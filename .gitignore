@@ -1,0 +1,31 @@
+# Certificate files (private keys should never be committed)
+mosquitto/config/certs/*.key
+mosquitto/config/certs/*.csr
+mosquitto/config/certs/*.srl
+
+# Certificate directory (optional - uncomment if you want to ignore all certs)
+# mosquitto/config/certs/
+
+# Data directories
+data/
+mosquitto/data/
+mosquitto/log/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.bak

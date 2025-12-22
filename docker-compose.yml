@@ -1,0 +1,46 @@
+version: '3.7'
+services:
+  mongodb:
+    image: mongo:6.0
+    restart: always
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - ./data/mongodb:/data/db
+    networks:
+      - local-network
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    restart: always
+    ports:
+      - "8883:8883"   # TLS encrypted (default, recommended for production)
+      - "9999:1883"   # Unencrypted (optional, for testing only)
+      - "9001:9001"   # WebSocket
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - local-network
+  app:
+    image: continuumdao/distributed-auth:latest
+    restart: always
+    environment:
+      # Configuration can be set via environment variables or configs.yaml file
+      # If both are set, environment variables take precedence
+      - GOLOG_FILE=logs/DistributedAuthCore.log
+      - GOLOG_OUTPUT=file
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mongodb
+      - mosquitto
+    volumes:
+      - ./configs.yaml:/app/configs.yaml:ro
+      - ./data/app/logs:/app/logs
+    networks:
+      - local-network
+networks:
+  local-network:
+    driver: bridge
+    attachable: true
