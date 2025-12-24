@@ -18,6 +18,7 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2.0
     restart: always
+    command: mosquitto -c /mosquitto/config/mosquitto.conf -v
     ports:
       - "8883:8883"   # TLS encrypted (default, required)
       # - "9999:1883"   # Unencrypted (disabled - use mosquitto.conf.no-tls for testing)
