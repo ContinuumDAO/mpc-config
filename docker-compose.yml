@@ -9,6 +9,12 @@ services:
       - ./data/mongodb:/data/db
     networks:
       - local-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
   mosquitto:
     image: eclipse-mosquitto:2.0
     restart: always
@@ -22,6 +28,11 @@ services:
       - ./mosquitto/log:/mosquitto/log
     networks:
       - local-network
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep mosquitto || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   app:
     image: continuumdao/distributed-auth:v1.12
     restart: always
@@ -33,8 +44,10 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - mongodb
-      - mosquitto
+      mongodb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
     volumes:
       - ./configs.yaml:/app/configs.yaml:ro
       - ./data/app/logs:/app/logs

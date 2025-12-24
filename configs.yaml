@@ -18,11 +18,14 @@ NodeMgtKey: "0x1234567890ABCDEF1234567890ABCDEF12345678"
 # NOTE: This does NOT affect relayer authentication - relayer signatures are always required
 IgnoreMgtKeySigCheck: true
 
-# MongoDB connection URI (optional, defaults to mongodb://localhost:27017)
-# MongoDB MUST be on localhost (127.0.0.1) - remote connections are not allowed
+# MongoDB connection URI (optional, automatically detected)
+# When running in Docker: automatically uses mongodb://mongodb:27017 (Docker service name)
+# When running outside Docker: automatically uses mongodb://localhost:27017
+# MongoDB MUST be on localhost or use Docker service name - remote connections are not allowed
 # Each node uses its own local MongoDB instance running on the same machine
 # Only specify if using a custom port (e.g., mongodb://localhost:27018)
 # Format: mongodb://[username:password@]localhost[:port][/database][?options]
+# Leave empty to use automatic detection (recommended)
 MongodbUri: ""
 
 # MongoDB database name (optional, defaults to "DistributedAuth")
