@@ -177,6 +177,9 @@ PreSigningVerification:
   # Format: Go duration string (e.g., "5m", "1h")
   CacheTTL: "5m"
 
+  # Note: Test transactions are automatically whitelisted when SourceTxHash or SourceChainID is empty
+  # This allows test transactions from the relayer (when new MPC signers are added) to bypass pre-validation
+
 # Automatic presigning configuration
 # Controls whether the MPC group automatically creates and maintains presign requests
 # Enable automatic presign request creation
