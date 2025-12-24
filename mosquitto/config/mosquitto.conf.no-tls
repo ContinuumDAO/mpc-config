@@ -1,0 +1,26 @@
+# Mosquitto MQTT Broker Configuration WITHOUT TLS
+# Use this only for testing - NOT recommended for production
+# To use: cp mosquitto.conf.no-tls mosquitto.conf
+
+# Unencrypted listener (testing only)
+listener 1883 0.0.0.0
+allow_anonymous true
+
+# Persistence
+persistence true
+persistence_location /mosquitto/data/
+
+# Logging
+log_dest file /mosquitto/log/mosquitto.log
+log_type error
+log_type warning
+log_type notice
+log_type information
+
+# Connection settings
+max_inflight_messages 20
+max_queued_messages 1000
+
+# Message settings
+max_packet_size 268435456
+

@@ -19,9 +19,9 @@ services:
     image: eclipse-mosquitto:2.0
     restart: always
     ports:
-      - "8883:8883"   # TLS encrypted (default, recommended for production)
-      - "9999:1883"   # Unencrypted (optional, for testing only)
-      - "9001:9001"   # WebSocket
+      - "8883:8883"   # TLS encrypted (default, required)
+      # - "9999:1883"   # Unencrypted (disabled - use mosquitto.conf.no-tls for testing)
+      - "9001:9001"   # WebSocket (TLS)
     volumes:
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
