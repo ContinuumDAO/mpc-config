@@ -49,14 +49,9 @@ This starts:
 - **Mosquitto** - MQTT broker (port 8883 for TLS)
 - **distributed-auth** - MPC node (port 8080)
 
-## Docker Image
+The `docker-compose.yml` pulls the Docker image from the registry: `continuumdao/distributed-auth:v1.12`
 
-The `docker-compose.yml` uses the official Docker image:
-```yaml
-image: continuumdao/distributed-auth:latest
-```
-
-Replace `latest` with a specific version tag for production (e.g., `v1.12`).
+**Note:** The default configuration uses version `v1.12`. To use a different version, edit `docker-compose.yml` and change the image tag (e.g., `continuumdao/distributed-auth:v1.13`).
 
 ## Documentation
 
@@ -110,6 +105,56 @@ Blockchain information (token / assets / chain) distributed authentication toolk
 sudo apt update && \
 sudo apt-get install docker-compose -y
 ```
+
+#### 1.1. Configure Docker Access on VPS (Required)
+
+If you encounter the error `Couldn't connect to Docker daemon at http+docker://localhost - is it running?` when running `docker-compose up -d`, this is typically a permissions issue on VPS systems.
+
+**Solution: Add your user to the docker group**
+
+1. **Check if Docker is running:**
+   ```bash
+   sudo systemctl status docker
+   ```
+   If Docker is not running, start it:
+   ```bash
+   sudo systemctl start docker
+   sudo systemctl enable docker  # Enable auto-start on boot
+   ```
+
+2. **Add your user to the docker group:**
+   ```bash
+   sudo usermod -aG docker $USER
+   ```
+   Replace `$USER` with your actual username if needed (e.g., `sudo usermod -aG docker mpcnode`).
+
+3. **Apply the group changes:**
+   You need to log out and log back in, or start a new session for the group changes to take effect:
+   ```bash
+   # Option 1: Log out and log back in (recommended)
+   exit
+   # Then SSH back into your VPS
+   
+   # Option 2: Use newgrp to activate the docker group in current session
+   newgrp docker
+   ```
+
+4. **Verify Docker access:**
+   ```bash
+   docker ps
+   ```
+   This should work without `sudo`. If you still see permission errors, ensure Docker is running:
+   ```bash
+   sudo systemctl restart docker
+   ```
+
+5. **Test docker-compose:**
+   ```bash
+   docker-compose --version
+   docker-compose up -d
+   ```
+
+**Note:** After adding your user to the docker group, you may need to restart your SSH session or run `newgrp docker` for the changes to take effect in your current terminal session.
 
 #### 2. Install Python 3 with PyYAML (Required for process_config.sh)
 
@@ -367,7 +412,9 @@ docker-compose up -d
 The docker-compose.yml includes:
 - **mongodb**: Local MongoDB instance (port 27017)
 - **mosquitto**: MQTT broker (automatically configured from `mosquitto/config/mosquitto.conf` - port 8883 for TLS by default)
-- **app**: The distributed-auth node (port 8080) - uses Docker image `continuumdao/distributed-auth:latest`
+- **app**: The distributed-auth node (port 8080) - pulls Docker image `continuumdao/distributed-auth:v1.12` from registry
+
+**Note:** The default configuration uses version `v1.12`. If you encounter an error that the image is not found, see the Troubleshooting section below.
 
 **Production Setup:**
 - The **first node** in each group runs mosquitto (via Docker using docker-compose, or directly on the host)
@@ -509,6 +556,125 @@ When a node joins a group:
 ---
 
 ## Troubleshooting
+
+### Docker Daemon Connection Issues (VPS)
+
+If you see the error `Couldn't connect to Docker daemon at http+docker://localhost - is it running?`:
+
+1. **Check if Docker service is running:**
+   ```bash
+   sudo systemctl status docker
+   ```
+   If not running, start it:
+   ```bash
+   sudo systemctl start docker
+   sudo systemctl enable docker
+   ```
+
+2. **Verify your user is in the docker group:**
+   ```bash
+   groups
+   ```
+   You should see `docker` in the list. If not, add yourself:
+   ```bash
+   sudo usermod -aG docker $USER
+   newgrp docker  # Or log out and back in
+   ```
+
+3. **Check Docker socket permissions:**
+   ```bash
+   ls -la /var/run/docker.sock
+   ```
+   Should show the docker group has read/write access. If not:
+   ```bash
+   sudo chmod 666 /var/run/docker.sock
+   # Or better: ensure docker group exists and has proper permissions
+   sudo groupadd docker 2>/dev/null || true
+   sudo usermod -aG docker $USER
+   ```
+
+4. **Test Docker access:**
+   ```bash
+   docker ps
+   ```
+   Should work without `sudo`. If it still fails, restart Docker:
+   ```bash
+   sudo systemctl restart docker
+   ```
+
+5. **Verify docker-compose:**
+   ```bash
+   docker-compose --version
+   docker-compose up -d
+   ```
+
+**Note:** After adding your user to the docker group, you must log out and log back in (or use `newgrp docker`) for the changes to take effect.
+
+### Docker Image Not Found
+
+If you see the error `manifest for continuumdao/distributed-auth:v1.12 not found: manifest unknown`:
+
+**This means the Docker image version isn't available in the registry.**
+
+**Solution 1: Use a Different Version (Recommended)**
+
+Check what versions are available and update `docker-compose.yml`:
+
+```bash
+# Try pulling a different version
+docker pull continuumdao/distributed-auth:v1.13  # Or another version
+```
+
+Then update `docker-compose.yml` to use the available version:
+```yaml
+app:
+  image: continuumdao/distributed-auth:v1.13  # Replace with available version
+```
+
+**Solution 2: Check Docker Registry Access**
+
+If the image should be available, verify you can access the registry:
+
+```bash
+# Test pulling the image directly
+docker pull continuumdao/distributed-auth:v1.12
+
+# If it's a private registry, you may need to log in first
+docker login
+# Or for a specific registry:
+# docker login docker.io  # For Docker Hub
+```
+
+**Solution 2: Build Image Locally (Development Only)**
+
+If you're a developer working on the `distributed-auth` codebase and need to test changes, you can build the image locally:
+
+1. **Clone the distributed-auth repository** (if you haven't already):
+   ```bash
+   cd /home/marcel/Cryptocurrency/Continuum/Code
+   git clone <distributed-auth-repo-url> distributed-auth
+   ```
+
+2. **Build the Docker image:**
+   ```bash
+   cd distributed-auth
+   docker build -f dockerfile_app -t continuumdao/distributed-auth:latest .
+   ```
+
+3. **Verify the image was created:**
+   ```bash
+   docker images | grep distributed-auth
+   ```
+
+4. **Now run docker-compose:**
+   ```bash
+   cd ../mpc-config
+   docker-compose up -d
+   ```
+
+**Note:** This is only for development/testing. Production deployments should use published images from the registry.
+
+For detailed build instructions, see `../distributed-auth/docs-internal/DOCKER_IMAGE_BUILD_AND_PUBLISH.md` (if you have access to the distributed-auth repository).
 
 ### PreSigningVerification API connectivity issues
 

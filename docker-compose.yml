@@ -23,7 +23,7 @@ services:
     networks:
       - local-network
   app:
-    image: continuumdao/distributed-auth:latest
+    image: continuumdao/distributed-auth:v1.12
     restart: always
     environment:
       # Configuration can be set via environment variables or configs.yaml file
