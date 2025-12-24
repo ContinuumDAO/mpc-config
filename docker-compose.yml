@@ -53,6 +53,10 @@ services:
       - ./data/app/logs:/app/logs
     networks:
       - local-network
+    security_opt:
+      - seccomp:unconfined
+    cap_add:
+      - SYS_PTRACE
 networks:
   local-network:
     driver: bridge
