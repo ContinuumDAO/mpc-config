@@ -94,7 +94,7 @@ Blockchain information (token / assets / chain) distributed authentication toolk
 
 - **Docker & Docker Compose** (required)
 - **Python 3 with PyYAML** (required for `process_config.sh` script - for YAML parsing)
-- **Sudo/root access** (required on client nodes to create `/mosquitto/config/certs/` directory - see Certificate Setup section)
+- **Sudo/root access** (may be required on client nodes to create `mosquitto/config/certs/` directory - see Certificate Setup section)
 - **Same username with sudo access on all nodes** (recommended for simplified certificate sharing - see Certificate Setup section)
 
 ### Installation
@@ -249,9 +249,10 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    **On client nodes:**
    - Validates configuration
    - Validates Relayer API connectivity (if PreSigningVerification is enabled)
-   - Creates certificate directory (relative path: `mosquitto/config/certs/` for Docker, or `/mosquitto/config/certs/` for host installation)
+   - Creates certificate directory at `mosquitto/config/certs/` (relative path - same as relay node for Docker compatibility)
    - Validates CA certificate configuration
    - Does NOT generate certificates (only relay node does this)
+   - **Note:** The script creates the directory in the relative path `mosquitto/config/certs/` so Docker can mount it correctly
 
 3. **Share CA Certificate with Client Nodes:**
    
@@ -334,28 +335,31 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
       - Receives `ca.crt` from the relay node operator
       - **Runs the validation script** (automatically creates the certificate directory):
         ```bash
-        ./process_config.sh  # Creates /mosquitto/config/certs/ automatically and sets ownership
+        ./process_config.sh  # Creates mosquitto/config/certs/ automatically and sets ownership
         ```
         The script will:
-        - Create `/mosquitto/config/certs/` directory if it doesn't exist (using sudo if needed)
+        - Create `mosquitto/config/certs/` directory (relative path) if it doesn't exist
         - Change ownership to your user so you can copy files without sudo
         - Validate your configuration
         - Provide instructions for copying the certificate
-      - Copies the certificate to their node at `/mosquitto/config/certs/ca.crt`:
+      - Copies the certificate to their node at `mosquitto/config/certs/ca.crt` (relative path):
         ```bash
         # The script sets ownership, so you typically don't need sudo:
-        scp relay-node-user@RELAY_NODE_IP:/mosquitto/config/certs/ca.crt /mosquitto/config/certs/ca.crt
+        scp relay-node-user@RELAY_NODE_IP:mosquitto/config/certs/ca.crt mosquitto/config/certs/ca.crt
+        # Or if the relay node path is different:
+        scp relay-node-user@RELAY_NODE_IP:~/mpc-config/mosquitto/config/certs/ca.crt mosquitto/config/certs/ca.crt
         ```
         If the directory wasn't writable and ownership couldn't be changed, use:
         ```bash
-        scp relay-node-user@RELAY_NODE_IP:/mosquitto/config/certs/ca.crt /tmp/ca.crt
-        sudo mv /tmp/ca.crt /mosquitto/config/certs/ca.crt
+        scp relay-node-user@RELAY_NODE_IP:mosquitto/config/certs/ca.crt /tmp/ca.crt
+        mv /tmp/ca.crt mosquitto/config/certs/ca.crt
         ```
       - Updates their `configs.yaml`:
         ```yaml
         MQTTTLS:
-          CAFile: "/mosquitto/config/certs/ca.crt"
+          CAFile: "/mosquitto/config/certs/ca.crt"  # Path inside Docker container
         ```
+        **Note:** The path in `configs.yaml` is the path inside the Docker container. Docker mounts `mosquitto/config` to `/mosquitto/config` in the container, so the relative path on the host maps to the absolute path in the container.
       - Ensures proper file permissions (readable by the application)
    
    **Note:** 

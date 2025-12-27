@@ -1828,10 +1828,23 @@ configure_docker_compose() {
         local in_app=false
         local in_depends=false
         local depends_indent=""
+        local mosquitto_found=false
         
         while IFS= read -r line || [ -n "$line" ]; do
-            # Detect mosquitto service start
-            if echo "$line" | grep -qE '^\s*mosquitto:' && ! echo "$line" | grep -qE '^\s*#'; then
+            # Detect mosquitto service start (must be at top level, not commented)
+            # Check if line contains "mosquitto:" and is not already commented
+            if echo "$line" | grep -q "mosquitto:" && ! echo "$line" | grep -qE '^[[:space:]]*#'; then
+                # Verify it's actually a service definition (ends with colon, possibly with trailing spaces/comments)
+                if echo "$line" | grep -qE 'mosquitto:[[:space:]]*(#|$)'; then
+                    # Comment out the mosquitto service header
+                    echo "$line" | sed 's/^\([[:space:]]*\)mosquitto:/\1# mosquitto:/' >> "$temp_file"
+                    in_mosquitto=true
+                    mosquitto_found=true
+                    mosquitto_indent=$(echo "$line" | sed 's/[^ ].*//')
+                    continue
+                fi
+            fi
+                # Comment out the mosquitto service header
                 echo "$line" | sed 's/^\(\s*\)mosquitto:/\1# mosquitto:/' >> "$temp_file"
                 in_mosquitto=true
                 mosquitto_indent=$(echo "$line" | sed 's/[^ ].*//')
@@ -1840,14 +1853,32 @@ configure_docker_compose() {
             
             # Handle lines within mosquitto service
             if [ "$in_mosquitto" = true ]; then
+                # Check if this is an empty line
+                if [ -z "$line" ] || [ "$line" = "" ]; then
+                    # Empty line - comment it (preserve as commented empty line)
+                    echo "# " >> "$temp_file"
+                    continue
+                fi
+                
                 local current_indent=$(echo "$line" | sed 's/[^ ].*//')
-                # Check if we've left mosquitto service
-                if [ -n "$line" ] && [ "${#current_indent}" -le "${#mosquitto_indent}" ] && echo "$line" | grep -qE '^\s*[a-zA-Z_]+:'; then
+                # Check if we've left mosquitto service (hit another top-level service at same indent level)
+                # Top-level services in docker-compose are at 2-space indent under "services:"
+                # Check if indent is exactly 2 spaces and it's a service definition
+                if [ "${#current_indent}" -eq 2 ] && echo "$line" | grep -qE '^  [a-zA-Z_]+:'; then
+                    # We've hit another service (like "app:"), so we're done with mosquitto
                     in_mosquitto=false
+                    # Write this line (it's the next service, not part of mosquitto)
+                    echo "$line" >> "$temp_file"
+                    continue
+                elif [ "${#current_indent}" -lt 2 ]; then
+                    # We've hit something at root level (like "networks:" or "version:")
+                    in_mosquitto=false
+                    echo "$line" >> "$temp_file"
+                    continue
                 else
-                    # Comment if not already commented
-                    if ! echo "$line" | grep -qE '^\s*#'; then
-                        echo "$line" | sed 's/^\(\s*\)/\1# /' >> "$temp_file"
+                    # Still within mosquitto service - comment if not already commented
+                    if ! echo "$line" | grep -qE '^[[:space:]]*#'; then
+                        echo "$line" | sed 's/^\([[:space:]]*\)/\1# /' >> "$temp_file"
                     else
                         echo "$line" >> "$temp_file"
                     fi
@@ -1892,16 +1923,41 @@ configure_docker_compose() {
             # All other lines pass through
             echo "$line" >> "$temp_file"
         done < "$docker_compose_file"
+        
+        # Verify mosquitto was found and processed
+        if [ "$mosquitto_found" != true ]; then
+            print_warning "Mosquitto service not found in docker-compose.yml - it may already be commented out or the file format is different"
+        fi
+    fi
+    
+    # Verify temp file was created and has content
+    if [ ! -f "$temp_file" ]; then
+        print_error "Temporary file was not created"
+        rm -f "$temp_file" 2>/dev/null
+        if [ -n "$backup_file" ] && [ -f "$backup_file" ]; then
+            print_info "Restoring from backup..."
+            cp "$backup_file" "$docker_compose_file" 2>/dev/null
+        fi
+        return 1
+    fi
+    
+    # Check if temp file has content (should have at least as many lines as original)
+    local original_lines=$(wc -l < "$docker_compose_file" 2>/dev/null || echo "0")
+    local temp_lines=$(wc -l < "$temp_file" 2>/dev/null || echo "0")
+    
+    if [ "$temp_lines" -lt "$original_lines" ]; then
+        print_warning "Temporary file has fewer lines than original - this might indicate an error"
+        print_info "Original: $original_lines lines, Temp: $temp_lines lines"
     fi
     
     # Replace original file with modified version
-    if [ -f "$temp_file" ] && mv "$temp_file" "$docker_compose_file" 2>/dev/null; then
+    if mv "$temp_file" "$docker_compose_file" 2>/dev/null; then
         print_success "docker-compose.yml configured successfully"
         if [ -n "$backup_file" ]; then
             print_info "Original file backed up to: $backup_file"
         fi
     else
-        print_error "Failed to update docker-compose.yml"
+        print_error "Failed to update docker-compose.yml (permission issue?)"
         rm -f "$temp_file" 2>/dev/null
         if [ -n "$backup_file" ] && [ -f "$backup_file" ]; then
             print_info "Restoring from backup..."
@@ -1953,24 +2009,43 @@ copy_certs_to_nodes() {
         
         print_info "Copying certificate to $node_host..."
         
-        # Try to determine remote path from configs.yaml or use default
-        local remote_path="/mosquitto/config/certs/ca.crt"
+        # Try to determine remote path - use relative path for Docker compatibility
+        # The script directory on remote node should be the mpc-config root
+        local remote_path="mosquitto/config/certs/ca.crt"
         
         # Try to extract expected path from remote node's config (if accessible)
         # For now, use default path
         
-        # Try SCP copy
+        # Try SCP copy - need to determine the correct remote path
+        # Try common locations relative to user's home or mpc-config directory
         if command -v scp &> /dev/null; then
-            # Try with current user
+            # Try relative path from current directory (if user is in mpc-config)
             if scp -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$ca_cert" "${node_host}:${remote_path}" 2>/dev/null; then
                 print_success "Successfully copied to $node_host:$remote_path"
                 success_count=$((success_count + 1))
                 continue
             fi
             
+            # Try with ~/mpc-config prefix
+            if scp -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$ca_cert" "${node_host}:~/mpc-config/${remote_path}" 2>/dev/null; then
+                print_success "Successfully copied to $node_host:~/mpc-config/$remote_path"
+                success_count=$((success_count + 1))
+                continue
+            fi
+            
+            # Try with current user's home directory
+            local remote_user=$(whoami 2>/dev/null || echo "")
+            if [ -n "$remote_user" ]; then
+                if scp -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$ca_cert" "${remote_user}@${node_host}:~/mpc-config/${remote_path}" 2>/dev/null; then
+                    print_success "Successfully copied to ${remote_user}@$node_host:~/mpc-config/$remote_path"
+                    success_count=$((success_count + 1))
+                    continue
+                fi
+            fi
+            
             # Try with root user
-            if scp -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$ca_cert" "root@${node_host}:${remote_path}" 2>/dev/null; then
-                print_success "Successfully copied to root@$node_host:$remote_path"
+            if scp -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$ca_cert" "root@${node_host}:~/mpc-config/${remote_path}" 2>/dev/null; then
+                print_success "Successfully copied to root@$node_host:~/mpc-config/$remote_path"
                 success_count=$((success_count + 1))
                 continue
             fi
@@ -1979,8 +2054,9 @@ copy_certs_to_nodes() {
         # If SCP failed, provide manual instructions
         print_warning "Could not automatically copy to $node_host"
         print_info "  Manual copy required:"
-        print_info "    scp $ca_cert user@$node_host:$remote_path"
-        print_info "    Or use: rsync -avz $ca_cert user@$node_host:$remote_path"
+        print_info "    scp $ca_cert user@$node_host:~/mpc-config/$remote_path"
+        print_info "    Or: scp $ca_cert user@$node_host:$remote_path  (if in mpc-config directory)"
+        print_info "    Or use: rsync -avz $ca_cert user@$node_host:~/mpc-config/$remote_path"
         fail_count=$((fail_count + 1))
     done
     
@@ -1992,13 +2068,16 @@ copy_certs_to_nodes() {
         print_warning "Could not automatically copy to $fail_count node(s) - manual copy required"
         echo ""
         print_info "To manually copy certificates:"
-        echo "  1. Use SCP: scp $ca_cert user@node-ip:/mosquitto/config/certs/ca.crt"
-        echo "  2. Or use rsync: rsync -avz $ca_cert user@node-ip:/mosquitto/config/certs/ca.crt"
+        echo "  1. Use SCP: scp $ca_cert user@node-ip:~/mpc-config/mosquitto/config/certs/ca.crt"
+        echo "  2. Or use rsync: rsync -avz $ca_cert user@node-ip:~/mpc-config/mosquitto/config/certs/ca.crt"
         echo "  3. Or transfer via secure file transfer method"
         echo ""
         print_info "After copying, ensure each node's configs.yaml has:"
         echo "  MQTTTLS:"
-        echo "    CAFile: \"/mosquitto/config/certs/ca.crt\""
+        echo "    CAFile: \"/mosquitto/config/certs/ca.crt\"  # Path inside Docker container"
+        echo ""
+        print_info "Note: The path in configs.yaml is the path inside the Docker container."
+        print_info "      Docker mounts mosquitto/config to /mosquitto/config in the container."
     fi
     
     return 0
@@ -2327,8 +2406,9 @@ except Exception:
         echo ""
         
         # Create certificate directory on client nodes if it doesn't exist
+        # Use relative path (same as relay node) for Docker compatibility
         print_step "Ensuring certificate directory exists..."
-        local cert_dir_path="/mosquitto/config/certs"
+        local cert_dir_path="${SCRIPT_DIR}/mosquitto/config/certs"
         local current_user=$(whoami)
         local ownership_changed=false
         
@@ -2352,6 +2432,9 @@ except Exception:
             else
                 print_warning "Could not create certificate directory: $cert_dir_path"
                 print_info "You need to create it manually with appropriate permissions:"
+                echo "  mkdir -p $cert_dir_path"
+                echo "  chmod 755 $cert_dir_path"
+                echo "  # Or with sudo if needed:"
                 echo "  sudo mkdir -p $cert_dir_path"
                 echo "  sudo chmod 755 $cert_dir_path"
                 echo "  sudo chown $current_user:$current_user $cert_dir_path"
@@ -2368,9 +2451,9 @@ except Exception:
                 else
                     print_warning "Could not change directory ownership"
                     print_info "You will need sudo to copy the certificate file:"
-                    echo "  sudo scp relay-node-user@RELAY_NODE_IP:/mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
+                    echo "  scp relay-node-user@RELAY_NODE_IP:mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
                     echo "  # Or copy to a temporary location first, then move with sudo:"
-                    echo "  scp relay-node-user@RELAY_NODE_IP:/mosquitto/config/certs/ca.crt /tmp/ca.crt"
+                    echo "  scp relay-node-user@RELAY_NODE_IP:mosquitto/config/certs/ca.crt /tmp/ca.crt"
                     echo "  sudo mv /tmp/ca.crt $cert_dir_path/ca.crt"
                 fi
             else
@@ -2388,9 +2471,9 @@ except Exception:
             expected_ca_path=$(grep -E '^\s*cafile\s+' "$MOSQUITTO_CONF" 2>/dev/null | head -1 | sed -E 's/^\s*cafile\s+//' | sed 's/#.*$//' | xargs)
         fi
         
-        # If no expected path from mosquitto.conf, use default
+        # If no expected path from mosquitto.conf, use default (relative path for Docker)
         if [ -z "$expected_ca_path" ]; then
-            expected_ca_path="$CA_CRT"
+            expected_ca_path="$CA_CRT"  # This is already the relative path
         fi
         
         print_step "Validating CA certificate configuration..."
@@ -2428,7 +2511,7 @@ except Exception:
                 print_info "The relay node will automatically copy the CA certificate to this node."
                 print_info "If the file is still missing after the relay node runs the script,"
                 print_info "manually copy it from the relay node:"
-                echo "  scp relay-node:/mosquitto/config/certs/ca.crt $expected_ca_path"
+                echo "  scp relay-node:mosquitto/config/certs/ca.crt $expected_ca_path"
                 ;;
             3)
                 print_warning "CA certificate is configured but path may not match the relay node's certificate"
@@ -2463,20 +2546,22 @@ except Exception:
         print_info "You must now copy the CA certificate file from the relay node:"
         echo ""
         print_info "1. On the RELAY NODE (first node), the CA certificate is located at:"
-        echo "   /mosquitto/config/certs/ca.crt"
+        echo "   mosquitto/config/certs/ca.crt  (relative to mpc-config directory)"
         echo ""
         if [ "$ownership_changed" = true ] || [ -w "$cert_dir_path" ]; then
             print_info "2. Copy it to this CLIENT NODE using scp (no sudo needed):"
-            echo "   scp relay-node-user@RELAY_NODE_IP:/mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
+            echo "   scp relay-node-user@RELAY_NODE_IP:~/mpc-config/mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
+            echo "   # Or if the relay node path is different:"
+            echo "   scp relay-node-user@RELAY_NODE_IP:mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
         else
             print_info "2. Copy it to this CLIENT NODE using one of these methods:"
             echo ""
             echo "   Option A - Copy to temp first, then move with sudo:"
-            echo "   scp relay-node-user@RELAY_NODE_IP:/mosquitto/config/certs/ca.crt /tmp/ca.crt"
+            echo "   scp relay-node-user@RELAY_NODE_IP:mosquitto/config/certs/ca.crt /tmp/ca.crt"
             echo "   sudo mv /tmp/ca.crt $cert_dir_path/ca.crt"
             echo ""
             echo "   Option B - Using sudo scp (if your sudo allows it):"
-            echo "   sudo scp relay-node-user@RELAY_NODE_IP:/mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
+            echo "   sudo scp relay-node-user@RELAY_NODE_IP:mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
         fi
         echo ""
         print_info "3. After copying, verify the certificate file exists:"
@@ -2484,7 +2569,10 @@ except Exception:
         echo ""
         print_info "4. Update your configs.yaml to reference the certificate:"
         echo "   MQTTTLS:"
-        echo "     CAFile: \"$cert_dir_path/ca.crt\""
+        echo "     CAFile: \"/mosquitto/config/certs/ca.crt\"  # Path inside Docker container"
+        echo ""
+        print_info "Note: The path in configs.yaml is the path inside the Docker container."
+        print_info "      Docker mounts mosquitto/config to /mosquitto/config in the container."
         echo ""
         print_info "Replace 'RELAY_NODE_IP' with the actual IP address of your relay node."
         print_info "Replace 'relay-node-user' with the SSH username on the relay node."
