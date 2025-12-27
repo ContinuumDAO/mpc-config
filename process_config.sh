@@ -1844,12 +1844,6 @@ configure_docker_compose() {
                     continue
                 fi
             fi
-                # Comment out the mosquitto service header
-                echo "$line" | sed 's/^\(\s*\)mosquitto:/\1# mosquitto:/' >> "$temp_file"
-                in_mosquitto=true
-                mosquitto_indent=$(echo "$line" | sed 's/[^ ].*//')
-                continue
-            fi
             
             # Handle lines within mosquitto service
             if [ "$in_mosquitto" = true ]; then
