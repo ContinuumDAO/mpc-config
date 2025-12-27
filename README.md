@@ -211,7 +211,7 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
 
 **Deployment Order (IMPORTANT):**
 
-1. **Deploy the broker node first (first node in the group):**
+1. **Deploy the broker node first (first node in the group - RELAY NODE ONLY):**
    ```bash
    cd mpc-config
    docker-compose up -d
@@ -219,7 +219,7 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    
    This starts:
    - **mongodb**: Local MongoDB instance (port 27017)
-   - **mosquitto**: MQTT broker (ports 8883:8883 for TLS, 9999:1883 for unencrypted, 9001:9001 for websockets)
+   - **mosquitto**: MQTT broker (ports 8883:8883 for TLS, 9999:1883 for unencrypted, 9001:9001 for websockets) - **ONLY ON RELAY NODE**
    - **app**: The distributed-auth node (port 8080)
    
    **Verify mosquitto is running:**
@@ -227,6 +227,8 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    docker ps | grep mosquitto
    docker logs <mosquitto-container-id>
    ```
+
+   **IMPORTANT: Client nodes should NOT run mosquitto.** Only the relay node (first node in the group) runs the MQTT broker. Client nodes connect to the broker on the relay node. See "Client Node Setup" below for instructions on excluding mosquitto.
 
 2. **Generate TLS certificates (on relay node only):**
    
@@ -236,16 +238,18 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    ./process_config.sh --no-copy-certs
    ```
    
+   **Important:** The script generates certificates in `mosquitto/config/certs/` (relative to your project directory). For Docker deployments, this is the correct location since `docker-compose.yml` mounts `./mosquitto/config` to `/mosquitto/config` in the container.
+   
    **On the relay node (first node):**
    - Validates configuration
    - Validates Relayer API connectivity (if PreSigningVerification is enabled)
-   - Generates self-signed certificates
+   - Generates self-signed certificates in `mosquitto/config/certs/` (relative path)
    - Provides instructions for sharing the CA certificate
    
    **On client nodes:**
    - Validates configuration
    - Validates Relayer API connectivity (if PreSigningVerification is enabled)
-   - Creates certificate directory (`/mosquitto/config/certs/`)
+   - Creates certificate directory (relative path: `mosquitto/config/certs/` for Docker, or `/mosquitto/config/certs/` for host installation)
    - Validates CA certificate configuration
    - Does NOT generate certificates (only relay node does this)
 
@@ -361,7 +365,98 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
 
 4. **Restart mosquitto:**
    ```bash
-   docker restart <mosquitto-container-name>
+   docker-compose restart mosquitto
+   # Or using docker directly:
+   # docker restart <mosquitto-container-name>
+   ```
+   
+   **Verify mosquitto started successfully:**
+   ```bash
+   docker-compose logs mosquitto
+   # Look for "mosquitto version X.X.X starting" and no certificate errors
+   ```
+   
+   If you see certificate errors, see the "Certificate Issues" troubleshooting section below.
+
+5. **Deploy client nodes (nodes 2, 3, etc. - DO NOT run mosquitto):**
+   
+   **IMPORTANT: Client nodes should NOT run mosquitto.** Only the relay node runs the MQTT broker. Client nodes connect to the broker on the relay node.
+   
+   **Option A: Comment out mosquitto service (Recommended - Simple)**
+   
+   On client nodes, edit `docker-compose.yml` and comment out:
+   
+   1. The entire mosquitto service:
+   ```yaml
+   # mosquitto:
+   #   image: eclipse-mosquitto:2.0
+   #   restart: always
+   #   command: mosquitto -c /mosquitto/config/mosquitto.conf -v
+   #   ports:
+   #     - "8883:8883"
+   #     - "9001:9001"
+   #   volumes:
+   #     - ./mosquitto/config:/mosquitto/config
+   #     - ./mosquitto/data:/mosquitto/data
+   #     - ./mosquitto/log:/mosquitto/log
+   #   networks:
+   #     - local-network
+   #   healthcheck:
+   #     test: ["CMD-SHELL", "pgrep mosquitto || exit 1"]
+   #     interval: 10s
+   #     timeout: 5s
+   #     retries: 5
+   ```
+   
+   2. The mosquitto dependency in the app service:
+   ```yaml
+   app:
+     # ... other config
+     depends_on:
+       mongodb:
+         condition: service_healthy
+       # mosquitto:  # Comment this out on client nodes
+       #   condition: service_started
+   ```
+   
+   Then start services:
+   ```bash
+   docker-compose up -d
+   ```
+   
+   **Option B: Use docker-compose profiles (Advanced)**
+   
+   If you want to keep the same docker-compose.yml file for both relay and client nodes, you can use profiles:
+   
+   1. Update `docker-compose.yml` to add a profile to mosquitto:
+   ```yaml
+   mosquitto:
+     profiles: ["broker"]  # Add this line - mosquitto only starts with --profile broker
+     image: eclipse-mosquitto:2.0
+     # ... rest of config
+   ```
+   
+   2. Also comment out or remove the mosquitto dependency in the app service (since it won't exist on client nodes):
+   ```yaml
+   app:
+     # ... other config
+     depends_on:
+       mongodb:
+         condition: service_healthy
+       # mosquitto:  # Comment out - will be started via profile on relay node only
+       #   condition: service_started
+   ```
+   
+   3. On relay node: `docker-compose --profile broker up -d` (starts mosquitto)
+   4. On client nodes: `docker-compose up -d` (does NOT start mosquitto)
+   
+   **Note:** With this approach, the app service on the relay node will start even if mosquitto isn't ready yet (since the dependency is commented out). This is usually fine since the app will retry connecting to the broker.
+   
+   **Option C: Use separate docker-compose file for client nodes**
+   
+   Create `docker-compose.client.yml` that excludes mosquitto, then use:
+   ```bash
+   docker-compose -f docker-compose.client.yml up -d
    ```
 
 **Testing mosquitto:**
@@ -729,7 +824,116 @@ If mosquitto fails to start or nodes can't connect:
 4. **Check mosquitto logs:**
    ```bash
    docker logs <mosquitto-container-name>
+   # Or with docker-compose:
+   docker-compose logs mosquitto
    ```
+
+#### Mosquitto Container Restarting - Certificate Path Issue
+
+If you see errors like:
+```
+Error: Unable to load CA certificates. Check cafile "/mosquitto/config/certs/ca.crt".
+OpenSSL Error[0]: error:80000002:system library::No such file or directory
+```
+
+**This usually means the certificates are in the wrong location.**
+
+**Problem:** Docker Compose mounts `./mosquitto/config` (relative path) to `/mosquitto/config` in the container. If your certificates are in an absolute path like `/mosquitto/config/certs/` on the host, the container won't be able to access them.
+
+**Solution:**
+
+1. **Navigate to your project directory** (where `docker-compose.yml` is located):
+   ```bash
+   cd ~/mpc-config  # or wherever your docker-compose.yml is
+   ```
+
+2. **Check if certificates exist in the relative path:**
+   ```bash
+   ls -la mosquitto/config/certs/
+   ```
+   You should see `ca.crt`, `server.crt`, and `server.key`.
+
+3. **If certificates are missing or in the wrong location**, copy them to the correct relative path:
+   ```bash
+   # Create the directory if it doesn't exist
+   mkdir -p mosquitto/config/certs
+   
+   # If certificates exist elsewhere (e.g., /mosquitto/config/certs/), copy them:
+   cp /mosquitto/config/certs/ca.crt mosquitto/config/certs/
+   cp /mosquitto/config/certs/server.crt mosquitto/config/certs/
+   cp /mosquitto/config/certs/server.key mosquitto/config/certs/
+   
+   # Or if you need to generate them:
+   ./process_config.sh --no-copy-certs
+   ```
+
+4. **Verify all three files exist:**
+   ```bash
+   ls -la mosquitto/config/certs/
+   # Should show: ca.crt, server.crt, server.key
+   ```
+
+5. **Set correct permissions:**
+   ```bash
+   chmod 644 mosquitto/config/certs/*.crt
+   chmod 600 mosquitto/config/certs/*.key
+   ```
+
+6. **Restart the mosquitto container:**
+   ```bash
+   docker-compose restart mosquitto
+   ```
+
+7. **Check logs to verify it started successfully:**
+   ```bash
+   docker-compose logs mosquitto
+   ```
+
+**Important:** The certificates must be in the **relative path** `mosquitto/config/certs/` (relative to where `docker-compose.yml` is located), not in an absolute path like `/mosquitto/config/certs/` on the host filesystem.
+
+#### Mosquitto Error on Client Node - Server Certificate Missing
+
+If you see errors like this on a **client node**:
+```
+Error: Unable to load server certificate "/mosquitto/config/certs/server.crt". Check certfile.
+OpenSSL Error[0]: error:80000002:system library::No such file or directory
+```
+
+**This means mosquitto is trying to start on a client node, but it shouldn't.**
+
+**Problem:** Only the relay node (first node in the group) should run mosquitto. Client nodes should NOT run mosquitto - they only connect to the broker on the relay node.
+
+**Solution:**
+
+1. **Stop and remove mosquitto on the client node:**
+   ```bash
+   docker-compose stop mosquitto
+   docker-compose rm -f mosquitto
+   ```
+
+2. **Exclude mosquitto from starting** (see "Client Node Setup" section above for detailed instructions):
+   
+   **Quick fix:** Edit `docker-compose.yml` and comment out the entire `mosquitto:` service section, and also comment out the `mosquitto` dependency in the `app:` service's `depends_on:` section.
+
+3. **Restart services:**
+   ```bash
+   docker-compose up -d
+   ```
+
+4. **Verify mosquitto is NOT running:**
+   ```bash
+   docker ps | grep mosquitto
+   # Should return nothing (no mosquitto container)
+   ```
+
+5. **Verify the app service is running:**
+   ```bash
+   docker ps | grep app
+   docker-compose logs app
+   # The app should connect to the broker on the relay node
+   ```
+
+**Note:** Client nodes only need the `ca.crt` file (for TLS verification when connecting to the broker), but they do NOT need `server.crt` or `server.key` because they don't run a broker.
 
 ---
 

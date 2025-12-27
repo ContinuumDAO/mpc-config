@@ -1719,6 +1719,198 @@ extract_port_from_url() {
     fi
 }
 
+# Configure docker-compose.yml based on node type (relay or client)
+configure_docker_compose() {
+    local is_relay_node="$1"
+    local script_dir="$(dirname "$0")"
+    local docker_compose_file="$script_dir/docker-compose.yml"
+    
+    if [ ! -f "$docker_compose_file" ]; then
+        print_warning "docker-compose.yml not found at $docker_compose_file - skipping configuration"
+        return 0
+    fi
+    
+    print_step "Configuring docker-compose.yml for $( [ "$is_relay_node" = "true" ] && echo "RELAY NODE" || echo "CLIENT NODE" )..."
+    
+    # Create backup
+    local backup_file="${docker_compose_file}.backup.$(date +%Y%m%d_%H%M%S)"
+    if ! cp "$docker_compose_file" "$backup_file" 2>/dev/null; then
+        print_warning "Could not create backup - proceeding anyway"
+        backup_file=""
+    else
+        print_info "Backup created: $backup_file"
+    fi
+    
+    # Create temporary file for modifications
+    local temp_file="${docker_compose_file}.tmp.$$"
+    
+    if [ "$is_relay_node" = "true" ]; then
+        # RELAY NODE: Ensure mosquitto is enabled (uncommented)
+        print_info "Ensuring mosquitto service is enabled for relay node..."
+        
+        # Simple approach: uncomment lines starting with # that are mosquitto-related
+        local in_mosquitto=false
+        local mosquitto_indent=""
+        local in_app=false
+        local in_depends=false
+        local depends_indent=""
+        
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Detect mosquitto service start
+            if echo "$line" | grep -qE '^\s*#\s*mosquitto:' || echo "$line" | grep -qE '^\s*mosquitto:'; then
+                echo "$line" | sed 's/^\(\s*\)#\s*mosquitto:/\1mosquitto:/' >> "$temp_file"
+                in_mosquitto=true
+                mosquitto_indent=$(echo "$line" | sed 's/[^ ].*//')
+                continue
+            fi
+            
+            # Handle lines within mosquitto service
+            if [ "$in_mosquitto" = true ]; then
+                local current_indent=$(echo "$line" | sed 's/[^ ].*//')
+                # Check if we've left mosquitto service (hit another top-level service)
+                if [ -n "$line" ] && [ "${#current_indent}" -le "${#mosquitto_indent}" ] && echo "$line" | grep -qE '^\s*[a-zA-Z_]+:'; then
+                    in_mosquitto=false
+                else
+                    # Uncomment if commented
+                    if echo "$line" | grep -qE '^\s*#'; then
+                        echo "$line" | sed 's/^\(\s*\)#\s*/\1/' >> "$temp_file"
+                    else
+                        echo "$line" >> "$temp_file"
+                    fi
+                    continue
+                fi
+            fi
+            
+            # Detect app service
+            if echo "$line" | grep -qE '^\s*app:'; then
+                in_app=true
+                echo "$line" >> "$temp_file"
+                continue
+            fi
+            
+            # Detect depends_on within app service
+            if [ "$in_app" = true ] && echo "$line" | grep -qE '^\s*depends_on:'; then
+                in_depends=true
+                depends_indent=$(echo "$line" | sed 's/[^ ].*//')
+                echo "$line" >> "$temp_file"
+                continue
+            fi
+            
+            # Handle mosquitto dependency
+            if [ "$in_depends" = true ] && echo "$line" | grep -qE 'mosquitto'; then
+                echo "$line" | sed 's/^\(\s*\)#\s*mosquitto:/\1mosquitto:/' | sed 's/^\(\s*\)#\s*condition:/\1condition:/' >> "$temp_file"
+                continue
+            fi
+            
+            # Check if we've left depends_on section
+            if [ "$in_depends" = true ]; then
+                local current_indent=$(echo "$line" | sed 's/[^ ].*//')
+                if [ -n "$line" ] && [ "${#current_indent}" -le "${#depends_indent}" ] && echo "$line" | grep -qE '^\s*[a-zA-Z_]+:'; then
+                    in_depends=false
+                fi
+            fi
+            
+            # Check if we've left app service
+            if [ "$in_app" = true ] && echo "$line" | grep -qE '^\s*[a-zA-Z_]+:' && ! echo "$line" | grep -qE '^\s*(depends_on|volumes|ports|environment|networks|security_opt|cap_add):'; then
+                in_app=false
+            fi
+            
+            # All other lines pass through
+            echo "$line" >> "$temp_file"
+        done < "$docker_compose_file"
+        
+    else
+        # CLIENT NODE: Comment out mosquitto service and dependency
+        print_info "Disabling mosquitto service for client node (only relay node runs the broker)..."
+        
+        local in_mosquitto=false
+        local mosquitto_indent=""
+        local in_app=false
+        local in_depends=false
+        local depends_indent=""
+        
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Detect mosquitto service start
+            if echo "$line" | grep -qE '^\s*mosquitto:' && ! echo "$line" | grep -qE '^\s*#'; then
+                echo "$line" | sed 's/^\(\s*\)mosquitto:/\1# mosquitto:/' >> "$temp_file"
+                in_mosquitto=true
+                mosquitto_indent=$(echo "$line" | sed 's/[^ ].*//')
+                continue
+            fi
+            
+            # Handle lines within mosquitto service
+            if [ "$in_mosquitto" = true ]; then
+                local current_indent=$(echo "$line" | sed 's/[^ ].*//')
+                # Check if we've left mosquitto service
+                if [ -n "$line" ] && [ "${#current_indent}" -le "${#mosquitto_indent}" ] && echo "$line" | grep -qE '^\s*[a-zA-Z_]+:'; then
+                    in_mosquitto=false
+                else
+                    # Comment if not already commented
+                    if ! echo "$line" | grep -qE '^\s*#'; then
+                        echo "$line" | sed 's/^\(\s*\)/\1# /' >> "$temp_file"
+                    else
+                        echo "$line" >> "$temp_file"
+                    fi
+                    continue
+                fi
+            fi
+            
+            # Detect app service
+            if echo "$line" | grep -qE '^\s*app:'; then
+                in_app=true
+                echo "$line" >> "$temp_file"
+                continue
+            fi
+            
+            # Detect depends_on within app service
+            if [ "$in_app" = true ] && echo "$line" | grep -qE '^\s*depends_on:'; then
+                in_depends=true
+                depends_indent=$(echo "$line" | sed 's/[^ ].*//')
+                echo "$line" >> "$temp_file"
+                continue
+            fi
+            
+            # Handle mosquitto dependency
+            if [ "$in_depends" = true ] && echo "$line" | grep -qE 'mosquitto' && ! echo "$line" | grep -qE '^\s*#'; then
+                echo "$line" | sed 's/^\(\s*\)mosquitto:/\1# mosquitto:/' | sed 's/^\(\s*\)condition:/\1# condition:/' >> "$temp_file"
+                continue
+            fi
+            
+            # Check if we've left depends_on section
+            if [ "$in_depends" = true ]; then
+                local current_indent=$(echo "$line" | sed 's/[^ ].*//')
+                if [ -n "$line" ] && [ "${#current_indent}" -le "${#depends_indent}" ] && echo "$line" | grep -qE '^\s*[a-zA-Z_]+:'; then
+                    in_depends=false
+                fi
+            fi
+            
+            # Check if we've left app service
+            if [ "$in_app" = true ] && echo "$line" | grep -qE '^\s*[a-zA-Z_]+:' && ! echo "$line" | grep -qE '^\s*(depends_on|volumes|ports|environment|networks|security_opt|cap_add):'; then
+                in_app=false
+            fi
+            
+            # All other lines pass through
+            echo "$line" >> "$temp_file"
+        done < "$docker_compose_file"
+    fi
+    
+    # Replace original file with modified version
+    if [ -f "$temp_file" ] && mv "$temp_file" "$docker_compose_file" 2>/dev/null; then
+        print_success "docker-compose.yml configured successfully"
+        if [ -n "$backup_file" ]; then
+            print_info "Original file backed up to: $backup_file"
+        fi
+    else
+        print_error "Failed to update docker-compose.yml"
+        rm -f "$temp_file" 2>/dev/null
+        if [ -n "$backup_file" ] && [ -f "$backup_file" ]; then
+            print_info "Restoring from backup..."
+            cp "$backup_file" "$docker_compose_file" 2>/dev/null
+        fi
+        return 1
+    fi
+}
+
 # Copy CA certificate to remote nodes
 copy_certs_to_nodes() {
     local config_file="$1"
@@ -1832,12 +2024,14 @@ main() {
                 echo "  - Validates configuration"
                 echo "  - Validates database connectivity (if PreSigningVerification is enabled)"
                 echo "  - Generates certificates"
+                echo "  - Configures docker-compose.yml to enable mosquitto service"
                 echo "  - Automatically copies CA certificate to client nodes (unless --no-copy-certs)"
                 echo ""
                 echo "On CLIENT NODES:"
                 echo "  - Validates configuration"
                 echo "  - Validates database connectivity (if PreSigningVerification is enabled)"
                 echo "  - Validates CA certificate is configured correctly"
+                echo "  - Configures docker-compose.yml to disable mosquitto service"
                 echo "  - Does NOT generate certificates (only relay node does this)"
                 echo ""
                 echo "Note: Relayer API connectivity validation requires curl to be installed."
@@ -1890,6 +2084,9 @@ main() {
     
     # Determine if this is the relay node (first node)
     IS_RELAY_NODE=$(validate_node_ip "$CONFIG_FILE")
+    
+    # Configure docker-compose.yml based on node type
+    configure_docker_compose "$IS_RELAY_NODE"
     
     if [ "$IS_RELAY_NODE" = "true" ]; then
         # ========================================
