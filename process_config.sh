@@ -1831,40 +1831,37 @@ configure_docker_compose() {
         local mosquitto_found=false
         
         while IFS= read -r line || [ -n "$line" ]; do
-            # Detect mosquitto service start (must be at top level, not commented)
-            # Check if line contains "mosquitto:" and is not already commented
-            if echo "$line" | grep -q "mosquitto:" && ! echo "$line" | grep -qE '^[[:space:]]*#'; then
-                # Verify it's actually a service definition (ends with colon, possibly with trailing spaces/comments)
-                if echo "$line" | grep -qE 'mosquitto:[[:space:]]*(#|$)'; then
-                    # Comment out the mosquitto service header
-                    echo "$line" | sed 's/^\([[:space:]]*\)mosquitto:/\1# mosquitto:/' >> "$temp_file"
-                    in_mosquitto=true
-                    mosquitto_found=true
-                    mosquitto_indent=$(echo "$line" | sed 's/[^ ].*//')
-                    continue
-                fi
+            # Detect mosquitto service start - look for "  mosquitto:" (2 spaces, not commented)
+            if [ "$in_mosquitto" != true ] && echo "$line" | grep -qE '^  mosquitto:' && ! echo "$line" | grep -qE '^[[:space:]]*#'; then
+                # Comment out the mosquitto service header
+                echo "$line" | sed 's/^\(  \)mosquitto:/\1# mosquitto:/' >> "$temp_file"
+                in_mosquitto=true
+                mosquitto_found=true
+                mosquitto_indent="  "
+                continue
             fi
             
             # Handle lines within mosquitto service
             if [ "$in_mosquitto" = true ]; then
                 # Check if this is an empty line
-                if [ -z "$line" ] || [ "$line" = "" ]; then
-                    # Empty line - comment it (preserve as commented empty line)
+                if [ -z "$line" ]; then
+                    # Empty line - add a commented empty line
                     echo "# " >> "$temp_file"
                     continue
                 fi
                 
+                # Get current line indent
                 local current_indent=$(echo "$line" | sed 's/[^ ].*//')
-                # Check if we've left mosquitto service (hit another top-level service at same indent level)
-                # Top-level services in docker-compose are at 2-space indent under "services:"
-                # Check if indent is exactly 2 spaces and it's a service definition
-                if [ "${#current_indent}" -eq 2 ] && echo "$line" | grep -qE '^  [a-zA-Z_]+:'; then
+                local indent_len=${#current_indent}
+                
+                # Check if we've left mosquitto service
+                # Top-level services have 2-space indent, so if we hit another 2-space service, we're done
+                if [ "$indent_len" -eq 2 ] && echo "$line" | grep -qE '^  [a-zA-Z_]+:'; then
                     # We've hit another service (like "app:"), so we're done with mosquitto
                     in_mosquitto=false
-                    # Write this line (it's the next service, not part of mosquitto)
                     echo "$line" >> "$temp_file"
                     continue
-                elif [ "${#current_indent}" -lt 2 ]; then
+                elif [ "$indent_len" -lt 2 ]; then
                     # We've hit something at root level (like "networks:" or "version:")
                     in_mosquitto=false
                     echo "$line" >> "$temp_file"
@@ -1881,36 +1878,40 @@ configure_docker_compose() {
             fi
             
             # Detect app service
-            if echo "$line" | grep -qE '^\s*app:'; then
+            if echo "$line" | grep -qE '^  app:'; then
                 in_app=true
                 echo "$line" >> "$temp_file"
                 continue
             fi
             
             # Detect depends_on within app service
-            if [ "$in_app" = true ] && echo "$line" | grep -qE '^\s*depends_on:'; then
+            if [ "$in_app" = true ] && echo "$line" | grep -qE '^    depends_on:'; then
                 in_depends=true
                 depends_indent=$(echo "$line" | sed 's/[^ ].*//')
                 echo "$line" >> "$temp_file"
                 continue
             fi
             
-            # Handle mosquitto dependency
-            if [ "$in_depends" = true ] && echo "$line" | grep -qE 'mosquitto' && ! echo "$line" | grep -qE '^\s*#'; then
-                echo "$line" | sed 's/^\(\s*\)mosquitto:/\1# mosquitto:/' | sed 's/^\(\s*\)condition:/\1# condition:/' >> "$temp_file"
+            # Handle mosquitto dependency (within depends_on section)
+            if [ "$in_depends" = true ] && echo "$line" | grep -q "mosquitto" && ! echo "$line" | grep -qE '^[[:space:]]*#'; then
+                # Comment out mosquitto and its condition
+                echo "$line" | sed 's/^\([[:space:]]*\)mosquitto:/\1# mosquitto:/' | sed 's/^\([[:space:]]*\)condition:/\1# condition:/' >> "$temp_file"
                 continue
             fi
             
             # Check if we've left depends_on section
             if [ "$in_depends" = true ]; then
                 local current_indent=$(echo "$line" | sed 's/[^ ].*//')
-                if [ -n "$line" ] && [ "${#current_indent}" -le "${#depends_indent}" ] && echo "$line" | grep -qE '^\s*[a-zA-Z_]+:'; then
+                local depends_indent_len=${#depends_indent}
+                local current_indent_len=${#current_indent}
+                # If we hit a key at same or less indent than depends_on, we've left it
+                if [ -n "$line" ] && [ "$current_indent_len" -le "$depends_indent_len" ] && echo "$line" | grep -qE '^[[:space:]]*[a-zA-Z_]+:'; then
                     in_depends=false
                 fi
             fi
             
-            # Check if we've left app service
-            if [ "$in_app" = true ] && echo "$line" | grep -qE '^\s*[a-zA-Z_]+:' && ! echo "$line" | grep -qE '^\s*(depends_on|volumes|ports|environment|networks|security_opt|cap_add):'; then
+            # Check if we've left app service (hit another top-level service)
+            if [ "$in_app" = true ] && echo "$line" | grep -qE '^  [a-zA-Z_]+:' && ! echo "$line" | grep -qE '^  (app|depends_on|volumes|ports|environment|networks|security_opt|cap_add):'; then
                 in_app=false
             fi
             
@@ -1920,7 +1921,13 @@ configure_docker_compose() {
         
         # Verify mosquitto was found and processed
         if [ "$mosquitto_found" != true ]; then
-            print_warning "Mosquitto service not found in docker-compose.yml - it may already be commented out or the file format is different"
+            print_warning "Mosquitto service not found in docker-compose.yml"
+            print_info "This might mean:"
+            print_info "  - Mosquitto is already commented out"
+            print_info "  - The file format is different than expected"
+            print_info "  - The service name is different"
+        else
+            print_success "Mosquitto service found and will be commented out"
         fi
     fi
     
