@@ -1741,230 +1741,59 @@ configure_docker_compose() {
         print_info "Backup created: $backup_file"
     fi
     
-    # Create temporary file for modifications
-    local temp_file="${docker_compose_file}.tmp.$$"
-    
     if [ "$is_relay_node" = "true" ]; then
         # RELAY NODE: Ensure mosquitto is enabled (uncommented)
         print_info "Ensuring mosquitto service is enabled for relay node..."
         
-        # Simple approach: uncomment lines starting with # that are mosquitto-related
-        local in_mosquitto=false
-        local mosquitto_indent=""
-        local in_app=false
-        local in_depends=false
-        local depends_indent=""
+        # Uncomment mosquitto service header
+        sed -i 's/^\(\s*\)#\s*mosquitto:/\1mosquitto:/' "$docker_compose_file"
         
-        while IFS= read -r line || [ -n "$line" ]; do
-            # Detect mosquitto service start
-            if echo "$line" | grep -qE '^\s*#\s*mosquitto:' || echo "$line" | grep -qE '^\s*mosquitto:'; then
-                echo "$line" | sed 's/^\(\s*\)#\s*mosquitto:/\1mosquitto:/' >> "$temp_file"
-                in_mosquitto=true
-                mosquitto_indent=$(echo "$line" | sed 's/[^ ].*//')
-                continue
-            fi
-            
-            # Handle lines within mosquitto service
-            if [ "$in_mosquitto" = true ]; then
-                local current_indent=$(echo "$line" | sed 's/[^ ].*//')
-                # Check if we've left mosquitto service (hit another top-level service)
-                if [ -n "$line" ] && [ "${#current_indent}" -le "${#mosquitto_indent}" ] && echo "$line" | grep -qE '^\s*[a-zA-Z_]+:'; then
-                    in_mosquitto=false
-                else
-                    # Uncomment if commented
-                    if echo "$line" | grep -qE '^\s*#'; then
-                        echo "$line" | sed 's/^\(\s*\)#\s*/\1/' >> "$temp_file"
-                    else
-                        echo "$line" >> "$temp_file"
-                    fi
-                    continue
-                fi
-            fi
-            
-            # Detect app service
-            if echo "$line" | grep -qE '^\s*app:'; then
-                in_app=true
-                echo "$line" >> "$temp_file"
-                continue
-            fi
-            
-            # Detect depends_on within app service
-            if [ "$in_app" = true ] && echo "$line" | grep -qE '^\s*depends_on:'; then
-                in_depends=true
-                depends_indent=$(echo "$line" | sed 's/[^ ].*//')
-                echo "$line" >> "$temp_file"
-                continue
-            fi
-            
-            # Handle mosquitto dependency
-            if [ "$in_depends" = true ] && echo "$line" | grep -qE 'mosquitto'; then
-                echo "$line" | sed 's/^\(\s*\)#\s*mosquitto:/\1mosquitto:/' | sed 's/^\(\s*\)#\s*condition:/\1condition:/' >> "$temp_file"
-                continue
-            fi
-            
-            # Check if we've left depends_on section
-            if [ "$in_depends" = true ]; then
-                local current_indent=$(echo "$line" | sed 's/[^ ].*//')
-                if [ -n "$line" ] && [ "${#current_indent}" -le "${#depends_indent}" ] && echo "$line" | grep -qE '^\s*[a-zA-Z_]+:'; then
-                    in_depends=false
-                fi
-            fi
-            
-            # Check if we've left app service
-            if [ "$in_app" = true ] && echo "$line" | grep -qE '^\s*[a-zA-Z_]+:' && ! echo "$line" | grep -qE '^\s*(depends_on|volumes|ports|environment|networks|security_opt|cap_add):'; then
-                in_app=false
-            fi
-            
-            # All other lines pass through
-            echo "$line" >> "$temp_file"
-        done < "$docker_compose_file"
+        # Uncomment all lines in mosquitto service block (between mosquitto: and next service)
+        awk '/^  mosquitto:/ { in_mosq=1 } /^  [a-zA-Z_]+:/ && in_mosq && !/^  mosquitto:/ { in_mosq=0 } in_mosq { gsub(/^(\s*)#\s*/, "\1") } { print }' "$docker_compose_file" > "${docker_compose_file}.tmp" && mv "${docker_compose_file}.tmp" "$docker_compose_file"
+        
+        # Uncomment mosquitto dependency in app service
+        sed -i '/depends_on:/,/^    [a-zA-Z_]*:$/ { s/^\(\s*\)#\s*mosquitto:/\1mosquitto:/; /mosquitto:/ { n; s/^\(\s*\)#\s*condition:/\1condition:/; } }' "$docker_compose_file"
+        
+        print_success "docker-compose.yml configured for relay node"
         
     else
         # CLIENT NODE: Comment out mosquitto service and dependency
         print_info "Disabling mosquitto service for client node (only relay node runs the broker)..."
         
-        local in_mosquitto=false
-        local mosquitto_indent=""
-        local in_app=false
-        local in_depends=false
-        local depends_indent=""
-        local mosquitto_found=false
+        # Find line numbers for mosquitto service
+        local mosquitto_start=$(grep -n "^  mosquitto:" "$docker_compose_file" | head -1 | cut -d: -f1)
         
-        while IFS= read -r line || [ -n "$line" ]; do
-            # Detect mosquitto service start - look for "  mosquitto:" (2 spaces, not commented)
-            if [ "$in_mosquitto" != true ] && echo "$line" | grep -qE '^  mosquitto:' && ! echo "$line" | grep -qE '^[[:space:]]*#'; then
-                # Comment out the mosquitto service header
-                echo "$line" | sed 's/^\(  \)mosquitto:/\1# mosquitto:/' >> "$temp_file"
-                in_mosquitto=true
-                mosquitto_found=true
-                mosquitto_indent="  "
-                continue
-            fi
+        if [ -n "$mosquitto_start" ]; then
+            # Find the end of mosquitto service (next service at same indent)
+            local mosquitto_end=$(awk -v start="$mosquitto_start" 'NR > start && /^  [a-zA-Z_]+:/ { print NR; exit }' "$docker_compose_file")
             
-            # Handle lines within mosquitto service
-            if [ "$in_mosquitto" = true ]; then
-                # Check if this is an empty line
-                if [ -z "$line" ]; then
-                    # Empty line - add a commented empty line
-                    echo "# " >> "$temp_file"
-                    continue
-                fi
-                
-                # Get current line indent
-                local current_indent=$(echo "$line" | sed 's/[^ ].*//')
-                local indent_len=${#current_indent}
-                
-                # Check if we've left mosquitto service
-                # Top-level services have 2-space indent, so if we hit another 2-space service, we're done
-                if [ "$indent_len" -eq 2 ] && echo "$line" | grep -qE '^  [a-zA-Z_]+:'; then
-                    # We've hit another service (like "app:"), so we're done with mosquitto
-                    in_mosquitto=false
-                    echo "$line" >> "$temp_file"
-                    continue
-                elif [ "$indent_len" -lt 2 ]; then
-                    # We've hit something at root level (like "networks:" or "version:")
-                    in_mosquitto=false
-                    echo "$line" >> "$temp_file"
-                    continue
-                else
-                    # Still within mosquitto service - comment if not already commented
-                    if ! echo "$line" | grep -qE '^[[:space:]]*#'; then
-                        echo "$line" | sed 's/^\([[:space:]]*\)/\1# /' >> "$temp_file"
-                    else
-                        echo "$line" >> "$temp_file"
-                    fi
-                    continue
-                fi
+            if [ -n "$mosquitto_end" ]; then
+                # Comment out mosquitto service block using sed
+                sed -i "${mosquitto_start},$((mosquitto_end-1))s/^\(\s*\)/\1# /" "$docker_compose_file"
+                # Ensure the mosquitto: line itself is commented
+                sed -i "${mosquitto_start}s/^\(\s*\)mosquitto:/\1# mosquitto:/" "$docker_compose_file"
+                print_success "Mosquitto service commented out (lines $mosquitto_start-$((mosquitto_end-1)))"
+            else
+                # Fallback: comment from mosquitto: to end of file (shouldn't happen but safer)
+                sed -i "${mosquitto_start},\$s/^\(\s*\)/\1# /" "$docker_compose_file"
+                sed -i "${mosquitto_start}s/^\(\s*\)mosquitto:/\1# mosquitto:/" "$docker_compose_file"
+                print_warning "Mosquitto service end not found - commented to end of file"
             fi
-            
-            # Detect app service
-            if echo "$line" | grep -qE '^  app:'; then
-                in_app=true
-                echo "$line" >> "$temp_file"
-                continue
-            fi
-            
-            # Detect depends_on within app service
-            if [ "$in_app" = true ] && echo "$line" | grep -qE '^    depends_on:'; then
-                in_depends=true
-                depends_indent=$(echo "$line" | sed 's/[^ ].*//')
-                echo "$line" >> "$temp_file"
-                continue
-            fi
-            
-            # Handle mosquitto dependency (within depends_on section)
-            if [ "$in_depends" = true ] && echo "$line" | grep -q "mosquitto" && ! echo "$line" | grep -qE '^[[:space:]]*#'; then
-                # Comment out mosquitto and its condition
-                echo "$line" | sed 's/^\([[:space:]]*\)mosquitto:/\1# mosquitto:/' | sed 's/^\([[:space:]]*\)condition:/\1# condition:/' >> "$temp_file"
-                continue
-            fi
-            
-            # Check if we've left depends_on section
-            if [ "$in_depends" = true ]; then
-                local current_indent=$(echo "$line" | sed 's/[^ ].*//')
-                local depends_indent_len=${#depends_indent}
-                local current_indent_len=${#current_indent}
-                # If we hit a key at same or less indent than depends_on, we've left it
-                if [ -n "$line" ] && [ "$current_indent_len" -le "$depends_indent_len" ] && echo "$line" | grep -qE '^[[:space:]]*[a-zA-Z_]+:'; then
-                    in_depends=false
-                fi
-            fi
-            
-            # Check if we've left app service (hit another top-level service)
-            if [ "$in_app" = true ] && echo "$line" | grep -qE '^  [a-zA-Z_]+:' && ! echo "$line" | grep -qE '^  (app|depends_on|volumes|ports|environment|networks|security_opt|cap_add):'; then
-                in_app=false
-            fi
-            
-            # All other lines pass through
-            echo "$line" >> "$temp_file"
-        done < "$docker_compose_file"
-        
-        # Verify mosquitto was found and processed
-        if [ "$mosquitto_found" != true ]; then
-            print_warning "Mosquitto service not found in docker-compose.yml"
-            print_info "This might mean:"
-            print_info "  - Mosquitto is already commented out"
-            print_info "  - The file format is different than expected"
-            print_info "  - The service name is different"
         else
-            print_success "Mosquitto service found and will be commented out"
+            print_warning "Mosquitto service not found - may already be commented"
         fi
-    fi
-    
-    # Verify temp file was created and has content
-    if [ ! -f "$temp_file" ]; then
-        print_error "Temporary file was not created"
-        rm -f "$temp_file" 2>/dev/null
-        if [ -n "$backup_file" ] && [ -f "$backup_file" ]; then
-            print_info "Restoring from backup..."
-            cp "$backup_file" "$docker_compose_file" 2>/dev/null
+        
+        # Comment out mosquitto dependency in app service
+        sed -i '/depends_on:/,/^    [a-zA-Z_]*:$/ { s/^\(\s*\)mosquitto:/\1# mosquitto:/; /mosquitto:/ { n; s/^\(\s*\)condition:/\1# condition:/; } }' "$docker_compose_file"
+        
+        # Verify mosquitto is commented
+        if grep -q "^  # mosquitto:" "$docker_compose_file" 2>/dev/null; then
+            print_success "Mosquitto service is now commented out"
+        else
+            print_warning "Could not verify mosquitto was commented - please check manually"
         fi
-        return 1
-    fi
-    
-    # Check if temp file has content (should have at least as many lines as original)
-    local original_lines=$(wc -l < "$docker_compose_file" 2>/dev/null || echo "0")
-    local temp_lines=$(wc -l < "$temp_file" 2>/dev/null || echo "0")
-    
-    if [ "$temp_lines" -lt "$original_lines" ]; then
-        print_warning "Temporary file has fewer lines than original - this might indicate an error"
-        print_info "Original: $original_lines lines, Temp: $temp_lines lines"
-    fi
-    
-    # Replace original file with modified version
-    if mv "$temp_file" "$docker_compose_file" 2>/dev/null; then
-        print_success "docker-compose.yml configured successfully"
-        if [ -n "$backup_file" ]; then
-            print_info "Original file backed up to: $backup_file"
-        fi
-    else
-        print_error "Failed to update docker-compose.yml (permission issue?)"
-        rm -f "$temp_file" 2>/dev/null
-        if [ -n "$backup_file" ] && [ -f "$backup_file" ]; then
-            print_info "Restoring from backup..."
-            cp "$backup_file" "$docker_compose_file" 2>/dev/null
-        fi
-        return 1
+        
+        print_success "docker-compose.yml configured for client node"
     fi
 }
 
