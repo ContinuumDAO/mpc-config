@@ -1770,39 +1770,110 @@ generate_server_csr() {
 }
 
 # Sign server certificate with CA
+# Accepts optional config_file parameter to extract IP address for SANs
 sign_server_cert() {
-    print_step "Signing server certificate with CA..."
-    if openssl x509 -req \
-        -in "$SERVER_CSR" \
-        -CA "$CA_CRT" \
-        -CAkey "$CA_KEY" \
-        -CAcreateserial \
-        -out "$SERVER_CRT" \
-        -days "$CERT_VALIDITY_DAYS" 2>/dev/null; then
-        print_success "Server certificate signed: $SERVER_CRT"
-        # Verify certificate was created
-        if [ ! -f "$SERVER_CRT" ]; then
-            print_error "Server certificate file was not created"
-            exit 1
-        fi
-        # Validate certificate
-        if openssl x509 -in "$SERVER_CRT" -noout -text >/dev/null 2>&1; then
-            print_success "Server certificate is valid"
-            SERVER_SUBJECT=$(openssl x509 -in "$SERVER_CRT" -noout -subject 2>/dev/null)
-            print_info "Server Subject: $SERVER_SUBJECT"
-            # Verify certificate is signed by CA
-            if openssl verify -CAfile "$CA_CRT" "$SERVER_CRT" >/dev/null 2>&1; then
-                print_success "Server certificate is properly signed by CA"
-            else
-                print_error "Server certificate verification failed"
-                exit 1
+    local config_file="${1:-}"
+    local server_ip=""
+    local openssl_config=""
+    
+    # Extract IP address from config file if provided
+    if [ -n "$config_file" ] && [ -f "$config_file" ]; then
+        local first_addr=$(get_first_node_address "$config_file")
+        if [ -n "$first_addr" ] && [ "$first_addr" != "null" ]; then
+            server_ip=$(extract_ip_from_url "$first_addr")
+            if [ -n "$server_ip" ]; then
+                print_info "Extracted broker IP address from config: $server_ip"
             fi
+        fi
+    fi
+    
+    print_step "Signing server certificate with CA..."
+    
+    # Create temporary OpenSSL config file with SANs if IP is available
+    if [ -n "$server_ip" ]; then
+        openssl_config=$(mktemp)
+        cat > "$openssl_config" <<EOF
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+
+[req_distinguished_name]
+
+[v3_req]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+subjectAltName = @alt_names
+
+[alt_names]
+IP.1 = $server_ip
+EOF
+        print_info "Including IP address $server_ip in certificate SANs"
+    fi
+    
+    # Sign certificate with or without SANs
+    if [ -n "$openssl_config" ]; then
+        # Sign with SANs
+        if openssl x509 -req \
+            -in "$SERVER_CSR" \
+            -CA "$CA_CRT" \
+            -CAkey "$CA_KEY" \
+            -CAcreateserial \
+            -out "$SERVER_CRT" \
+            -days "$CERT_VALIDITY_DAYS" \
+            -extensions v3_req \
+            -extfile "$openssl_config" 2>/dev/null; then
+            rm -f "$openssl_config"
+            print_success "Server certificate signed with IP SAN: $SERVER_CRT"
         else
-            print_error "Generated server certificate is invalid"
+            rm -f "$openssl_config"
+            print_error "Failed to sign server certificate"
             exit 1
         fi
     else
-        print_error "Failed to sign server certificate"
+        # Sign without SANs (fallback)
+        if openssl x509 -req \
+            -in "$SERVER_CSR" \
+            -CA "$CA_CRT" \
+            -CAkey "$CA_KEY" \
+            -CAcreateserial \
+            -out "$SERVER_CRT" \
+            -days "$CERT_VALIDITY_DAYS" 2>/dev/null; then
+            print_success "Server certificate signed: $SERVER_CRT"
+            print_warning "No IP address found in config - certificate will not validate IP connections"
+        else
+            print_error "Failed to sign server certificate"
+            exit 1
+        fi
+    fi
+    
+    # Verify certificate was created
+    if [ ! -f "$SERVER_CRT" ]; then
+        print_error "Server certificate file was not created"
+        exit 1
+    fi
+    
+    # Validate certificate
+    if openssl x509 -in "$SERVER_CRT" -noout -text >/dev/null 2>&1; then
+        print_success "Server certificate is valid"
+        SERVER_SUBJECT=$(openssl x509 -in "$SERVER_CRT" -noout -subject 2>/dev/null)
+        print_info "Server Subject: $SERVER_SUBJECT"
+        
+        # Display SANs if present
+        local sans=$(openssl x509 -in "$SERVER_CRT" -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" || true)
+        if [ -n "$sans" ]; then
+            print_info "Certificate SANs:"
+            echo "$sans" | sed 's/^/  /'
+        fi
+        
+        # Verify certificate is signed by CA
+        if openssl verify -CAfile "$CA_CRT" "$SERVER_CRT" >/dev/null 2>&1; then
+            print_success "Server certificate is properly signed by CA"
+        else
+            print_error "Server certificate verification failed"
+            exit 1
+        fi
+    else
+        print_error "Generated server certificate is invalid"
         exit 1
     fi
 }
@@ -2193,7 +2264,7 @@ main() {
                 generate_ca_cert
                 generate_server_key
                 generate_server_csr
-                sign_server_cert
+                sign_server_cert "$CONFIG_FILE"
                 set_permissions
                 
                 # Copy CA certificate to location specified in configs.yaml (for relay node)
@@ -2314,7 +2385,7 @@ except Exception:
             generate_ca_cert
             generate_server_key
             generate_server_csr
-            sign_server_cert
+            sign_server_cert "$CONFIG_FILE"
             set_permissions
             
             # Copy CA certificate to location specified in configs.yaml (for relay node)
