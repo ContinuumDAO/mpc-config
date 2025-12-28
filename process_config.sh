@@ -1328,10 +1328,9 @@ validate_node_ip() {
     fi
 }
 
-# Check if CAFile is configured correctly for client nodes
-validate_client_cafile() {
+# Get CAFile path from configs.yaml
+get_cafile_from_config() {
     local config_file="$1"
-    local expected_ca_path="$2"
     
     if [ ! -f "$config_file" ]; then
         return 1
@@ -1365,7 +1364,176 @@ except Exception:
         cafile=$(grep -E '^\s*CAFile:' "$config_file" 2>/dev/null | head -1 | sed -E 's/^\s*CAFile:\s*["'\'']?([^"'\'']*)["'\'']?.*/\1/' | xargs)
     fi
     
-    # Check if CAFile is set
+    if [ -n "$cafile" ] && [ "$cafile" != "" ]; then
+        echo "$cafile"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Find distributed-auth directory (where docker-compose runs)
+find_distributed_auth_dir() {
+    local current_dir="$PWD"
+    local script_dir="$(dirname "$0")"
+    
+    # Try multiple strategies to find distributed-auth directory
+    local possible_paths=(
+        # If we're in mpc-config, look for sibling distributed-auth
+        "$(dirname "$script_dir")/distributed-auth"
+        # If we're already in distributed-auth
+        "$current_dir"
+        # Look for docker-compose.yml in current directory
+        "$current_dir"
+        # Look for docker-compose.yml in parent directories
+        "$(dirname "$current_dir")"
+        "$(dirname "$(dirname "$current_dir")")"
+    )
+    
+    for path in "${possible_paths[@]}"; do
+        if [ -f "$path/docker-compose.yml" ] || [ -f "$path/docker-compose_server.yml" ]; then
+            # Check if mosquitto/config directory exists or can be created
+            if [ -d "$path/mosquitto" ] || [ -d "$(dirname "$path")/mosquitto" ]; then
+                echo "$path"
+                return 0
+            fi
+        fi
+    done
+    
+    # If not found, try to find by looking for mosquitto directory
+    local search_dir="$current_dir"
+    for i in {1..5}; do
+        if [ -d "$search_dir/mosquitto" ]; then
+            echo "$search_dir"
+            return 0
+        fi
+        search_dir="$(dirname "$search_dir")"
+        if [ "$search_dir" = "/" ]; then
+            break
+        fi
+    done
+    
+    # Default: assume we're in distributed-auth or it's a sibling of mpc-config
+    if [ -d "$(dirname "$script_dir")/distributed-auth" ]; then
+        echo "$(dirname "$script_dir")/distributed-auth"
+        return 0
+    fi
+    
+    # Last resort: use current directory
+    echo "$current_dir"
+}
+
+# Copy generated CA certificate to CAFile location in configs.yaml (for relay node)
+# The CAFile path in configs.yaml is the container path (/mosquitto/config/certs/ca.crt)
+# We need to convert it to the host path (./mosquitto/config/certs/ca.crt relative to distributed-auth)
+copy_cert_to_cafile_location() {
+    local config_file="$1"
+    local generated_ca_cert="$2"
+    
+    if [ ! -f "$generated_ca_cert" ]; then
+        print_error "Generated CA certificate not found: $generated_ca_cert"
+        return 1
+    fi
+    
+    print_step "Copying CA certificate to location specified in configs.yaml..."
+    
+    # Get CAFile path from config (this is the container path, e.g., /mosquitto/config/certs/ca.crt)
+    local container_cafile_path
+    container_cafile_path=$(get_cafile_from_config "$config_file")
+    
+    if [ -z "$container_cafile_path" ]; then
+        print_info "CAFile not configured in configs.yaml - skipping copy"
+        print_info "Certificate remains at: $generated_ca_cert"
+        return 0
+    fi
+    
+    # Find distributed-auth directory (where docker-compose runs)
+    local distributed_auth_dir
+    distributed_auth_dir=$(find_distributed_auth_dir)
+    
+    if [ ! -d "$distributed_auth_dir" ]; then
+        print_warning "Could not find distributed-auth directory. Attempting to create mosquitto/config structure in current location."
+        distributed_auth_dir="$PWD"
+    fi
+    
+    # Convert container path to host path
+    # Container: /mosquitto/config/certs/ca.crt
+    # Host: ./mosquitto/config/certs/ca.crt (relative to distributed-auth)
+    local host_cafile_path
+    if [[ "$container_cafile_path" == /* ]]; then
+        # Remove leading slash to make it relative
+        host_cafile_path="${container_cafile_path#/}"
+    else
+        host_cafile_path="$container_cafile_path"
+    fi
+    
+    # Full host path
+    local full_host_path="${distributed_auth_dir}/${host_cafile_path}"
+    
+    # Normalize paths for comparison
+    local normalized_generated=$(readlink -f "$generated_ca_cert" 2>/dev/null || echo "$generated_ca_cert")
+    local normalized_host=$(readlink -f "$full_host_path" 2>/dev/null || echo "$full_host_path")
+    
+    # Check if paths are the same (already in the right place)
+    if [ "$normalized_generated" = "$normalized_host" ]; then
+        print_success "CA certificate is already at the configured location: $full_host_path"
+        return 0
+    fi
+    
+    # Create directory if it doesn't exist
+    local cafile_dir=$(dirname "$full_host_path")
+    if [ ! -d "$cafile_dir" ]; then
+        print_info "Creating directory: $cafile_dir"
+        if ! mkdir -p "$cafile_dir" 2>/dev/null; then
+            # Try with sudo if regular mkdir failed
+            if sudo mkdir -p "$cafile_dir" 2>/dev/null; then
+                print_success "Directory created (with sudo): $cafile_dir"
+            else
+                print_error "Failed to create directory: $cafile_dir"
+                print_info "Please create the directory manually: mkdir -p $cafile_dir"
+                return 1
+            fi
+        else
+            print_success "Directory created: $cafile_dir"
+        fi
+    fi
+    
+    # Copy the certificate
+    print_info "Copying CA certificate from $generated_ca_cert to $full_host_path"
+    print_info "  (Container path: $container_cafile_path, Host path: $full_host_path)"
+    if cp "$generated_ca_cert" "$full_host_path" 2>/dev/null; then
+        print_success "CA certificate copied to: $full_host_path"
+        # Set appropriate permissions
+        chmod 644 "$full_host_path" 2>/dev/null || print_warning "Could not set permissions on $full_host_path"
+        return 0
+    else
+        # Try with sudo if regular copy failed
+        if sudo cp "$generated_ca_cert" "$full_host_path" 2>/dev/null; then
+            print_success "CA certificate copied (with sudo) to: $full_host_path"
+            sudo chmod 644 "$full_host_path" 2>/dev/null || print_warning "Could not set permissions on $full_host_path"
+            return 0
+        else
+            print_error "Failed to copy CA certificate to: $full_host_path"
+            print_info "Please copy manually: cp $generated_ca_cert $full_host_path"
+            return 1
+        fi
+    fi
+}
+
+# Check if CAFile is configured correctly for client nodes
+validate_client_cafile() {
+    local config_file="$1"
+    local expected_ca_path="$2"
+    
+    if [ ! -f "$config_file" ]; then
+        return 1
+    fi
+    
+    # Get CAFile from config using helper function
+    local cafile=""
+    cafile=$(get_cafile_from_config "$config_file")
+    
+    # If get_cafile_from_config failed or returned empty, return 1
     if [ -z "$cafile" ]; then
         return 1  # Not configured
     fi
@@ -2028,6 +2196,9 @@ main() {
                 sign_server_cert
                 set_permissions
                 
+                # Copy CA certificate to location specified in configs.yaml (for relay node)
+                copy_cert_to_cafile_location "$CONFIG_FILE" "$CA_CRT"
+                
                 # Display relay node specific instructions
                 echo ""
                 echo "=========================================="
@@ -2145,6 +2316,9 @@ except Exception:
             generate_server_csr
             sign_server_cert
             set_permissions
+            
+            # Copy CA certificate to location specified in configs.yaml (for relay node)
+            copy_cert_to_cafile_location "$CONFIG_FILE" "$CA_CRT"
             
             echo ""
             print_warning "Next steps:"

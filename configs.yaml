@@ -51,9 +51,16 @@ LogPath: "logs/DistributedAuth.log"
 #       The broker must have its own TLS listener configured (e.g., listener 8883)
 MQTTTLS:
   # REQUIRED for self-signed certificates (default): Path to CA certificate file
+  # This is the path INSIDE the Docker container (absolute path)
+  # The process_config.sh script automatically copies the generated certificate
+  # to the corresponding host path (./mosquitto/config/certs/ca.crt relative to where docker-compose runs)
+  # 
   # The broker generates a CA certificate (ca.crt) that must be shared with all nodes
   # Each node needs the CA certificate to verify the broker's self-signed certificate
-  # Example: '/mosquitto/config/certs/ca.crt' or '/path/to/ca.crt'
+  # 
+  # IMPORTANT: This path is the container path. Docker mounts ./mosquitto/config
+  #            to /mosquitto/config in the container. The process_config.sh script
+  #            handles copying the cert to the correct host location automatically.
   # 
   # Optional for Let's Encrypt/certbot certificates: Leave empty
   # System CA store will be used automatically (Let's Encrypt is publicly trusted)
