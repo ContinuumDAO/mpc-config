@@ -1980,6 +1980,42 @@ configure_docker_compose() {
         print_info "Backup created: $backup_file"
     fi
     
+    # Ensure app service has mosquitto/config volume mount (needed for both relay and client nodes)
+    # This allows the app container to access the CA certificate at /mosquitto/config/certs/ca.crt
+    print_info "Ensuring app service has mosquitto/config volume mount..."
+    
+    # Check if the volume mount already exists
+    if ! grep -qE '^\s+-\./mosquitto/config:/mosquitto/config' "$docker_compose_file"; then
+        # Find the last volume entry in the app service volumes section
+        # Look for the pattern: app: ... volumes: ... - ... (last - entry before networks: or other top-level keys)
+        local last_volume_line=$(awk '
+            /^\s+app:/ { in_app=1; next }
+            in_app && /^\s+volumes:/ { in_volumes=1; next }
+            in_volumes && /^\s+-/ { last_vol=NR }
+            in_volumes && /^\s+[a-zA-Z_]+:/ && !/^\s+-/ { if (last_vol) print last_vol; exit }
+            END { if (in_volumes && last_vol) print last_vol }
+        ' "$docker_compose_file")
+        
+        if [ -n "$last_volume_line" ] && [ "$last_volume_line" -gt 0 ]; then
+            # Insert after the last volume entry
+            sed -i "${last_volume_line}a\      - ./mosquitto/config:/mosquitto/config" "$docker_compose_file"
+            print_success "Added mosquitto/config volume mount to app service"
+        else
+            # Fallback: find volumes: line and add after it
+            local volumes_line=$(grep -n '^\s+volumes:' "$docker_compose_file" | awk -F: 'NR==1 {print $1}')
+            if [ -n "$volumes_line" ] && [ "$volumes_line" -gt 0 ]; then
+                sed -i "${volumes_line}a\      - ./mosquitto/config:/mosquitto/config" "$docker_compose_file"
+                print_success "Added mosquitto/config volume mount to app service (after volumes: line)"
+            else
+                print_warning "Could not find app service volumes section - volume mount may need to be added manually"
+                print_info "Please add the following to the app service volumes section in docker-compose.yml:"
+                echo "      - ./mosquitto/config:/mosquitto/config"
+            fi
+        fi
+    else
+        print_info "mosquitto/config volume mount already exists in app service"
+    fi
+    
     if [ "$is_relay_node" = "true" ]; then
         # RELAY NODE: Ensure mosquitto is enabled (uncommented)
         print_info "Ensuring mosquitto service is enabled for relay node..."
