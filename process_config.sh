@@ -2066,7 +2066,9 @@ try:
     
     # Update all groups (only if not already set or if set to empty)
     for group in data.get('MPCGroups', []):
-        if 'mqttBroker' not in group or not group.get('mqttBroker'):
+        mqtt_broker = group.get('mqttBroker', '')
+        # Update if not set, empty string, or None
+        if not mqtt_broker or mqtt_broker == '' or mqtt_broker is None:
             group['mqttBroker'] = "$broker_addr"
     
     with open("$config_file", 'w') as f:
@@ -2138,13 +2140,38 @@ EOF
     else
         # mqttBroker exists but is empty - update it using sed
         if [ "$mqtt_broker_exists" = true ] && [ -z "$existing_broker" ]; then
-            # Update existing empty mqttBroker line
-            if sed -i.tmp "s|^\s*mqttBroker\s*:\s*[\"']*[\"']*\s*$|    mqttBroker: \"$broker_addr\"|" "$config_file" 2>/dev/null; then
-                rm -f "${config_file}.tmp"
-                print_success "Updated empty mqttBroker to: $broker_addr"
+            # Update existing empty mqttBroker line (preserve comment if present)
+            # Pattern matches: mqttBroker: "" or mqttBroker: '' or mqttBroker:  (with optional quotes and whitespace)
+            # Preserves any comment after the value
+            if sed -i.tmp -E "s|^(\s*mqttBroker\s*:\s*)[\"']*[\"']*(\s*#.*)?$|\1\"$broker_addr\"\2|" "$config_file" 2>/dev/null; then
+                # Verify the update worked
+                if grep -qE "^\s*mqttBroker\s*:\s*\"$broker_addr\"" "$config_file" 2>/dev/null; then
+                    rm -f "${config_file}.tmp"
+                    print_success "Updated empty mqttBroker to: $broker_addr (comment preserved)"
+                else
+                    # Fallback: replace entire line but try to preserve comment
+                    local comment_part=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1 | sed -E 's/^[^#]*(#.*)$/\1/')
+                    if [ -n "$comment_part" ]; then
+                        sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\" $comment_part|" "$config_file" 2>/dev/null
+                    else
+                        sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\"|" "$config_file" 2>/dev/null
+                    fi
+                    if [ $? -eq 0 ]; then
+                        rm -f "${config_file}.tmp"
+                        print_success "Updated mqttBroker to: $broker_addr"
+                    else
+                        print_warning "Failed to update mqttBroker - please update manually in configs.yaml"
+                        rm -f "${config_file}.tmp"
+                    fi
+                fi
             else
-                # Try a more flexible pattern
-                sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\"|" "$config_file" 2>/dev/null
+                # Try a more flexible pattern that replaces the whole line
+                local comment_part=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1 | sed -E 's/^[^#]*(#.*)$/\1/')
+                if [ -n "$comment_part" ]; then
+                    sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\" $comment_part|" "$config_file" 2>/dev/null
+                else
+                    sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\"|" "$config_file" 2>/dev/null
+                fi
                 if [ $? -eq 0 ]; then
                     rm -f "${config_file}.tmp"
                     print_success "Updated mqttBroker to: $broker_addr"
