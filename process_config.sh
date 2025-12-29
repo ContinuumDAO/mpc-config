@@ -1990,7 +1990,9 @@ configure_mqtt_broker() {
     
     # Check if mqttBroker is already set by the user
     local existing_broker=""
+    local mqtt_broker_exists=false
     if grep -qE '^\s*mqttBroker\s*:' "$config_file"; then
+        mqtt_broker_exists=true
         # Extract existing value (handles both quoted and unquoted)
         existing_broker=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1 | sed -E 's/^\s*mqttBroker\s*:\s*["'\'']?([^"'\'']*)["'\'']?\s*$/\1/')
         if [ -n "$existing_broker" ]; then
@@ -2038,6 +2040,9 @@ configure_mqtt_broker() {
             fi
             
             return 0
+        else
+            # mqttBroker exists but is empty - we should update it
+            print_info "mqttBroker field exists but is empty - will update it to: $broker_addr"
         fi
     fi
     
@@ -2131,9 +2136,28 @@ EOF
             return 1
         fi
     else
-        # mqttBroker exists - we already checked above and should have returned
-        # This is a fallback in case the check above didn't catch it
-        print_info "mqttBroker already exists in configs.yaml - preserving user value"
+        # mqttBroker exists but is empty - update it using sed
+        if [ "$mqtt_broker_exists" = true ] && [ -z "$existing_broker" ]; then
+            # Update existing empty mqttBroker line
+            if sed -i.tmp "s|^\s*mqttBroker\s*:\s*[\"']*[\"']*\s*$|    mqttBroker: \"$broker_addr\"|" "$config_file" 2>/dev/null; then
+                rm -f "${config_file}.tmp"
+                print_success "Updated empty mqttBroker to: $broker_addr"
+            else
+                # Try a more flexible pattern
+                sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\"|" "$config_file" 2>/dev/null
+                if [ $? -eq 0 ]; then
+                    rm -f "${config_file}.tmp"
+                    print_success "Updated mqttBroker to: $broker_addr"
+                else
+                    print_warning "Failed to update mqttBroker - please update manually in configs.yaml"
+                    rm -f "${config_file}.tmp"
+                fi
+            fi
+        else
+            # mqttBroker exists with a value - we already checked above and should have returned
+            # This is a fallback in case the check above didn't catch it
+            print_info "mqttBroker already exists in configs.yaml - preserving user value"
+        fi
     fi
     
     return 0
