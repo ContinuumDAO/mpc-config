@@ -1986,29 +1986,47 @@ configure_docker_compose() {
     
     # Check if the volume mount already exists
     if ! grep -qE '^\s+-\./mosquitto/config:/mosquitto/config' "$docker_compose_file"; then
-        # Find the last volume entry in the app service volumes section
-        # Look for the pattern: app: ... volumes: ... - ... (last - entry before networks: or other top-level keys)
-        local last_volume_line=$(awk '
-            /^\s+app:/ { in_app=1; next }
-            in_app && /^\s+volumes:/ { in_volumes=1; next }
-            in_volumes && /^\s+-/ { last_vol=NR }
-            in_volumes && /^\s+[a-zA-Z_]+:/ && !/^\s+-/ { if (last_vol) print last_vol; exit }
-            END { if (in_volumes && last_vol) print last_vol }
-        ' "$docker_compose_file")
+        # Find the app service and its volumes section
+        # Use a more robust approach: find app service, then find volumes under it
+        local app_line=$(grep -nE '^[[:space:]]+app:' "$docker_compose_file" | head -1 | cut -d: -f1)
         
-        if [ -n "$last_volume_line" ] && [ "$last_volume_line" -gt 0 ]; then
-            # Insert after the last volume entry
-            sed -i "${last_volume_line}a\      - ./mosquitto/config:/mosquitto/config" "$docker_compose_file"
-            print_success "Added mosquitto/config volume mount to app service"
+        if [ -z "$app_line" ] || [ "$app_line" -eq 0 ]; then
+            print_warning "Could not find app service in docker-compose.yml"
+            print_info "Please add the following to the app service volumes section in docker-compose.yml:"
+            echo "      - ./mosquitto/config:/mosquitto/config"
         else
-            # Fallback: find volumes: line and add after it
-            local volumes_line=$(grep -n '^\s+volumes:' "$docker_compose_file" | awk -F: 'NR==1 {print $1}')
+            # Find volumes: line that comes after app: (within the app service block)
+            local volumes_line=$(awk -v app_start="$app_line" '
+                NR >= app_start && /^[[:space:]]+volumes:/ { print NR; exit }
+            ' "$docker_compose_file")
+            
             if [ -n "$volumes_line" ] && [ "$volumes_line" -gt 0 ]; then
-                sed -i "${volumes_line}a\      - ./mosquitto/config:/mosquitto/config" "$docker_compose_file"
-                print_success "Added mosquitto/config volume mount to app service (after volumes: line)"
+                # Find the last volume entry (line starting with spaces and -) after volumes:
+                # Stop when we hit another top-level key (same or less indentation as volumes:)
+                local last_volume_line=$(awk -v vol_start="$volumes_line" '
+                    NR > vol_start && /^[[:space:]]+-/ { last_vol=NR }
+                    NR > vol_start && /^[[:space:]]+[a-zA-Z_]+:/ && !/^[[:space:]]+-/ {
+                        # Check if this is at same or less indentation than volumes: (means we left volumes section)
+                        if (last_vol) { print last_vol; exit }
+                    }
+                    END { if (last_vol) print last_vol }
+                ' "$docker_compose_file")
+                
+                if [ -n "$last_volume_line" ] && [ "$last_volume_line" -gt 0 ]; then
+                    # Insert after the last volume entry
+                    sed -i "${last_volume_line}a\      - ./mosquitto/config:/mosquitto/config" "$docker_compose_file"
+                    print_success "Added mosquitto/config volume mount to app service"
+                else
+                    # No volume entries found yet, add after volumes: line
+                    sed -i "${volumes_line}a\      - ./mosquitto/config:/mosquitto/config" "$docker_compose_file"
+                    print_success "Added mosquitto/config volume mount to app service (first volume entry)"
+                fi
             else
-                print_warning "Could not find app service volumes section - volume mount may need to be added manually"
-                print_info "Please add the following to the app service volumes section in docker-compose.yml:"
+                print_warning "Could not find volumes section in app service"
+                print_info "Please add the following to the app service in docker-compose.yml:"
+                echo "    volumes:"
+                echo "      - ./configs.yaml:/app/configs.yaml:ro"
+                echo "      - ./data/app/logs:/app/logs"
                 echo "      - ./mosquitto/config:/mosquitto/config"
             fi
         fi
