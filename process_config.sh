@@ -1958,7 +1958,7 @@ extract_port_from_url() {
     fi
 }
 
-# Configure mqttBroker in configs.yaml
+# Configure mqttBroker in configs.yaml (preserves comments using sed)
 configure_mqtt_broker() {
     local config_file="$1"
     local is_relay_node="$2"
@@ -1988,69 +1988,152 @@ configure_mqtt_broker() {
     print_step "Configuring mqttBroker in configs.yaml..."
     print_info "Setting mqttBroker to: $broker_addr (derived from first node: $first_node_addr)"
     
-    # Use yq if available
-    if command -v yq &> /dev/null; then
-        # Check if mqttBroker already exists
-        local existing_broker=$(yq eval '.MPCGroups[0].mqttBroker' "$config_file" 2>/dev/null)
-        if [ "$existing_broker" != "null" ] && [ -n "$existing_broker" ]; then
-            print_info "mqttBroker already set to: $existing_broker"
-            # Update it anyway to ensure consistency
-            yq eval ".MPCGroups[].mqttBroker = \"$broker_addr\"" -i "$config_file" 2>/dev/null
-            if [ $? -eq 0 ]; then
-                print_success "Updated mqttBroker to: $broker_addr"
-            else
-                print_warning "Failed to update mqttBroker with yq"
+    # Check if mqttBroker is already set by the user
+    local existing_broker=""
+    if grep -qE '^\s*mqttBroker\s*:' "$config_file"; then
+        # Extract existing value (handles both quoted and unquoted)
+        existing_broker=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1 | sed -E 's/^\s*mqttBroker\s*:\s*["'\'']?([^"'\'']*)["'\'']?\s*$/\1/')
+        if [ -n "$existing_broker" ]; then
+            # Validate the broker address format
+            local protocol_valid=false
+            local port_valid=false
+            local protocol=""
+            local port=""
+            
+            # Check protocol (should be ssl:// or tls://)
+            if echo "$existing_broker" | grep -qE '^(ssl|tls)://'; then
+                protocol_valid=true
+                protocol=$(echo "$existing_broker" | sed -E 's|^(ssl|tls)://.*|\1|')
             fi
-        else
-            # Add mqttBroker to all MPCGroups
-            yq eval ".MPCGroups[].mqttBroker = \"$broker_addr\"" -i "$config_file" 2>/dev/null
-            if [ $? -eq 0 ]; then
-                print_success "Added mqttBroker: $broker_addr"
-            else
-                print_warning "Failed to add mqttBroker with yq"
+            
+            # Extract and check port (should be 8883 for TLS)
+            if echo "$existing_broker" | grep -qE ':[0-9]+'; then
+                port=$(echo "$existing_broker" | sed -E 's|.*:([0-9]+).*|\1|')
+                if [ "$port" = "8883" ]; then
+                    port_valid=true
+                fi
             fi
+            
+            # Validate and warn if format is incorrect
+            if [ "$protocol_valid" = false ] || [ "$port_valid" = false ]; then
+                print_warning "mqttBroker format validation issues found:"
+                if [ "$protocol_valid" = false ]; then
+                    print_warning "  - Protocol should be 'ssl://' or 'tls://' (found: ${existing_broker%%://*})"
+                fi
+                if [ "$port_valid" = false ]; then
+                    print_warning "  - Port should be 8883 for TLS (found: ${port:-not specified})"
+                fi
+                print_info "Recommended format: ssl://host:8883 or tls://host:8883"
+                print_warning "Current value will be preserved, but may cause connection issues."
+                print_info "To fix, update mqttBroker in configs.yaml to: $broker_addr"
+            fi
+            
+            # If format is correct but value differs, just inform
+            if [ "$protocol_valid" = true ] && [ "$port_valid" = true ] && [ "$existing_broker" != "$broker_addr" ]; then
+                print_info "mqttBroker is already set to: $existing_broker (format is correct)"
+                print_info "Keeping user-specified value. If you want to use the auto-derived value ($broker_addr),"
+                print_info "please remove or update the mqttBroker field in configs.yaml manually."
+            elif [ "$existing_broker" = "$broker_addr" ]; then
+                print_info "mqttBroker already set correctly to: $broker_addr"
+            fi
+            
+            return 0
         fi
-    # Use Python if available
-    elif command -v python3 &> /dev/null; then
+    fi
+    
+    # Try using ruamel.yaml (preserves comments) if available, otherwise use simple sed
+    if python3 -c "import ruamel.yaml" 2>/dev/null; then
+        # Use ruamel.yaml which preserves comments
         python3 << EOF
-import yaml
+import ruamel.yaml
 import sys
-import os
 
 try:
-    config_file = "$config_file"
-    broker_addr = "$broker_addr"
+    yaml = ruamel.yaml.YAML()
+    yaml.preserve_quotes = True
+    yaml.width = 4096
     
-    with open(config_file, 'r') as f:
-        data = yaml.safe_load(f) or {}
+    with open("$config_file", 'r') as f:
+        data = yaml.load(f)
     
     if 'MPCGroups' not in data:
         data['MPCGroups'] = []
     
-    # Update all groups
+    # Update all groups (only if not already set or if set to empty)
     for group in data.get('MPCGroups', []):
-        group['mqttBroker'] = broker_addr
+        if 'mqttBroker' not in group or not group.get('mqttBroker'):
+            group['mqttBroker'] = "$broker_addr"
     
-    with open(config_file, 'w') as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    with open("$config_file", 'w') as f:
+        yaml.dump(data, f)
     
-    print(f"Successfully set mqttBroker to {broker_addr}")
+    print("Successfully set mqttBroker to $broker_addr (comments preserved)")
     sys.exit(0)
 except Exception as e:
     print(f"Error: {e}", file=sys.stderr)
     sys.exit(1)
 EOF
         if [ $? -eq 0 ]; then
-            print_success "Added/updated mqttBroker: $broker_addr"
+            print_success "Added/updated mqttBroker: $broker_addr (comments preserved)"
         else
-            print_warning "Failed to update mqttBroker with Python"
+            print_warning "Failed with ruamel.yaml, trying sed fallback..."
+            # Fall through to sed approach
+        fi
+    fi
+    
+    # Fallback: Use sed for simple update/add (may not preserve all formatting but preserves comments)
+    if ! grep -qE '^\s*mqttBroker\s*:' "$config_file"; then
+        # Add mqttBroker after threshold if it exists, otherwise after nodeAddresses
+        if grep -qE '^\s*threshold\s*:' "$config_file"; then
+            # Simple sed: add after threshold line with same indentation
+            sed -i.tmp "/^\s*threshold\s*:/a\\    mqttBroker: \"$broker_addr\"" "$config_file" 2>/dev/null
+        elif grep -qE '^\s*nodeAddresses\s*:' "$config_file"; then
+            # Find where nodeAddresses block ends and add there
+            # This is a simple approach - finds the line after nodeAddresses that has less indentation
+            awk -v broker="$broker_addr" '
+            /^\s*nodeAddresses\s*:/ {
+                print
+                nodeaddr_indent = match($0, /^[[:space:]]*/)
+                while ((getline > 0)) {
+                    if (!/^\s*#/ && NF > 0) {
+                        current_indent = match($0, /^[[:space:]]*/)
+                        if (length(substr($0, 1, current_indent)) <= nodeaddr_indent) {
+                            # End of nodeAddresses, add mqttBroker
+                            indent_str = substr($0, 1, nodeaddr_indent)
+                            print indent_str "mqttBroker: \"" broker "\""
+                            print
+                            next
+                        }
+                    }
+                    print
+                }
+                # If we reach here, add at end
+                indent_str = substr($0, 1, nodeaddr_indent)
+                print indent_str "mqttBroker: \"" broker "\""
+                next
+            }
+            { print }
+            ' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+        else
+            print_warning "Could not find threshold or nodeAddresses - cannot auto-add mqttBroker"
+            print_info "Please manually add to configs.yaml:"
+            echo "  MPCGroups:"
+            echo "    - mqttBroker: \"$broker_addr\""
+            return 1
+        fi
+        
+        if [ $? -eq 0 ] && [ -f "$config_file" ]; then
+            rm -f "${config_file}.tmp"
+            print_success "Added mqttBroker: $broker_addr"
+        else
+            print_warning "Failed to add mqttBroker"
+            rm -f "${config_file}.tmp"
+            return 1
         fi
     else
-        print_warning "Neither yq nor python3 available - cannot automatically set mqttBroker"
-        print_info "Please manually add to configs.yaml:"
-        echo "  MPCGroups:"
-        echo "    - mqttBroker: \"$broker_addr\""
-        return 1
+        # mqttBroker exists - we already checked above and should have returned
+        # This is a fallback in case the check above didn't catch it
+        print_info "mqttBroker already exists in configs.yaml - preserving user value"
     fi
     
     return 0
