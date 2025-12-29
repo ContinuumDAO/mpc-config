@@ -1958,6 +1958,104 @@ extract_port_from_url() {
     fi
 }
 
+# Configure mqttBroker in configs.yaml
+configure_mqtt_broker() {
+    local config_file="$1"
+    local is_relay_node="$2"
+    
+    if [ -z "$config_file" ] || [ ! -f "$config_file" ]; then
+        print_warning "configs.yaml not found - skipping mqttBroker configuration"
+        return 0
+    fi
+    
+    # Get first node address (relay node's address)
+    local first_node_addr=$(get_first_node_address "$config_file")
+    if [ -z "$first_node_addr" ] || [ "$first_node_addr" = "null" ]; then
+        print_warning "Could not determine first node address - skipping mqttBroker configuration"
+        return 0
+    fi
+    
+    # Extract host/IP from the first node address
+    local first_node_host=$(extract_host_from_url "$first_node_addr")
+    if [ -z "$first_node_host" ]; then
+        print_warning "Could not extract host from first node address - skipping mqttBroker configuration"
+        return 0
+    fi
+    
+    # Construct broker address (TLS on port 8883)
+    local broker_addr="ssl://${first_node_host}:8883"
+    
+    print_step "Configuring mqttBroker in configs.yaml..."
+    print_info "Setting mqttBroker to: $broker_addr (derived from first node: $first_node_addr)"
+    
+    # Use yq if available
+    if command -v yq &> /dev/null; then
+        # Check if mqttBroker already exists
+        local existing_broker=$(yq eval '.MPCGroups[0].mqttBroker' "$config_file" 2>/dev/null)
+        if [ "$existing_broker" != "null" ] && [ -n "$existing_broker" ]; then
+            print_info "mqttBroker already set to: $existing_broker"
+            # Update it anyway to ensure consistency
+            yq eval ".MPCGroups[].mqttBroker = \"$broker_addr\"" -i "$config_file" 2>/dev/null
+            if [ $? -eq 0 ]; then
+                print_success "Updated mqttBroker to: $broker_addr"
+            else
+                print_warning "Failed to update mqttBroker with yq"
+            fi
+        else
+            # Add mqttBroker to all MPCGroups
+            yq eval ".MPCGroups[].mqttBroker = \"$broker_addr\"" -i "$config_file" 2>/dev/null
+            if [ $? -eq 0 ]; then
+                print_success "Added mqttBroker: $broker_addr"
+            else
+                print_warning "Failed to add mqttBroker with yq"
+            fi
+        fi
+    # Use Python if available
+    elif command -v python3 &> /dev/null; then
+        python3 << EOF
+import yaml
+import sys
+import os
+
+try:
+    config_file = "$config_file"
+    broker_addr = "$broker_addr"
+    
+    with open(config_file, 'r') as f:
+        data = yaml.safe_load(f) or {}
+    
+    if 'MPCGroups' not in data:
+        data['MPCGroups'] = []
+    
+    # Update all groups
+    for group in data.get('MPCGroups', []):
+        group['mqttBroker'] = broker_addr
+    
+    with open(config_file, 'w') as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    
+    print(f"Successfully set mqttBroker to {broker_addr}")
+    sys.exit(0)
+except Exception as e:
+    print(f"Error: {e}", file=sys.stderr)
+    sys.exit(1)
+EOF
+        if [ $? -eq 0 ]; then
+            print_success "Added/updated mqttBroker: $broker_addr"
+        else
+            print_warning "Failed to update mqttBroker with Python"
+        fi
+    else
+        print_warning "Neither yq nor python3 available - cannot automatically set mqttBroker"
+        print_info "Please manually add to configs.yaml:"
+        echo "  MPCGroups:"
+        echo "    - mqttBroker: \"$broker_addr\""
+        return 1
+    fi
+    
+    return 0
+}
+
 # Configure docker-compose.yml based on node type (relay or client)
 configure_docker_compose() {
     local is_relay_node="$1"
@@ -2286,6 +2384,9 @@ main() {
     
     # Determine if this is the relay node (first node)
     IS_RELAY_NODE=$(validate_node_ip "$CONFIG_FILE")
+    
+    # Configure mqttBroker in configs.yaml (for both relay and client nodes)
+    configure_mqtt_broker "$CONFIG_FILE" "$IS_RELAY_NODE"
     
     # Configure docker-compose.yml based on node type
     configure_docker_compose "$IS_RELAY_NODE"
