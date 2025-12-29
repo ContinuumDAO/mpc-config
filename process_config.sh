@@ -2276,7 +2276,23 @@ configure_docker_compose() {
     # This allows the app container to access the CA certificate at /mosquitto/config/certs/ca.crt
     print_info "Ensuring app service has mosquitto/config volume mount..."
     
-    # Check if the volume mount already exists
+    # First, remove any duplicate mosquitto/config volume mounts to avoid docker-compose errors
+    # Count how many times the mount appears
+    local mount_count=$(grep -cE '^\s+-\./mosquitto/config:/mosquitto/config' "$docker_compose_file" 2>/dev/null || echo "0")
+    if [ "$mount_count" -gt 1 ]; then
+        print_warning "Found $mount_count duplicate mosquitto/config volume mounts - removing duplicates..."
+        # Remove all occurrences, we'll add it back once
+        sed -i.tmp '/^\s+-\.\/mosquitto\/config:\/mosquitto\/config$/d' "$docker_compose_file"
+        if [ $? -eq 0 ]; then
+            rm -f "${docker_compose_file}.tmp"
+            print_success "Removed duplicate mosquitto/config volume mounts"
+        else
+            print_warning "Failed to remove duplicates - please check docker-compose.yml manually"
+            rm -f "${docker_compose_file}.tmp"
+        fi
+    fi
+    
+    # Check if the volume mount already exists (after removing duplicates)
     if ! grep -qE '^\s+-\./mosquitto/config:/mosquitto/config' "$docker_compose_file"; then
         # Find the app service and its volumes section
         # Use a more robust approach: find app service, then find volumes under it
