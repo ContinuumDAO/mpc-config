@@ -2540,10 +2540,7 @@ main() {
                 print_warning "Keep the private keys ($CA_KEY, $SERVER_KEY) secure and private!"
                 
                 # Copy certificates to other nodes by default (unless --no-copy-certs is specified)
-                if [ "$NO_COPY_CERTS" != "true" ]; then
-                    echo ""
-                    copy_certs_to_nodes "$CONFIG_FILE" "$CA_CRT"
-                else
+                if [ "$NO_COPY_CERTS" = "true" ]; then
                     echo ""
                     print_info "Skipping automatic certificate copy (--no-copy-certs specified)"
                     
@@ -2608,6 +2605,9 @@ except Exception:
                         print_info "To manually copy certificates:"
                         echo "  scp $CA_CRT user@node-ip:/mosquitto/config/certs/ca.crt"
                     fi
+                else
+                    echo ""
+                    copy_certs_to_nodes "$CONFIG_FILE" "$CA_CRT"
                 fi
             else
                 print_success "Let's Encrypt is configured - no self-signed certificates needed"
@@ -2635,10 +2635,7 @@ except Exception:
             echo "  2. Share $CA_CRT with all client nodes"
             
             # Copy certificates to other nodes by default (unless --no-copy-certs is specified)
-            if [ "$NO_COPY_CERTS" != "true" ]; then
-                echo ""
-                copy_certs_to_nodes "$CONFIG_FILE" "$CA_CRT"
-            else
+            if [ "$NO_COPY_CERTS" = "true" ]; then
                 echo ""
                 print_info "Skipping automatic certificate copy (--no-copy-certs specified)"
                 
@@ -2699,7 +2696,13 @@ except Exception:
                     echo "     chmod 644 /mosquitto/config/certs/ca.crt"
                     echo ""
                     print_info "CA Certificate file to share: $CA_CRT"
+                else
+                    print_info "To manually copy certificates:"
+                    echo "  scp $CA_CRT user@node-ip:/mosquitto/config/certs/ca.crt"
                 fi
+            else
+                echo ""
+                copy_certs_to_nodes "$CONFIG_FILE" "$CA_CRT"
             fi
         fi
     else
