@@ -1993,8 +1993,9 @@ configure_mqtt_broker() {
     local mqtt_broker_exists=false
     if grep -qE '^\s*mqttBroker\s*:' "$config_file"; then
         mqtt_broker_exists=true
-        # Extract existing value (handles both quoted and unquoted)
-        existing_broker=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1 | sed -E 's/^\s*mqttBroker\s*:\s*["'\'']?([^"'\'']*)["'\'']?\s*$/\1/')
+        # Extract existing value (handles both quoted and unquoted, stops at comment)
+        # Remove comment first, then extract value
+        existing_broker=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1 | sed -E 's/#.*$//' | sed -E 's/^\s*mqttBroker\s*:\s*["'\'']?([^"'\''#]*)["'\'']?\s*$/\1/' | xargs)
         if [ -n "$existing_broker" ]; then
             # Validate the broker address format
             local protocol_valid=false
