@@ -2047,9 +2047,10 @@ configure_mqtt_broker() {
     fi
     
     # Try using ruamel.yaml (preserves comments) if available, otherwise use simple sed
+    local ruamel_success=false
     if python3 -c "import ruamel.yaml" 2>/dev/null; then
         # Use ruamel.yaml which preserves comments
-        python3 << EOF
+        local py_output=$(python3 << EOF 2>&1
 import ruamel.yaml
 import sys
 
@@ -2064,32 +2065,52 @@ try:
     if 'MPCGroups' not in data:
         data['MPCGroups'] = []
     
+    updated = False
     # Update all groups (only if not already set or if set to empty)
     for group in data.get('MPCGroups', []):
-        mqtt_broker = group.get('mqttBroker', '')
+        mqtt_broker = group.get('mqttBroker')
         # Update if not set, empty string, or None
-        if not mqtt_broker or mqtt_broker == '' or mqtt_broker is None:
+        if mqtt_broker is None or mqtt_broker == '' or str(mqtt_broker).strip() == '':
             group['mqttBroker'] = "$broker_addr"
+            updated = True
     
-    with open("$config_file", 'w') as f:
-        yaml.dump(data, f)
-    
-    print("Successfully set mqttBroker to $broker_addr (comments preserved)")
-    sys.exit(0)
+    if updated:
+        with open("$config_file", 'w') as f:
+            yaml.dump(data, f)
+        print("SUCCESS")
+        sys.exit(0)
+    else:
+        print("NO_UPDATE_NEEDED")
+        sys.exit(0)
 except Exception as e:
-    print(f"Error: {e}", file=sys.stderr)
+    print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
 EOF
+)
         if [ $? -eq 0 ]; then
-            print_success "Added/updated mqttBroker: $broker_addr (comments preserved)"
+            if echo "$py_output" | grep -q "SUCCESS"; then
+                print_success "Added/updated mqttBroker: $broker_addr (comments preserved)"
+                ruamel_success=true
+            elif echo "$py_output" | grep -q "NO_UPDATE_NEEDED"; then
+                # Check if it's because mqttBroker already has a value
+                if [ "$mqtt_broker_exists" = true ] && [ -n "$existing_broker" ]; then
+                    # Already handled above, just return
+                    return 0
+                else
+                    print_warning "ruamel.yaml found no groups to update, trying sed fallback..."
+                fi
+            fi
         else
-            print_warning "Failed with ruamel.yaml, trying sed fallback..."
-            # Fall through to sed approach
+            print_warning "Failed with ruamel.yaml: $py_output"
+            print_warning "Trying sed fallback..."
         fi
     fi
     
-    # Fallback: Use sed for simple update/add (may not preserve all formatting but preserves comments)
-    if ! grep -qE '^\s*mqttBroker\s*:' "$config_file"; then
+    # If ruamel.yaml didn't succeed, use sed fallback
+    if [ "$ruamel_success" != "true" ]; then
+    
+        # Fallback: Use sed for simple update/add (may not preserve all formatting but preserves comments)
+        if [ "$mqtt_broker_exists" = false ]; then
         # Add mqttBroker after threshold if it exists, otherwise after nodeAddresses
         if grep -qE '^\s*threshold\s*:' "$config_file"; then
             # Simple sed: add after threshold line with same indentation
@@ -2137,20 +2158,36 @@ EOF
             rm -f "${config_file}.tmp"
             return 1
         fi
-    else
-        # mqttBroker exists but is empty - update it using sed
-        if [ "$mqtt_broker_exists" = true ] && [ -z "$existing_broker" ]; then
-            # Update existing empty mqttBroker line (preserve comment if present)
-            # Pattern matches: mqttBroker: "" or mqttBroker: '' or mqttBroker:  (with optional quotes and whitespace)
-            # Preserves any comment after the value
-            if sed -i.tmp -E "s|^(\s*mqttBroker\s*:\s*)[\"']*[\"']*(\s*#.*)?$|\1\"$broker_addr\"\2|" "$config_file" 2>/dev/null; then
-                # Verify the update worked
-                if grep -qE "^\s*mqttBroker\s*:\s*\"$broker_addr\"" "$config_file" 2>/dev/null; then
-                    rm -f "${config_file}.tmp"
-                    print_success "Updated empty mqttBroker to: $broker_addr (comment preserved)"
+        elif [ "$mqtt_broker_exists" = true ] && [ -z "$existing_broker" ]; then
+            # mqttBroker exists but is empty - update it using sed
+            # Extract comment if present
+            local mqtt_line=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1)
+            local comment_part=$(echo "$mqtt_line" | sed -E 's/^[^#]*(#.*)$/\1/')
+            
+            # Try to update preserving comment - use perl for better regex support, or sed as fallback
+            if command -v perl &> /dev/null; then
+                # Use perl for more reliable regex
+                if perl -i.tmp -pe "s/^(\s*mqttBroker\s*:\s*)[\"']*[\"']*(\s*#.*)?\$/\1\"$broker_addr\"\2/" "$config_file" 2>/dev/null; then
+                    if grep -qE "^\s*mqttBroker\s*:\s*\"$broker_addr\"" "$config_file" 2>/dev/null; then
+                        rm -f "${config_file}.tmp"
+                        print_success "Updated empty mqttBroker to: $broker_addr (comment preserved)"
+                    else
+                        # Fallback: simple replacement
+                        if [ -n "$comment_part" ]; then
+                            perl -i.tmp -pe "s/^\s*mqttBroker\s*:.*/    mqttBroker: \"$broker_addr\" $comment_part/" "$config_file" 2>/dev/null
+                        else
+                            perl -i.tmp -pe "s/^\s*mqttBroker\s*:.*/    mqttBroker: \"$broker_addr\"/" "$config_file" 2>/dev/null
+                        fi
+                        if [ $? -eq 0 ]; then
+                            rm -f "${config_file}.tmp"
+                            print_success "Updated mqttBroker to: $broker_addr"
+                        else
+                            print_warning "Failed to update mqttBroker with perl"
+                            rm -f "${config_file}.tmp"
+                        fi
+                    fi
                 else
-                    # Fallback: replace entire line but try to preserve comment
-                    local comment_part=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1 | sed -E 's/^[^#]*(#.*)$/\1/')
+                    # Fallback: simple replacement
                     if [ -n "$comment_part" ]; then
                         sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\" $comment_part|" "$config_file" 2>/dev/null
                     else
@@ -2165,19 +2202,41 @@ EOF
                     fi
                 fi
             else
-                # Try a more flexible pattern that replaces the whole line
-                local comment_part=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1 | sed -E 's/^[^#]*(#.*)$/\1/')
-                if [ -n "$comment_part" ]; then
-                    sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\" $comment_part|" "$config_file" 2>/dev/null
+                # Use sed - try multiple patterns
+                # Pattern 1: Match empty quotes with optional comment
+                if sed -i.tmp -E "s|^(\s*mqttBroker\s*:\s*)[\"']{2}(\s*#.*)?\$|\1\"$broker_addr\"\2|" "$config_file" 2>/dev/null; then
+                    if grep -qE "^\s*mqttBroker\s*:\s*\"$broker_addr\"" "$config_file" 2>/dev/null; then
+                        rm -f "${config_file}.tmp"
+                        print_success "Updated empty mqttBroker to: $broker_addr"
+                    else
+                        # Pattern 2: Replace entire line
+                        if [ -n "$comment_part" ]; then
+                            sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\" $comment_part|" "$config_file" 2>/dev/null
+                        else
+                            sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\"|" "$config_file" 2>/dev/null
+                        fi
+                        if [ $? -eq 0 ]; then
+                            rm -f "${config_file}.tmp"
+                            print_success "Updated mqttBroker to: $broker_addr"
+                        else
+                            print_warning "Failed to update mqttBroker - please update manually in configs.yaml"
+                            rm -f "${config_file}.tmp"
+                        fi
+                    fi
                 else
-                    sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\"|" "$config_file" 2>/dev/null
-                fi
-                if [ $? -eq 0 ]; then
-                    rm -f "${config_file}.tmp"
-                    print_success "Updated mqttBroker to: $broker_addr"
-                else
-                    print_warning "Failed to update mqttBroker - please update manually in configs.yaml"
-                    rm -f "${config_file}.tmp"
+                    # Fallback: simple replacement
+                    if [ -n "$comment_part" ]; then
+                        sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\" $comment_part|" "$config_file" 2>/dev/null
+                    else
+                        sed -i.tmp "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\"|" "$config_file" 2>/dev/null
+                    fi
+                    if [ $? -eq 0 ]; then
+                        rm -f "${config_file}.tmp"
+                        print_success "Updated mqttBroker to: $broker_addr"
+                    else
+                        print_warning "Failed to update mqttBroker - please update manually in configs.yaml"
+                        rm -f "${config_file}.tmp"
+                    fi
                 fi
             fi
         else
