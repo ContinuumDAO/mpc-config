@@ -149,17 +149,9 @@ NodePingTimeout: "5s"
 
 # Pre-signing verification configuration
 # Pre-validate transactions before signing to prevent invalid operations
-# Enabled by default - requires database credentials from the DAO
+# Always enabled when configured - requires database credentials from the DAO
+# Verification is always required - signing will fail if verification cannot be performed
 PreSigningVerification:
-  # Enable pre-signing verification
-  # If false, verification is skipped entirely
-  Enabled: true
-
-  # Require verification (fail if verification cannot be performed)
-  # If false, skip gracefully when credentials unavailable
-  # If true, reject signing when verification cannot be performed
-  Required: true
-
   # Relayer API URL
   # Base URL of the relayer API server (e.g., "https://relayer.example.com" or "http://203.0.113.10:8080")
   # REQUIRED: Obtain this value from the DAO

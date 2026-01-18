@@ -596,7 +596,7 @@ PYEOF
     print_success "Presign configuration validation passed"
 }
 
-# Validate Relayer API connection when PreSigningVerification is enabled
+# Validate Relayer API connection when PreSigningVerification is configured
 validate_relayer_api_connection() {
     local config_file="$1"
     
@@ -606,8 +606,8 @@ validate_relayer_api_connection() {
     
     print_step "Validating Relayer API configuration for pre-signing verification..."
     
-    # Check if PreSigningVerification is enabled
-    local enabled=""
+    # Check if PreSigningVerification section exists
+    local has_ps_verif=false
     local api_url=""
     
     # Use simple grep/sed parsing (most reliable, no dependencies)
@@ -618,6 +618,7 @@ validate_relayer_api_connection() {
         # Check if we're entering PreSigningVerification section
         if echo "$line" | grep -qE '^\s*PreSigningVerification\s*:'; then
             in_ps_verif=true
+            has_ps_verif=true
             ps_indent=$(echo "$line" | sed 's/[^ ].*//')
             continue
         fi
@@ -628,11 +629,6 @@ validate_relayer_api_connection() {
             if [ -n "$current_indent" ] && [ "${#current_indent}" -le "${#ps_indent}" ] && echo "$line" | grep -qE '^\s*[A-Za-z_]+:'; then
                 in_ps_verif=false
             fi
-        fi
-        
-        # Extract Enabled value (must be within PreSigningVerification section)
-        if [ "$in_ps_verif" = true ] && [ -z "$enabled" ] && echo "$line" | grep -qE '^\s+Enabled\s*:'; then
-            enabled=$(echo "$line" | sed -E 's/^\s*Enabled\s*:\s*(true|false).*/\1/' | head -1)
         fi
         
         # Extract RelayerAPIURL value (handle quoted and unquoted strings)
@@ -647,26 +643,25 @@ validate_relayer_api_connection() {
     done < "$config_file"
     
     # Fallback to yq if grep didn't find values
-    if [ -z "$enabled" ] && [ -z "$api_url" ]; then
+    if [ "$has_ps_verif" = false ] || [ -z "$api_url" ]; then
         if command -v yq &> /dev/null; then
-            enabled=$(yq eval '.PreSigningVerification.Enabled' "$config_file" 2>/dev/null)
+            has_ps_verif=$(yq eval '.PreSigningVerification != null' "$config_file" 2>/dev/null)
             api_url=$(yq eval '.PreSigningVerification.RelayerAPIURL' "$config_file" 2>/dev/null)
         fi
     fi
     
-    # Check if PreSigningVerification is enabled
-    if [ "$enabled" != "true" ]; then
-        print_info "PreSigningVerification is disabled - skipping Relayer API validation"
+    # If PreSigningVerification section doesn't exist, skip validation
+    if [ "$has_ps_verif" != "true" ]; then
+        print_info "PreSigningVerification section not found - skipping Relayer API validation"
         return 0
     fi
     
     # Check required field
     if [ -z "$api_url" ] || [ "$api_url" = "null" ] || [ "$api_url" = "" ]; then
-        print_error "PreSigningVerification is enabled but RelayerAPIURL is missing"
+        print_error "PreSigningVerification is configured but RelayerAPIURL is missing"
         echo ""
         print_info "Please obtain the Relayer API URL from the DAO and update your configs.yaml:"
         echo "  PreSigningVerification:"
-        echo "    Enabled: true"
         echo "    RelayerAPIURL: \"https://relayer.example.com\""
         echo "    # or: RelayerAPIURL: \"http://203.0.113.10:8080\""
         echo ""
@@ -1831,14 +1826,14 @@ EOF
         fi
     else
         # Sign without SANs (fallback)
-        if openssl x509 -req \
-            -in "$SERVER_CSR" \
-            -CA "$CA_CRT" \
-            -CAkey "$CA_KEY" \
-            -CAcreateserial \
-            -out "$SERVER_CRT" \
-            -days "$CERT_VALIDITY_DAYS" 2>/dev/null; then
-            print_success "Server certificate signed: $SERVER_CRT"
+    if openssl x509 -req \
+        -in "$SERVER_CSR" \
+        -CA "$CA_CRT" \
+        -CAkey "$CA_KEY" \
+        -CAcreateserial \
+        -out "$SERVER_CRT" \
+        -days "$CERT_VALIDITY_DAYS" 2>/dev/null; then
+        print_success "Server certificate signed: $SERVER_CRT"
             print_warning "No IP address found in config - certificate will not validate IP connections"
         else
             print_error "Failed to sign server certificate"
@@ -1846,17 +1841,17 @@ EOF
         fi
     fi
     
-    # Verify certificate was created
-    if [ ! -f "$SERVER_CRT" ]; then
-        print_error "Server certificate file was not created"
-        exit 1
-    fi
+        # Verify certificate was created
+        if [ ! -f "$SERVER_CRT" ]; then
+            print_error "Server certificate file was not created"
+            exit 1
+        fi
     
-    # Validate certificate
-    if openssl x509 -in "$SERVER_CRT" -noout -text >/dev/null 2>&1; then
-        print_success "Server certificate is valid"
-        SERVER_SUBJECT=$(openssl x509 -in "$SERVER_CRT" -noout -subject 2>/dev/null)
-        print_info "Server Subject: $SERVER_SUBJECT"
+        # Validate certificate
+        if openssl x509 -in "$SERVER_CRT" -noout -text >/dev/null 2>&1; then
+            print_success "Server certificate is valid"
+            SERVER_SUBJECT=$(openssl x509 -in "$SERVER_CRT" -noout -subject 2>/dev/null)
+            print_info "Server Subject: $SERVER_SUBJECT"
         
         # Display SANs if present
         local sans=$(openssl x509 -in "$SERVER_CRT" -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" || true)
@@ -1865,15 +1860,15 @@ EOF
             echo "$sans" | sed 's/^/  /'
         fi
         
-        # Verify certificate is signed by CA
-        if openssl verify -CAfile "$CA_CRT" "$SERVER_CRT" >/dev/null 2>&1; then
-            print_success "Server certificate is properly signed by CA"
+            # Verify certificate is signed by CA
+            if openssl verify -CAfile "$CA_CRT" "$SERVER_CRT" >/dev/null 2>&1; then
+                print_success "Server certificate is properly signed by CA"
+            else
+                print_error "Server certificate verification failed"
+                exit 1
+            fi
         else
-            print_error "Server certificate verification failed"
-            exit 1
-        fi
-    else
-        print_error "Generated server certificate is invalid"
+            print_error "Generated server certificate is invalid"
         exit 1
     fi
 }
@@ -2532,20 +2527,20 @@ main() {
                 echo ""
                 echo "On RELAY NODE (first node):"
                 echo "  - Validates configuration"
-                echo "  - Validates database connectivity (if PreSigningVerification is enabled)"
+                echo "  - Validates database connectivity (if PreSigningVerification is configured)"
                 echo "  - Generates certificates"
                 echo "  - Configures docker-compose.yml to enable mosquitto service"
                 echo "  - Automatically copies CA certificate to client nodes (unless --no-copy-certs)"
                 echo ""
                 echo "On CLIENT NODES:"
                 echo "  - Validates configuration"
-                echo "  - Validates database connectivity (if PreSigningVerification is enabled)"
+                echo "  - Validates database connectivity (if PreSigningVerification is configured)"
                 echo "  - Validates CA certificate is configured correctly"
                 echo "  - Configures docker-compose.yml to disable mosquitto service"
                 echo "  - Does NOT generate certificates (only relay node does this)"
                 echo ""
                 echo "Note: Relayer API connectivity validation requires curl to be installed."
-                echo "      If PreSigningVerification.Enabled is true, ensure RelayerAPIURL is configured"
+                echo "      If PreSigningVerification is configured, ensure RelayerAPIURL is set"
                 echo "      in configs.yaml (obtain from the DAO)."
                 echo ""
                 echo "Options:"
