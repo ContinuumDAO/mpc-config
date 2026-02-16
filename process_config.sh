@@ -1144,7 +1144,8 @@ except Exception as e:
     return 1
 }
 
-# Get first node address from config
+# Get first node address from config (relay node = runs mosquitto).
+# All nodes must list nodeAddresses in the SAME order; the first entry is the relay node.
 get_first_node_address() {
     local config_file="$1"
     
@@ -1152,7 +1153,7 @@ get_first_node_address() {
         return 1
     fi
     
-    # Use yq if available
+    # Use yq if available (to_entries preserves document order in yq 4.x)
     if command -v yq &> /dev/null; then
         local first_addr=$(yq eval '.MPCGroups[0].nodeAddresses | to_entries | .[0].value' "$config_file" 2>/dev/null)
         if [ -n "$first_addr" ] && [ "$first_addr" != "null" ]; then
@@ -1173,7 +1174,7 @@ try:
         if groups:
             node_addresses = groups[0].get('nodeAddresses', {})
             if node_addresses:
-                # Get first value from ordered dict
+                # First value = relay node (order must be same on all nodes)
                 first_value = next(iter(node_addresses.values()))
                 if first_value:
                     print(first_value)
