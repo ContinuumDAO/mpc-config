@@ -1956,7 +1956,8 @@ extract_port_from_url() {
     fi
 }
 
-# Configure mqttBroker in configs.yaml (preserves comments using sed)
+# Configure mqttBroker in configs.yaml (uses awk only - no sed - so ssl:// URLs never break)
+# Marker: process_config_mqttbroker_no_sed_v1 (grep this on server to confirm script version)
 configure_mqtt_broker() {
     local config_file="$1"
     local is_relay_node="$2"
@@ -2004,15 +2005,15 @@ configure_mqtt_broker() {
             local protocol=""
             local port=""
             
-            # Check protocol (should be ssl:// or tls://)
+            # Check protocol (should be ssl:// or tls://) - use awk to avoid any sed with URL
             if echo "$existing_broker" | grep -qE '^(ssl|tls)://'; then
                 protocol_valid=true
-                protocol=$(echo "$existing_broker" | sed -E 's|^(ssl|tls)://.*|\1|')
+                protocol=$(echo "$existing_broker" | awk 'match($0, /^(ssl|tls)/) { print substr($0, RSTART, RLENGTH); exit }')
             fi
             
-            # Extract and check port (should be 8883 for TLS)
+            # Extract and check port (should be 8883 for TLS) - use awk to avoid any sed with URL
             if echo "$existing_broker" | grep -qE ':[0-9]+'; then
-                port=$(echo "$existing_broker" | sed -E 's|.*:([0-9]+).*|\1|')
+                port=$(echo "$existing_broker" | awk -F: 'NF>=2 && $NF ~ /^[0-9]+$/ { print $NF; exit }')
                 if [ "$port" = "8883" ]; then
                     port_valid=true
                 fi
