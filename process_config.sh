@@ -2240,9 +2240,9 @@ configure_docker_compose() {
     if ! grep -qE '^\s+-\./mosquitto/config:/mosquitto/config' "$docker_compose_file"; then
         # Find the app service and its volumes section
         # Use a more robust approach: find app service, then find volumes under it
-        local app_line=$(grep -nE '^[[:space:]]+app:' "$docker_compose_file" | head -1 | cut -d: -f1)
+        local app_line=$(grep -nE '^[[:space:]]+app:' "$docker_compose_file" | head -1 | cut -d: -f1 | tr -d '\n\r')
         
-        if [ -z "$app_line" ] || [ "$app_line" -eq 0 ]; then
+        if [ -z "$app_line" ] || [ "$app_line" -eq 0 ] 2>/dev/null; then
             print_warning "Could not find app service in docker-compose.yml"
             print_info "Please add the following to the app service volumes section in docker-compose.yml:"
             echo "      - ./mosquitto/config:/mosquitto/config"
@@ -2250,9 +2250,9 @@ configure_docker_compose() {
             # Find volumes: line that comes after app: (within the app service block)
             local volumes_line=$(awk -v app_start="$app_line" '
                 NR >= app_start && /^[[:space:]]+volumes:/ { print NR; exit }
-            ' "$docker_compose_file")
+            ' "$docker_compose_file" | head -1 | tr -d '\n\r')
             
-            if [ -n "$volumes_line" ] && [ "$volumes_line" -gt 0 ]; then
+            if [ -n "$volumes_line" ] && [ "$volumes_line" -gt 0 ] 2>/dev/null; then
                 # Find the last volume entry (line starting with spaces and -) after volumes:
                 # Stop when we hit another top-level key (same or less indentation as volumes:)
                 local last_volume_line=$(awk -v vol_start="$volumes_line" '
@@ -2262,9 +2262,9 @@ configure_docker_compose() {
                         if (last_vol) { print last_vol; exit }
                     }
                     END { if (last_vol) print last_vol }
-                ' "$docker_compose_file")
+                ' "$docker_compose_file" | head -1 | tr -d '\n\r')
                 
-                if [ -n "$last_volume_line" ] && [ "$last_volume_line" -gt 0 ]; then
+                if [ -n "$last_volume_line" ] && [ "$last_volume_line" -gt 0 ] 2>/dev/null; then
                     # Insert after the last volume entry
                     sed -i "${last_volume_line}a\      - ./mosquitto/config:/mosquitto/config" "$docker_compose_file"
                     print_success "Added mosquitto/config volume mount to app service"
@@ -2306,11 +2306,12 @@ configure_docker_compose() {
         print_info "Disabling mosquitto service for client node (only relay node runs the broker)..."
         
         # Find line numbers for mosquitto service (match 2+ spaces then "mosquitto:")
-        local mosquitto_start=$(grep -nE '^[[:space:]]+mosquitto:' "$docker_compose_file" | head -1 | cut -d: -f1)
+        local mosquitto_start=$(grep -nE '^[[:space:]]+mosquitto:' "$docker_compose_file" | head -1 | cut -d: -f1 | tr -d '\n\r')
         
         if [ -n "$mosquitto_start" ]; then
-            # Find the end of mosquitto service (next service at same indent: 2 spaces + word + :)
-            local mosquitto_end=$(awk -v start="$mosquitto_start" 'NR > start && /^[[:space:]]+[a-zA-Z_]+:/ && !/^[[:space:]]+#/ { print NR; exit }' "$docker_compose_file")
+            # Find the end: next top-level service (same indent as "  mosquitto:" i.e. exactly 2 spaces + name + :)
+            # Do NOT match nested keys like "    image:" (4 spaces) - only "  app:" etc.
+            local mosquitto_end=$(awk -v start="$mosquitto_start" 'NR > start && /^  [a-zA-Z_]+:/ && !/^  mosquitto:/ { print NR; exit }' "$docker_compose_file" | head -1 | tr -d '\n\r')
             
             if [ -n "$mosquitto_end" ]; then
                 # Comment out mosquitto service block: prepend "# " to each line (portable sed: use [ ]* for spaces)
