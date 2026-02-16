@@ -1,0 +1,44 @@
+# Client node: no MQTT broker (connects to relay). Use this on non-first nodes in configs.yaml nodeAddresses.
+# App still mounts mosquitto/config so it can read the CA cert at /mosquitto/config/certs/ca.crt.
+version: '3.8'
+services:
+  mongodb:
+    image: mongo:6.0
+    restart: always
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - ./data/mongodb:/data/db
+    networks:
+      - local-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+  app:
+    image: continuumdao/mpc-auth:v1.0
+    restart: always
+    environment:
+      - GOLOG_FILE=logs/MPCAuthCore.log
+      - GOLOG_OUTPUT=file
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./configs.yaml:/app/configs.yaml:ro
+      - ./data/app/logs:/app/logs
+      - ./mosquitto/config:/mosquitto/config
+    networks:
+      - local-network
+    security_opt:
+      - seccomp:unconfined
+    cap_add:
+      - SYS_PTRACE
+networks:
+  local-network:
+    driver: bridge
+    attachable: true

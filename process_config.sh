@@ -2194,165 +2194,43 @@ EOF
     return 0
 }
 
-# Configure docker-compose.yml based on node type (relay or client)
+# Configure docker-compose.yml based on node type (relay or client).
+# Uses two fixed files: docker-compose.relay.yml and docker-compose.client.yml.
+# Copies the appropriate one to docker-compose.yml (no sed/awk on the active file).
 configure_docker_compose() {
     local is_relay_node="$1"
     local script_dir="$(dirname "$0")"
     local docker_compose_file="$script_dir/docker-compose.yml"
     
-    if [ ! -f "$docker_compose_file" ]; then
-        print_warning "docker-compose.yml not found at $docker_compose_file - skipping configuration"
-        return 0
-    fi
-    
-    print_step "Configuring docker-compose.yml for $( [ "$is_relay_node" = "true" ] && echo "RELAY NODE" || echo "CLIENT NODE" )..."
-    
-    # Create backup
-    local backup_file="${docker_compose_file}.backup.$(date +%Y%m%d_%H%M%S)"
-    if ! cp "$docker_compose_file" "$backup_file" 2>/dev/null; then
-        print_warning "Could not create backup - proceeding anyway"
-        backup_file=""
-    else
-        print_info "Backup created: $backup_file"
-    fi
-    
-    # Ensure app service has mosquitto/config volume mount (needed for both relay and client nodes)
-    # This allows the app container to access the CA certificate at /mosquitto/config/certs/ca.crt
-    print_info "Ensuring app service has mosquitto/config volume mount..."
-    
-    # First, remove any duplicate mosquitto/config volume mounts to avoid docker-compose errors
-    # Count how many times the mount appears
-    local mount_count=$(grep -cE '^\s+-\./mosquitto/config:/mosquitto/config' "$docker_compose_file" 2>/dev/null || echo "0")
-    if [ "$mount_count" -gt 1 ]; then
-        print_warning "Found $mount_count duplicate mosquitto/config volume mounts - removing duplicates..."
-        # Remove all occurrences, we'll add it back once
-        sed -i.tmp '/^\s+-\.\/mosquitto\/config:\/mosquitto\/config$/d' "$docker_compose_file"
-        if [ $? -eq 0 ]; then
-            rm -f "${docker_compose_file}.tmp"
-            print_success "Removed duplicate mosquitto/config volume mounts"
-        else
-            print_warning "Failed to remove duplicates - please check docker-compose.yml manually"
-            rm -f "${docker_compose_file}.tmp"
-        fi
-    fi
-    
-    # Check if the volume mount already exists (after removing duplicates)
-    if ! grep -qE '^\s+-\./mosquitto/config:/mosquitto/config' "$docker_compose_file"; then
-        # Find the app service and its volumes section
-        # Use a more robust approach: find app service, then find volumes under it
-        local app_line=$(grep -nE '^[[:space:]]+app:' "$docker_compose_file" | head -1 | cut -d: -f1 | tr -d '\n\r')
-        
-        if [ -z "$app_line" ] || [ "$app_line" -eq 0 ] 2>/dev/null; then
-            print_warning "Could not find app service in docker-compose.yml"
-            print_info "Please add the following to the app service volumes section in docker-compose.yml:"
-            echo "      - ./mosquitto/config:/mosquitto/config"
-        else
-            # Find volumes: line that comes after app: (within the app service block)
-            local volumes_line=$(awk -v app_start="${app_line%%*$'\n'*}" '
-                NR >= app_start+0 && /^[[:space:]]+volumes:/ { print NR; exit }
-            ' "$docker_compose_file" | head -1 | tr -d '\n\r')
-            volumes_line="${volumes_line%%*$'\n'*}"
-            if [ -n "$volumes_line" ] && [ "${volumes_line//[^0-9]/}" = "$volumes_line" ] && [ "$volumes_line" -gt 0 ] 2>/dev/null; then
-                # Find the last volume entry (line starting with spaces and -) after volumes:
-                # Stop when we hit another top-level key (same or less indentation as volumes:)
-                local last_volume_line=$(awk -v vol_start="${volumes_line}" '
-                    NR > vol_start+0 && /^[[:space:]]+-/ { last_vol=NR }
-                    NR > vol_start+0 && /^[[:space:]]+[a-zA-Z_]+:/ && !/^[[:space:]]+-/ {
-                        # Check if this is at same or less indentation than volumes: (means we left volumes section)
-                        if (last_vol) { print last_vol; exit }
-                    }
-                    END { if (last_vol) print last_vol }
-                ' "$docker_compose_file" | head -1 | tr -d '\n\r')
-                last_volume_line="${last_volume_line%%*$'\n'*}"
-                if [ -n "$last_volume_line" ] && [ "${last_volume_line//[^0-9]/}" = "$last_volume_line" ] && [ "$last_volume_line" -gt 0 ] 2>/dev/null; then
-                    # Insert after the last volume entry
-                    sed -i "${last_volume_line}a\      - ./mosquitto/config:/mosquitto/config" "$docker_compose_file"
-                    print_success "Added mosquitto/config volume mount to app service"
-                else
-                    # No volume entries found yet, add after volumes: line
-                    sed -i "${volumes_line}a\      - ./mosquitto/config:/mosquitto/config" "$docker_compose_file"
-                    print_success "Added mosquitto/config volume mount to app service (first volume entry)"
-                fi
-            else
-                print_warning "Could not find volumes section in app service"
-                print_info "Please add the following to the app service in docker-compose.yml:"
-                echo "    volumes:"
-                echo "      - ./configs.yaml:/app/configs.yaml:ro"
-                echo "      - ./data/app/logs:/app/logs"
-                echo "      - ./mosquitto/config:/mosquitto/config"
-            fi
-        fi
-    else
-        print_info "mosquitto/config volume mount already exists in app service"
-    fi
-    
     if [ "$is_relay_node" = "true" ]; then
-        # RELAY NODE: Ensure mosquitto is enabled (uncommented)
-        print_info "Ensuring mosquitto service is enabled for relay node..."
-        
-        # Uncomment mosquitto service header
-        sed -i 's/^\(\s*\)#\s*mosquitto:/\1mosquitto:/' "$docker_compose_file"
-        
-        # Uncomment all lines in mosquitto service block (between mosquitto: and next service)
-        awk '/^  mosquitto:/ { in_mosq=1 } /^  [a-zA-Z_]+:/ && in_mosq && !/^  mosquitto:/ { in_mosq=0 } in_mosq { gsub(/^(\s*)#\s*/, "\1") } { print }' "$docker_compose_file" > "${docker_compose_file}.tmp" && mv "${docker_compose_file}.tmp" "$docker_compose_file"
-        
-        # Uncomment mosquitto dependency in app service
-        sed -i '/depends_on:/,/^    [a-zA-Z_]*:$/ { s/^\(\s*\)#\s*mosquitto:/\1mosquitto:/; /mosquitto:/ { n; s/^\(\s*\)#\s*condition:/\1condition:/; } }' "$docker_compose_file"
-        
-        print_success "docker-compose.yml configured for relay node"
-        
+        local template="$script_dir/docker-compose.relay.yml"
+        local node_type="RELAY"
     else
-        # CLIENT NODE: Comment out mosquitto service and dependency
-        print_info "Disabling mosquitto service for client node (only relay node runs the broker)..."
-        
-        # Find line numbers for mosquitto service (match 2+ spaces then "mosquitto:")
-        local mosquitto_start=$(grep -nE '^[[:space:]]*(# [[:space:]]*)?mosquitto:' "$docker_compose_file" | head -1 | cut -d: -f1 | tr -d '\n\r')
-        mosquitto_start="${mosquitto_start%%*$'\n'*}"
-        
-        if [ -n "$mosquitto_start" ] && [ "${mosquitto_start//[^0-9]/}" = "$mosquitto_start" ]; then
-            # Find the end: next line with SAME indentation as mosquitto line and "servicename:" (not nested like "    image:")
-            # Capture indent length from the mosquitto line, then find next line with that exact indent + word:
-            local mosquitto_end=$(awk -v start="${mosquitto_start}" '
-                NR==start {
-                    match($0, /^[[:space:]]*/); indent_len = RLENGTH; next
-                }
-                NR > start && indent_len != "" {
-                    if (match($0, /^[[:space:]]*/) && RLENGTH == indent_len) {
-                        rest = substr($0, RLENGTH+1); rest = rest ~ /^#/ ? substr(rest, index(rest," ")+1) : rest
-                        if (rest ~ /^[a-zA-Z_]+:/ && rest !~ /^mosquitto:/) { print NR; exit }
-                    }
-                }
-            ' "$docker_compose_file" | head -1 | tr -d '\n\r')
-            mosquitto_end="${mosquitto_end%%*$'\n'*}"
-            
-            if [ -n "$mosquitto_end" ] && [ "${mosquitto_end//[^0-9]/}" = "$mosquitto_end" ] && [ "$mosquitto_end" -gt "$mosquitto_start" ] 2>/dev/null; then
-                # Comment out mosquitto service block only (from mosquitto: line to line before next service)
-                sed -i "${mosquitto_start},$((mosquitto_end-1))s/^\([ ]*\)/\1# /" "$docker_compose_file"
-                sed -i "${mosquitto_start}s/^\([ ]*\)#*[ ]*mosquitto:/\1# mosquitto:/" "$docker_compose_file"
-                print_success "Mosquitto service commented out (lines $mosquitto_start-$((mosquitto_end-1)))"
-            else
-                # Fallback only if we could not find next service: comment just the mosquitto block by line count (typical size ~18 lines)
-                # Do NOT comment to end of file - that would break app and networks. Comment a reasonable block.
-                local safe_end=$((mosquitto_start + 25))
-                sed -i "${mosquitto_start},${safe_end}s/^\([ ]*\)/\1# /" "$docker_compose_file"
-                sed -i "${mosquitto_start}s/^\([ ]*\)#*[ ]*mosquitto:/\1# mosquitto:/" "$docker_compose_file"
-                print_warning "Could not detect next service line - commented lines $mosquitto_start-$safe_end (check docker-compose.yml)"
-            fi
-        else
-            print_warning "Mosquitto service not found - may already be commented"
+        local template="$script_dir/docker-compose.client.yml"
+        local node_type="CLIENT"
+    fi
+    
+    print_step "Configuring docker-compose.yml for $node_type NODE..."
+    
+    if [ ! -f "$template" ]; then
+        print_warning "Template not found: $template"
+        print_info "Expected docker-compose.relay.yml and docker-compose.client.yml in the same directory as this script."
+        return 1
+    fi
+    
+    # Backup current docker-compose.yml if it exists
+    if [ -f "$docker_compose_file" ]; then
+        local backup_file="${docker_compose_file}.backup.$(date +%Y%m%d_%H%M%S)"
+        if cp "$docker_compose_file" "$backup_file" 2>/dev/null; then
+            print_info "Backup created: $backup_file"
         fi
-        
-        # Comment out mosquitto dependency in app service (portable: [ ]* for spaces)
-        sed -i '/depends_on:/,/^[[:space:]]*[a-zA-Z_]*:$/ { s/^\([ ]*\)mosquitto:/\1# mosquitto:/; /mosquitto:/ { n; s/^\([ ]*\)condition:/\1# condition:/; } }' "$docker_compose_file"
-        
-        # Verify mosquitto is commented
-        if grep -qE '^[[:space:]]+# mosquitto:' "$docker_compose_file" 2>/dev/null; then
-            print_success "Mosquitto service is now commented out"
-        else
-            print_warning "Could not verify mosquitto was commented - please check manually"
-        fi
-        
-        print_success "docker-compose.yml configured for client node"
+    fi
+    
+    if cp "$template" "$docker_compose_file" 2>/dev/null; then
+        print_success "docker-compose.yml configured for $node_type node (copied from $(basename "$template"))"
+    else
+        print_warning "Failed to copy $template to docker-compose.yml"
+        return 1
     fi
 }
 
