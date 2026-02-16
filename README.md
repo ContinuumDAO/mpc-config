@@ -1,6 +1,6 @@
 # MPC Node Configuration Repository
 
-This repository contains the configuration files and setup scripts needed to deploy and configure MPC (Multi-Party Computation) nodes using the distributed-auth Docker image.
+This repository contains the configuration files and setup scripts needed to deploy and configure MPC (Multi-Party Computation) nodes using the mpc-auth Docker image.
 
 ## What's Included
 
@@ -47,11 +47,11 @@ docker-compose up -d
 This starts:
 - **MongoDB** - Local database (port 27017)
 - **Mosquitto** - MQTT broker (port 8883 for TLS)
-- **distributed-auth** - MPC node (port 8080)
+- **mpc-auth** - MPC node (port 8080)
 
-The `docker-compose.yml` pulls the Docker image from the registry: `continuumdao/distributed-auth:v1.12`
+The `docker-compose.yml` pulls the Docker image from the registry: `continuumdao/mpc-auth:v1.0`
 
-**Note:** The default configuration uses version `v1.12`. To use a different version, edit `docker-compose.yml` and change the image tag (e.g., `continuumdao/distributed-auth:v1.13`).
+**Note:** The default configuration uses version `v1.0`. To use a different version, edit `docker-compose.yml` and change the image tag (e.g., `continuumdao/mpc-auth:v1.1`).
 
 ## Documentation
 
@@ -220,7 +220,7 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    This starts:
    - **mongodb**: Local MongoDB instance (port 27017)
    - **mosquitto**: MQTT broker (ports 8883:8883 for TLS, 9999:1883 for unencrypted, 9001:9001 for websockets) - **ONLY ON RELAY NODE**
-   - **app**: The distributed-auth node (port 8080)
+   - **app**: The mpc-auth node (port 8080)
    
    **Verify mosquitto is running:**
    ```bash
@@ -511,9 +511,9 @@ docker-compose up -d
 The docker-compose.yml includes:
 - **mongodb**: Local MongoDB instance (port 27017)
 - **mosquitto**: MQTT broker (automatically configured from `mosquitto/config/mosquitto.conf` - port 8883 for TLS by default)
-- **app**: The distributed-auth node (port 8080) - pulls Docker image `continuumdao/distributed-auth:v1.12` from registry
+- **app**: The mpc-auth node (port 8080) - pulls Docker image `continuumdao/mpc-auth:v1.0` from registry
 
-**Note:** The default configuration uses version `v1.12`. If you encounter an error that the image is not found, see the Troubleshooting section below.
+**Note:** The default configuration uses version `v1.0`. If you encounter an error that the image is not found, see the Troubleshooting section below.
 
 **Production Setup:**
 - The **first node** in each group runs mosquitto (via Docker using docker-compose, or directly on the host)
@@ -711,7 +711,7 @@ If you see the error `Couldn't connect to Docker daemon at http+docker://localho
 
 ### Docker Image Not Found
 
-If you see the error `manifest for continuumdao/distributed-auth:v1.12 not found: manifest unknown`:
+If you see the error `manifest for continuumdao/mpc-auth:v1.0 not found: manifest unknown`:
 
 **This means the Docker image version isn't available in the registry.**
 
@@ -721,13 +721,13 @@ Check what versions are available and update `docker-compose.yml`:
 
 ```bash
 # Try pulling a different version
-docker pull continuumdao/distributed-auth:v1.13  # Or another version
+docker pull continuumdao/mpc-auth:v1.1  # Or another version
 ```
 
 Then update `docker-compose.yml` to use the available version:
 ```yaml
 app:
-  image: continuumdao/distributed-auth:v1.13  # Replace with available version
+  image: continuumdao/mpc-auth:v1.1  # Replace with available version
 ```
 
 **Solution 2: Check Docker Registry Access**
@@ -736,7 +736,7 @@ If the image should be available, verify you can access the registry:
 
 ```bash
 # Test pulling the image directly
-docker pull continuumdao/distributed-auth:v1.12
+docker pull continuumdao/mpc-auth:v1.0
 
 # If it's a private registry, you may need to log in first
 docker login
@@ -746,23 +746,23 @@ docker login
 
 **Solution 2: Build Image Locally (Development Only)**
 
-If you're a developer working on the `distributed-auth` codebase and need to test changes, you can build the image locally:
+If you're a developer working on the `mpc-auth` codebase and need to test changes, you can build the image locally:
 
-1. **Clone the distributed-auth repository** (if you haven't already):
+1. **Clone the mpc-auth repository** (if you haven't already):
    ```bash
    cd /home/marcel/Cryptocurrency/Continuum/Code
-   git clone <distributed-auth-repo-url> distributed-auth
+   git clone <mpc-auth-repo-url> mpc-auth
    ```
 
 2. **Build the Docker image:**
    ```bash
-   cd distributed-auth
-   docker build -f dockerfile_app -t continuumdao/distributed-auth:latest .
+   cd mpc-auth
+   docker build -f dockerfile_app -t continuumdao/mpc-auth:latest .
    ```
 
 3. **Verify the image was created:**
    ```bash
-   docker images | grep distributed-auth
+   docker images | grep mpc-auth
    ```
 
 4. **Now run docker-compose:**
@@ -773,7 +773,7 @@ If you're a developer working on the `distributed-auth` codebase and need to tes
 
 **Note:** This is only for development/testing. Production deployments should use published images from the registry.
 
-For detailed build instructions, see `../distributed-auth/docs-internal/DOCKER_IMAGE_BUILD_AND_PUBLISH.md` (if you have access to the distributed-auth repository).
+For detailed build instructions, see `../mpc-auth/docs-internal/DOCKER_IMAGE_BUILD_AND_PUBLISH.md` (if you have access to the mpc-auth repository).
 
 ### PreSigningVerification API connectivity issues
 
@@ -943,4 +943,4 @@ OpenSSL Error[0]: error:80000002:system library::No such file or directory
 
 ## Support
 
-For issues, questions, or contributions, please contact the DAO or refer to the main distributed-auth repository documentation.
+For issues, questions, or contributions, please contact the DAO or refer to the main mpc-auth repository documentation.

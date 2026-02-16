@@ -18,18 +18,17 @@ NodeMgtKey: "0x1234567890ABCDEF1234567890ABCDEF12345678"
 # NOTE: This does NOT affect relayer authentication - relayer signatures are always required
 IgnoreMgtKeySigCheck: true
 
-# MongoDB connection URI (optional, automatically detected)
-# When running in Docker: automatically uses mongodb://mongodb:27017 (Docker service name)
-# When running outside Docker: automatically uses mongodb://localhost:27017
-# MongoDB MUST be on localhost or use Docker service name - remote connections are not allowed
+# MongoDB connection URI (optional, defaults to mongodb://localhost:27017)
+# MongoDB MUST be on localhost (127.0.0.1) - remote connections are not allowed
 # Each node uses its own local MongoDB instance running on the same machine
 # Only specify if using a custom port (e.g., mongodb://localhost:27018)
 # Format: mongodb://[username:password@]localhost[:port][/database][?options]
-# Leave empty to use automatic detection (recommended)
+# When running in Docker, the app auto-detects and uses mongodb://mongodb:27017
 MongodbUri: ""
 
-# MongoDB database name (optional, defaults to "DistributedAuth")
-# Database where all node data (keys, groups, signing requests, etc.) is stored
+# MongoDB database name (optional, defaults to "DistributedAuth" for backwards compatibility)
+# Database where all node data (keys, groups, signing requests, etc.) is stored.
+# Existing MongoDB instances use "DistributedAuth"; new installs can set e.g. "MPCAuth" or "DA".
 DBName: ""
 
 # Log level (0-7, higher = more verbose)
@@ -40,10 +39,10 @@ LogLevel: 6
 # Log file path
 # Path where log files will be written
 # Relative paths are relative to the working directory
-LogPath: "logs/DistributedAuth.log"
+LogPath: "logs/MPCAuth.log"
 
-# MQTT TLS configuration (CLIENT-SIDE - for distributed-auth nodes to verify broker certificates)
-# This configures how distributed-auth nodes verify the MQTT broker's TLS certificate
+# MQTT TLS configuration (CLIENT-SIDE - for mpc-auth nodes to verify broker certificates)
+# This configures how mpc-auth nodes verify the MQTT broker's TLS certificate
 # IMPORTANT: TLS certificate verification is ALWAYS enforced - cannot be disabled
 # 
 # NOTE: The MQTT broker's TLS endpoint is configured separately in mosquitto.conf
@@ -53,14 +52,14 @@ MQTTTLS:
   # REQUIRED for self-signed certificates (default): Path to CA certificate file
   # This is the path INSIDE the Docker container (absolute path)
   # The process_config.sh script automatically copies the generated certificate
-  # to the corresponding host path (./mosquitto/config/certs/ca.crt relative to where docker-compose runs)
+  # to the corresponding host path (./mosquitto/config/certs/ca.crt relative to project directory).
   # 
   # The broker generates a CA certificate (ca.crt) that must be shared with all nodes
   # Each node needs the CA certificate to verify the broker's self-signed certificate
   # 
   # IMPORTANT: This path is the container path. Docker mounts ./mosquitto/config
-  #            to /mosquitto/config in the container. The process_config.sh script
-  #            handles copying the cert to the correct host location automatically.
+  #            (relative to project directory) to /mosquitto/config in the container.
+  #            The process_config.sh script handles copying the cert to the correct host location.
   # 
   # Optional for Let's Encrypt/certbot certificates: Leave empty
   # System CA store will be used automatically (Let's Encrypt is publicly trusted)
@@ -153,9 +152,11 @@ NodePingTimeout: "5s"
 # Verification is always required - signing will fail if verification cannot be performed
 PreSigningVerification:
   # Relayer API URL
-  # Base URL of the relayer API server (e.g., "https://relayer.example.com" or "http://203.0.113.10:8080")
-  # REQUIRED: Obtain this value from the DAO
-  # Format: Full URL with protocol (http:// or https://) and optional port
+  # Base URL of the relayer API server where /v1/mpc/chain_info is served.
+  # REQUIRED for pre-signing verification - mpc-auth fetches active RPC from this endpoint.
+  # IMPORTANT: Use the relayer's HTTP API port (e.g. 8080), NOT any port from node_addresses.
+  # node_addresses are for MPC peer nodes; RelayerAPIURL points to the relayer (different service).
+  # Format: Full URL with protocol (http:// or https://) and port
   # Examples:
   #   - "https://relayer.example.com"
   #   - "http://203.0.113.10:8080"
@@ -318,10 +319,24 @@ MPCGroups:
     #   - "tcp://192.168.1.100:1883" (unencrypted - testing only, not recommended)
     mqttBroker: ""  # Leave empty to auto-derive from first node (ssl://<first-node-ip>:8883 with TLS)
 
-    # Threshold value for the group
-    # In threshold cryptography, threshold + 1 nodes must agree to perform signing operations
-    # Must be < number of nodes in keyList (threshold must be strictly less than keyList length)
-    # Minimum threshold: 1 (requires at least 2 nodes in the group)
+    # Threshold value for the group (INFORMATIONAL ONLY)
+    # 
+    # ⚠️ IMPORTANT: This field is ONLY for informational/documentation purposes.
+    # It is NOT used in actual key generation or signing operations.
+    # 
+    # The actual threshold is specified in the keyGenRequest API call when generating keys.
+    # Multiple keys can be generated for the same group with different threshold values.
+    # For example, a 5-node group could generate:
+    #   - Key A with threshold=2 (3-of-5 signing)
+    #   - Key B with threshold=3 (4-of-5 signing)
+    #   - Key C with threshold=4 (5-of-5 signing)
+    # 
+    # This field is only used by the GetMPCGroupsInfo() API endpoint for informational purposes.
+    # It does NOT affect the actual threshold used during key generation or signing.
+    # 
+    # In threshold cryptography, threshold + 1 nodes must agree to perform signing operations.
+    # Must be < number of nodes in keyList (threshold must be strictly less than keyList length).
+    # Minimum threshold: 1 (requires at least 2 nodes in the group).
     # 
     # Examples:
     #   - 2 nodes: threshold = 1 (requires 2 nodes to agree)
@@ -329,4 +344,3 @@ MPCGroups:
     #   - 4 nodes: threshold = 1, 2, or 3 (requires 2, 3, or 4 nodes to agree)
     #   - threshold: 2 with 3 nodes means 3 nodes must agree (threshold + 1 = 3)
     threshold: 2
-

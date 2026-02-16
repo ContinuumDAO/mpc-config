@@ -35,12 +35,12 @@ services:
       timeout: 5s
       retries: 5
   app:
-    image: continuumdao/distributed-auth:v1.12
+    image: continuumdao/mpc-auth:v1.0
     restart: always
     environment:
       # Configuration can be set via environment variables or configs.yaml file
       # If both are set, environment variables take precedence
-      - GOLOG_FILE=logs/DistributedAuthCore.log
+      - GOLOG_FILE=logs/MPCAuthCore.log
       - GOLOG_OUTPUT=file
     ports:
       - "8080:8080"

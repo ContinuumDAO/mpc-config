@@ -42,7 +42,7 @@ Returns the current node version.
 {
   "code": 0,
   "error": "",
-  "data": "v1.12"
+  "data": "v1.0"
 }
 ```
 

@@ -1,6 +1,6 @@
 # MPC-Config Repository Setup
 
-This repository has been created as a standalone configuration repository for deploying MPC nodes using the distributed-auth Docker image.
+This repository has been created as a standalone configuration repository for deploying MPC nodes using the mpc-auth Docker image.
 
 ## Repository Structure
 
@@ -20,7 +20,7 @@ mpc-config/
     └── mosquitto/        # Mosquitto data and logs
 ```
 
-## Key Changes from distributed-auth Repository
+## Key Changes from mpc-auth Repository
 
 1. **Standalone Configuration**: All configuration files are at the root level, not in a `console/` subdirectory
 2. **Docker Image Based**: `docker-compose.yml` uses the pre-built Docker image instead of building from source
@@ -53,14 +53,14 @@ mpc-config/
 
 The `docker-compose.yml` uses:
 ```yaml
-image: continuumdao/distributed-auth:latest
+image: continuumdao/mpc-auth:latest
 ```
 
-For production, replace `latest` with a specific version tag (e.g., `v1.12`).
+For production, replace `latest` with a specific version tag (e.g., `v1.0`).
 
 ## Benefits of This Split
 
-- **Public Access**: Users can clone and configure without access to the private distributed-auth repository
+- **Public Access**: Users can clone and configure without access to the private mpc-auth repository
 - **Simplified Setup**: Only configuration files needed, no source code
 - **Version Control**: Configuration changes can be tracked separately
 - **Security**: Private keys and source code remain in the private repository

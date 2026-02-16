@@ -1367,16 +1367,16 @@ except Exception:
     return 1
 }
 
-# Find distributed-auth directory (where docker-compose runs)
-find_distributed_auth_dir() {
+# Find mpc project directory (where docker-compose runs; typically mpc-config)
+find_mpc_project_dir() {
     local current_dir="$PWD"
     local script_dir="$(dirname "$0")"
     
-    # Try multiple strategies to find distributed-auth directory
+    # Try multiple strategies to find mpc project directory (mpc-config or mpc-auth)
     local possible_paths=(
-        # If we're in mpc-config, look for sibling distributed-auth
-        "$(dirname "$script_dir")/distributed-auth"
-        # If we're already in distributed-auth
+        # If we're in mpc-config, use it; or look for sibling mpc-config
+        "$(dirname "$script_dir")/mpc-config"
+        # If we're already in the project directory
         "$current_dir"
         # Look for docker-compose.yml in current directory
         "$current_dir"
@@ -1408,9 +1408,9 @@ find_distributed_auth_dir() {
         fi
     done
     
-    # Default: assume we're in distributed-auth or it's a sibling of mpc-config
-    if [ -d "$(dirname "$script_dir")/distributed-auth" ]; then
-        echo "$(dirname "$script_dir")/distributed-auth"
+    # Default: assume we're in mpc-config or it's a sibling
+    if [ -d "$(dirname "$script_dir")/mpc-config" ]; then
+        echo "$(dirname "$script_dir")/mpc-config"
         return 0
     fi
     
@@ -1420,7 +1420,7 @@ find_distributed_auth_dir() {
 
 # Copy generated CA certificate to CAFile location in configs.yaml (for relay node)
 # The CAFile path in configs.yaml is the container path (/mosquitto/config/certs/ca.crt)
-# We need to convert it to the host path (./mosquitto/config/certs/ca.crt relative to distributed-auth)
+# We need to convert it to the host path (./mosquitto/config/certs/ca.crt relative to mpc project dir)
 copy_cert_to_cafile_location() {
     local config_file="$1"
     local generated_ca_cert="$2"
@@ -1442,18 +1442,18 @@ copy_cert_to_cafile_location() {
         return 0
     fi
     
-    # Find distributed-auth directory (where docker-compose runs)
-    local distributed_auth_dir
-    distributed_auth_dir=$(find_distributed_auth_dir)
+    # Find mpc project directory (where docker-compose runs)
+    local mpc_project_dir
+    mpc_project_dir=$(find_mpc_project_dir)
     
-    if [ ! -d "$distributed_auth_dir" ]; then
-        print_warning "Could not find distributed-auth directory. Attempting to create mosquitto/config structure in current location."
-        distributed_auth_dir="$PWD"
+    if [ ! -d "$mpc_project_dir" ]; then
+        print_warning "Could not find mpc project directory. Attempting to create mosquitto/config structure in current location."
+        mpc_project_dir="$PWD"
     fi
     
     # Convert container path to host path
     # Container: /mosquitto/config/certs/ca.crt
-    # Host: ./mosquitto/config/certs/ca.crt (relative to distributed-auth)
+    # Host: ./mosquitto/config/certs/ca.crt (relative to mpc project dir)
     local host_cafile_path
     if [[ "$container_cafile_path" == /* ]]; then
         # Remove leading slash to make it relative
@@ -1463,7 +1463,7 @@ copy_cert_to_cafile_location() {
     fi
     
     # Full host path
-    local full_host_path="${distributed_auth_dir}/${host_cafile_path}"
+    local full_host_path="${mpc_project_dir}/${host_cafile_path}"
     
     # Normalize paths for comparison
     local normalized_generated=$(readlink -f "$generated_ca_cert" 2>/dev/null || echo "$generated_ca_cert")
