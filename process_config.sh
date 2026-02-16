@@ -1991,9 +1991,12 @@ configure_mqtt_broker() {
     local mqtt_broker_exists=false
     if grep -qE '^\s*mqttBroker\s*:' "$config_file"; then
         mqtt_broker_exists=true
-        # Extract existing value (handles both quoted and unquoted, stops at comment)
-        # Remove comment first, then extract value
-        existing_broker=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1 | sed -E 's/#.*$//' | sed -E 's/^\s*mqttBroker\s*:\s*["'\'']?([^"'\''#]*)["'\'']?\s*$/\1/' | xargs)
+        # Extract existing value via awk (no sed - avoids any chance of URL like ssl:// breaking sed)
+        existing_broker=$(awk '
+            /^[[:space:]]*mqttBroker[[:space:]]*:/ {
+                sub(/#.*$/, ""); sub(/^[[:space:]]*mqttBroker[[:space:]]*:[[:space:]]*/, ""); gsub(/^["'\'']?|["'\'']?[[:space:]]*$/, ""); gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print; exit
+            }
+        ' "$config_file" | xargs)
         if [ -n "$existing_broker" ]; then
             # Validate the broker address format
             local protocol_valid=false
@@ -2161,9 +2164,9 @@ EOF
             return 1
         fi
         elif [ "$mqtt_broker_exists" = true ] && [ -z "$existing_broker" ]; then
-            # mqttBroker exists but is empty - update line via awk (avoids sed/perl issues with ssl:// in URL)
+            # mqttBroker exists but is empty - update line via awk (no sed so ssl:// in URL cannot break anything)
             local mqtt_line=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1)
-            local comment_part=$(echo "$mqtt_line" | sed -E 's/^[^#]*(#.*)$/\1/')
+            local comment_part=$(echo "$mqtt_line" | awk 'match($0, /#.*$/) { print substr($0, RSTART, RLENGTH) }')
             if awk -v broker="$broker_addr" -v comment="${comment_part:-}" '
                 /^[[:space:]]*mqttBroker[[:space:]]*:/ {
                     match($0, /^[[:space:]]*/)
