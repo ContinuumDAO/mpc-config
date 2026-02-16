@@ -2585,10 +2585,8 @@ main() {
     validate_threshold "$CONFIG_FILE"
     validate_presign_config "$CONFIG_FILE"
     
-    # Validate Relayer API connection (MANDATORY - must pass before certificate generation)
-    validate_relayer_api_connection "$CONFIG_FILE"
-    
-    # Determine if this is the relay node (first node in nodeAddresses; order must be same on all nodes)
+    # Determine relay vs client and configure docker-compose FIRST (so client always gets mosquitto commented out)
+    # before any step that might exit (e.g. Relayer API check). Otherwise a client would never reach configure_docker_compose.
     IS_RELAY_NODE=$(validate_node_ip "$CONFIG_FILE")
     if [ "$IS_RELAY_NODE" = "true" ]; then
         print_info "Detected as RELAY NODE (this machine is first in configs.yaml nodeAddresses) - mosquitto will be enabled"
@@ -2596,11 +2594,11 @@ main() {
         print_info "Detected as CLIENT NODE (this machine is not first in configs.yaml nodeAddresses) - mosquitto will be commented out"
     fi
     
-    # Configure mqttBroker in configs.yaml (for both relay and client nodes)
     configure_mqtt_broker "$CONFIG_FILE" "$IS_RELAY_NODE"
-    
-    # Configure docker-compose.yml based on node type
     configure_docker_compose "$IS_RELAY_NODE"
+    
+    # Validate Relayer API connection (MANDATORY for relay before certificate generation; may exit 1 on failure)
+    validate_relayer_api_connection "$CONFIG_FILE"
     
     if [ "$IS_RELAY_NODE" = "true" ]; then
         # ========================================
