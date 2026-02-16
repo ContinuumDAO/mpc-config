@@ -263,7 +263,9 @@ check_openssl() {
     print_success "openssl found (version $OPENSSL_VERSION)"
 }
 
-# Find configs.yaml file
+# Find configs.yaml file. Prints path if found, nothing if not. Always returns 0 so that
+# main() can run "CONFIG_FILE=$(find_configs_yaml)" and then check [ -z "$CONFIG_FILE" ]
+# without set -e exiting when the file is missing.
 find_configs_yaml() {
     local script_dir="$(dirname "$0")"
     local current_dir="$PWD"
@@ -281,7 +283,7 @@ find_configs_yaml() {
         fi
     done
     
-    return 1
+    return 0
 }
 
 # Extract IP address from URL (http://ip:port or https://ip:port)
@@ -2110,8 +2112,11 @@ EOF
         if [ "$mqtt_broker_exists" = false ]; then
         # Add mqttBroker after threshold if it exists, otherwise after nodeAddresses
         if grep -qE '^\s*threshold\s*:' "$config_file"; then
-            # Simple sed: add after threshold line with same indentation
-            sed -i.tmp "/^\s*threshold\s*:/a\\    mqttBroker: \"$broker_addr\"" "$config_file" 2>/dev/null
+            # Add after threshold (use awk to avoid sed issues with / and " in broker_addr e.g. ssl://host:8883)
+            awk -v broker="$broker_addr" '
+                /^[[:space:]]*threshold[[:space:]]*:/ { print; print "    mqttBroker: \"" broker "\""; next }
+                { print }
+            ' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
         elif grep -qE '^\s*nodeAddresses\s*:' "$config_file"; then
             # Find where nodeAddresses block ends and add there
             # This is a simple approach - finds the line after nodeAddresses that has less indentation
@@ -2164,16 +2169,16 @@ EOF
             # Try to update preserving comment - use perl for better regex support, or sed as fallback
             if command -v perl &> /dev/null; then
                 # Use perl for more reliable regex
-                if perl -i.tmp -pe "s/^(\s*mqttBroker\s*:\s*)[\"']*[\"']*(\s*#.*)?\$/\1\"$broker_addr\"\2/" "$config_file" 2>/dev/null; then
+                if perl -i.tmp -pe "s|^(\s*mqttBroker\s*:\s*)[\"']*[\"']*(\s*#.*)?\$|\1\"$broker_addr\"\2|" "$config_file" 2>/dev/null; then
                     if grep -qE "^\s*mqttBroker\s*:\s*\"$broker_addr\"" "$config_file" 2>/dev/null; then
                         rm -f "${config_file}.tmp"
                         print_success "Updated empty mqttBroker to: $broker_addr (comment preserved)"
                     else
                         # Fallback: simple replacement
                         if [ -n "$comment_part" ]; then
-                            perl -i.tmp -pe "s/^\s*mqttBroker\s*:.*/    mqttBroker: \"$broker_addr\" $comment_part/" "$config_file" 2>/dev/null
+                            perl -i.tmp -pe "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\" $comment_part|" "$config_file" 2>/dev/null
                         else
-                            perl -i.tmp -pe "s/^\s*mqttBroker\s*:.*/    mqttBroker: \"$broker_addr\"/" "$config_file" 2>/dev/null
+                            perl -i.tmp -pe "s|^\s*mqttBroker\s*:.*|    mqttBroker: \"$broker_addr\"|" "$config_file" 2>/dev/null
                         fi
                         if [ $? -eq 0 ]; then
                             rm -f "${config_file}.tmp"
