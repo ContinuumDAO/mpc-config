@@ -2248,23 +2248,23 @@ configure_docker_compose() {
             echo "      - ./mosquitto/config:/mosquitto/config"
         else
             # Find volumes: line that comes after app: (within the app service block)
-            local volumes_line=$(awk -v app_start="$app_line" '
-                NR >= app_start && /^[[:space:]]+volumes:/ { print NR; exit }
+            local volumes_line=$(awk -v app_start="${app_line%%*$'\n'*}" '
+                NR >= app_start+0 && /^[[:space:]]+volumes:/ { print NR; exit }
             ' "$docker_compose_file" | head -1 | tr -d '\n\r')
-            
-            if [ -n "$volumes_line" ] && [ "$volumes_line" -gt 0 ] 2>/dev/null; then
+            volumes_line="${volumes_line%%*$'\n'*}"
+            if [ -n "$volumes_line" ] && [ "${volumes_line//[^0-9]/}" = "$volumes_line" ] && [ "$volumes_line" -gt 0 ] 2>/dev/null; then
                 # Find the last volume entry (line starting with spaces and -) after volumes:
                 # Stop when we hit another top-level key (same or less indentation as volumes:)
-                local last_volume_line=$(awk -v vol_start="$volumes_line" '
-                    NR > vol_start && /^[[:space:]]+-/ { last_vol=NR }
-                    NR > vol_start && /^[[:space:]]+[a-zA-Z_]+:/ && !/^[[:space:]]+-/ {
+                local last_volume_line=$(awk -v vol_start="${volumes_line}" '
+                    NR > vol_start+0 && /^[[:space:]]+-/ { last_vol=NR }
+                    NR > vol_start+0 && /^[[:space:]]+[a-zA-Z_]+:/ && !/^[[:space:]]+-/ {
                         # Check if this is at same or less indentation than volumes: (means we left volumes section)
                         if (last_vol) { print last_vol; exit }
                     }
                     END { if (last_vol) print last_vol }
                 ' "$docker_compose_file" | head -1 | tr -d '\n\r')
-                
-                if [ -n "$last_volume_line" ] && [ "$last_volume_line" -gt 0 ] 2>/dev/null; then
+                last_volume_line="${last_volume_line%%*$'\n'*}"
+                if [ -n "$last_volume_line" ] && [ "${last_volume_line//[^0-9]/}" = "$last_volume_line" ] && [ "$last_volume_line" -gt 0 ] 2>/dev/null; then
                     # Insert after the last volume entry
                     sed -i "${last_volume_line}a\      - ./mosquitto/config:/mosquitto/config" "$docker_compose_file"
                     print_success "Added mosquitto/config volume mount to app service"
@@ -2306,24 +2306,37 @@ configure_docker_compose() {
         print_info "Disabling mosquitto service for client node (only relay node runs the broker)..."
         
         # Find line numbers for mosquitto service (match 2+ spaces then "mosquitto:")
-        local mosquitto_start=$(grep -nE '^[[:space:]]+mosquitto:' "$docker_compose_file" | head -1 | cut -d: -f1 | tr -d '\n\r')
+        local mosquitto_start=$(grep -nE '^[[:space:]]*(# [[:space:]]*)?mosquitto:' "$docker_compose_file" | head -1 | cut -d: -f1 | tr -d '\n\r')
+        mosquitto_start="${mosquitto_start%%*$'\n'*}"
         
-        if [ -n "$mosquitto_start" ]; then
-            # Find the end: next top-level service (same indent as "  mosquitto:" i.e. exactly 2 spaces + name + :)
-            # Do NOT match nested keys like "    image:" (4 spaces) - only "  app:" etc.
-            local mosquitto_end=$(awk -v start="$mosquitto_start" 'NR > start && /^  [a-zA-Z_]+:/ && !/^  mosquitto:/ { print NR; exit }' "$docker_compose_file" | head -1 | tr -d '\n\r')
+        if [ -n "$mosquitto_start" ] && [ "${mosquitto_start//[^0-9]/}" = "$mosquitto_start" ]; then
+            # Find the end: next line with SAME indentation as mosquitto line and "servicename:" (not nested like "    image:")
+            # Capture indent length from the mosquitto line, then find next line with that exact indent + word:
+            local mosquitto_end=$(awk -v start="${mosquitto_start}" '
+                NR==start {
+                    match($0, /^[[:space:]]*/); indent_len = RLENGTH; next
+                }
+                NR > start && indent_len != "" {
+                    if (match($0, /^[[:space:]]*/) && RLENGTH == indent_len) {
+                        rest = substr($0, RLENGTH+1); rest = rest ~ /^#/ ? substr(rest, index(rest," ")+1) : rest
+                        if (rest ~ /^[a-zA-Z_]+:/ && rest !~ /^mosquitto:/) { print NR; exit }
+                    }
+                }
+            ' "$docker_compose_file" | head -1 | tr -d '\n\r')
+            mosquitto_end="${mosquitto_end%%*$'\n'*}"
             
-            if [ -n "$mosquitto_end" ]; then
-                # Comment out mosquitto service block: prepend "# " to each line (portable sed: use [ ]* for spaces)
+            if [ -n "$mosquitto_end" ] && [ "${mosquitto_end//[^0-9]/}" = "$mosquitto_end" ] && [ "$mosquitto_end" -gt "$mosquitto_start" ] 2>/dev/null; then
+                # Comment out mosquitto service block only (from mosquitto: line to line before next service)
                 sed -i "${mosquitto_start},$((mosquitto_end-1))s/^\([ ]*\)/\1# /" "$docker_compose_file"
-                # Ensure the mosquitto: line itself is commented (in case first sed missed it)
-                sed -i "${mosquitto_start}s/^\([ ]*\)mosquitto:/\1# mosquitto:/" "$docker_compose_file"
+                sed -i "${mosquitto_start}s/^\([ ]*\)#*[ ]*mosquitto:/\1# mosquitto:/" "$docker_compose_file"
                 print_success "Mosquitto service commented out (lines $mosquitto_start-$((mosquitto_end-1)))"
             else
-                # Fallback: comment from mosquitto: to end of file
-                sed -i "${mosquitto_start},\$s/^\([ ]*\)/\1# /" "$docker_compose_file"
-                sed -i "${mosquitto_start}s/^\([ ]*\)mosquitto:/\1# mosquitto:/" "$docker_compose_file"
-                print_warning "Mosquitto service end not found - commented to end of file"
+                # Fallback only if we could not find next service: comment just the mosquitto block by line count (typical size ~18 lines)
+                # Do NOT comment to end of file - that would break app and networks. Comment a reasonable block.
+                local safe_end=$((mosquitto_start + 25))
+                sed -i "${mosquitto_start},${safe_end}s/^\([ ]*\)/\1# /" "$docker_compose_file"
+                sed -i "${mosquitto_start}s/^\([ ]*\)#*[ ]*mosquitto:/\1# mosquitto:/" "$docker_compose_file"
+                print_warning "Could not detect next service line - commented lines $mosquitto_start-$safe_end (check docker-compose.yml)"
             fi
         else
             print_warning "Mosquitto service not found - may already be commented"
