@@ -2564,20 +2564,21 @@ main() {
     echo "=========================================="
     echo ""
     
+    # Require configs.yaml first (fail fast before any other checks)
+    CONFIG_FILE=$(find_configs_yaml)
+    if [ -z "$CONFIG_FILE" ]; then
+        print_error "Could not find configs.yaml"
+        print_info "Expected location: configs.yaml in the same directory as this script ($(dirname "$0"))"
+        exit 1
+    fi
+    print_success "Found config: $CONFIG_FILE"
+    echo ""
+    
     check_root
     check_openssl
     
     # Check sudo access early (needed for client nodes to create /mosquitto/config/certs)
-    # Note: This check happens before we know if we're on a client node, but it's better
-    # to fail early with a clear message than to fail later during directory creation
     check_sudo_access
-    
-    # Find and validate configs.yaml
-    CONFIG_FILE=$(find_configs_yaml)
-    if [ -z "$CONFIG_FILE" ]; then
-        print_error "Could not find configs.yaml"
-        exit 1
-    fi
     
     # Validate configuration
     validate_no_default_ips "$CONFIG_FILE"
