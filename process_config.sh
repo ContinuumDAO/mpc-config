@@ -2357,34 +2357,34 @@ configure_docker_compose() {
         # CLIENT NODE: Comment out mosquitto service and dependency
         print_info "Disabling mosquitto service for client node (only relay node runs the broker)..."
         
-        # Find line numbers for mosquitto service
-        local mosquitto_start=$(grep -n "^  mosquitto:" "$docker_compose_file" | head -1 | cut -d: -f1)
+        # Find line numbers for mosquitto service (match 2+ spaces then "mosquitto:")
+        local mosquitto_start=$(grep -nE '^[[:space:]]+mosquitto:' "$docker_compose_file" | head -1 | cut -d: -f1)
         
         if [ -n "$mosquitto_start" ]; then
-            # Find the end of mosquitto service (next service at same indent)
-            local mosquitto_end=$(awk -v start="$mosquitto_start" 'NR > start && /^  [a-zA-Z_]+:/ { print NR; exit }' "$docker_compose_file")
+            # Find the end of mosquitto service (next service at same indent: 2 spaces + word + :)
+            local mosquitto_end=$(awk -v start="$mosquitto_start" 'NR > start && /^[[:space:]]+[a-zA-Z_]+:/ && !/^[[:space:]]+#/ { print NR; exit }' "$docker_compose_file")
             
             if [ -n "$mosquitto_end" ]; then
-                # Comment out mosquitto service block using sed
-                sed -i "${mosquitto_start},$((mosquitto_end-1))s/^\(\s*\)/\1# /" "$docker_compose_file"
-                # Ensure the mosquitto: line itself is commented
-                sed -i "${mosquitto_start}s/^\(\s*\)mosquitto:/\1# mosquitto:/" "$docker_compose_file"
+                # Comment out mosquitto service block: prepend "# " to each line (portable sed: use [ ]* for spaces)
+                sed -i "${mosquitto_start},$((mosquitto_end-1))s/^\([ ]*\)/\1# /" "$docker_compose_file"
+                # Ensure the mosquitto: line itself is commented (in case first sed missed it)
+                sed -i "${mosquitto_start}s/^\([ ]*\)mosquitto:/\1# mosquitto:/" "$docker_compose_file"
                 print_success "Mosquitto service commented out (lines $mosquitto_start-$((mosquitto_end-1)))"
             else
-                # Fallback: comment from mosquitto: to end of file (shouldn't happen but safer)
-                sed -i "${mosquitto_start},\$s/^\(\s*\)/\1# /" "$docker_compose_file"
-                sed -i "${mosquitto_start}s/^\(\s*\)mosquitto:/\1# mosquitto:/" "$docker_compose_file"
+                # Fallback: comment from mosquitto: to end of file
+                sed -i "${mosquitto_start},\$s/^\([ ]*\)/\1# /" "$docker_compose_file"
+                sed -i "${mosquitto_start}s/^\([ ]*\)mosquitto:/\1# mosquitto:/" "$docker_compose_file"
                 print_warning "Mosquitto service end not found - commented to end of file"
             fi
         else
             print_warning "Mosquitto service not found - may already be commented"
         fi
         
-        # Comment out mosquitto dependency in app service
-        sed -i '/depends_on:/,/^    [a-zA-Z_]*:$/ { s/^\(\s*\)mosquitto:/\1# mosquitto:/; /mosquitto:/ { n; s/^\(\s*\)condition:/\1# condition:/; } }' "$docker_compose_file"
+        # Comment out mosquitto dependency in app service (portable: [ ]* for spaces)
+        sed -i '/depends_on:/,/^[[:space:]]*[a-zA-Z_]*:$/ { s/^\([ ]*\)mosquitto:/\1# mosquitto:/; /mosquitto:/ { n; s/^\([ ]*\)condition:/\1# condition:/; } }' "$docker_compose_file"
         
         # Verify mosquitto is commented
-        if grep -q "^  # mosquitto:" "$docker_compose_file" 2>/dev/null; then
+        if grep -qE '^[[:space:]]+# mosquitto:' "$docker_compose_file" 2>/dev/null; then
             print_success "Mosquitto service is now commented out"
         else
             print_warning "Could not verify mosquitto was commented - please check manually"
@@ -2588,8 +2588,13 @@ main() {
     # Validate Relayer API connection (MANDATORY - must pass before certificate generation)
     validate_relayer_api_connection "$CONFIG_FILE"
     
-    # Determine if this is the relay node (first node)
+    # Determine if this is the relay node (first node in nodeAddresses; order must be same on all nodes)
     IS_RELAY_NODE=$(validate_node_ip "$CONFIG_FILE")
+    if [ "$IS_RELAY_NODE" = "true" ]; then
+        print_info "Detected as RELAY NODE (this machine is first in configs.yaml nodeAddresses) - mosquitto will be enabled"
+    else
+        print_info "Detected as CLIENT NODE (this machine is not first in configs.yaml nodeAddresses) - mosquitto will be commented out"
+    fi
     
     # Configure mqttBroker in configs.yaml (for both relay and client nodes)
     configure_mqtt_broker "$CONFIG_FILE" "$IS_RELAY_NODE"
