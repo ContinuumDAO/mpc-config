@@ -7,8 +7,16 @@
 
 # Node management key for API authentication
 # Format: Ethereum address (0x followed by 40 hex characters)
-# Used to verify signatures on management API requests
+# Used to verify signatures on management API requests (e.g. MetaMask personal_sign)
 NodeMgtKey: "0x1234567890ABCDEF1234567890ABCDEF12345678"
+
+# Optional: Ed25519 public key for direct API management without a frontend (bootstrap key)
+# Format: 64 hex characters (32-byte Ed25519 public key)
+# This is the first permitted machine; it can add more keys via POST /addManagementKey (signed
+# with this key). When set, the node accepts NodeMgtKey (MetaMask) or any Ed25519 key (this one
+# plus any added via addManagementKey) for management endpoints. Leave empty if you only use
+# the frontend with MetaMask for management.
+PublicMgtKey: ""
 
 # Ignore management key signature check (for testing/development only)
 # Controls signature verification for MANAGEMENT API endpoints (e.g., /newGroupRequest, /presignRequest)
@@ -145,6 +153,11 @@ BloomFilterHashCount: 4
 # 
 # Can also be set via environment variable: NodePingTimeout
 NodePingTimeout: "5s"
+
+# Delay before first poll for ping replies (reduces intermittent "insufficient online nodes")
+# Format: Go duration (e.g., "500ms", "1s"). Set to "0" to disable.
+# Default: "800ms" if not specified. Env: NodePingInitialDelay
+NodePingInitialDelay: "800ms"
 
 # Pre-signing verification configuration
 # Pre-validate transactions before signing to prevent invalid operations

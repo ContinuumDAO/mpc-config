@@ -24,7 +24,7 @@ mpc-config/
 
 1. **Standalone Configuration**: All configuration files are at the root level, not in a `console/` subdirectory
 2. **Docker Image Based**: `docker-compose.yml` uses the pre-built Docker image instead of building from source
-3. **Path Adjustments**: `process_config.sh` has been adapted to work from the repository root
+3. **Path Adjustments**: `process_config.sh` has been adapted to work from the repository root (script lives at repo root; certs at `./mosquitto/config/certs`, config at `./configs.yaml`). The mpc-auth repository has a different version in `console/process_config.sh` that uses `../mosquitto/` and `../console/configs.yaml` for the source-tree layout. Keep using this repo’s script when deploying from mpc-config only.
 4. **Public Repository**: This repository is public and contains no source code - only configuration and setup scripts
 
 ## Usage Workflow
