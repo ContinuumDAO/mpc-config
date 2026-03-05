@@ -97,7 +97,7 @@ ManagementAPIsPort: 8080
 # If true, skips client signature verification during MPC coordination
 # WARNING: Set to false in production for security
 # NOTE: This does NOT affect relayer authentication - relayer signatures are always required for /signRequest
-IgnoreClientSigCheck: true
+IgnoreClientSigCheck: false
 
 # Disable API documentation (Swagger)
 # If true, disables the /swagger/index.html endpoint
