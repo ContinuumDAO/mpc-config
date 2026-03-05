@@ -4,12 +4,17 @@
 
 The Distributed Auth Management API provides a RESTful interface for managing MPC (Multi-Party Computation) nodes, key generation, signing operations, and system monitoring. The API is implemented using the Gin web framework and follows a consistent response format.
 
+**Related:** For Ed25519-based agent setup (node management without MetaMask), see [AGENT_ED25519_SETUP.md](AGENT_ED25519_SETUP.md).
+
 ## Architecture
 
-### Base URL
-- Default port: `8080` (configurable via `ManagementAPIsPort` in `configs.yaml`)
-- Base path: `/`
-- Swagger UI: `/swagger/index.html` (if docs are enabled)
+### Base URL and connecting to the node
+
+- **Default port:** `8080` (configurable via `ManagementAPIsPort` in `configs.yaml`)
+- **Base path:** `/`
+- **Node URL:** `http://<host>:<port>` (e.g. `http://localhost:8080` or `http://your-node.example.com:8080`)
+- **When the client runs on the same host as the node** (e.g. an AI agent like Open Claw on the node VPS): use `http://localhost:8080` (or `http://127.0.0.1:8080`). See [AGENT_ED25519_SETUP.md](AGENT_ED25519_SETUP.md) for deploying the agent on the node VPS under a dedicated user (e.g. `ai-agent`).
+- **Swagger UI:** `/swagger/index.html` (if docs are enabled)
 
 ### Response Format
 

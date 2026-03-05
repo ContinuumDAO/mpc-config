@@ -1,6 +1,6 @@
 # Agent Ed25519 setup for node management
 
-This doc describes how a **node owner** can set up their node so that an **AI agent** (or any automated process) can perform management signing using an Ed25519 keypair—without MetaMask. The agent can then call the node APIs for signRequestAgree, triggerSignRequestById, updateSignResultStatusById, shelveSignRequest, and keyGen (create/join) using Ed25519 signatures.
+This doc describes how a **node owner** can set up their node so that an **AI agent** (e.g. Open Claw or any automated process) can perform management signing using an Ed25519 keypair—without MetaMask. The agent can then call the node APIs for signRequestAgree, triggerSignRequestById, updateSignResultStatusById, shelveSignRequest, and keyGen (create/join) using Ed25519 signatures.
 
 ## Summary
 
@@ -111,6 +111,65 @@ If the AI agent (or a signing helper) runs **on the same machine as the node**, 
 - **Path:** Use only **`~/.ssh/mpc_auth_ed25519`** for the private key (on your PC or the agent's machine). Configure the agent (or your helper) to read that path and sign the exact message string the backend expects.
 - **Key format:** The file at `~/.ssh/mpc_auth_ed25519` can be OpenSSH or PEM format. Sign the **exact** JSON message string (no EIP-191 wrapper) and output the signature as **128 hex characters**. The public key for `PublicMgtKey` is the same key, expressed as 64 hex.
 - **Human users (no copy-paste of key):** Use the **sign-clipboard** helper in `tools/sign-clipboard`: copy the message from the app, run the binary, then paste the 128-hex signature back into the app. See `tools/sign-clipboard/README.md`.
+
+## 8. Deploying the agent on the node VPS (e.g. Open Claw)
+
+To run the agent (e.g. Open Claw) on the **same VPS as the node**, use a dedicated OS user and access the node API via its port. This keeps the agent isolated and makes key placement consistent.
+
+### 8.1 Create a dedicated user (recommended: `ai-agent`)
+
+On the node VPS, create a user that will run only the agent (not the node itself):
+
+```bash
+# Create user (no login shell if the agent is a service)
+sudo adduser --disabled-password --gecos "AI agent for MPC node" ai-agent
+
+# Or with login shell if you need to SSH in or run interactive commands:
+# sudo adduser ai-agent
+```
+
+The node continues to run as its own user (e.g. the user that runs Docker or the mpc-auth process). The agent runs as `ai-agent` and only needs to call the node API over the network.
+
+### 8.2 Node API URL and port
+
+The node exposes its management API on **port 8080** by default (configurable via `ManagementAPIsPort` in `configs.yaml`). When the agent runs on the same VPS:
+
+- **Base URL:** `http://localhost:8080` or `http://127.0.0.1:8080`
+- If you changed the port in config, use that port instead.
+
+Examples:
+
+- Health: `GET http://localhost:8080/health`
+- Check Ed25519: `GET http://localhost:8080/hasPublicMgtKey`
+- Nonce: `GET http://localhost:8080/getPublicMgtKeyNonce`
+
+So the agent (e.g. Open Claw) should be configured with **node URL = `http://localhost:8080`** when it runs on the node VPS.
+
+### 8.3 Install and run the agent as `ai-agent`
+
+1. **Switch to the agent user** (or deploy your agent process under that user):
+   ```bash
+   sudo su - ai-agent
+   ```
+
+2. **Create SSH directory and put the Ed25519 key** (same key whose public key is in the node’s `PublicMgtKey`):
+   ```bash
+   mkdir -p ~/.ssh
+   chmod 700 ~/.ssh
+   # Copy or generate the key at ~/.ssh/mpc_auth_ed25519
+   chmod 600 ~/.ssh/mpc_auth_ed25519
+   ```
+
+3. **Configure the agent** to use:
+   - **Node URL:** `http://localhost:8080` (or `http://127.0.0.1:8080`)
+   - **Private key path:** `~/.ssh/mpc_auth_ed25519` (i.e. `/home/ai-agent/.ssh/mpc_auth_ed25519`)
+
+4. Run the agent as `ai-agent`. It will read the key from disk and call the node API over the loopback port.
+
+### 8.4 Security (optional)
+
+- **Restrict who can reach the node API:** If only the agent on the same host should talk to the node, bind the management API to `127.0.0.1` (if supported by the node config) or use a firewall so that port 8080 is only reachable from localhost.
+- **Key permissions:** Ensure only `ai-agent` can read `~/.ssh/mpc_auth_ed25519` (e.g. `chmod 600` and correct ownership).
 
 ## 7. Security notes
 

@@ -845,6 +845,38 @@ OpenSSL Error[0]: error:80000002:system library::No such file or directory
 
 **Note:** Client nodes only need the `ca.crt` file (for TLS verification when connecting to the broker), but they do NOT need `server.crt` or `server.key` because they don't run a broker.
 
+### Node won't start
+
+- **Check MongoDB** is running on localhost: `docker-compose ps mongodb` (or `systemctl status mongod` if not using Docker).
+- **Verify mosquitto** is accessible (relay node only): `docker exec <mosquitto-container> mosquitto_sub -h localhost -p 8883 --cafile /mosquitto/config/certs/ca.crt -t "test"` or check `docker-compose logs mosquitto`.
+- **Check app logs:** `docker-compose logs app` or `tail -f data/app/logs/*.log`.
+
+### Group creation fails
+
+- Ensure all nodes have the same `keyList` (for pre-configured groups).
+- Verify all node addresses use **external/public IPs** only (no private IPs).
+- Check broker connectivity from all nodes (relay node must be reachable on port 8883 for TLS).
+- Review node logs for specific error messages.
+
+### MQTT connection issues
+
+- Verify broker is reachable: `mosquitto_pub -h <broker-ip> -p 8883 -t "test" -m "test"` (use `--cafile` for TLS).
+- For TLS: ensure `MQTTTLS.CAFile` in `configs.yaml` points to the correct CA certificate.
+- Check firewall rules allow MQTT (1883 unencrypted, 8883 TLS).
+
+### API authentication errors
+
+- Verify `NodeMgtKey` in `configs.yaml` matches the key used to sign requests.
+- Get current nonce: `GET /getNodeMgtKeyNonce` and use it in the request.
+- Ensure the request body is signed correctly (signature over JSON body excluding the `sig` field).
+
+---
+
+## Additional documentation
+
+- **[docs/API_IMPLEMENTATION.md](docs/API_IMPLEMENTATION.md)** – Full API reference (endpoints, request/response formats, Swagger).
+- **[docs/AGENT_ED25519_SETUP.md](docs/AGENT_ED25519_SETUP.md)** – Ed25519 agent setup for node management (no MetaMask).
+
 ---
 
 ## Support
