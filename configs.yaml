@@ -24,7 +24,7 @@ PublicMgtKey: ""
 # If true, skips signature verification on management API requests
 # WARNING: Set to false in production for security
 # NOTE: This does NOT affect relayer authentication - relayer signatures are always required
-IgnoreMgtKeySigCheck: true
+IgnoreMgtKeySigCheck: false
 
 # MongoDB connection URI (optional, defaults to mongodb://localhost:27017)
 # MongoDB MUST be on localhost (127.0.0.1) - remote connections are not allowed
