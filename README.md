@@ -23,7 +23,6 @@ cd mpc-config
 Edit `configs.yaml` with your settings:
 - Set `NodeMgtKey` to your Ethereum address
 - Configure `MPCGroups` with your node addresses
-- Set `PreSigningVerification.RelayerAPIURL` if using pre-signing verification
 
 ### 3. Validate Configuration and Generate Certificates
 
@@ -33,7 +32,6 @@ Edit `configs.yaml` with your settings:
 
 This script will:
 - Validate your configuration
-- Test Relayer API connectivity (if enabled)
 - Generate TLS certificates for the MQTT broker (on relay node)
 - Create certificate directories (on client nodes)
 - Provide instructions for certificate sharing
@@ -242,13 +240,11 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    
    **On the relay node (first node):**
    - Validates configuration
-   - Validates Relayer API connectivity (if PreSigningVerification is enabled)
    - Generates self-signed certificates in `mosquitto/config/certs/` (relative path)
    - Provides instructions for sharing the CA certificate
    
    **On client nodes:**
    - Validates configuration
-   - Validates Relayer API connectivity (if PreSigningVerification is enabled)
    - Creates certificate directory at `mosquitto/config/certs/` (relative path - same as relay node for Docker compatibility)
    - Validates CA certificate configuration
    - Does NOT generate certificates (only relay node does this)
@@ -386,47 +382,20 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    
    **IMPORTANT: Client nodes should NOT run mosquitto.** Only the relay node runs the MQTT broker. Client nodes connect to the broker on the relay node.
    
-   **Option A: Comment out mosquitto service (Recommended - Simple)**
+   **Option A: Use process_config.sh (Recommended)**
    
-   On client nodes, edit `docker-compose.yml` and comment out:
+   On each client node, run the configuration script before starting Docker. It detects that the node is a client (not first in `nodeAddresses`) and configures `docker-compose.yml` accordingly (copies from `docker-compose.client.yml`, which has mosquitto disabled):
    
-   1. The entire mosquitto service:
-   ```yaml
-   # mosquitto:
-   #   image: eclipse-mosquitto:2.0
-   #   restart: always
-   #   command: mosquitto -c /mosquitto/config/mosquitto.conf -v
-   #   ports:
-   #     - "8883:8883"
-   #     - "9001:9001"
-   #   volumes:
-   #     - ./mosquitto/config:/mosquitto/config
-   #     - ./mosquitto/data:/mosquitto/data
-   #     - ./mosquitto/log:/mosquitto/log
-   #   networks:
-   #     - local-network
-   #   healthcheck:
-   #     test: ["CMD-SHELL", "pgrep mosquitto || exit 1"]
-   #     interval: 10s
-   #     timeout: 5s
-   #     retries: 5
-   ```
-   
-   2. The mosquitto dependency in the app service:
-   ```yaml
-   app:
-     # ... other config
-     depends_on:
-       mongodb:
-         condition: service_healthy
-       # mosquitto:  # Comment this out on client nodes
-       #   condition: service_started
-   ```
-   
-   Then start services:
    ```bash
+   cd mpc-config
+   ./process_config.sh
    docker-compose up -d
    ```
+   
+   The script will:
+   - Detect this machine as a CLIENT NODE
+   - Copy `docker-compose.client.yml` to `docker-compose.yml` (mosquitto service disabled, app does not depend on mosquitto)
+   - Validate config and certificate setup
    
    **Option B: Use docker-compose profiles (Advanced)**
    
@@ -491,10 +460,6 @@ Edit `configs.yaml` with your settings:
 - **`ManagementAPIsPort`**: HTTP API server port (default: 8080)
 - **`BrokerQos`**: MQTT QoS level (must be 1 or 2 for reliable MPC operations)
 - **`MQTTTLS.CAFile`**: Path to CA certificate for TLS broker verification (required for self-signed certs, which are valid for production)
-- **`PreSigningVerification`**: Optional transaction verification before signing
-  - **Note:** If enabled, requires `RelayerAPIURL` to be configured in `configs.yaml`
-  - The `process_config.sh` script will test Relayer API connectivity when `PreSigningVerification.Enabled` is `true`
-  - Obtain `RelayerAPIURL` from the DAO
 - **`InitiatePreSigning`**: Enable automatic presign request creation (background worker)
 - **`PreSigningCacheSize`**: Target number of presignatures to maintain (1-50)
 - **`NodePingTimeout`**: Timeout for node availability checks (e.g., "5s", "10s")
@@ -589,9 +554,9 @@ MPCGroups:
       - "node2_actual_public_key_128_chars_hex"
       - "node3_actual_public_key_128_chars_hex"
     nodeAddresses:
-      node1_actual_public_key_128_chars_hex: "http://203.0.113.10:8080"
-      node2_actual_public_key_128_chars_hex: "http://203.0.113.11:8080"
-      node3_actual_public_key_128_chars_hex: "http://203.0.113.12:8080"
+      node1_actual_public_key_128_chars_hex: "http://203.0.113.10:8081"
+      node2_actual_public_key_128_chars_hex: "http://203.0.113.11:8081"
+      node3_actual_public_key_128_chars_hex: "http://203.0.113.12:8081"
     # mqttBroker: ""  # Omit or leave empty to auto-derive from first node (ssl://203.0.113.10:8883 with TLS)
     # Or specify custom broker: mqttBroker: "tcp://custom-broker:1883"
     threshold: 2
@@ -744,65 +709,6 @@ docker login
 # docker login docker.io  # For Docker Hub
 ```
 
-**Solution 2: Build Image Locally (Development Only)**
-
-If you're a developer working on the `mpc-auth` codebase and need to test changes, you can build the image locally:
-
-1. **Clone the mpc-auth repository** (if you haven't already):
-   ```bash
-   cd /home/marcel/Cryptocurrency/Continuum/Code
-   git clone <mpc-auth-repo-url> mpc-auth
-   ```
-
-2. **Build the Docker image:**
-   ```bash
-   cd mpc-auth
-   docker build -f dockerfile_app -t continuumdao/mpc-auth:latest .
-   ```
-
-3. **Verify the image was created:**
-   ```bash
-   docker images | grep mpc-auth
-   ```
-
-4. **Now run docker-compose:**
-   ```bash
-   cd ../mpc-config
-   docker-compose up -d
-   ```
-
-**Note:** This is only for development/testing. Production deployments should use published images from the registry.
-
-For detailed build instructions, see `../mpc-auth/docs-internal/DOCKER_IMAGE_BUILD_AND_PUBLISH.md` (if you have access to the mpc-auth repository).
-
-### PreSigningVerification API connectivity issues
-
-If you see errors related to Relayer API connectivity:
-
-1. **Verify the API URL is correct:**
-   - Check `PreSigningVerification.RelayerAPIURL` in `configs.yaml`
-   - Obtain the correct URL from the DAO
-   - Ensure the URL includes the protocol (`http://` or `https://`)
-
-2. **Test connectivity manually:**
-   ```bash
-   curl http://relayer-api-url:8080/v1/mpc/chain_info?chain_id=97
-   ```
-
-3. **Check network connectivity:**
-   - Ensure your node can reach the relayer API server
-   - Check firewall rules
-   - Verify DNS resolution if using hostnames
-
-4. **Verify API endpoint:**
-   - The endpoint should be `/v1/mpc/chain_info`
-   - It should accept `chain_id` as a query parameter
-   - It should return JSON with `chain_config` and `active_rpc` fields
-
-5. **Check logs:**
-   ```bash
-   docker logs <app-container-name>
-   ```
 
 ### Certificate Issues
 

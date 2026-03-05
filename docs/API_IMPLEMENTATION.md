@@ -1944,23 +1944,34 @@ curl "http://localhost:8080/getSignRequestById?id=Sign20260111003720999cf104d0f"
 #### `POST /signRequestAgree`
 Agrees to or rejects a signing request.
 
-- **tx-check (relayer):** Unchanged. Request body is `requestId` + `clientSig`; no `accept` field. Relayer flow is not affected.
-- **multi-agree:** Optional `accept` (boolean). Omitted or `true` = agree to sign (same as before). `false` = reject: this node is recorded as having declined; the request **no longer appears in this node's `listSignRequests?filter=pending`**. The client must sign over the same body (including `accept`). Other nodes may still agree; rejection is per-node.
+- **tx-check (relayer):** Unchanged. Request body is `requestId` + `clientSig`; no `accept` or `thoughts` field. Relayer flow is not affected.
+- **multi-agree:** Optional `accept` (boolean). Omitted or `true` = agree to sign (same as before). `false` = reject: this node is recorded as having declined; the request **no longer appears in this node's `listSignRequests?filter=pending`**. The client must sign over the same body (including `accept` and `thoughts` when present). Other nodes may still agree; rejection is per-node.
 
 **Request Body:**
 - `requestId` (required): Sign request ID
-- `clientSig` (required for multi-agree when client sig check enabled): Signature over the request body (including `accept` for multi-agree)
-- `accept` (optional, **multi-agree only**): `true` or omitted = agree; `false` = reject (drops from this node's pending list). Ignored for tx-check.
+- `clientSig` (required for multi-agree when client sig check enabled): Signature over the **exact** request body used for this call (including `requestId`, `clientSig` empty, `accept`, and `thoughts` when present). For **MetaMask** (Ethereum address client key), use `personal_sign`; send the same string in `signedMessage`. For P256 (128-hex client key), the backend hashes the JSON with SHA256 and verifies ECDSA P256.
+- `accept` (optional, **multi-agree only**): `true` or omitted = agree to sign; `false` = reject (drops from this node's pending list). Ignored for tx-check.
 - `thoughts` (optional): Comment from this node when agreeing or rejecting, max 256 characters; stored per node key and returned in list/get and `getSignResultById`.
+- `signedMessage` (optional, **required for MetaMask**): The exact string the client signed (e.g. the JSON body with `clientSig: ""`). Required when the key's client key is an Ethereum address (MetaMask); optional for Ed25519 (backend can use canonical JSON if omitted). Ignored for P256.
 
 **Example (multi-agree agree):**
 ```json
 { "requestId": "Sign20260111003720999cf104d0f", "clientSig": "0x...", "accept": true }
 ```
 
+**Example (multi-agree agree with thoughts):**
+```json
+{ "requestId": "Sign20260111003720999cf104d0f", "clientSig": "0x...", "accept": true, "thoughts": "Verified on explorer" }
+```
+
 **Example (multi-agree reject):**
 ```json
 { "requestId": "Sign20260111003720999cf104d0f", "clientSig": "0x...", "accept": false }
+```
+
+**Example (multi-agree reject with thoughts):**
+```json
+{ "requestId": "Sign20260111003720999cf104d0f", "clientSig": "0x...", "accept": false, "thoughts": "Risk too high" }
 ```
 
 **Response:**
@@ -2538,8 +2549,8 @@ curl "http://localhost:8080/getAllGroupIds"
 
 ## See Also
 
-- `API_docs.md` - Usage examples and workflows (if present in mpc-auth source repo)
-- `MPC_AUTH_README.md` - General mpc-auth project documentation (copied from mpc-auth)
+- `API_docs.md` - Usage examples and workflows
+- `README.md` - General project documentation
 - `docs/swagger.yaml` - Complete API specification
-- In mpc-auth source: `node/managementapi.go` - API implementation source code
+- `node/managementapi.go` - API implementation source code
 
