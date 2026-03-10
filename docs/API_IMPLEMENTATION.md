@@ -66,6 +66,16 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getChainDetails`](#get-getchaindetails) - Get chain config(s); optional `chain_id` query for single chain
 - [`POST /removeChainDetails`](#post-removechaindetails) - Remove chain config for one chain (requires mgt key)
 
+### Local Token Config
+- [`POST /addToken`](#post-addtoken) - Add a token contract for a chain (this node only; requires mgt key)
+- [`POST /removeToken`](#post-removetoken) - Remove a token contract (requires mgt key)
+- [`GET /getTokens`](#get-gettokens) - Get all token configs grouped by chain type; optional `chainType`, `chain_id` filter
+
+### Known Addresses (local node only)
+- [`POST /addKnownAddress`](#post-addknownaddress) - Add or update a known address for a chain type (requires mgt key)
+- [`POST /removeKnownAddress`](#post-removeknownaddress) - Remove a known address (requires mgt key)
+- [`GET /getKnownAddresses`](#get-getknownaddresses) - Get all known addresses grouped by chain type; optional `chain_type`, `chain_id`, `is_contract` (0 or 1) filters
+
 ### Node Ping & Connectivity
 - [`GET /pingNodesRequest`](#get-pingnodesrequest) - Ping nodes to test connectivity
 - [`GET /getPingNodesResultById`](#get-getpingnodesresultbyid) - Get ping results by ID
@@ -1292,6 +1302,170 @@ curl -X POST http://localhost:8080/removeChainDetails \
     "clientSig": "0x..."
   }'
 ```
+
+### Local Token Config
+
+Token contracts are stored on the local node only (not propagated). Used so the frontend wallet can display and interact with tokens per chain. Supports multiple `chainType` values (e.g. `ethereum`, `solana`, `NEAR`, `stellar`, `TON`) and per-chain `chainId` (integer for Ethereum, string for others; stored as string). Token types for Ethereum include `ERC20`, `ERC721`, `CTMERC20`, `CTMRWA1`; new chain and token types can be added later.
+
+<a id="post-addtoken"></a>
+#### `POST /addToken`
+Adds a token contract for the given `chainType`, `chainId` and `tokenType`. Requires management key signature (MetaMask or Ed25519, same as postChainDetails).
+
+**Request Body (AddTokenPost):**
+```json
+{
+  "nonce": 1,
+  "chainType": "ethereum",
+  "chainId": 1234,
+  "tokenType": "ERC20",
+  "contract": {
+    "contractAddress": "0x1234567890123456789012345678901234567890",
+    "name": "My Token",
+    "symbol": "MTK",
+    "symbolURL": "https://example.com/icon.png"
+  },
+  "signedMessage": "{\"nonce\":1,\"chainType\":\"ethereum\",\"chainId\":\"1234\",\"tokenType\":\"ERC20\",\"action\":\"addToken\"}",
+  "clientSig": "0x..."
+}
+```
+
+**Field Descriptions:**
+- `nonce` (required): From `/getNodeMgtKeyNonce` or `/getPublicMgtKeyNonce`.
+- `chainType` (required): e.g. `ethereum`, `solana`, `NEAR`, `stellar`, `TON` (stored lowercase for lookup).
+- `chainId` (required): Number (Ethereum) or string; normalized to string when stored.
+- `tokenType` (required): e.g. `ERC20`, `ERC721`, `CTMERC20`, `CTMRWA1`.
+- `contract` (required): Object with at least `contractAddress`. Other fields by token type:
+  - **ERC20 / CTMERC20**: `name`, `symbol`, `symbolURL` (optional, can be empty string). Optional `decimals` (number, e.g. 18) for display/formatting; stored and returned by `GET /getTokens`.
+  - **ERC721**: `name`, `symbol`, `tokenURI`, and `tokenId` (required; identifies the specific NFT). If the same (contractAddress, tokenId) already exists for that chain/token type, that entry is updated; otherwise a new contract entry is appended.
+  - **CTMRWA1**: same as ERC20/ERC721 plus any RWA-specific fields (transfer sigs are set by server).
+- `transferSig`, `transferNames` (optional): Used when creating a new token-type entry; omitted for known types (server uses defaults).
+- `signedMessage` (required): Exact string signed by management key.
+- `clientSig` (required): MetaMask (0x-prefixed) or Ed25519 (128 hex) signature.
+
+**Response:** `{ "code": 0, "error": "", "data": "Token added" }`
+
+**Errors:** `400` missing/invalid fields; `401` invalid signature; `500` database error.
+
+<a id="post-removetoken"></a>
+#### `POST /removeToken`
+Removes the token contract with the given `contractAddress` for `chainType`, `chainId` and `tokenType`. For **ERC721**, `tokenId` is required so that only the specific (contractAddress, tokenId) entry is removed. Requires management key signature.
+
+**Request Body (RemoveTokenPost):**
+- `nonce`, `chainType`, `chainId`, `tokenType`, `contractAddress`, `signedMessage`, `clientSig` (all required).
+- **`tokenId`** (required for ERC721): The token ID of the NFT to remove. Omit or leave empty for ERC20 and other token types.
+
+Example (ERC20):
+```json
+{
+  "nonce": 2,
+  "chainType": "ethereum",
+  "chainId": "1234",
+  "tokenType": "ERC20",
+  "contractAddress": "0x1234567890123456789012345678901234567890",
+  "signedMessage": "{\"nonce\":2,\"chainType\":\"ethereum\",\"chainId\":\"1234\",\"tokenType\":\"ERC20\",\"contractAddress\":\"0x1234...\",\"action\":\"removeToken\"}",
+  "clientSig": "0x..."
+}
+```
+
+Example (ERC721; `tokenId` must appear in both the body and the signed message):
+```json
+{
+  "nonce": 2,
+  "chainType": "ethereum",
+  "chainId": "1234",
+  "tokenType": "ERC721",
+  "contractAddress": "0x221EC90B3B083A8501A37bdeb7035CeaedF3C31f",
+  "tokenId": "18",
+  "signedMessage": "{\"nonce\":2,\"chainType\":\"ethereum\",\"chainId\":\"1234\",\"tokenType\":\"ERC721\",\"contractAddress\":\"0x221EC90B3B083A8501A37bdeb7035CeaedF3C31f\",\"tokenId\":\"18\",\"action\":\"removeToken\"}",
+  "clientSig": "0x..."
+}
+```
+
+**Response:** `{ "code": 0, "error": "", "data": "Token removed" }`  
+**Errors:** `400` missing fields (including `tokenId` for ERC721); `401` invalid signature; `404` token contract not found; `500` database error.
+
+<a id="get-gettokens"></a>
+#### `GET /getTokens`
+Returns all token configs stored on this node, grouped by `chainType`. Response shape: `{ "ethereum": [ { "chainId": "...", "ERC20": { "transferSig": "...", "transferNames": [...], "contracts": [ { "contractAddress", "name", "symbol", "symbolURL", "decimals"?, ... } ] }, ... }, ... ], "solana": [], ... }`. Each contract in `contracts` includes whatever fields were stored (e.g. `decimals` if provided on addToken).
+
+**Query Parameters:**
+- `chainType` (optional): Filter by chain type (e.g. `ethereum`, `solana`).
+- `chain_id` (optional): Filter by chain ID.
+
+**Response:** `{ "code": 0, "error": "", "data": { "ethereum": [ ... ], "solana": [ ... ], ... } }`
+
+See [Token storage schema](docs/TOKEN_STORAGE_SCHEMA.md) for the full JSON structure and CTMRWA1 transfer signatures.
+
+### Known Addresses (local node only)
+
+Known addresses are stored on the local node only (not propagated). Each entry is scoped by chain type (e.g. `ethereum`, `solana`) and includes an address, optional `name`, optional `chainIds` (empty = valid on all chains of that type), and `isContract` (false = EOA). See [Known Addresses schema](docs/KNOWN_ADDRESSES_SCHEMA.md).
+
+<a id="post-addknownaddress"></a>
+#### `POST /addKnownAddress`
+Adds or updates a known address for the given `chainType`. Requires management key signature (MetaMask or Ed25519, same as postChainDetails).
+
+**Request Body (AddKnownAddressPost):**
+```json
+{
+  "nonce": 1,
+  "chainType": "ethereum",
+  "address": "0x1234567890123456789012345678901234567890",
+  "name": "My Wallet",
+  "chainIds": ["1", "137"],
+  "isContract": false,
+  "signedMessage": "{\"nonce\":1,\"chainType\":\"ethereum\",\"address\":\"0x1234...\",\"action\":\"addKnownAddress\"}",
+  "clientSig": "0x..."
+}
+```
+
+**Field Descriptions:**
+- `nonce` (required): From `/getNodeMgtKeyNonce` or `/getPublicMgtKeyNonce`.
+- `chainType` (required): e.g. `ethereum`, `solana` (stored lowercase).
+- `address` (required): The address; normalized server-side (e.g. lowercase for 0x-prefixed).
+- `name` (optional): Display name for the address.
+- `chainIds` (optional): Array of chain IDs this address is valid on. **Omit or empty = no restrictions** (valid on all chains of that type).
+- `isContract` (optional, default false): `true` = contract address, `false` = EOA.
+- `signedMessage` (required): Exact string signed by management key.
+- `clientSig` (required): MetaMask (0x-prefixed) or Ed25519 (128 hex) signature.
+
+**Response:** `{ "code": 0, "error": "", "data": "Known address added" }`
+
+**Errors:** `400` missing/invalid fields; `401` invalid signature; `500` database error.
+
+<a id="post-removeknownaddress"></a>
+#### `POST /removeKnownAddress`
+Removes the known address for the given `chainType` and `address`. Requires management key signature.
+
+**Request Body (RemoveKnownAddressPost):**
+- `nonce`, `chainType`, `address`, `signedMessage`, `clientSig` (all required).
+
+Example:
+```json
+{
+  "nonce": 2,
+  "chainType": "ethereum",
+  "address": "0x1234567890123456789012345678901234567890",
+  "signedMessage": "{\"nonce\":2,\"chainType\":\"ethereum\",\"address\":\"0x1234...\",\"action\":\"removeKnownAddress\"}",
+  "clientSig": "0x..."
+}
+```
+
+**Response:** `{ "code": 0, "error": "", "data": "Known address removed" }`
+
+**Errors:** `400` missing fields; `401` invalid signature; `404` known address not found; `500` database error.
+
+<a id="get-getknownaddresses"></a>
+#### `GET /getKnownAddresses`
+Returns all known addresses stored on this node, grouped by chain type. Each entry includes `address`, `name`, `chainIds`, `isContract`, and `updatedAt`. Optional query parameters filter the result set.
+
+**Query Parameters:**
+- `chain_type` (optional): Filter by chain type (e.g. `ethereum`, `solana`).
+- `chain_id` (optional): Filter by chain ID — only addresses that are valid on this chain are returned (i.e. documents where `chainIds` is empty or contains `chain_id`).
+- `is_contract` (optional): Filter by contract flag — `1` = contract addresses only, `0` = EOAs only. Omit to return both.
+
+**Response:** `{ "code": 0, "error": "", "data": { "ethereum": [ { "address": "0x...", "name": "My Wallet", "chainIds": ["1", "137"], "isContract": false, "updatedAt": "..." }, ... ], "solana": [ ... ], ... } }`
+
+See [Known Addresses schema](docs/KNOWN_ADDRESSES_SCHEMA.md) for the full document shape.
 
 ### 3. Node Tools
 
