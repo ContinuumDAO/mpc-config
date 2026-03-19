@@ -913,6 +913,113 @@ validate_relayer_api_connection() {
     print_success "Relayer API configuration validated successfully"
 }
 
+# When PreSigningVerification exists but RelayerAPIURL is empty, prompt (or use RELAYER_API_URL) before validate_relayer_api_connection.
+prompt_relayer_api_url_if_missing() {
+    local config_file="$1"
+    
+    if ! command -v python3 &> /dev/null; then
+        return 0
+    fi
+    if [ ! -f "$config_file" ]; then
+        return 0
+    fi
+    
+    local need_url
+    need_url=$(RELAYER_CFG="$config_file" python3 << 'PYRELAYERNEED'
+import os, yaml
+path = os.environ["RELAYER_CFG"]
+with open(path, "r") as f:
+    d = yaml.safe_load(f) or {}
+ps = d.get("PreSigningVerification")
+if ps is None or not isinstance(ps, dict):
+    print("no")
+    raise SystemExit(0)
+u = ps.get("RelayerAPIURL")
+if u is None:
+    print("yes")
+elif isinstance(u, str) and not u.strip():
+    print("yes")
+else:
+    print("no")
+PYRELAYERNEED
+)
+    need_url=$(printf '%s' "$need_url" | tr -d '\r\n')
+    if [ "$need_url" != "yes" ]; then
+        return 0
+    fi
+    
+    local env_url="${RELAYER_API_URL:-}"
+    env_url="${env_url#"${env_url%%[![:space:]]*}"}"
+    env_url="${env_url%"${env_url##*[![:space:]]}"}"
+    if [ -n "$env_url" ]; then
+        env_url="${env_url%/}"
+        RELAYER_MERGE_CFG="$config_file" RELAYER_MERGE_URL="$env_url" python3 << 'PYRELAYERMERGE'
+import os, yaml
+path = os.environ["RELAYER_MERGE_CFG"]
+url = os.environ["RELAYER_MERGE_URL"].strip().rstrip("/")
+with open(path, "r") as f:
+    data = yaml.safe_load(f)
+if not isinstance(data, dict):
+    raise SystemExit("invalid yaml")
+ps = data.get("PreSigningVerification")
+if not isinstance(ps, dict):
+    ps = {}
+ps["RelayerAPIURL"] = url
+data["PreSigningVerification"] = ps
+with open(path, "w") as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+PYRELAYERMERGE
+        print_success "Set PreSigningVerification.RelayerAPIURL from RELAYER_API_URL environment variable"
+        return 0
+    fi
+    
+    if [ ! -r /dev/tty ]; then
+        print_error "PreSigningVerification is configured but RelayerAPIURL is empty."
+        print_info "Set RELAYER_API_URL before running this script, or edit configs.yaml and add:"
+        echo "  PreSigningVerification:"
+        echo "    RelayerAPIURL: \"https://your-relayer-host:port\""
+        return 1
+    fi
+    
+    echo ""
+    print_step "RelayerAPIURL missing — required when PreSigningVerification is configured"
+    print_info "Obtain the relayer HTTP base URL from the DAO (serves /v1/mpc/chain_info). Not the same as MPC node addresses."
+    local url_in=""
+    while true; do
+        read -r -p "RelayerAPIURL (https://... or http://host:port): " url_in < /dev/tty || true
+        url_in="${url_in#"${url_in%%[![:space:]]*}"}"
+        url_in="${url_in%"${url_in##*[![:space:]]}"}"
+        if [ -z "$url_in" ]; then
+            print_warning "RelayerAPIURL cannot be empty while PreSigningVerification is configured. Try again or remove that block from configs.yaml."
+            continue
+        fi
+        url_in="${url_in%/}"
+        if ! printf '%s' "$url_in" | grep -qE '^https?://[^[:space:]]+'; then
+            print_error "URL must start with http:// or https:// (e.g. https://relayer.example.com:8080)"
+            continue
+        fi
+        RELAYER_MERGE_CFG="$config_file" RELAYER_MERGE_URL="$url_in" python3 << 'PYRELAYERMERGE'
+import os, yaml
+path = os.environ["RELAYER_MERGE_CFG"]
+url = os.environ["RELAYER_MERGE_URL"].strip().rstrip("/")
+with open(path, "r") as f:
+    data = yaml.safe_load(f)
+if not isinstance(data, dict):
+    raise SystemExit("invalid yaml")
+ps = data.get("PreSigningVerification")
+if not isinstance(ps, dict):
+    ps = {}
+ps["RelayerAPIURL"] = url
+data["PreSigningVerification"] = ps
+with open(path, "w") as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+PYRELAYERMERGE
+        print_success "Wrote PreSigningVerification.RelayerAPIURL to configs.yaml"
+        echo ""
+        return 0
+    done
+}
+
 # Validate that default example IPs have been replaced
 validate_no_default_ips() {
     local config_file="$1"
@@ -2852,6 +2959,9 @@ show_process_config_help() {
     echo "If NodeMgtKey or PublicMgtKey is empty, the script may prompt: Ethereum (MetaMask) and/or"
     echo "Ed25519 public key for non-MetaMask management. At least one valid key is required."
     echo ""
+    echo "If PreSigningVerification is set but RelayerAPIURL is empty, the script prompts for the URL"
+    echo "(or use RELAYER_API_URL in the environment)."
+    echo ""
     echo "On RELAY NODE (first node):"
     echo "  - Validates configuration"
     echo "  - Validates database connectivity (if PreSigningVerification is configured)"
@@ -2942,6 +3052,8 @@ main() {
     configure_docker_compose "$IS_RELAY_NODE"
 
     setup_browser_https "$CONFIG_FILE"
+    
+    prompt_relayer_api_url_if_missing "$CONFIG_FILE" || exit 1
     
     # Validate Relayer API connection (MANDATORY for relay before certificate generation; may exit 1 on failure)
     validate_relayer_api_connection "$CONFIG_FILE"
