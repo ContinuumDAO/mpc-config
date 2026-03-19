@@ -95,9 +95,21 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid) - Get key generation request by ID
 - [`POST /keyGenRequestAgree`](#post-keygenrequestagree) - Agree to key generation request (requires mgt key)
 - [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) - Get key generation result by ID
+- [`GET /getGlobalNonceByKeyGenId`](#get-getglobalnoncebykeygenid) - Get globalNonce by keyGen result id
 - [`GET /getKeyGenGroupId`](#get-getkeygengrouesultbyid) - Get key generation result by ID
 - [`GET /getKeyGenGroupId`](#get-getkeygengroupid) - Get GroupId for a keyGen request
 - [`GET /getAllGroupIds`](#get-getallgroupids) - Get all GroupIds with their keyGens
+
+### KeyGen Messaging
+KeyGen messaging is documented in [API_KEYGEN_MESSAGING.md](API_KEYGEN_MESSAGING.md). Response format and conventions follow this document ([API_IMPLEMENTATION.md](API_IMPLEMENTATION.md)). **sendMessage, markMessageRead, multiMarkMessagesRead, deleteMessage, and multiDeleteMessages require a management key signature** (MetaMask or Ed25519, depending on the client key in the keyGen); see API_KEYGEN_MESSAGING.md for Nonce/Sig and getMessageToSign / getNodeMgtKeyNonce / getAllowedEd25519MgtKeys.
+- `POST /sendMessage` - Send a message (top-level or reply) in a keyGen channel (mgt key required)
+- `GET /listMessages` - List messages (with unread, time range, top_level, pagination)
+- `GET /getMessageById` - Get a single message by id
+- `GET /getMessageThread` - Get a top-level message and its reply tree (nested, max depth 3)
+- `POST /markMessageRead` - Mark a message as read (add read receipt) (mgt key required)
+- `POST /multiMarkMessagesRead` - Mark multiple messages as read (list of message ids) (mgt key required)
+- `POST /deleteMessage` - Delete a message and all its replies (originator only) (mgt key required)
+- `POST /multiDeleteMessages` - Delete multiple messages (and their reply trees); originator-only per message; mgt key required
 
 ### Pre-Signing
 - [`POST /presignRequest`](#post-presignrequest) - Create presign request (requires mgt key)
@@ -117,7 +129,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /isSignRequestReadyById`](#get-issignrequestreadybyid) - Check if multi-agree sign request is ready to trigger
 - [`GET /listSignRequestsReady`](#get-listsignrequestsready) - List multi-agree sign requests ready to trigger (with pagenum/pagesize)
 - [`POST /triggerSignRequestById`](#post-triggersignrequestbyid) - Trigger signature generation for multi-agree (requires mgt key)
-- [`POST /updateSignResultStatusById`](#post-updatesignresultstatusbyid) - Update sign result status: executed (with tx hash) or shelved (originator only, requires mgt key)
+- [`POST /updateSignResultStatusById`](#post-updatesignresultstatusbyid) - Update sign result status: executed / failed / shelved; batch hashes; single-tx retry failed→executed (originator, mgt key)
 - [`POST /shelveSignRequest`](#post-shelvesignrequest) - Set sign request status to shelved (originator only, requires mgt key)
 - [`GET /listSignResults`](#get-listsignresults) - List sign results (filter + pagination)
 - [`GET /getSignResultById`](#get-getsignresultbyid) - Get sign result by ID
@@ -150,7 +162,7 @@ Returns the current node version and the date it was changed.
   "code": 0,
   "error": "",
   "data": {
-    "version": "v1.12",
+    "version": "v1.0",
     "versionDate": "2024-01-15"
   }
 }
@@ -1110,6 +1122,7 @@ Stores or updates chain config for one chain on this node. Requires management k
   "gasLimit": 21000,
   "baseFee": 30,
   "priorityFee": 2,
+  "baseFeeMultiplier": 200,
   "gasPrice": 25,
   "signedMessage": "{\"nonce\":1,\"chainName\":\"Ethereum Mainnet\",\"chainId\":\"1\",\"rpcGateway\":\"https://eth.llamarpc.com\",\"legacy\":false,\"testnet\":false,\"gasName\":\"ETH\"}",
   "clientSig": "0x..."
@@ -1126,8 +1139,9 @@ Stores or updates chain config for one chain on this node. Requires management k
 - `testnet` (optional): If true, chain is a testnet; if false, mainnet. Defaults to false when omitted.
 - `gasName` (optional): Native gas token symbol (e.g. "ETH", "BNB").
 - `gasLimit` (optional): Default gas limit.
-- `baseFee` (optional): Default base fee (EIP-1559).
-- `priorityFee` (optional): Default priority fee (EIP-1559).
+- `baseFee` (optional): Default base fee in gwei (EIP-1559). Omit or send `null` to leave unset so the client can refetch (e.g. "Use custom gas config").
+- `priorityFee` (optional): Default priority fee in gwei (EIP-1559). Omit or send `null` to leave unset so the client can refetch.
+- `baseFeeMultiplier` (optional): EIP-1559 only. Percentage applied to base fee for the base component of `maxFeePerGas` (e.g. 200 = 2× base). Must be ≥ 100 so that `maxFeePerGas ≥ baseFee + maxPriorityFeePerGas`. Omitted or 200 preserves previous default behaviour.
 - `gasMultiplier` (optional): Gas multiplier for legacy chains.
 - `gasPrice` (optional): Gas price in gwei for legacy chains.
 - `signedMessage` (required): The exact string that was signed (e.g. JSON of nonce, chainName, chainId, rpcGateway, explorer, legacy, testnet, gasName, and optional gas fields).
@@ -1177,8 +1191,9 @@ Returns chain config details stored on this node. Optional query parameter selec
 - `testnet` (boolean): If true, chain is a testnet; if false, mainnet.
 - `gasName` (string, optional): Native gas token symbol (e.g. "ETH", "BNB").
 - `gasLimit` (number, optional): Default gas limit.
-- `baseFee` (number, optional): Default base fee in gwei (EIP-1559).
-- `priorityFee` (number, optional): Default priority fee in gwei (EIP-1559).
+- `baseFee` (number or null, optional): Default base fee in gwei (EIP-1559). Omitted or `null` when not stored so the client can refetch.
+- `priorityFee` (number or null, optional): Default priority fee in gwei (EIP-1559). Omitted or `null` when not stored so the client can refetch.
+- `baseFeeMultiplier` (number, optional): EIP-1559 only. Percentage for base component of maxFeePerGas (e.g. 200 = 2× base); must be ≥ 100.
 - `gasMultiplier` (number, optional): Gas multiplier for legacy chains (%).
 - `gasPrice` (number, optional): Gas price in gwei for legacy chains.
 - `updatedAt` (string): Last update time (RFC3339).
@@ -1202,6 +1217,7 @@ Returns chain config details stored on this node. Optional query parameter selec
     "gasLimit": 21000,
     "baseFee": 30,
     "priorityFee": 2,
+    "baseFeeMultiplier": 200,
     "gasMultiplier": 0,
     "gasPrice": 0,
     "updatedAt": "2026-02-25T12:00:00Z"
@@ -1226,6 +1242,7 @@ Returns chain config details stored on this node. Optional query parameter selec
       "gasLimit": 21000,
       "baseFee": 30,
       "priorityFee": 2,
+      "baseFeeMultiplier": 200,
       "gasMultiplier": 0,
       "gasPrice": 0,
       "updatedAt": "2026-02-25T12:00:00Z"
@@ -1980,16 +1997,42 @@ A result is returned (Code 0) only when this node completed the TSS and has the 
     "nearaddress": "",
     "tonaddress": "",
     "savedata": "HIDE ENCRYPTED DATA",
-    "timepoint": "2026-01-11T00:37:20.999Z"
+    "timepoint": "2026-01-11T00:37:20.999Z",
+    "globalnonce": 0
   }
 }
 ```
 
-**Note:** The `keylist` field contains all node keys that participated in key generation. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration.
+**Note:** The `keylist` field contains all node keys that participated in key generation. **globalnonce** is the number of sign results created for this keyGen (secp256k1); it is also available via `GET /getGlobalNonceByKeyGenId`. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration.
 
 **Example:**
 ```bash
 curl "http://localhost:8080/getKeyGenResultById?id=KeyGen20260111003720999cf104d0f"
+```
+
+<a id="get-getglobalnoncebykeygenid"></a>
+#### `GET /getGlobalNonceByKeyGenId`
+Returns the **globalNonce** for a keyGen result. The `id` is the keyGen result id (same as the keyGen requestId).
+
+**Query Parameters:**
+- `id` (required): KeyGen result id (requestId)
+
+**Response (secp256k1):**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": {
+    "globalnonce": 5
+  }
+}
+```
+
+For keyGen results that are not secp256k1 (e.g. ed25519), the endpoint returns `globalnonce: 0` and optionally `keytype`.
+
+**Example:**
+```bash
+curl "http://localhost:8080/getGlobalNonceByKeyGenId?id=KeyGen20260111003720999cf104d0f"
 ```
 
 <a id="get-getkeygengroupid"></a>
@@ -2343,9 +2386,11 @@ curl -X POST http://localhost:8080/signRequest \
 
 <a id="post-multisignrequest"></a>
 #### `POST /multiSignRequest`
-Creates a new signing request for **multi-agree keys only**. No relayer authentication; uses the same internal sign flow as `signRequest`. Nodes in the same GroupId must agree via `POST /signRequestAgree`; when enough nodes have agreed, the message in `msgRaw` is signed. Supports **gas token (native transfer) requests**: use optional `sendGas` and `value` for "Send gas" flows; they are part of the signed payload and stored in `ExtraJSON` so all nodes see them in `getSignRequestById` and `listSignRequests`.
+Creates a new signing request for **multi-agree keys only**. No relayer authentication; uses the same internal sign flow as `signRequest`. Nodes in the same GroupId must agree via `POST /signRequestAgree`; when enough nodes have agreed, the message(s) are signed. Supports **single** (one message) and **batch** (N messages in one request: one agree, one trigger, one SignResult with N signatures). Supports **gas token (native transfer) requests**: use optional `sendGas` and `value` for "Send gas" flows; they are part of the signed payload and stored in `ExtraJSON` so all nodes see them in `getSignRequestById` and `listSignRequests`.
 
-**Request Body:**
+**Single vs batch:** For a **single** message, send `msgHash` (required) and optional `msgRaw`. For a **batch** of N messages (e.g. a sequence of transactions), send `messageHashes` (array of N hex strings, length ≥ 2) and optionally `messageRawBatch` (length 0 or N); do not send `msgHash`/`msgRaw` for batch. One agree and one trigger then produce one SignResult whose `batchSignatures` array holds the N signatures (see `GET /getSignResultById`).
+
+**Request Body (single):**
 ```json
 {
   "clientSig": "<client signature over request (same scheme as keyGenRequest)>",
@@ -2361,12 +2406,27 @@ Creates a new signing request for **multi-agree keys only**. No relayer authenti
 }
 ```
 
+**Request Body (batch):** Same as above but use `messageHashes` and optional `messageRawBatch` instead of `msgHash`/`msgRaw`:
+```json
+{
+  "clientSig": "...",
+  "keyList": ["node1_key", "node2_key", "node3_key"],
+  "pubKey": "08caf...",
+  "messageHashes": ["hash1_hex", "hash2_hex", "hash3_hex"],
+  "messageRawBatch": ["raw1_hex", "raw2_hex", "raw3_hex"],
+  "destinationChainID": "11155111",
+  ...
+}
+```
+
 **Field Descriptions:**
 - `clientSig` (required): Client signature over the request (excluding `clientSig`), verified like keyGenRequest
 - `keyList` (required): Array of node keys in the same GroupId that may participate; can be empty array `[]` to use keyList from KeyGenResult
 - `pubKey` (required): Public key (128 hex characters) from key generation (must be multi-agree key)
-- `msgHash` (required): Keccak256 hash of the message to sign. **EVM broadcast:** For secp256k1 keys, if the client will build a signed tx and call `eth_sendRawTransaction`, the recovered signer must match the keyGen's `ethereumaddress`. That only holds when the signature is over the **transaction signing hash** (hash of the serialized unsigned EIP-1559/legacy tx). If the client sends a different hash (e.g. only `keccak256(msgRaw)`), the MPC signs it correctly, but using that (r,s,v) on the full tx yields a different recovered address; send the tx signing hash as `msgHash` and use the same nonce/gas when building the signed tx.
-- `msgRaw` (optional): Raw message bytes (hex encoded)
+- `msgHash` (required for **single**): Keccak256 hash of the message to sign. Omit when using `messageHashes` (batch). **EVM broadcast:** For secp256k1 keys, if the client will build a signed tx and call `eth_sendRawTransaction`, the recovered signer must match the keyGen's `ethereumaddress`. That only holds when the signature is over the **transaction signing hash** (hash of the serialized unsigned EIP-1559/legacy tx). If the client sends a different hash (e.g. only `keccak256(msgRaw)`), the MPC signs it correctly, but using that (r,s,v) on the full tx yields a different recovered address; send the tx signing hash as `msgHash` and use the same nonce/gas when building the signed tx.
+- `msgRaw` (optional, **single**): Raw message bytes (hex encoded). Omit for batch.
+- `messageHashes` (optional, **batch**): Array of N message hashes (hex strings), in order. When length ≥ 2, creates a batch request; `msgHash`/`msgRaw` are ignored. Each element must be valid hex.
+- `messageRawBatch` (optional, **batch**): Array of N raw messages (hex encoded) for display/audit. Length must be 0 or equal to `messageHashes` length.
 - `destinationChainID` (required): Destination chain ID for the signed message (EVM signatures only; stored and returned in `listSignRequests` / `getSignRequestById` so the node key knows which chain the signature is destined for)
 - `destinationAddress` (optional): Destination address (EVM signatures only; stored and returned in `listSignRequests` / `getSignRequestById`)
 - `extraJSON` (optional): Arbitrary JSON string for node context; used for **Ed25519** key types (not secp256k1). Stored and returned in `listSignRequests` / `getSignRequestById`. For send-gas requests, the backend merges `sendGas` and `value` into this object before storing.
@@ -2401,7 +2461,7 @@ curl -X POST http://localhost:8080/multiSignRequest \
 ```
 
 **Error Responses:**
-- `400 Bad Request`: Key not found or key is not multi-agree type
+- `400 Bad Request`: Key not found or key is not multi-agree type; for single, missing `msgHash`; for batch, invalid `messageHashes` (e.g. non-hex or `messageRawBatch` length not 0 or N)
 - `401 Unauthorized`: Client signature invalid
 - `500 Internal Server Error`: Internal processing error
 
@@ -2411,11 +2471,13 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
 
 
 **Query Parameters:**
-- `filter` (optional): `all`, `pending`, `success`, `originator`, `blocked` (default: `all`). Use `blocked` to list sign requests whose lifecycle status is `"blocked"` (cannot reach threshold+1 agreements).
-  - `all`: All sign requests
-  - `pending`: Requests this node can still agree to (not initiator, not completed, not already agreed, not rejected)
-  - `success`: Requests where this node is the initiator or status is not "agree"
-  - `originator`: Only sign requests **created by this node** (this node’s key is the key in the `Purpose` map)
+- `filter` (optional): `all`, `live`, `pending`, `success`, `blocked`, `shelved` (default: `all`). Values align with sign request lifecycle status.
+  - `all`: All sign requests (any status, including `live`)
+  - `live`: Sign requests with status `live` (active requests not yet agreed by this node, success, blocked, or shelved)
+  - `pending`: Sign requests with status `pending` (this node has called signRequestAgree; not propagated to other nodes)
+  - `success`: Sign requests with status `success` (a sign result was created for the request)
+  - `blocked`: Sign requests with status `blocked` (threshold+1 agreements can no longer be reached)
+  - `shelved`: Sign requests with status `shelved` (originator shelved the request)
 - `pagenum` (optional, default: 0)
 - `pagesize` (optional, default: 10)
 
@@ -2460,7 +2522,11 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
 **Response field descriptions (each item in `data`):**
 - `requestid`: Sign request ID (use with `POST /signRequestAgree` and `GET /getSignResultById`)
 - `PubKey`: MPC public key (128 hex) for this sign request
-- `MessageHash`, `MessageRaw`: Message to sign (Keccak256 hash and optional raw bytes)
+- `MessageHash`, `MessageRaw`: For **single** requests, the message to sign (Keccak256 hash and optional raw bytes). For **batch** requests, `MessageHash`/`MessageRaw` are the first element; use `MessageHashes`/`MessageRawBatch` for the full list.
+- `BatchSignRequest` (optional): When `true`, this is a batch request; use `MessageHashes` and optionally `MessageRawBatch`.
+- `BatchSize` (optional): Number of messages in the batch (N); present when `BatchSignRequest` is true.
+- `MessageHashes` (optional): When batch, array of N message hashes (hex), in order.
+- `MessageRawBatch` (optional): When batch, array of N raw messages (hex) for display/audit; may be empty.
 - `KeyList`: Node keys that may participate in signing (same GroupId as the key)
 - `PresignId`: If set, this request uses a presign; otherwise normal signing
 - `ClientSigs`: Map of node key → client signature (from the node when agreeing); empty or missing means that node has not agreed yet
@@ -2470,18 +2536,21 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
 - `DestinationAddress`: Destination address when provided at request creation (EVM signatures only); empty if not provided.
 - `ExtraJSON`: Arbitrary JSON string passed at request creation (e.g. for node context); stored and returned in listSignRequests; empty if not provided. For **multi-agree send-gas** requests, the backend merges `sendGas` and `value` into this object, so the app can read them for Join/Execute UI and for building the native transfer at Get Sig/Execute.
 - `SignatureText`: For EVM/secp256k1, JSON string `{"signature": "<function signature>", "names": ["<name1>", ...]}` (signature = selector text, names = parameter names in order). Other chains: program name or custom text. Stored and returned in listSignRequests; empty if not provided.
-- `RejectedBy`: (multi-agree only) List of node keys that declined to sign; those nodes no longer see this request in `filter=pending`.
+- `RejectedBy`: (multi-agree only) List of node keys that declined to sign.
 - `Purpose`: Key/value map: node key (128 hex) → purpose text (max 256 chars per entry). Visible to nodes considering agree/reject. The key identifies which node created or submitted the request (multiSignRequest: creator node; signRequest/tx-check: node that received the request).
 - `Thoughts`: Map of node key → optional comment (max 256 chars each) from each node when they called `signRequestAgree` (accept or reject).
 - `KeyGenRequestId`: Key generation request ID (keyGenId) for the MPC key used by this sign request (same as the keygen request that produced `PubKey`). Included in listSignRequests, getSignRequestById, getSignResultById, and listSignRequestsReady.
-- `status`: Sign request lifecycle status: `"live"` (default after creation), `"shelved"` (set by the originator via `POST /shelveSignRequest`), or `"blocked"` (set automatically when threshold+1 can no longer be reached, e.g. too many nodes have rejected). Omitted or `"live"` until set.
+- `status`: Sign request lifecycle status: `"live"` (default after creation), `"pending"` (set locally when this node has called `POST /signRequestAgree`; not propagated), `"shelved"` (set by the originator via `POST /shelveSignRequest`), `"blocked"` (set automatically when threshold+1 can no longer be reached), or `"success"` (set when a sign result is created). Omitted or `"live"` until set.
 - `timepoint`: When the request was recorded
 
 **Example:**
 ```bash
 curl "http://localhost:8080/listSignRequests?filter=all&pagenum=0&pagesize=10"
-curl "http://localhost:8080/listSignRequests?filter=originator&pagenum=0&pagesize=10"
+curl "http://localhost:8080/listSignRequests?filter=live&pagenum=0&pagesize=10"
+curl "http://localhost:8080/listSignRequests?filter=pending&pagenum=0&pagesize=10"
+curl "http://localhost:8080/listSignRequests?filter=success&pagenum=0&pagesize=10"
 curl "http://localhost:8080/listSignRequests?filter=blocked&pagenum=0&pagesize=10"
+curl "http://localhost:8080/listSignRequests?filter=shelved&pagenum=0&pagesize=10"
 ```
 
 <a id="get-getsignrequestbyid"></a>
@@ -2509,7 +2578,7 @@ curl "http://localhost:8080/getSignRequestById?id=Sign20260111003720999cf104d0f&
 Agrees to or rejects a signing request.
 
 - **tx-check (relayer):** Unchanged. Request body is `requestId` + `clientSig`; no `accept` or `thoughts` field. Relayer flow is not affected.
-- **multi-agree:** Optional `accept` (boolean). Omitted or `true` = agree to sign (same as before). `false` = reject: this node is recorded as having declined; the request **no longer appears in this node's `listSignRequests?filter=pending`**. The client must sign over the same body (including `accept` and `thoughts` when present). Other nodes may still agree; rejection is per-node.
+- **multi-agree:** Optional `accept` (boolean). Omitted or `true` = agree to sign (same as before). `false` = reject: this node is recorded as having declined in **RejectedBy**. The client must sign over the same body (including `accept` and `thoughts` when present). Other nodes may still agree; rejection is per-node.
 
 **Request Body:**
 - `requestId` (required): Sign request ID
@@ -2545,14 +2614,16 @@ Agrees to or rejects a signing request.
 
 <a id="get-listsignresults"></a>
 #### `GET /listSignResults`
-Lists sign results with optional filter and pagination. Each item in the response has the **same fields** as a single `GET /getSignResultById` result (requestid, messagehash, sigdata, sigr, sigs, sigrecover, timepoint, keylist, participatingkeys, signaturehex, keytype, signatureformat, DestinationChainID, DestinationAddress, ExtraJSON, RejectedBy, Purpose, Thoughts, KeyGenRequestId, status, transactionhash, shelved, and ethereumSignature when applicable).
+Lists sign results with optional filter and pagination. Each item in the response has the **same fields** as a single `GET /getSignResultById` result (requestid, messagehash, sigdata, sigr, sigs, sigrecover, timepoint, keylist, participatingkeys, signaturehex, keytype, signatureformat, DestinationChainID, DestinationAddress, ExtraJSON, RejectedBy, Purpose, Thoughts, KeyGenRequestId, status, transactionhash, shelved, and ethereumSignature when applicable). For **batch** sign results, each item also includes `batchSignResult`, `batchSize`, and `batchSignatures` (array of N signature entries); see `GET /getSignResultById` for the batch response shape.
 
 **Query Parameters:**
-- `filter` (optional, default `"all"`): `"all"` — all sign results; `"active"` — status is not `"executed"` and not `"shelved"` (i.e. not yet updated by originator); `"originator"` — only results where this node's key is the key in the **Purpose** map (i.e. created by this node via multiSignRequest).
+- `filter` (optional, default `"all"`): `"all"` — all sign results (including **`failed`** for History); `"active"` — status is not `"executed"` and not `"shelved"` (includes never-updated, **`failed`** single-tx awaiting retry, and batch **`failed`**); `"originator"` — only results where this node's key is the key in the **Purpose** map.
 - `pagenum` (optional): Page number (0-based). Used only when `pagesize` > 0.
 - `pagesize` (optional): Page size. Use `0` to return all results for the filter (no pagination).
+- `fromTime` (optional): Unix timestamp in seconds (Linux time). Only include sign results whose stored **timepoint** is greater than or equal to this time. Ignored if omitted.
+- `toTime` (optional): Unix timestamp in seconds (Linux time). Only include sign results whose stored **timepoint** is less than or equal to this time. Ignored if omitted. If both `fromTime` and `toTime` are set, `fromTime` must be ≤ `toTime`.
 
-**Response:**
+**Response:** When pagination is used (`pagesize` > 0), the response includes a top-level `total` field with the total number of items matching the filter (so clients can show "Page X of Y" and compute total pages).
 ```json
 {
   "code": 0,
@@ -2582,9 +2653,13 @@ Lists sign results with optional filter and pagination. Each item in the respons
       "transactionhash": "0xabc123...",
       "shelved": false
     }
-  ]
+  ],
+  "total": 42
 }
 ```
+
+- `data`: Array of sign result objects for the requested page.
+- `total`: Total number of sign results matching the filter (all pages). Always returned so clients can show "Page X of Y" when using pagination.
 
 Results are sorted by **timepoint** descending. Field meanings are the same as in `GET /getSignResultById`.
 
@@ -2592,16 +2667,20 @@ Results are sorted by **timepoint** descending. Field meanings are the same as i
 ```bash
 curl "http://localhost:8080/listSignResults?filter=active&pagenum=0&pagesize=10"
 curl "http://localhost:8080/listSignResults?filter=originator&pagesize=0"
+# Date filter: only results between two Unix timestamps (e.g. 1704931200 = 2024-01-11 00:00:00 UTC and 1705017600 = 2024-01-12 00:00:00 UTC)
+curl "http://localhost:8080/listSignResults?filter=all&fromTime=1704931200&toTime=1705017600&pagenum=0&pagesize=10"
 ```
 
 <a id="get-getsignresultbyid"></a>
 #### `GET /getSignResultById`
-Gets a specific signing result by ID. Returns the signature data.
+Gets a specific signing result by ID. Returns the signature data. For **single** requests the result has one signature in the top-level fields; for **batch** requests the result has `batchSignResult: true`, `batchSize`, and `batchSignatures` (array of N signature entries).
 
 **Query Parameters:**
 - `id` (required): Sign request ID
 
-**Response:**
+**Not ready:** Until the signature(s) are ready, the API returns `code: 1` with error message `signresults with id ... is not ready, pls query again after 5 seconds` (single) or `signresults with id ... is not ready (batch), pls query again after a few seconds` (batch). For batch, "ready" means all N slots in `batchSignatures` have been filled.
+
+**Response (single):**
 ```json
 {
   "code": 0,
@@ -2636,20 +2715,32 @@ Gets a specific signing result by ID. Returns the signature data.
 }
 ```
 
-**Note:** `Purpose` in the result is a key/value map (node key → purpose text), so you can identify which node created or submitted the request. `KeyGenRequestId` is the key generation request ID (keyGenId) for the MPC key used by this sign request. **Status fields** (`status`, `transactionhash`, `shelved`) are set by the originator via `POST /updateSignResultStatusById`: `"executed"` with transaction hash when the tx was broadcast, or `"shelved"` with `shelved: true` when the transaction will not be broadcast.
+**Response (batch):** Same as above, plus:
+- `batchSignResult`: `true`
+- `batchSize`: N (number of messages in the batch)
+- `batchSignatures`: Array of N objects, one per message, in order. Each object has:
+  - `messagehash`: The message hash that was signed
+  - `sigr`, `sigs`, `sigrecover`: Signature components (same as top-level for single)
+  - `signaturehex`: Full signature as hex (convenience)
+  - `ethereumsignature`: Ethereum r\|s\|v format when key type is secp256k1
+
+Use `data.batchSignatures[i]` to get the signature for the i-th message (index 0 to N−1). Execute transactions in order: get signature for index 0, broadcast tx 0, then index 1, etc.
+
+**Note:** `Purpose` in the result is a key/value map (node key → purpose text). `KeyGenRequestId` is the keygen id for the MPC key. **Status** is set via `POST /updateSignResultStatusById`: `"executed"` (with `transactionHash` or `batchTransactionHashes`), `"failed"` (single-tx or partial batch), or `"shelved"`. **`batchTransactionHashes`** (array) is stored for batch **executed** and partial **failed**; list/get return it when the node persists it. Single-tx **`failed`** can later become **`executed`** on retry.
 
 **Field Descriptions:**
 - `keylist`: Array of node keys that were selected to participate in signing (filtered to only online nodes)
 - `participatingkeys`: Array of node keys that actually participated in signing (derived from `SigList`, sorted alphabetically). This is the definitive list of nodes that contributed to the signature.
-- `signaturehex`: Full signature as hex string (64 bytes = 128 hex chars for both secp256k1 and ed25519)
+- `signaturehex` (single): Full signature as hex string (64 bytes = 128 hex chars for both secp256k1 and ed25519)
 - `keytype`: Key type used ("secp256k1" or "ed25519")
 - `signatureformat`: Signature format ("ieee-p1363" for secp256k1, "ed25519" for ed25519)
 - `DestinationChainID`, `DestinationAddress`, `ExtraJSON`, `RejectedBy`, `Purpose`, `Thoughts`, `KeyGenRequestId`: Same as in the sign request; merged from the latest sign request so the result includes this metadata. For **send-gas** (multi-agree native transfer) requests, `ExtraJSON` contains `sendGas` and `value` (wei) so the app can build the native transfer at Execute. `Purpose` is a key/value map (node key → purpose text); see note above and listSignRequests field descriptions. `KeyGenRequestId` is the key generation request ID (keyGenId) for the MPC key.
-- `status`: Set by the originator via `POST /updateSignResultStatusById`: `"executed"` (transaction was broadcast) or `"shelved"` (will not be broadcast). Omitted until set.
-- `transactionhash`: Hash of the broadcast transaction; set when `status` is `"executed"`. Omitted until set.
+- `status`: `"executed"` | `"failed"` | `"shelved"` (originator via `updateSignResultStatusById`). Omitted until set.
+- `transactionhash` / `transactionHash`: Single-tx hash when executed; often last hash for display when batch executed server-side stores per-hash in `batchTransactionHashes`.
+- `batchtransactionhashes` / `batchTransactionHashes`: Batch only; all hashes when executed; partial list when failed mid-batch.
 - `shelved`: Boolean; `true` when the originator marked the result as shelved (not to be broadcast). Set when `status` is `"shelved"`. Omitted or false until set.
 
-**When `status` is `"shelved"`:** The API does not return the signature. The fields `sigdata`, `sigr`, `sigs`, `sigrecover`, `signaturehex`, and `ethereumsignature` are omitted from the response for both `GET /getSignResultById` and each item in `GET /listSignResults`.
+**When `status` is `"shelved"`:** The API does not return the signature. The fields `sigdata`, `sigr`, `sigs`, `sigrecover`, `signaturehex`, and `ethereumsignature` are omitted from the response for both `GET /getSignResultById` and each item in `GET /listSignResults`. For batch, each entry in `batchSignatures` is also redacted (signature fields cleared).
 
 **Example:**
 ```bash
@@ -2699,7 +2790,7 @@ curl "http://localhost:8080/listSignRequestsReady?pagenum=0&pagesize=10"
 
 <a id="post-triggersignrequestbyid"></a>
 #### `POST /triggerSignRequestById`
-**Multi-agree only.** When at least **threshold+1** nodes have accepted (and rejections are excluded), triggers signature generation: sends **SIGNREQUESTCONFIRMSUCCESS** and starts the sign worker. **Only the originator may call this:** the request’s **Purpose** map must have this node’s key as the (originator) key; otherwise the server returns an error. **If the sign request status is `"shelved"`** (set via `POST /shelveSignRequest`), the server returns an error and does not trigger. **Idempotent:** if the request was already triggered, returns success with data `"Already triggered"`. Does not affect tx-check flow. Requires management key signature (MetaMask or Ed25519).
+**Multi-agree only.** When at least **threshold+1** nodes have accepted (and rejections are excluded), triggers signature generation: sends **SIGNREQUESTCONFIRMSUCCESS** and starts the sign worker(s). For **single** requests, one signature is produced; for **batch** requests, one trigger produces one SignResult with N signatures (retrieved via `GET /getSignResultById` as the `batchSignatures` array). **Only the originator may call this:** the request’s **Purpose** map must have this node’s key as the (originator) key; otherwise the server returns an error. **If the sign request status is `"shelved"`** (set via `POST /shelveSignRequest`), the server returns an error and does not trigger. **Idempotent:** if the request was already triggered, returns success with data `"Already triggered"`. Does not affect tx-check flow. Requires management key signature (MetaMask or Ed25519).
 
 **Request Body:**
 ```json
@@ -2748,18 +2839,56 @@ curl -X POST http://localhost:8080/triggerSignRequestById \
 
 <a id="post-updatesignresultstatusbyid"></a>
 #### `POST /updateSignResultStatusById`
-**Originator only.** Updates the sign result status so that nodes see it in `GET /getSignResultById`. Only the node that created the sign request (originator: node key in **Purpose**) may call. **The update can only happen once:** if status (executed/shelved) is already set, a second call returns an error. Requires management key signature (MetaMask or Ed25519).
+**Originator only.** Updates the sign result status so that nodes see it in `GET /getSignResultById` and `GET /listSignResults`. Only the node that created the sign request (originator: node key in **Purpose**) may call. Requires management key signature (MetaMask or Ed25519).
+
+**Final vs retryable:**
+- **`executed`** and **`shelved`** are terminal for a sign result (no further status updates except as below).
+- **`failed`**: Broadcast did not complete as intended. **Single-tx only**—after `failed`, the originator may call again with **`executed`** and `transactionHash` when a retry broadcast succeeds (**failed → executed**). **Batch** results cannot be retried via status; use `failed` with `batchTransactionHashes` listing only the txs that did broadcast before the failure.
+- For **`executed`**, at most one successful update applies unless the current status is **`failed`** (single tx retry).
 
 **Status values:**
-- **`executed`**: The transaction was broadcast. You must send `transactionHash` (hash of the transaction).
-- **`shelved`**: The transaction will **not** be broadcast. Set `shelved: true` (or omit; backend sets true). No `transactionHash`.
+- **`executed`**: Success. **Single tx:** send `transactionHash`. **Batch:** send `batchTransactionHashes` (array length = batch size; one hash per broadcast tx in order). Do not send a redundant `transactionHash` for batch when all hashes are in `batchTransactionHashes`.
+- **`failed`**: **Single tx:** broadcast failed (or not attempted); omit `transactionHash` and `batchTransactionHashes`. **Batch partial:** send `batchTransactionHashes` with only the hashes that were broadcast successfully before stopping (length ≤ batch size).
+- **`shelved`**: Will not broadcast. Set `shelved: true` (or omit; backend sets true). No `transactionHash` / `batchTransactionHashes`.
 
-**Request Body:**
+**Request Body (single tx executed):**
 ```json
 {
   "requestId": "Sign20260111003720999cf104d0f",
   "status": "executed",
   "transactionHash": "0xabc123...",
+  "nonce": 1,
+  "sig": "0x..."
+}
+```
+
+**Request Body (batch executed — all txs broadcast):**
+```json
+{
+  "requestId": "Sign20260111003720999cf104d0f",
+  "status": "executed",
+  "batchTransactionHashes": ["0xaaa...", "0xbbb..."],
+  "nonce": 1,
+  "sig": "0x..."
+}
+```
+
+**Request Body (single tx failed, e.g. after RPC error):**
+```json
+{
+  "requestId": "Sign20260111003720999cf104d0f",
+  "status": "failed",
+  "nonce": 1,
+  "sig": "0x..."
+}
+```
+
+**Request Body (batch partial failure):**
+```json
+{
+  "requestId": "Sign20260111003720999cf104d0f",
+  "status": "failed",
+  "batchTransactionHashes": ["0xaaa..."],
   "nonce": 1,
   "sig": "0x..."
 }
@@ -2776,11 +2905,12 @@ For shelved:
 }
 ```
 
-- `requestId` (required): Sign request ID (must already have a sign result, i.e. trigger was run).
-- `status` (required): `"executed"` or `"shelved"`.
-- `transactionHash` (required when `status` is `"executed"`): Hash of the broadcast transaction.
-- `shelved` (optional when `status` is `"shelved"`): Set to `true`; if omitted, backend sets `shelved: true` when status is shelved.
-- `nonce`, `sig`: Management key signature over the JSON body with `sig` set to empty.
+- `requestId` (required): Sign request ID (must already have a sign result).
+- `status` (required): `"executed"`, `"failed"`, or `"shelved"`.
+- `transactionHash`: Required when `status` is `"executed"` **for a single-tx** sign result (or use one element in `batchTransactionHashes` only for batch).
+- `batchTransactionHashes`: Required when `status` is `"executed"` **for a batch** (length = batch size). Required when `status` is `"failed"` **for a batch** (partial list of successful tx hashes). Omit for single-tx `failed`.
+- `shelved`: Optional when `status` is `"shelved"`.
+- `nonce`, `sig`: Management key signature over the JSON body with `sig` set to empty (canonical JSON of the struct fields the server unmarshals).
 
 **Response:**
 ```json
@@ -2791,19 +2921,13 @@ For shelved:
 }
 ```
 
-**Errors:** Non-originator or missing Purpose (no originator key in map) returns 500 with message that only the originator can update. Sign result not found (trigger not run yet) or status already set (update can only happen once) returns 500.
+**Errors:** Non-originator or missing Purpose returns 500. Sign result not found returns 500. Status already **`executed`** or **`shelved`** returns 500. From **`failed`** (single tx), only **`executed`** is accepted next.
 
-**Example:**
+**Examples:**
 ```bash
 curl -X POST http://localhost:8080/updateSignResultStatusById \
   -H "Content-Type: application/json" \
-  -d '{
-    "requestId": "Sign20260111003720999cf104d0f",
-    "status": "executed",
-    "transactionHash": "0xabc123...",
-    "nonce": 1,
-    "sig": "0x..."
-  }'
+  -d '{"requestId":"...","status":"executed","transactionHash":"0x...","nonce":1,"sig":"0x..."}'
 ```
 
 <a id="post-shelvesignrequest"></a>
@@ -3254,6 +3378,8 @@ curl "http://localhost:8080/getSignResultById?id=Sign20260111003720999cf104d0f"
 ### 3. Multi-Agree Signing (Ready / Trigger Flow)
 
 For **multi-agree** keys, nodes agree via `POST /signRequestAgree`. Once at least **threshold+1** nodes have agreed, **only the originator** (the node whose key is the key in the Purpose map, i.e. the one that created the request via multiSignRequest) may call `POST /triggerSignRequestById` to trigger signature generation. Use `GET /getSignResultById` to poll for the signature. The originator can then call `POST /updateSignResultStatusById` to set status to `"executed"` (with transaction hash) or `"shelved"` (transaction will not be broadcast); these fields appear in `getSignResultById`. The originator can also call `POST /shelveSignRequest` to set the **sign request** status to `"shelved"` (e.g. to cancel or defer the request before triggering); this status appears in `getSignRequestById` and `listSignRequests` and is propagated to all nodes.
+
+**Batch sign request:** To request N signatures in one go (e.g. a sequence of transactions), call `POST /multiSignRequest` with `messageHashes` (array of N hex hashes) and optionally `messageRawBatch`. One `POST /signRequestAgree` agrees to the entire batch. After trigger, `GET /getSignResultById` returns one result with `batchSignResult: true`, `batchSize: N`, and `batchSignatures` (array of N entries: `messagehash`, `sigr`, `sigs`, `sigrecover`, `signaturehex`, `ethereumsignature`). Use `data.batchSignatures[i]` for the i-th signature and execute transactions in order (e.g. consecutive nonces on EVM).
 
 ```bash
 # Step 1: Create multi-agree sign request (e.g. from dApp)

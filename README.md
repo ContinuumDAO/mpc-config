@@ -4,7 +4,7 @@ This repository contains the configuration files and setup scripts needed to dep
 
 ## What's Included
 
-- **`configs.yaml`** - Main node configuration file
+- **`configs.yaml`** - Main node configuration file (at **repo root** here; in the **mpc-auth** repo the equivalent file is **`console/configs.yaml`**)
 - **`process_config.sh`** - Configuration validator and certificate generator
 - **`docker-compose.yml`** - Docker Compose configuration for running the node
 - **`mosquitto/config/mosquitto.conf`** - MQTT broker configuration
@@ -233,7 +233,7 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    The default `mosquitto/config/mosquitto.conf` uses TLS on port 8883. To generate certificates:
    
    ```bash
-   ./process_config.sh --no-copy-certs
+   ./process_config.sh
    ```
    
    **Important:** The script generates certificates in `mosquitto/config/certs/` (relative to your project directory). For Docker deployments, this is the correct location since `docker-compose.yml` mounts `./mosquitto/config` to `/mosquitto/config` in the container.
@@ -242,6 +242,7 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    - Validates configuration
    - Generates self-signed certificates in `mosquitto/config/certs/` (relative path)
    - Provides instructions for sharing the CA certificate
+   - **Note:** By default the script does **not** copy the CA over SSH; use **`--copy-certs`** on the relay if you want automated copying (same SSH user across nodes)
    
    **On client nodes:**
    - Validates configuration
@@ -313,10 +314,9 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    5. **Certificate sharing workflow:**
       ```bash
       # On relay node:
-      ./process_config.sh  # Without --no-copy-certs for automated copying
+      ./process_config.sh --copy-certs
       
-      # The script will automatically copy certificates to all client nodes
-      # using the same username, avoiding ownership and permission issues
+      # Copies the CA to all client nodes over SSH (requires SSH key access)
       ```
    
    **Alternative: Manual Sharing (for different operators/users)**
@@ -324,7 +324,7 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    If different operators run different nodes with different usernames, manual sharing is recommended:
    
    1. **Relay node operator:**
-      - After running `./process_config.sh --no-copy-certs`, locate the CA certificate at `mosquitto/config/certs/ca.crt`
+      - After running `./process_config.sh` (default), locate the CA certificate at `mosquitto/config/certs/ca.crt`
       - Share this file securely with each client node operator (via secure file transfer, encrypted email, secure messaging, etc.)
    
    2. **Each client node operator:**
@@ -361,7 +361,7 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    **Note:** 
    - If all nodes use the same username with sudo access, automated certificate copying works seamlessly
    - In decentralized setups where different operators run different nodes, manual sharing is typically easier and more secure
-   - The `process_config.sh` script will automatically attempt to copy certificates if SSH access is configured (without `--no-copy-certs` flag)
+   - The `process_config.sh` script copies the CA over SSH only when you pass **`--copy-certs`** on the relay node
 
 4. **Restart mosquitto:**
    ```bash
@@ -774,7 +774,7 @@ OpenSSL Error[0]: error:80000002:system library::No such file or directory
    cp /mosquitto/config/certs/server.key mosquitto/config/certs/
    
    # Or if you need to generate them:
-   ./process_config.sh --no-copy-certs
+   ./process_config.sh
    ```
 
 4. **Verify all three files exist:**

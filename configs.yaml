@@ -24,7 +24,7 @@ PublicMgtKey: ""
 # If true, skips signature verification on management API requests
 # WARNING: Set to false in production for security
 # NOTE: This does NOT affect relayer authentication - relayer signatures are always required
-IgnoreMgtKeySigCheck: false
+IgnoreMgtKeySigCheck: true
 
 # MongoDB connection URI (optional, defaults to mongodb://localhost:27017)
 # MongoDB MUST be on localhost (127.0.0.1) - remote connections are not allowed
@@ -91,7 +91,12 @@ BrokerQos: 1
 # Access API documentation at: http://localhost:8080/swagger/index.html
 ManagementAPIsPort: 8080
 
-# Ignore client signature check (for testing/development only)
+# Optional: HTTP port exposing only GET /getNodeMgtKey and GET /health (ContinuumDAO discovery on :80).
+# Full management API (signatures, relayer, etc.) stays on ManagementAPIsPort. Use 0 to disable.
+# Binding :80 may require root, Docker -p 80:80, or setcap cap_net_bind_service.
+PublicDiscoveryPort: 0
+
+# Ignore client signature check (set to true for testing/development only)
 # Controls signature verification for CLIENT signatures used in MPC coordination
 # When nodes communicate during signing operations, they verify each other's signatures using client keys
 # If true, skips client signature verification during MPC coordination
@@ -103,6 +108,19 @@ IgnoreClientSigCheck: false
 # If true, disables the /swagger/index.html endpoint
 # Set to false to enable API documentation
 DisableDocs: false
+
+# Browser HTTPS: run process_config.sh (mpc-auth: console/process_config.sh; mpc-config: ./process_config.sh at repo root); then add JWKSURL (+ optional ExpectedIssuer) from ContinuumDAO devs.
+# ContinuumDAO devs host an RS256 JWT issuer and provide the public JWKS URL so the node can verify GET Bearer tokens.
+# BrowserHTTPS:
+#   Port: 8443
+#   CertFile: "/webTLS/config/certs/browser.crt"
+#   KeyFile: "/webTLS/config/certs/browser.key"
+#   AllowedOrigins:
+#     - "https://mpa.continuumdao.org"
+#   ExpectedAudience: "mpc-node-read"
+#   ExpectedIssuer: ""  # optional; set if you want to enforce JWT 'iss'
+#   EnforceNodeIPClaim: true
+#   # JWKSURL: "https://<your-jwt-issuer>/.well-known/jwks.json"  # RS256 JWKS endpoint (required in production)
 
 # Allowed key types for MPC operations
 # List of cryptographic key types this node supports
@@ -216,6 +234,13 @@ PreSigningCacheSize: 5
 # Must be less than PreSigningCacheSize
 # Default: 2
 PreSigningMinThreshold: 2
+
+# Maximum number of batch sign TSS rounds that can run concurrently (per node)
+# When a batch sign request has N messages, only this many TSS signing workers run at once;
+# as each completes, the next message in the batch is started until all N are done.
+# Reduces CPU/memory load and channel pressure for large batches.
+# Default: 2 if not set or <= 0
+MaxConcurrentBatchSignatures: 1
 
 # Pre-configured MPC groups
 # Each node should only include groups it belongs to
@@ -361,3 +386,4 @@ MPCGroups:
     #   - 4 nodes: threshold = 1, 2, or 3 (requires 2, 3, or 4 nodes to agree)
     #   - threshold: 2 with 3 nodes means 3 nodes must agree (threshold + 1 = 3)
     threshold: 2
+

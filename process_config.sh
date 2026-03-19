@@ -14,15 +14,34 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-# Certificate directory - use mosquitto/config/certs (relative to script location)
-SCRIPT_DIR="$(dirname "$0")"
-CERT_DIR="${SCRIPT_DIR}/mosquitto/config/certs"
+# Repo root: mpc-config keeps process_config.sh at repo root; mpc-auth keeps it under console/.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -d "$SCRIPT_DIR/mosquitto/config" ]; then
+    REPO_ROOT="$SCRIPT_DIR"
+else
+    REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+CERT_DIR="${REPO_ROOT}/mosquitto/config/certs"
 CA_KEY="${CERT_DIR}/ca.key"
 CA_CRT="${CERT_DIR}/ca.crt"
 SERVER_KEY="${CERT_DIR}/server.key"
 SERVER_CSR="${CERT_DIR}/server.csr"
 SERVER_CRT="${CERT_DIR}/server.crt"
 CERT_VALIDITY_DAYS=365
+
+# Browser HTTPS (TLS for DAO app): certs on host, mounted at /webTLS/config/certs in Docker
+WEB_TLS_HOST_DIR="${REPO_ROOT}/webTLS/config/certs"
+BROWSER_HTTPS_CRT="${WEB_TLS_HOST_DIR}/browser.crt"
+BROWSER_HTTPS_KEY="${WEB_TLS_HOST_DIR}/browser.key"
+BROWSER_HTTPS_CONTAINER_CERT="/webTLS/config/certs/browser.crt"
+BROWSER_HTTPS_CONTAINER_KEY="/webTLS/config/certs/browser.key"
+DEFAULT_BROWSER_HTTPS_ORIGIN="https://mpa.continuumdao.org"
+
+# HTTP port written into nodeAddresses URLs (management API); default Docker mapping is often 8080—set to match your deployment.
+MPC_NODE_HTTP_PORT=8081
+
+# Default example NodeMgtKey in configs.yaml — treated like unset (must be replaced for a real deployment).
+NODE_MGT_ETH_PLACEHOLDER="0x1234567890abcdef1234567890abcdef12345678"
 
 # Functions
 print_error() {
@@ -47,13 +66,17 @@ print_step() {
 
 # Find mosquitto.conf file
 find_mosquitto_conf() {
-    local script_dir="$(dirname "$0")"
+    local script_dir="$(cd "$(dirname "$0")" && pwd)"
     local current_dir="$PWD"
+    local repo_root="$script_dir"
+    if [ ! -d "$repo_root/mosquitto/config" ] && [ -d "$script_dir/../mosquitto/config" ]; then
+        repo_root="$(cd "$script_dir/.." && pwd)"
+    fi
     
-    # Try common locations (relative to script directory - script is at root of mpc-config)
     local possible_paths=(
-        "$script_dir/mosquitto/config/mosquitto.conf"
+        "$repo_root/mosquitto/config/mosquitto.conf"
         "$current_dir/mosquitto/config/mosquitto.conf"
+        "$current_dir/../mosquitto/config/mosquitto.conf"
         "$current_dir/mosquitto.conf"
         "/etc/mosquitto/mosquitto.conf"
         "/mosquitto/config/mosquitto.conf"
@@ -267,13 +290,20 @@ check_openssl() {
 # main() can run "CONFIG_FILE=$(find_configs_yaml)" and then check [ -z "$CONFIG_FILE" ]
 # without set -e exiting when the file is missing.
 find_configs_yaml() {
-    local script_dir="$(dirname "$0")"
+    local script_dir="$(cd "$(dirname "$0")" && pwd)"
     local current_dir="$PWD"
-    
-    # Try common locations (script is at root of mpc-config repo)
+    local repo_root="$script_dir"
+    if [ ! -d "$repo_root/mosquitto/config" ] && [ -d "$script_dir/../mosquitto/config" ]; then
+        repo_root="$(cd "$script_dir/.." && pwd)"
+    fi
+
+    # mpc-auth: configs.yaml next to script (console/); mpc-config: configs.yaml at repo root next to script
     local possible_paths=(
         "$script_dir/configs.yaml"
+        "$repo_root/configs.yaml"
         "$current_dir/configs.yaml"
+        "$current_dir/console/configs.yaml"
+        "$repo_root/console/configs.yaml"
     )
     
     for path in "${possible_paths[@]}"; do
@@ -1146,6 +1176,397 @@ except Exception as e:
     return 1
 }
 
+# Exit 0 if MPCGroups[0].nodeAddresses is missing, empty, or only the default example URLs (203.0.113.10–12:8080);
+# 1 if configured; 2 if no MPCGroups.
+first_mpc_group_node_addresses_empty() {
+    local config_file="$1"
+    if ! command -v python3 &> /dev/null; then
+        return 1
+    fi
+    python3 - "$config_file" << 'PYNAEMPTY'
+import yaml, sys
+path = sys.argv[1]
+PLACEHOLDER_URLS = frozenset(
+    (
+        "http://203.0.113.10:8080",
+        "http://203.0.113.11:8080",
+        "http://203.0.113.12:8080",
+    )
+)
+
+def norm_node_url(u):
+    s = str(u).strip().strip('"').strip("'")
+    return s.lower()
+
+def is_only_placeholder_node_addresses(na):
+    if not isinstance(na, dict) or len(na) != 3:
+        return False
+    vals = []
+    for v in na.values():
+        if v is None or not str(v).strip():
+            return False
+        vals.append(norm_node_url(v))
+    return len(vals) == 3 and frozenset(vals) == PLACEHOLDER_URLS
+
+with open(path, "r") as f:
+    d = yaml.safe_load(f)
+if not d:
+    sys.exit(2)
+groups = d.get("MPCGroups")
+if not groups:
+    sys.exit(2)
+na = groups[0].get("nodeAddresses")
+if na is None:
+    sys.exit(0)
+if not isinstance(na, dict):
+    sys.exit(0)
+if len(na) == 0:
+    sys.exit(0)
+if not any(v and str(v).strip() for v in na.values()):
+    sys.exit(0)
+if is_only_placeholder_node_addresses(na):
+    sys.exit(0)
+sys.exit(1)
+PYNAEMPTY
+}
+
+# Strip whitespace, optional scheme/path, and trailing :port from user input (host or IPv4).
+normalize_node_address_input() {
+    local raw="$1"
+    raw="${raw#"${raw%%[![:space:]]*}"}"
+    raw="${raw%"${raw##*[![:space:]]}"}"
+    raw="${raw#http://}"
+    raw="${raw#https://}"
+    raw="${raw%%/*}"
+    raw="${raw%%\?*}"
+    if [[ "$raw" == *:* ]]; then
+        local after="${raw##*:}"
+        if [[ "$after" =~ ^[0-9]+$ ]]; then
+            raw="${raw%:*}"
+        fi
+    fi
+    printf '%s' "$raw"
+}
+
+# If first group's nodeAddresses is empty or only the default example URLs, prompt for IPs/hostnames and write http://HOST:MPC_NODE_HTTP_PORT entries.
+prompt_fill_empty_node_addresses() {
+    local config_file="$1"
+    first_mpc_group_node_addresses_empty "$config_file"
+    local ec=$?
+    if [ "$ec" -eq 1 ]; then
+        return 0
+    fi
+    if [ "$ec" -eq 2 ]; then
+        print_error "configs.yaml has no MPCGroups (or file is empty). Add at least one group before running this script."
+        return 1
+    fi
+    
+    if ! command -v python3 &> /dev/null; then
+        print_error "python3 is required to fill empty nodeAddresses. Install python3 or edit configs.yaml manually."
+        return 1
+    fi
+    
+    if [ ! -r /dev/tty ]; then
+        print_error "MPCGroups[0].nodeAddresses is empty or still the default example (203.0.113.10–12:8080). Edit configs.yaml or run this script in an interactive terminal."
+        return 1
+    fi
+    
+    echo ""
+    print_step "nodeAddresses is empty or still the default example IPs — enter each node's public IP or hostname"
+    print_info "Replace 203.0.113.10 / .11 / .12 (documentation examples) with your real public IPs or hostnames."
+    print_info "The first address you enter is the RELAY NODE (runs the MQTT broker). Use the SAME order on every machine's configs.yaml."
+    print_info "Port :${MPC_NODE_HTTP_PORT} is added automatically (http://...:${MPC_NODE_HTTP_PORT})."
+    print_info "If your API listens on a different port, set MPC_NODE_HTTP_PORT at the top of this script (or edit configs.yaml afterward)."
+    print_info "Enter one address per line. When you are done, type: finished (or done)"
+    echo ""
+    
+    local hosts=()
+    local line norm lower
+    while true; do
+        read -r -p "Node IP or hostname (or 'finished' to save): " line < /dev/tty || true
+        lower=$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')
+        lower="${lower#"${lower%%[![:space:]]*}"}"
+        lower="${lower%"${lower##*[![:space:]]}"}"
+        if [ "$lower" = "finished" ] || [ "$lower" = "done" ]; then
+            break
+        fi
+        norm=$(normalize_node_address_input "$line")
+        if [ -z "$norm" ]; then
+            print_warning "Skipped empty line"
+            continue
+        fi
+        local dup=false
+        local h
+        for h in "${hosts[@]}"; do
+            if [ "$h" = "$norm" ]; then
+                dup=true
+                break
+            fi
+        done
+        if [ "$dup" = true ]; then
+            print_warning "Already in list: $norm"
+            continue
+        fi
+        hosts+=("$norm")
+        print_success "Added node ${#hosts[@]}: $norm (will become http://${norm}:${MPC_NODE_HTTP_PORT})"
+    done
+    
+    if [ ${#hosts[@]} -eq 0 ]; then
+        print_error "No nodes entered. Enter at least one address before typing 'finished'."
+        return 1
+    fi
+    
+    local hosts_tmp
+    hosts_tmp=$(mktemp)
+    printf '%s\n' "${hosts[@]}" > "$hosts_tmp"
+    
+    if ! CONFIG_FILE_MERGE_NA="$config_file" HOSTS_LIST_FILE="$hosts_tmp" PORT_MERGE_NA="$MPC_NODE_HTTP_PORT" python3 << 'PYNA'
+import os, yaml
+path = os.environ["CONFIG_FILE_MERGE_NA"]
+hosts_path = os.environ["HOSTS_LIST_FILE"]
+port = os.environ.get("PORT_MERGE_NA", "8081")
+with open(hosts_path) as f:
+    hosts = [ln.strip() for ln in f if ln.strip()]
+with open(path, "r") as f:
+    data = yaml.safe_load(f)
+if not data or not data.get("MPCGroups"):
+    raise SystemExit("no MPCGroups")
+na = {}
+for i, h in enumerate(hosts, 1):
+    na[f"node{i}_key"] = f"http://{h}:{port}"
+data["MPCGroups"][0]["nodeAddresses"] = na
+with open(path, "w") as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+PYNA
+    then
+        rm -f "$hosts_tmp"
+        print_error "Failed to write nodeAddresses to configs.yaml (python3 / PyYAML error)."
+        return 1
+    fi
+    rm -f "$hosts_tmp"
+    
+    echo ""
+    print_success "Wrote MPCGroups[0].nodeAddresses (${#hosts[@]} nodes, relay = first):"
+    local i=0
+    for h in "${hosts[@]}"; do
+        i=$((i + 1))
+        echo "  node${i}_key -> http://${h}:${MPC_NODE_HTTP_PORT}"
+    done
+    echo ""
+    return 0
+}
+
+# True if configs.yaml has a valid NodeMgtKey (Ethereum) and/or valid PublicMgtKey (Ed25519 public, 64 hex).
+verify_at_least_one_management_key() {
+    local config_file="$1"
+    if ! command -v python3 &> /dev/null; then
+        return 1
+    fi
+    python3 - "$config_file" << 'PYVERIFY'
+import yaml, sys, re
+path = sys.argv[1]
+with open(path, "r") as f:
+    d = yaml.safe_load(f) or {}
+nk = d.get("NodeMgtKey")
+nk = "" if nk is None else str(nk).strip().strip('"').strip("'")
+pk = d.get("PublicMgtKey")
+pk = "" if pk is None else str(pk).strip().strip('"').strip("'")
+
+PLACEHOLDER_ETH = "1234567890abcdef1234567890abcdef12345678"
+
+def valid_eth(s):
+    s = s.strip()
+    if s.startswith(("0x", "0X")):
+        s = s[2:]
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", s):
+        return False
+    return s.lower() != PLACEHOLDER_ETH
+
+def valid_ed25519_pub(s):
+    s = s.strip()
+    if s.startswith(("0x", "0X")):
+        s = s[2:]
+    s = re.sub(r"\s+", "", s)
+    if len(s) == 128 and re.fullmatch(r"[0-9a-fA-F]{128}", s):
+        return False
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", s):
+        return False
+    try:
+        bytes.fromhex(s)
+    except ValueError:
+        return False
+    return True
+
+ok_eth = valid_eth(nk)
+ok_pub = valid_ed25519_pub(pk)
+sys.exit(0 if (ok_eth or ok_pub) else 1)
+PYVERIFY
+}
+
+# Prompt for NodeMgtKey / PublicMgtKey when empty; require at least one valid key after prompts.
+prompt_configure_management_keys() {
+    local config_file="$1"
+    
+    if ! command -v python3 &> /dev/null; then
+        print_warning "python3 not found — cannot validate or prompt for management keys; ensure at least one of NodeMgtKey or PublicMgtKey is set in configs.yaml."
+        return 0
+    fi
+    
+    if [ ! -r /dev/tty ]; then
+        if verify_at_least_one_management_key "$config_file"; then
+            return 0
+        fi
+        print_error "At least one of NodeMgtKey or PublicMgtKey must be set. Edit configs.yaml or run this script interactively."
+        return 1
+    fi
+    
+    local set_node="" set_pub=""
+    local nk_empty pk_empty
+    nk_empty=$(CONFIG_FILE_MGT="$config_file" PH_ETH="$NODE_MGT_ETH_PLACEHOLDER" python3 -c "
+import yaml, os, re
+ph = os.environ.get('PH_ETH', '').strip()
+if ph.startswith(('0x', '0X')):
+    ph = ph[2:]
+ph = ph.lower()
+with open(os.environ['CONFIG_FILE_MGT']) as f:
+    d = yaml.safe_load(f) or {}
+v = d.get('NodeMgtKey')
+v = '' if v is None else str(v).strip().strip('\"').strip(\"'\")
+if not v:
+    print('1')
+else:
+    h = v[2:] if v.startswith(('0x', '0X')) else v
+    h = h.lower() if re.fullmatch(r'[0-9a-fA-F]{40}', h) else ''
+    print('1' if h == ph else '0')
+")
+    pk_empty=$(CONFIG_FILE_MGT="$config_file" python3 -c "
+import yaml, os
+with open(os.environ['CONFIG_FILE_MGT']) as f:
+    d = yaml.safe_load(f) or {}
+v = d.get('PublicMgtKey')
+v = '' if v is None else str(v).strip().strip('\"').strip(\"'\")
+print('1' if not v else '0')
+")
+    
+    if [ "$nk_empty" = "1" ]; then
+        echo ""
+        print_step "NodeMgtKey is missing or still the default example address — optional Ethereum (MetaMask) management address"
+        print_info "Replace the placeholder with an address you control. It is used with MetaMask (or any Ethereum wallet) and EIP-191 personal_sign for management API calls."
+        print_info "You do not have to set it if you will use Ed25519 management (PublicMgtKey) instead."
+        print_info "Press Enter to skip and configure PublicMgtKey only (or add NodeMgtKey later)."
+        echo ""
+        local eth_in norm_eth
+        while true; do
+            read -r -p "Ethereum address (0x + 40 hex, or Enter to skip): " eth_in < /dev/tty || true
+            eth_in="${eth_in#"${eth_in%%[![:space:]]*}"}"
+            eth_in="${eth_in%"${eth_in##*[![:space:]]}"}"
+            if [ -z "$eth_in" ]; then
+                break
+            fi
+            norm_eth=$(printf '%s' "$eth_in" | PH_ETH="$NODE_MGT_ETH_PLACEHOLDER" python3 -c "
+import sys, re, os
+s = sys.stdin.read().strip()
+if s.startswith(('0x', '0X')):
+    s = s[2:]
+if not re.fullmatch(r'[0-9a-fA-F]{40}', s):
+    sys.exit(1)
+low = s.lower()
+ph = os.environ.get('PH_ETH', '').strip()
+if ph.startswith(('0x', '0X')):
+    ph = ph[2:]
+ph = ph.lower()
+if low == ph:
+    sys.exit(2)
+print('0x' + low)
+" 2>/dev/null) || {
+                ec=$?
+                if [ "$ec" -eq 2 ]; then
+                    print_error "That address is the default example from configs.yaml — enter your own Ethereum address."
+                    continue
+                fi
+                print_error "Invalid Ethereum address (expected 0x + 40 hex digits, or 40 hex without prefix)."
+                continue
+            }
+            set_node="$norm_eth"
+            print_success "NodeMgtKey will be set to: $set_node"
+            break
+        done
+    fi
+    
+    if [ "$pk_empty" = "1" ]; then
+        echo ""
+        print_step "PublicMgtKey is empty — optional Ed25519 public key (non-MetaMask management)"
+        print_info "This lets you manage the node without MetaMask (no EIP-191); scripts and AI agents can sign with the matching Ed25519 secret key."
+        print_info "You can set both NodeMgtKey and PublicMgtKey, or add PublicMgtKey later in configs.yaml."
+        print_info "Enter the 64-hex-character Ed25519 public key (32 bytes). Press Enter to skip if you use NodeMgtKey only."
+        echo ""
+        local pk_in norm_pk ec
+        while true; do
+            read -r -p "Ed25519 public key (64 hex, or Enter to skip): " pk_in < /dev/tty || true
+            pk_in="${pk_in#"${pk_in%%[![:space:]]*}"}"
+            pk_in="${pk_in%"${pk_in##*[![:space:]]}"}"
+            if [ -z "$pk_in" ]; then
+                break
+            fi
+            ec=0
+            norm_pk=$(printf '%s' "$pk_in" | python3 -c "
+import sys, re
+s = sys.stdin.read().strip()
+if s.startswith(('0x', '0X')):
+    s = s[2:]
+s = re.sub(r'\s+', '', s)
+if len(s) == 128 and re.fullmatch(r'[0-9a-fA-F]{128}', s):
+    sys.exit(2)
+if not re.fullmatch(r'[0-9a-fA-F]{64}', s):
+    sys.exit(1)
+try:
+    bytes.fromhex(s)
+except ValueError:
+    sys.exit(1)
+print(s.lower())
+" 2>/dev/null) || ec=$?
+            if [ "$ec" -eq 2 ]; then
+                print_warning "That looks like a 128-hex Ed25519 *private* key (or seed+key material). Enter the *public* key only (64 hex)."
+                continue
+            fi
+            if [ "$ec" -ne 0 ] || [ -z "$norm_pk" ]; then
+                print_error "Invalid Ed25519 public key (expected 64 hex characters)."
+                continue
+            fi
+            set_pub="$norm_pk"
+            print_success "PublicMgtKey will be set (64 hex, no 0x prefix in file)."
+            break
+        done
+    fi
+    
+    if [ -n "$set_node" ] || [ -n "$set_pub" ]; then
+        CONFIG_FILE_MGT_MERGE="$config_file" MGT_NODE_VAL="${set_node:-}" MGT_PUB_VAL="${set_pub:-}" python3 << 'PYMGT'
+import os, yaml
+path = os.environ["CONFIG_FILE_MGT_MERGE"]
+node_v = os.environ.get("MGT_NODE_VAL", "")
+pub_v = os.environ.get("MGT_PUB_VAL", "")
+with open(path, "r") as f:
+    data = yaml.safe_load(f)
+if not isinstance(data, dict):
+    raise SystemExit("invalid yaml root")
+if node_v:
+    data["NodeMgtKey"] = node_v
+if pub_v:
+    data["PublicMgtKey"] = pub_v
+with open(path, "w") as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+PYMGT
+        print_success "Updated configs.yaml (management keys)."
+        echo ""
+    fi
+    
+    if ! verify_at_least_one_management_key "$config_file"; then
+        print_error "You must configure at least one of: NodeMgtKey (valid Ethereum address) or PublicMgtKey (valid Ed25519 public key, 64 hex)."
+        return 1
+    fi
+    return 0
+}
+
 # Get first node address from config (relay node = runs mosquitto).
 # All nodes must list nodeAddresses in the SAME order; the first entry is the relay node.
 get_first_node_address() {
@@ -1228,7 +1649,7 @@ validate_node_ip() {
     
     if [ ! -f "$config_file" ]; then
         print_warning "Could not find configs.yaml - skipping IP validation"
-        print_info "Expected location: configs.yaml (in the same directory as this script)"
+        print_info "Expected locations: console/configs.yaml or configs.yaml"
         return 0  # Don't fail if config not found
     fi
     
@@ -1326,9 +1747,10 @@ validate_node_ip() {
     fi
 }
 
-# Get CAFile path from configs.yaml
-get_cafile_from_config() {
+# Check if CAFile is configured correctly for client nodes
+validate_client_cafile() {
     local config_file="$1"
+    local expected_ca_path="$2"
     
     if [ ! -f "$config_file" ]; then
         return 1
@@ -1362,176 +1784,7 @@ except Exception:
         cafile=$(grep -E '^\s*CAFile:' "$config_file" 2>/dev/null | head -1 | sed -E 's/^\s*CAFile:\s*["'\'']?([^"'\'']*)["'\'']?.*/\1/' | xargs)
     fi
     
-    if [ -n "$cafile" ] && [ "$cafile" != "" ]; then
-        echo "$cafile"
-        return 0
-    fi
-    
-    return 1
-}
-
-# Find mpc project directory (where docker-compose runs; typically mpc-config)
-find_mpc_project_dir() {
-    local current_dir="$PWD"
-    local script_dir="$(dirname "$0")"
-    
-    # Try multiple strategies to find mpc project directory (mpc-config or mpc-auth)
-    local possible_paths=(
-        # If we're in mpc-config, use it; or look for sibling mpc-config
-        "$(dirname "$script_dir")/mpc-config"
-        # If we're already in the project directory
-        "$current_dir"
-        # Look for docker-compose.yml in current directory
-        "$current_dir"
-        # Look for docker-compose.yml in parent directories
-        "$(dirname "$current_dir")"
-        "$(dirname "$(dirname "$current_dir")")"
-    )
-    
-    for path in "${possible_paths[@]}"; do
-        if [ -f "$path/docker-compose.yml" ] || [ -f "$path/docker-compose_server.yml" ]; then
-            # Check if mosquitto/config directory exists or can be created
-            if [ -d "$path/mosquitto" ] || [ -d "$(dirname "$path")/mosquitto" ]; then
-                echo "$path"
-                return 0
-            fi
-        fi
-    done
-    
-    # If not found, try to find by looking for mosquitto directory
-    local search_dir="$current_dir"
-    for i in {1..5}; do
-        if [ -d "$search_dir/mosquitto" ]; then
-            echo "$search_dir"
-            return 0
-        fi
-        search_dir="$(dirname "$search_dir")"
-        if [ "$search_dir" = "/" ]; then
-            break
-        fi
-    done
-    
-    # Default: assume we're in mpc-config or it's a sibling
-    if [ -d "$(dirname "$script_dir")/mpc-config" ]; then
-        echo "$(dirname "$script_dir")/mpc-config"
-        return 0
-    fi
-    
-    # Last resort: use current directory
-    echo "$current_dir"
-}
-
-# Copy generated CA certificate to CAFile location in configs.yaml (for relay node)
-# The CAFile path in configs.yaml is the container path (/mosquitto/config/certs/ca.crt)
-# We need to convert it to the host path (./mosquitto/config/certs/ca.crt relative to mpc project dir)
-copy_cert_to_cafile_location() {
-    local config_file="$1"
-    local generated_ca_cert="$2"
-    
-    if [ ! -f "$generated_ca_cert" ]; then
-        print_error "Generated CA certificate not found: $generated_ca_cert"
-        return 1
-    fi
-    
-    print_step "Copying CA certificate to location specified in configs.yaml..."
-    
-    # Get CAFile path from config (this is the container path, e.g., /mosquitto/config/certs/ca.crt)
-    local container_cafile_path
-    container_cafile_path=$(get_cafile_from_config "$config_file")
-    
-    if [ -z "$container_cafile_path" ]; then
-        print_info "CAFile not configured in configs.yaml - skipping copy"
-        print_info "Certificate remains at: $generated_ca_cert"
-        return 0
-    fi
-    
-    # Find mpc project directory (where docker-compose runs)
-    local mpc_project_dir
-    mpc_project_dir=$(find_mpc_project_dir)
-    
-    if [ ! -d "$mpc_project_dir" ]; then
-        print_warning "Could not find mpc project directory. Attempting to create mosquitto/config structure in current location."
-        mpc_project_dir="$PWD"
-    fi
-    
-    # Convert container path to host path
-    # Container: /mosquitto/config/certs/ca.crt
-    # Host: ./mosquitto/config/certs/ca.crt (relative to mpc project dir)
-    local host_cafile_path
-    if [[ "$container_cafile_path" == /* ]]; then
-        # Remove leading slash to make it relative
-        host_cafile_path="${container_cafile_path#/}"
-    else
-        host_cafile_path="$container_cafile_path"
-    fi
-    
-    # Full host path
-    local full_host_path="${mpc_project_dir}/${host_cafile_path}"
-    
-    # Normalize paths for comparison
-    local normalized_generated=$(readlink -f "$generated_ca_cert" 2>/dev/null || echo "$generated_ca_cert")
-    local normalized_host=$(readlink -f "$full_host_path" 2>/dev/null || echo "$full_host_path")
-    
-    # Check if paths are the same (already in the right place)
-    if [ "$normalized_generated" = "$normalized_host" ]; then
-        print_success "CA certificate is already at the configured location: $full_host_path"
-        return 0
-    fi
-    
-    # Create directory if it doesn't exist
-    local cafile_dir=$(dirname "$full_host_path")
-    if [ ! -d "$cafile_dir" ]; then
-        print_info "Creating directory: $cafile_dir"
-        if ! mkdir -p "$cafile_dir" 2>/dev/null; then
-            # Try with sudo if regular mkdir failed
-            if sudo mkdir -p "$cafile_dir" 2>/dev/null; then
-                print_success "Directory created (with sudo): $cafile_dir"
-            else
-                print_error "Failed to create directory: $cafile_dir"
-                print_info "Please create the directory manually: mkdir -p $cafile_dir"
-                return 1
-            fi
-        else
-            print_success "Directory created: $cafile_dir"
-        fi
-    fi
-    
-    # Copy the certificate
-    print_info "Copying CA certificate from $generated_ca_cert to $full_host_path"
-    print_info "  (Container path: $container_cafile_path, Host path: $full_host_path)"
-    if cp "$generated_ca_cert" "$full_host_path" 2>/dev/null; then
-        print_success "CA certificate copied to: $full_host_path"
-        # Set appropriate permissions
-        chmod 644 "$full_host_path" 2>/dev/null || print_warning "Could not set permissions on $full_host_path"
-        return 0
-    else
-        # Try with sudo if regular copy failed
-        if sudo cp "$generated_ca_cert" "$full_host_path" 2>/dev/null; then
-            print_success "CA certificate copied (with sudo) to: $full_host_path"
-            sudo chmod 644 "$full_host_path" 2>/dev/null || print_warning "Could not set permissions on $full_host_path"
-            return 0
-        else
-            print_error "Failed to copy CA certificate to: $full_host_path"
-            print_info "Please copy manually: cp $generated_ca_cert $full_host_path"
-            return 1
-        fi
-    fi
-}
-
-# Check if CAFile is configured correctly for client nodes
-validate_client_cafile() {
-    local config_file="$1"
-    local expected_ca_path="$2"
-    
-    if [ ! -f "$config_file" ]; then
-        return 1
-    fi
-    
-    # Get CAFile from config using helper function
-    local cafile=""
-    cafile=$(get_cafile_from_config "$config_file")
-    
-    # If get_cafile_from_config failed or returned empty, return 1
+    # Check if CAFile is set
     if [ -z "$cafile" ]; then
         return 1  # Not configured
     fi
@@ -1663,29 +1916,100 @@ check_cert_dir() {
     fi
 }
 
-# Check if certificates already exist
-check_existing_certs() {
-    local files_exist=0
-    
-    if [ -f "$CA_KEY" ] || [ -f "$CA_CRT" ] || [ -f "$SERVER_KEY" ] || [ -f "$SERVER_CRT" ]; then
-        print_warning "Some certificate files already exist:"
-        [ -f "$CA_KEY" ] && echo "  - $CA_KEY"
-        [ -f "$CA_CRT" ] && echo "  - $CA_CRT"
-        [ -f "$SERVER_KEY" ] && echo "  - $SERVER_KEY"
-        [ -f "$SERVER_CRT" ] && echo "  - $SERVER_CRT"
+# Mosquitto/MQTT broker TLS only (under mosquitto/config/certs). Returns 0 = regenerate, 1 = keep existing.
+confirm_overwrite_mqtt_certs() {
+    if [ ! -f "$CA_KEY" ] && [ ! -f "$CA_CRT" ] && [ ! -f "$SERVER_KEY" ] && [ ! -f "$SERVER_CRT" ]; then
+        return 0
+    fi
+    print_warning "Some Mosquitto (MQTT TLS) broker certificate files already exist — these are for the MQTT broker (e.g. port 8883), not for Browser HTTPS (webTLS, port 8443):"
+    [ -f "$CA_KEY" ] && echo "  - $CA_KEY"
+    [ -f "$CA_CRT" ] && echo "  - $CA_CRT"
+    [ -f "$SERVER_KEY" ] && echo "  - $SERVER_KEY"
+    [ -f "$SERVER_CRT" ] && echo "  - $SERVER_CRT"
+    echo ""
+    read -p "Overwrite these Mosquitto (MQTT) TLS files? (yes/no): " overwrite
+    if [ "$overwrite" != "yes" ] && [ "$overwrite" != "y" ]; then
+        return 1
+    fi
+    print_info "Will overwrite existing Mosquitto (MQTT TLS) certificates"
+    return 0
+}
+
+# After relay has a CA (new or existing): SSH copy or manual instructions.
+relay_mqtt_ca_copy_or_manual_instructions() {
+    local config_file="$1"
+    if [ "$COPY_CERTS" != "true" ]; then
         echo ""
-        read -p "Do you want to overwrite existing certificates? (yes/no): " overwrite
-        if [ "$overwrite" != "yes" ] && [ "$overwrite" != "y" ]; then
-            print_info "Certificate generation cancelled"
-            exit 0
+        print_info "Skipping automatic MQTT CA copy to clients (default; use --copy-certs to enable SSH copy)"
+        
+        local cafile=""
+        if command -v yq &> /dev/null; then
+            cafile=$(yq eval '.MQTTTLS.CAFile' "$config_file" 2>/dev/null)
+            if [ "$cafile" = "null" ] || [ -z "$cafile" ]; then
+                cafile=""
+            fi
+        elif command -v python3 &> /dev/null; then
+            cafile=$(python3 -c "
+import yaml
+import sys
+try:
+    with open('$config_file', 'r') as f:
+        data = yaml.safe_load(f)
+        mqtt_tls = data.get('MQTTTLS', {})
+        cafile = mqtt_tls.get('CAFile', '')
+        if cafile:
+            print(cafile)
+except Exception:
+    sys.exit(1)
+" 2>/dev/null)
         fi
-        print_info "Will overwrite existing certificates"
+        
+        if [ -n "$cafile" ] && [ "$cafile" != "" ]; then
+            echo ""
+            print_warning "MANUAL MQTT CA DISTRIBUTION"
+            echo ""
+            print_info "Automatic copy is off (default unless --copy-certs) and CAFile is configured; manually copy"
+            print_info "the Mosquitto CA certificate to each client node in your MPC group."
+            echo ""
+            print_info "Steps to copy certificate to each client node:"
+            echo ""
+            echo "  1. Get the CA certificate file:"
+            echo "     Location: $CA_CRT"
+            echo ""
+            echo "  2. Copy to each client node using one of these methods:"
+            echo ""
+            echo "     Method A - Using SCP:"
+            echo "       scp $CA_CRT user@client-node-ip:/mosquitto/config/certs/ca.crt"
+            echo ""
+            echo "     Method B - Using rsync:"
+            echo "       rsync -avz $CA_CRT user@client-node-ip:/mosquitto/config/certs/ca.crt"
+            echo ""
+            echo "     Method C - Manual transfer:"
+            echo "       - Transfer the file securely to each client node operator"
+            echo "       - Each operator copies it to: /mosquitto/config/certs/ca.crt"
+            echo ""
+            echo "  3. On each client node, ensure configs.yaml has:"
+            echo "     MQTTTLS:"
+            echo "       CAFile: \"/mosquitto/config/certs/ca.crt\""
+            echo "     (or the path where the certificate was placed)"
+            echo ""
+            echo "  4. Verify file permissions on each client node:"
+            echo "     chmod 644 /mosquitto/config/certs/ca.crt"
+            echo ""
+            print_info "MQTT CA file to share: $CA_CRT"
+        else
+            print_info "To manually copy the MQTT CA:"
+            echo "  scp $CA_CRT user@node-ip:/mosquitto/config/certs/ca.crt"
+        fi
+    else
+        echo ""
+        copy_certs_to_nodes "$config_file" "$CA_CRT"
     fi
 }
 
 # Generate CA private key
 generate_ca_key() {
-    print_step "Generating CA private key..."
+    print_step "Generating Mosquitto (MQTT) CA private key..."
     if openssl genrsa -out "$CA_KEY" 2048 2>/dev/null; then
         print_success "CA private key generated: $CA_KEY"
         # Verify key was created
@@ -1706,7 +2030,7 @@ generate_ca_key() {
 
 # Generate CA certificate
 generate_ca_cert() {
-    print_step "Generating CA certificate..."
+    print_step "Generating Mosquitto (MQTT) CA certificate..."
     if openssl req -new -x509 -days "$CERT_VALIDITY_DAYS" \
         -key "$CA_KEY" \
         -out "$CA_CRT" \
@@ -1734,7 +2058,7 @@ generate_ca_cert() {
 
 # Generate server private key
 generate_server_key() {
-    print_step "Generating server private key..."
+    print_step "Generating Mosquitto broker TLS server private key..."
     if openssl genrsa -out "$SERVER_KEY" 2048 2>/dev/null; then
         print_success "Server private key generated: $SERVER_KEY"
         # Verify key was created
@@ -1750,7 +2074,7 @@ generate_server_key() {
 
 # Generate server certificate signing request
 generate_server_csr() {
-    print_step "Generating server certificate signing request..."
+    print_step "Generating Mosquitto broker TLS certificate signing request..."
     if openssl req -new \
         -key "$SERVER_KEY" \
         -out "$SERVER_CSR" \
@@ -1785,7 +2109,7 @@ sign_server_cert() {
         fi
     fi
     
-    print_step "Signing server certificate with CA..."
+    print_step "Signing Mosquitto broker TLS server certificate with CA..."
     
     # Create temporary OpenSSL config file with SANs if IP is available
     if [ -n "$server_ip" ]; then
@@ -1931,7 +2255,7 @@ display_summary() {
     print_info "Note: This script typically does NOT need to be run as root/sudo."
     print_info "      Only use sudo if the directory is owned by another user (e.g., mosquitto service)."
     print_info ""
-    print_info "Script location: process_config.sh"
+    print_info "Script location: console/process_config.sh"
     print_info "Certificate location: mosquitto/config/certs/"
 }
 
@@ -1956,8 +2280,7 @@ extract_port_from_url() {
     fi
 }
 
-# Configure mqttBroker in configs.yaml (uses awk only - no sed - so ssl:// URLs never break)
-# Marker: process_config_mqttbroker_no_sed_v1 (grep this on server to confirm script version)
+# Configure mqttBroker in configs.yaml (preserves comments using sed)
 configure_mqtt_broker() {
     local config_file="$1"
     local is_relay_node="$2"
@@ -2184,10 +2507,6 @@ EOF
                 rm -f "${config_file}.tmp"
                 print_warning "Failed to update mqttBroker - please update manually in configs.yaml"
             fi
-        else
-            # mqttBroker exists with a value - we already checked above and should have returned
-            # This is a fallback in case the check above didn't catch it
-            print_info "mqttBroker already exists in configs.yaml - preserving user value"
         fi
     fi
     
@@ -2197,16 +2516,23 @@ EOF
 # Configure docker-compose.yml based on node type (relay or client).
 # Uses two fixed files: docker-compose.relay.yml and docker-compose.client.yml.
 # Copies the appropriate one to docker-compose.yml (no sed/awk on the active file).
+# When script is in console/, look for compose files in script dir then in parent (repo root).
 configure_docker_compose() {
     local is_relay_node="$1"
-    local script_dir="$(dirname "$0")"
-    local docker_compose_file="$script_dir/docker-compose.yml"
+    local script_dir="$(cd "$(dirname "$0")" && pwd)"
+    local compose_dir="$script_dir"
+    if [ -d "$script_dir/mosquitto/config" ]; then
+        compose_dir="$script_dir"
+    elif [ -f "$script_dir/../docker-compose.yml" ]; then
+        compose_dir="$(cd "$script_dir/.." && pwd)"
+    fi
+    local docker_compose_file="$compose_dir/docker-compose.yml"
     
     if [ "$is_relay_node" = "true" ]; then
-        local template="$script_dir/docker-compose.relay.yml"
+        local template="$compose_dir/docker-compose.relay.yml"
         local node_type="RELAY"
     else
-        local template="$script_dir/docker-compose.client.yml"
+        local template="$compose_dir/docker-compose.client.yml"
         local node_type="CLIENT"
     fi
     
@@ -2214,7 +2540,7 @@ configure_docker_compose() {
     
     if [ ! -f "$template" ]; then
         print_warning "Template not found: $template"
-        print_info "Expected docker-compose.relay.yml and docker-compose.client.yml in the same directory as this script."
+        print_info "Expected docker-compose.relay.yml and docker-compose.client.yml in $compose_dir"
         return 1
     fi
     
@@ -2244,7 +2570,7 @@ copy_certs_to_nodes() {
         return 1
     fi
     
-    print_step "Copying CA certificate to client nodes..."
+    print_step "Copying MQTT CA certificate to client nodes..."
     
     # Get all node addresses (excluding the first one, which is the relay node)
     local node_addresses=()
@@ -2276,43 +2602,24 @@ copy_certs_to_nodes() {
         
         print_info "Copying certificate to $node_host..."
         
-        # Try to determine remote path - use relative path for Docker compatibility
-        # The script directory on remote node should be the mpc-config root
-        local remote_path="mosquitto/config/certs/ca.crt"
+        # Try to determine remote path from configs.yaml or use default
+        local remote_path="/mosquitto/config/certs/ca.crt"
         
         # Try to extract expected path from remote node's config (if accessible)
         # For now, use default path
         
-        # Try SCP copy - need to determine the correct remote path
-        # Try common locations relative to user's home or mpc-config directory
+        # Try SCP copy
         if command -v scp &> /dev/null; then
-            # Try relative path from current directory (if user is in mpc-config)
+            # Try with current user
             if scp -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$ca_cert" "${node_host}:${remote_path}" 2>/dev/null; then
                 print_success "Successfully copied to $node_host:$remote_path"
                 success_count=$((success_count + 1))
                 continue
             fi
             
-            # Try with ~/mpc-config prefix
-            if scp -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$ca_cert" "${node_host}:~/mpc-config/${remote_path}" 2>/dev/null; then
-                print_success "Successfully copied to $node_host:~/mpc-config/$remote_path"
-                success_count=$((success_count + 1))
-                continue
-            fi
-            
-            # Try with current user's home directory
-            local remote_user=$(whoami 2>/dev/null || echo "")
-            if [ -n "$remote_user" ]; then
-                if scp -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$ca_cert" "${remote_user}@${node_host}:~/mpc-config/${remote_path}" 2>/dev/null; then
-                    print_success "Successfully copied to ${remote_user}@$node_host:~/mpc-config/$remote_path"
-                    success_count=$((success_count + 1))
-                    continue
-                fi
-            fi
-            
             # Try with root user
-            if scp -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$ca_cert" "root@${node_host}:~/mpc-config/${remote_path}" 2>/dev/null; then
-                print_success "Successfully copied to root@$node_host:~/mpc-config/$remote_path"
+            if scp -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$ca_cert" "root@${node_host}:${remote_path}" 2>/dev/null; then
+                print_success "Successfully copied to root@$node_host:$remote_path"
                 success_count=$((success_count + 1))
                 continue
             fi
@@ -2321,9 +2628,8 @@ copy_certs_to_nodes() {
         # If SCP failed, provide manual instructions
         print_warning "Could not automatically copy to $node_host"
         print_info "  Manual copy required:"
-        print_info "    scp $ca_cert user@$node_host:~/mpc-config/$remote_path"
-        print_info "    Or: scp $ca_cert user@$node_host:$remote_path  (if in mpc-config directory)"
-        print_info "    Or use: rsync -avz $ca_cert user@$node_host:~/mpc-config/$remote_path"
+        print_info "    scp $ca_cert user@$node_host:$remote_path"
+        print_info "    Or use: rsync -avz $ca_cert user@$node_host:$remote_path"
         fail_count=$((fail_count + 1))
     done
     
@@ -2335,72 +2641,215 @@ copy_certs_to_nodes() {
         print_warning "Could not automatically copy to $fail_count node(s) - manual copy required"
         echo ""
         print_info "To manually copy certificates:"
-        echo "  1. Use SCP: scp $ca_cert user@node-ip:~/mpc-config/mosquitto/config/certs/ca.crt"
-        echo "  2. Or use rsync: rsync -avz $ca_cert user@node-ip:~/mpc-config/mosquitto/config/certs/ca.crt"
+        echo "  1. Use SCP: scp $ca_cert user@node-ip:/mosquitto/config/certs/ca.crt"
+        echo "  2. Or use rsync: rsync -avz $ca_cert user@node-ip:/mosquitto/config/certs/ca.crt"
         echo "  3. Or transfer via secure file transfer method"
         echo ""
         print_info "After copying, ensure each node's configs.yaml has:"
         echo "  MQTTTLS:"
-        echo "    CAFile: \"/mosquitto/config/certs/ca.crt\"  # Path inside Docker container"
-        echo ""
-        print_info "Note: The path in configs.yaml is the path inside the Docker container."
-        print_info "      Docker mounts mosquitto/config to /mosquitto/config in the container."
+        echo "    CAFile: \"/mosquitto/config/certs/ca.crt\""
     fi
     
     return 0
 }
 
+# Public IP for this machine as listed in configs.yaml nodeAddresses (same match as validate_node_ip).
+get_browser_https_node_ip() {
+    local config_file="$1"
+    local node_addresses=()
+    local local_ips=()
+    while IFS= read -r addr; do
+        [ -n "$addr" ] && node_addresses+=("$addr")
+    done < <(parse_node_addresses_from_yaml "$config_file")
+    while IFS= read -r ip; do
+        [ -n "$ip" ] && local_ips+=("$ip")
+    done < <(get_local_ips)
+    if [ ${#node_addresses[@]} -eq 0 ] || [ ${#local_ips[@]} -eq 0 ]; then
+        return 1
+    fi
+    for local_ip in "${local_ips[@]}"; do
+        for node_addr in "${node_addresses[@]}"; do
+            local node_ip
+            node_ip=$(extract_ip_from_url "$node_addr")
+            if [ -n "$node_ip" ] && ip_matches "$local_ip" "$node_ip"; then
+                echo "$node_ip"
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
+# Generate browser HTTPS cert (IP SAN), write webTLS files, merge BrowserHTTPS into configs.yaml.
+setup_browser_https() {
+    local config_file="$1"
+    local browser_ip
+    browser_ip=$(get_browser_https_node_ip "$config_file") || {
+        print_warning "Could not match this host to a node address — skipping Browser HTTPS setup"
+        return 0
+    }
+
+    print_step "Browser HTTPS — web access / DAO app TLS (port 8443, webTLS/; separate from Mosquitto MQTT TLS)..."
+    print_info "Using public IP from configs for certificate SAN: $browser_ip"
+
+    if ! mkdir -p "$WEB_TLS_HOST_DIR" 2>/dev/null; then
+        if sudo mkdir -p "$WEB_TLS_HOST_DIR" 2>/dev/null; then
+            sudo chown "$(whoami):$(whoami)" "$WEB_TLS_HOST_DIR" 2>/dev/null || true
+        else
+            print_error "Could not create $WEB_TLS_HOST_DIR"
+            return 1
+        fi
+    fi
+
+    local need_cert=true
+    if [ -f "$BROWSER_HTTPS_CRT" ] && [ -f "$BROWSER_HTTPS_KEY" ]; then
+        if openssl x509 -in "$BROWSER_HTTPS_CRT" -noout -text 2>/dev/null | grep -Fq "IP Address:${browser_ip}"; then
+            need_cert=false
+        else
+            print_info "Regenerating Browser HTTPS (web) TLS cert — IP SAN mismatch or new IP (not MQTT certs)"
+        fi
+    fi
+
+    if [ "$need_cert" = true ]; then
+        local sslcnf
+        sslcnf=$(mktemp)
+        cat > "$sslcnf" <<EOF
+[ req ]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
+
+[ req_distinguished_name ]
+CN = mpc-browser-https
+
+[ v3_req ]
+subjectAltName = @alt_names
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+
+[ alt_names ]
+IP.1 = $browser_ip
+EOF
+        if openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
+            -keyout "$BROWSER_HTTPS_KEY" -out "$BROWSER_HTTPS_CRT" \
+            -config "$sslcnf" -extensions v3_req 2>/dev/null; then
+            rm -f "$sslcnf"
+            chmod 600 "$BROWSER_HTTPS_KEY" 2>/dev/null || true
+            chmod 644 "$BROWSER_HTTPS_CRT" 2>/dev/null || true
+            print_success "Browser HTTPS (web) certificate: $BROWSER_HTTPS_CRT"
+        else
+            rm -f "$sslcnf"
+            print_error "Failed to generate Browser HTTPS (web) certificate"
+            return 1
+        fi
+    else
+        print_success "Browser HTTPS (web) certificate already valid for IP $browser_ip"
+    fi
+
+    if ! command -v python3 &> /dev/null; then
+        print_warning "python3 not found — update configs.yaml BrowserHTTPS manually (see docs-internal/railway-browser-https-deployment.md)"
+        return 0
+    fi
+    CONFIG_FILE_MERGE="$config_file" DEFAULT_ORIGIN_MERGE="$DEFAULT_BROWSER_HTTPS_ORIGIN" \
+    CONTAINER_CERT_MERGE="$BROWSER_HTTPS_CONTAINER_CERT" CONTAINER_KEY_MERGE="$BROWSER_HTTPS_CONTAINER_KEY" \
+    python3 << 'PYMERGE'
+import os, yaml
+path = os.environ["CONFIG_FILE_MERGE"]
+default_origin = os.environ.get("DEFAULT_ORIGIN_MERGE", "https://mpa.continuumdao.org")
+cert = os.environ["CONTAINER_CERT_MERGE"]
+key = os.environ["CONTAINER_KEY_MERGE"]
+with open(path, "r") as f:
+    data = yaml.safe_load(f) or {}
+bh = data.get("BrowserHTTPS") or {}
+if not isinstance(bh, dict):
+    bh = {}
+bh["Port"] = 8443
+bh["CertFile"] = cert
+bh["KeyFile"] = key
+origins = bh.get("AllowedOrigins")
+if not origins or not isinstance(origins, list) or len(origins) == 0:
+    bh["AllowedOrigins"] = [default_origin]
+bh["ExpectedAudience"] = bh.get("ExpectedAudience") or "mpc-node-read"
+if "ExpectedIssuer" not in bh:
+    bh["ExpectedIssuer"] = ""
+bh["EnforceNodeIPClaim"] = bool(bh.get("EnforceNodeIPClaim", True))
+jwks = (bh.get("JWKSURL") or "").strip()
+if jwks:
+    bh["JWKSURL"] = jwks
+data["BrowserHTTPS"] = bh
+with open(path, "w") as f:
+    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+PYMERGE
+    print_success "configs.yaml updated: BrowserHTTPS block written (cert paths, AllowedOrigins, ExpectedAudience, EnforceNodeIPClaim)"
+    print_warning "JWKSURL is required for RS256 (see node/configs.go Enabled()). If it is not set in configs.yaml, the 8443 listener will not start."
+    print_info "AllowedOrigins: https://mpa.continuumdao.org (edit if your browser Origin differs). Docker: port 8443, volume ./webTLS/config/certs. See docs-internal/railway-browser-https-deployment.md"
+}
+
+show_process_config_help() {
+    echo "Usage: $0 [ARGUMENTS]"
+    echo ""
+    echo "Arguments:"
+    echo "  --copy-certs      On the relay: after MQTT certs are generated, copy the CA to clients over SSH"
+    echo "  --no-copy-certs   Do not copy via SSH (default); kept for explicit use / backward compatibility"
+    echo "  --help | -h | -help | help   Show this message (arguments above + relay/client behavior below)"
+    echo ""
+    echo "This script validates configuration and generates certificates."
+    echo ""
+    echo "If MPCGroups[0].nodeAddresses is empty or still the default 203.0.113.10–12:8080 examples, the script prompts"
+    echo "and writes http://...:${MPC_NODE_HTTP_PORT} URLs (first entry = relay; same order on all nodes)."
+    echo ""
+    echo "If NodeMgtKey or PublicMgtKey is empty, the script may prompt: Ethereum (MetaMask) and/or"
+    echo "Ed25519 public key for non-MetaMask management. At least one valid key is required."
+    echo ""
+    echo "On RELAY NODE (first node):"
+    echo "  - Validates configuration"
+    echo "  - Validates database connectivity (if PreSigningVerification is configured)"
+    echo "  - Generates MQTT (mosquitto) certificates"
+    echo "  - Enables Browser HTTPS: TLS cert in webTLS/config/certs, configs.yaml BrowserHTTPS, Docker 8443"
+    echo "  - Does not copy CA to client nodes by default (use --copy-certs for automatic SSH copy)"
+    echo ""
+    echo "On CLIENT NODES:"
+    echo "  - Validates configuration"
+    echo "  - Validates database connectivity (if PreSigningVerification is configured)"
+    echo "  - Validates CA certificate is configured correctly"
+    echo "  - Generates Browser HTTPS cert for this node's IP + updates configs.yaml (MQTT CA only on relay)"
+    echo ""
+    echo "Note: Relayer API connectivity validation requires curl to be installed."
+    echo "      If PreSigningVerification is configured, ensure RelayerAPIURL is set"
+    echo "      in configs.yaml (obtain from the DAO)."
+    echo ""
+}
+
 # Main execution
 main() {
-    local NO_COPY_CERTS=false
+    local COPY_CERTS=false
     
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --no-copy-certs)
-                NO_COPY_CERTS=true
+            --copy-certs)
+                COPY_CERTS=true
                 shift
                 ;;
-            --help|-h)
-                echo "Usage: $0 [OPTIONS]"
-                echo ""
-                echo "This script validates configuration and generates certificates."
-                echo ""
-                echo "On RELAY NODE (first node):"
-                echo "  - Validates configuration"
-                echo "  - Validates database connectivity (if PreSigningVerification is configured)"
-                echo "  - Generates certificates"
-                echo "  - Configures docker-compose.yml to enable mosquitto service"
-                echo "  - Automatically copies CA certificate to client nodes (unless --no-copy-certs)"
-                echo ""
-                echo "On CLIENT NODES:"
-                echo "  - Validates configuration"
-                echo "  - Validates database connectivity (if PreSigningVerification is configured)"
-                echo "  - Validates CA certificate is configured correctly"
-                echo "  - Configures docker-compose.yml to disable mosquitto service"
-                echo "  - Does NOT generate certificates (only relay node does this)"
-                echo ""
-                echo "Note: Relayer API connectivity validation requires curl to be installed."
-                echo "      If PreSigningVerification is configured, ensure RelayerAPIURL is set"
-                echo "      in configs.yaml (obtain from the DAO)."
-                echo ""
-                echo "Options:"
-                echo "  --no-copy-certs Skip automatic copying of CA certificate to client nodes"
-                echo "                  (only applies when running on relay node)"
-                echo "  --help, -h      Show this help message"
-                echo ""
+            --no-copy-certs)
+                COPY_CERTS=false
+                shift
+                ;;
+            --help|-h|-help|help)
+                show_process_config_help
                 exit 0
                 ;;
             *)
                 print_error "Unknown option: $1"
-                echo "Use --help for usage information"
+                echo "Run with --help, -h, -help, or help for usage."
                 exit 1
                 ;;
         esac
     done
     
     echo "=========================================="
-    echo "MQTT Configuration Validator and Certificate Generator"
+    echo "MPC config: Mosquitto (MQTT) + Browser HTTPS (web) validation and certificates"
     echo "=========================================="
     echo ""
     
@@ -2408,11 +2857,15 @@ main() {
     CONFIG_FILE=$(find_configs_yaml)
     if [ -z "$CONFIG_FILE" ]; then
         print_error "Could not find configs.yaml"
-        print_info "Expected location: configs.yaml in the same directory as this script ($(dirname "$0"))"
+        print_info "Expected locations: next to this script (configs.yaml), repo root, ./configs.yaml, or ./console/configs.yaml"
         exit 1
     fi
     print_success "Found config: $CONFIG_FILE"
     echo ""
+    
+    prompt_fill_empty_node_addresses "$CONFIG_FILE" || exit 1
+    
+    prompt_configure_management_keys "$CONFIG_FILE" || exit 1
     
     check_root
     check_openssl
@@ -2437,6 +2890,8 @@ main() {
     
     configure_mqtt_broker "$CONFIG_FILE" "$IS_RELAY_NODE"
     configure_docker_compose "$IS_RELAY_NODE"
+
+    setup_browser_https "$CONFIG_FILE"
     
     # Validate Relayer API connection (MANDATORY for relay before certificate generation; may exit 1 on failure)
     validate_relayer_api_connection "$CONFIG_FILE"
@@ -2451,7 +2906,7 @@ main() {
         echo "=========================================="
         echo ""
         print_info "This node is the first node in the MPC group and should run the MQTT broker."
-        print_info "The script will validate your configuration and generate certificates if needed."
+        print_info "The script validates configuration, sets up Browser HTTPS (webTLS) if applicable, then Mosquitto (MQTT TLS) certs on the relay if needed."
         echo ""
         
         # Find and validate mosquitto.conf
@@ -2461,120 +2916,51 @@ main() {
             
             # Only generate self-signed certs if Let's Encrypt is not configured
             if ! is_letsencrypt_configured "$MOSQUITTO_CONF"; then
-                print_step "Generating self-signed certificates for MQTT broker..."
                 check_cert_dir
-                check_existing_certs
-                
-                generate_ca_key
-                generate_ca_cert
-                generate_server_key
-                generate_server_csr
-                sign_server_cert "$CONFIG_FILE"
-                set_permissions
-                
-                # Copy CA certificate to location specified in configs.yaml (for relay node)
-                copy_cert_to_cafile_location "$CONFIG_FILE" "$CA_CRT"
-                
-                # Display relay node specific instructions
-                echo ""
-                echo "=========================================="
-                print_success "Certificate generation complete!"
-                echo "=========================================="
-                echo ""
-                print_info "IMPORTANT: You must share the CA certificate with all client nodes in your MPC group."
-                echo ""
-                print_warning "Next steps for the RELAY NODE:"
-                echo ""
-                echo "  1. Copy the CA certificate file to each client node:"
-                echo "     File to share: $CA_CRT"
-                echo ""
-                echo "  2. Send this file to each node operator in your MPC group"
-                echo "     They need to:"
-                echo "     a. Copy the file to their node (e.g., to /mosquitto/config/certs/ca.crt)"
-                echo "     b. Update their configs.yaml:"
-                echo "        MQTTTLS:"
-                echo "          CAFile: \"/mosquitto/config/certs/ca.crt\""
-                echo "        (or the path where they placed the file)"
-                echo ""
-                echo "  3. Ensure mosquitto can read the certificate files:"
-                echo "     sudo chown -R mosquitto:mosquitto $CERT_DIR  # if mosquitto runs as 'mosquitto' user"
-                echo ""
-                echo "  4. Restart mosquitto to apply the new certificates:"
-                echo "     sudo systemctl restart mosquitto"
-                echo "     # or if using Docker: docker restart mosquitto"
-                echo ""
-                print_info "CA Certificate location: $CA_CRT"
-                print_warning "Keep the private keys ($CA_KEY, $SERVER_KEY) secure and private!"
-                
-                # Copy certificates to other nodes by default (unless --no-copy-certs is specified)
-                if [ "$NO_COPY_CERTS" = "true" ]; then
+                if confirm_overwrite_mqtt_certs; then
+                    print_step "Generating self-signed Mosquitto (MQTT TLS) certificates for the broker..."
+                    generate_ca_key
+                    generate_ca_cert
+                    generate_server_key
+                    generate_server_csr
+                    sign_server_cert "$CONFIG_FILE"
+                    set_permissions
+                    
                     echo ""
-                    print_info "Skipping automatic certificate copy (--no-copy-certs specified)"
-                    
-                    # Check if CAFile is configured in configs.yaml
-                    local cafile=""
-                    if command -v yq &> /dev/null; then
-                        cafile=$(yq eval '.MQTTTLS.CAFile' "$CONFIG_FILE" 2>/dev/null)
-                        if [ "$cafile" = "null" ] || [ -z "$cafile" ]; then
-                            cafile=""
-                        fi
-                    elif command -v python3 &> /dev/null; then
-                        cafile=$(python3 -c "
-import yaml
-import sys
-try:
-    with open('$CONFIG_FILE', 'r') as f:
-        data = yaml.safe_load(f)
-        mqtt_tls = data.get('MQTTTLS', {})
-        cafile = mqtt_tls.get('CAFile', '')
-        if cafile:
-            print(cafile)
-except Exception:
-    sys.exit(1)
-" 2>/dev/null)
-                    fi
-                    
-                    # If CAFile is configured, provide detailed manual copy instructions
-                    if [ -n "$cafile" ] && [ "$cafile" != "" ]; then
-                        echo ""
-                        print_warning "MANUAL CERTIFICATE COPY REQUIRED"
-                        echo ""
-                        print_info "Since --no-copy-certs was used and CAFile is configured, you must manually copy"
-                        print_info "the CA certificate to each client node in your MPC group."
-                        echo ""
-                        print_info "Steps to copy certificate to each client node:"
-                        echo ""
-                        echo "  1. Get the CA certificate file:"
-                        echo "     Location: $CA_CRT"
-                        echo ""
-                        echo "  2. Copy to each client node using one of these methods:"
-                        echo ""
-                        echo "     Method A - Using SCP:"
-                        echo "       scp $CA_CRT user@client-node-ip:/mosquitto/config/certs/ca.crt"
-                        echo ""
-                        echo "     Method B - Using rsync:"
-                        echo "       rsync -avz $CA_CRT user@client-node-ip:/mosquitto/config/certs/ca.crt"
-                        echo ""
-                        echo "     Method C - Manual transfer:"
-                        echo "       - Transfer the file securely to each client node operator"
-                        echo "       - Each operator copies it to: /mosquitto/config/certs/ca.crt"
-                        echo ""
-                        echo "  3. On each client node, ensure configs.yaml has:"
-                        echo "     MQTTTLS:"
-                        echo "       CAFile: \"/mosquitto/config/certs/ca.crt\""
-                        echo "     (or the path where the certificate was placed)"
-                        echo ""
-                        echo "  4. Verify file permissions on each client node:"
-                        echo "     chmod 644 /mosquitto/config/certs/ca.crt"
-                        echo ""
-                        print_info "CA Certificate file to share: $CA_CRT"
-                    else
-                        print_info "To manually copy certificates:"
-                        echo "  scp $CA_CRT user@node-ip:/mosquitto/config/certs/ca.crt"
-                    fi
+                    echo "=========================================="
+                    print_success "Mosquitto (MQTT TLS) broker certificate generation complete!"
+                    echo "=========================================="
+                    echo ""
+                    print_info "IMPORTANT: Share the MQTT CA certificate ($CA_CRT) with all client nodes for TLS to the broker."
+                    echo ""
+                    print_warning "Next steps for the RELAY NODE (Mosquitto / MQTT):"
+                    echo ""
+                    echo "  1. Copy the CA certificate file to each client node:"
+                    echo "     File to share: $CA_CRT"
+                    echo ""
+                    echo "  2. Send this file to each node operator in your MPC group"
+                    echo "     They need to:"
+                    echo "     a. Copy the file to their node (e.g., to /mosquitto/config/certs/ca.crt)"
+                    echo "     b. Update their configs.yaml:"
+                    echo "        MQTTTLS:"
+                    echo "          CAFile: \"/mosquitto/config/certs/ca.crt\""
+                    echo "        (or the path where they placed the file)"
+                    echo ""
+                    echo "  3. Ensure mosquitto can read the certificate files:"
+                    echo "     sudo chown -R mosquitto:mosquitto $CERT_DIR  # if mosquitto runs as 'mosquitto' user"
+                    echo ""
+                    echo "  4. Restart mosquitto to apply the new certificates:"
+                    echo "     sudo systemctl restart mosquitto"
+                    echo "     # or if using Docker: docker restart mosquitto"
+                    echo ""
+                    print_info "MQTT CA certificate location: $CA_CRT"
+                    print_warning "Keep the MQTT private keys ($CA_KEY, $SERVER_KEY) secure and private!"
+                    relay_mqtt_ca_copy_or_manual_instructions "$CONFIG_FILE"
                 else
                     echo ""
-                    copy_certs_to_nodes "$CONFIG_FILE" "$CA_CRT"
+                    print_info "Keeping existing Mosquitto (MQTT TLS) files in $CERT_DIR (no overwrite)."
+                    print_info "Browser HTTPS (webTLS, port 8443) is separate and was already handled earlier in this run."
+                    relay_mqtt_ca_copy_or_manual_instructions "$CONFIG_FILE"
                 fi
             else
                 print_success "Let's Encrypt is configured - no self-signed certificates needed"
@@ -2582,94 +2968,26 @@ except Exception:
             fi
         else
             print_warning "Could not find mosquitto.conf"
-            print_info "Proceeding with self-signed certificate generation..."
+            print_info "Proceeding with self-signed Mosquitto (MQTT TLS) certificate generation..."
             check_cert_dir
-            check_existing_certs
-            
-            generate_ca_key
-            generate_ca_cert
-            generate_server_key
-            generate_server_csr
-            sign_server_cert "$CONFIG_FILE"
-            set_permissions
-            
-            # Copy CA certificate to location specified in configs.yaml (for relay node)
-            copy_cert_to_cafile_location "$CONFIG_FILE" "$CA_CRT"
-            
-            echo ""
-            print_warning "Next steps:"
-            echo "  1. Configure mosquitto.conf to use these certificates"
-            echo "  2. Share $CA_CRT with all client nodes"
-            
-            # Copy certificates to other nodes by default (unless --no-copy-certs is specified)
-            if [ "$NO_COPY_CERTS" = "true" ]; then
+            if confirm_overwrite_mqtt_certs; then
+                generate_ca_key
+                generate_ca_cert
+                generate_server_key
+                generate_server_csr
+                sign_server_cert "$CONFIG_FILE"
+                set_permissions
+                
                 echo ""
-                print_info "Skipping automatic certificate copy (--no-copy-certs specified)"
-                
-                # Check if CAFile is configured in configs.yaml
-                local cafile=""
-                if command -v yq &> /dev/null; then
-                    cafile=$(yq eval '.MQTTTLS.CAFile' "$CONFIG_FILE" 2>/dev/null)
-                    if [ "$cafile" = "null" ] || [ -z "$cafile" ]; then
-                        cafile=""
-                    fi
-                elif command -v python3 &> /dev/null; then
-                    cafile=$(python3 -c "
-import yaml
-import sys
-try:
-    with open('$CONFIG_FILE', 'r') as f:
-        data = yaml.safe_load(f)
-        mqtt_tls = data.get('MQTTTLS', {})
-        cafile = mqtt_tls.get('CAFile', '')
-        if cafile:
-            print(cafile)
-except Exception:
-    sys.exit(1)
-" 2>/dev/null)
-                fi
-                
-                # If CAFile is configured, provide detailed manual copy instructions
-                if [ -n "$cafile" ] && [ "$cafile" != "" ]; then
-                    echo ""
-                    print_warning "MANUAL CERTIFICATE COPY REQUIRED"
-                    echo ""
-                    print_info "Since --no-copy-certs was used and CAFile is configured, you must manually copy"
-                    print_info "the CA certificate to each client node in your MPC group."
-                    echo ""
-                    print_info "Steps to copy certificate to each client node:"
-                    echo ""
-                    echo "  1. Get the CA certificate file:"
-                    echo "     Location: $CA_CRT"
-                    echo ""
-                    echo "  2. Copy to each client node using one of these methods:"
-                    echo ""
-                    echo "     Method A - Using SCP:"
-                    echo "       scp $CA_CRT user@client-node-ip:/mosquitto/config/certs/ca.crt"
-                    echo ""
-                    echo "     Method B - Using rsync:"
-                    echo "       rsync -avz $CA_CRT user@client-node-ip:/mosquitto/config/certs/ca.crt"
-                    echo ""
-                    echo "     Method C - Manual transfer:"
-                    echo "       - Transfer the file securely to each client node operator"
-                    echo "       - Each operator copies it to: /mosquitto/config/certs/ca.crt"
-                    echo ""
-                    echo "  3. On each client node, ensure configs.yaml has:"
-                    echo "     MQTTTLS:"
-                    echo "       CAFile: \"/mosquitto/config/certs/ca.crt\""
-                    echo "     (or the path where the certificate was placed)"
-                    echo ""
-                    echo "  4. Verify file permissions on each client node:"
-                    echo "     chmod 644 /mosquitto/config/certs/ca.crt"
-                    echo ""
-                    print_info "CA Certificate file to share: $CA_CRT"
-                else
-                    print_info "To manually copy certificates:"
-                    echo "  scp $CA_CRT user@node-ip:/mosquitto/config/certs/ca.crt"
-                fi
+                print_warning "Next steps (Mosquitto / MQTT):"
+                echo "  1. Configure mosquitto.conf to use these certificates"
+                echo "  2. Share MQTT CA $CA_CRT with all client nodes"
+                relay_mqtt_ca_copy_or_manual_instructions "$CONFIG_FILE"
             else
                 echo ""
-                copy_certs_to_nodes "$CONFIG_FILE" "$CA_CRT"
+                print_info "Keeping existing Mosquitto (MQTT TLS) files in $CERT_DIR (no overwrite)."
+                print_info "Browser HTTPS (webTLS, port 8443) is separate and was already handled earlier in this run."
+                relay_mqtt_ca_copy_or_manual_instructions "$CONFIG_FILE"
             fi
         fi
     else
@@ -2684,14 +3002,33 @@ except Exception:
         print_info "This node is a client in the MPC group and connects to the MQTT broker."
         print_info "Configuration validation has been completed."
         echo ""
-        print_info "Note: Certificate generation only happens on the relay node (first node)."
-        print_info "The relay node will automatically copy the CA certificate to this node."
+        print_info "Note: Mosquitto (MQTT TLS) CA is issued on the relay (first node). Browser HTTPS (webTLS) is generated per-node when you run this script."
+        print_info "Obtain the MQTT CA from the relay operator (relay runs process_config.sh; use --copy-certs there for SSH copy)."
         echo ""
         
         # Create certificate directory on client nodes if it doesn't exist
-        # Use relative path (same as relay node) for Docker compatibility
         print_step "Ensuring certificate directory exists..."
-        local cert_dir_path="${SCRIPT_DIR}/mosquitto/config/certs"
+        # Use relative path (matches docker-compose.yml volume mount: ./mosquitto/config:/mosquitto/config)
+        # Try to find the mosquitto/config directory relative to common locations
+        local script_dir="$(cd "$(dirname "$0")" && pwd)"
+        local cert_dir_path=""
+        local repo_root="$script_dir"
+        if [ ! -d "$repo_root/mosquitto/config" ] && [ -d "$script_dir/../mosquitto/config" ]; then
+            repo_root="$(cd "$script_dir/.." && pwd)"
+        fi
+        
+        if [ -d "$repo_root/mosquitto/config" ]; then
+            cert_dir_path="$repo_root/mosquitto/config/certs"
+        elif [ -d "./mosquitto/config" ]; then
+            cert_dir_path="./mosquitto/config/certs"
+        # Fallback to absolute path (for systems where /mosquitto/config exists)
+        else
+            cert_dir_path="/mosquitto/config/certs"
+            print_warning "Could not find mosquitto/config relative to script or current directory"
+            print_info "Using absolute path: $cert_dir_path"
+            print_info "Make sure this matches your docker-compose.yml volume mount"
+        fi
+        
         local current_user=$(whoami)
         local ownership_changed=false
         
@@ -2715,9 +3052,6 @@ except Exception:
             else
                 print_warning "Could not create certificate directory: $cert_dir_path"
                 print_info "You need to create it manually with appropriate permissions:"
-                echo "  mkdir -p $cert_dir_path"
-                echo "  chmod 755 $cert_dir_path"
-                echo "  # Or with sudo if needed:"
                 echo "  sudo mkdir -p $cert_dir_path"
                 echo "  sudo chmod 755 $cert_dir_path"
                 echo "  sudo chown $current_user:$current_user $cert_dir_path"
@@ -2734,9 +3068,9 @@ except Exception:
                 else
                     print_warning "Could not change directory ownership"
                     print_info "You will need sudo to copy the certificate file:"
-                    echo "  scp relay-node-user@RELAY_NODE_IP:mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
+                    echo "  sudo scp relay-node-user@RELAY_NODE_IP:/mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
                     echo "  # Or copy to a temporary location first, then move with sudo:"
-                    echo "  scp relay-node-user@RELAY_NODE_IP:mosquitto/config/certs/ca.crt /tmp/ca.crt"
+                    echo "  scp relay-node-user@RELAY_NODE_IP:/mosquitto/config/certs/ca.crt /tmp/ca.crt"
                     echo "  sudo mv /tmp/ca.crt $cert_dir_path/ca.crt"
                 fi
             else
@@ -2754,9 +3088,9 @@ except Exception:
             expected_ca_path=$(grep -E '^\s*cafile\s+' "$MOSQUITTO_CONF" 2>/dev/null | head -1 | sed -E 's/^\s*cafile\s+//' | sed 's/#.*$//' | xargs)
         fi
         
-        # If no expected path from mosquitto.conf, use default (relative path for Docker)
+        # If no expected path from mosquitto.conf, use default
         if [ -z "$expected_ca_path" ]; then
-            expected_ca_path="$CA_CRT"  # This is already the relative path
+            expected_ca_path="$CA_CRT"
         fi
         
         print_step "Validating CA certificate configuration..."
@@ -2780,7 +3114,7 @@ except Exception:
             1)
                 print_warning "CA certificate is NOT configured in configs.yaml"
                 echo ""
-                print_info "The relay node will automatically copy the CA certificate to this node."
+                print_info "Obtain the CA certificate from the relay operator (relay runs process_config.sh; use --copy-certs there for SSH copy)."
                 print_info "After the relay node runs ./process_config.sh, ensure:"
                 echo "  1. The CA certificate file exists at: $expected_ca_path"
                 echo "  2. Your configs.yaml has:"
@@ -2791,10 +3125,10 @@ except Exception:
                 print_warning "CA certificate path is configured but the file does NOT exist"
                 echo ""
                 print_info "Your configs.yaml specifies a CA certificate, but the file is missing."
-                print_info "The relay node will automatically copy the CA certificate to this node."
+                print_info "Obtain the CA certificate from the relay operator (relay runs process_config.sh; use --copy-certs there for SSH copy)."
                 print_info "If the file is still missing after the relay node runs the script,"
                 print_info "manually copy it from the relay node:"
-                echo "  scp relay-node:mosquitto/config/certs/ca.crt $expected_ca_path"
+                echo "  scp relay-node:/mosquitto/config/certs/ca.crt $expected_ca_path"
                 ;;
             3)
                 print_warning "CA certificate is configured but path may not match the relay node's certificate"
@@ -2829,22 +3163,20 @@ except Exception:
         print_info "You must now copy the CA certificate file from the relay node:"
         echo ""
         print_info "1. On the RELAY NODE (first node), the CA certificate is located at:"
-        echo "   mosquitto/config/certs/ca.crt  (relative to mpc-config directory)"
+        echo "   /mosquitto/config/certs/ca.crt"
         echo ""
         if [ "$ownership_changed" = true ] || [ -w "$cert_dir_path" ]; then
             print_info "2. Copy it to this CLIENT NODE using scp (no sudo needed):"
-            echo "   scp relay-node-user@RELAY_NODE_IP:~/mpc-config/mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
-            echo "   # Or if the relay node path is different:"
-            echo "   scp relay-node-user@RELAY_NODE_IP:mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
+            echo "   scp relay-node-user@RELAY_NODE_IP:/mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
         else
             print_info "2. Copy it to this CLIENT NODE using one of these methods:"
             echo ""
             echo "   Option A - Copy to temp first, then move with sudo:"
-            echo "   scp relay-node-user@RELAY_NODE_IP:mosquitto/config/certs/ca.crt /tmp/ca.crt"
+            echo "   scp relay-node-user@RELAY_NODE_IP:/mosquitto/config/certs/ca.crt /tmp/ca.crt"
             echo "   sudo mv /tmp/ca.crt $cert_dir_path/ca.crt"
             echo ""
             echo "   Option B - Using sudo scp (if your sudo allows it):"
-            echo "   sudo scp relay-node-user@RELAY_NODE_IP:mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
+            echo "   sudo scp relay-node-user@RELAY_NODE_IP:/mosquitto/config/certs/ca.crt $cert_dir_path/ca.crt"
         fi
         echo ""
         print_info "3. After copying, verify the certificate file exists:"
@@ -2852,10 +3184,7 @@ except Exception:
         echo ""
         print_info "4. Update your configs.yaml to reference the certificate:"
         echo "   MQTTTLS:"
-        echo "     CAFile: \"/mosquitto/config/certs/ca.crt\"  # Path inside Docker container"
-        echo ""
-        print_info "Note: The path in configs.yaml is the path inside the Docker container."
-        print_info "      Docker mounts mosquitto/config to /mosquitto/config in the container."
+        echo "     CAFile: \"$cert_dir_path/ca.crt\""
         echo ""
         print_info "Replace 'RELAY_NODE_IP' with the actual IP address of your relay node."
         print_info "Replace 'relay-node-user' with the SSH username on the relay node."
@@ -2863,6 +3192,6 @@ except Exception:
     fi
 }
 
-# Run main function
-main
+# Run main function (pass through CLI arguments)
+main "$@"
 

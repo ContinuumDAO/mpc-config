@@ -44,6 +44,8 @@ services:
       - GOLOG_OUTPUT=file
     ports:
       - "8080:8080"
+      - "80:80"       # Public discovery (set PublicDiscoveryPort in configs.yaml)
+      - "8443:8443"   # Browser HTTPS (DAO app)
     depends_on:
       mongodb:
         condition: service_healthy
@@ -52,6 +54,8 @@ services:
     volumes:
       - ./configs.yaml:/app/configs.yaml:ro
       - ./data/app/logs:/app/logs
+      - ./mosquitto/config:/mosquitto/config
+      - ./webTLS/config/certs:/webTLS/config/certs
     networks:
       - local-network
     security_opt:
