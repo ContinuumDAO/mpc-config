@@ -3170,26 +3170,16 @@ main() {
         
         # Create certificate directory on client nodes if it doesn't exist
         print_step "Ensuring certificate directory exists..."
-        # Use relative path (matches docker-compose.yml volume mount: ./mosquitto/config:/mosquitto/config)
-        # Try to find the mosquitto/config directory relative to common locations
+        # Host path: <repo root>/mosquitto/config/certs — same as docker-compose ./mosquitto/config:/mosquitto/config
         local script_dir="$(cd "$(dirname "$0")" && pwd)"
-        local cert_dir_path=""
         local repo_root="$script_dir"
         if [ ! -d "$repo_root/mosquitto/config" ] && [ -d "$script_dir/../mosquitto/config" ]; then
             repo_root="$(cd "$script_dir/.." && pwd)"
         fi
+        local cert_dir_path="$repo_root/mosquitto/config/certs"
         
-        if [ -d "$repo_root/mosquitto/config" ]; then
-            cert_dir_path="$repo_root/mosquitto/config/certs"
-        elif [ -d "./mosquitto/config" ]; then
-            cert_dir_path="./mosquitto/config/certs"
-        # Fallback to absolute path (for systems where /mosquitto/config exists)
-        else
-            cert_dir_path="/mosquitto/config/certs"
-            print_warning "Could not find mosquitto/config relative to script or current directory"
-            print_info "Using absolute path: $cert_dir_path"
-            print_info "Make sure this matches your docker-compose.yml volume mount"
-        fi
+        print_info "Using project mosquitto TLS directory: $cert_dir_path"
+        print_info "(Place relay's ca.crt here for the container path /mosquitto/config/certs/ca.crt.)"
         
         local current_user=$(whoami)
         local ownership_changed=false
