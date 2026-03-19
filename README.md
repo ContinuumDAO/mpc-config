@@ -91,7 +91,7 @@ Blockchain information (token / assets / chain) distributed authentication toolk
 ## Prerequisites
 
 - **Docker & Docker Compose** (required)
-- **Python 3 with PyYAML** (required for `process_config.sh` script - for YAML parsing)
+- **Python 3 with PyYAML and ruamel.yaml** (required for `process_config.sh`: parsing plus **round-trip YAML updates** that **keep comments** in `configs.yaml`; on Debian/Ubuntu: `sudo apt install python3 python3-pip python3-ruamel.yaml` — see Installation §2)
 - **Sudo/root access** (may be required on client nodes to create `mosquitto/config/certs/` directory - see Certificate Setup section)
 - **Same username with sudo access on all nodes** (recommended for simplified certificate sharing - see Certificate Setup section)
 
@@ -154,27 +154,27 @@ If you encounter the error `Couldn't connect to Docker daemon at http+docker://l
 
 **Note:** After adding your user to the docker group, you may need to restart your SSH session or run `newgrp docker` for the changes to take effect in your current terminal session.
 
-#### 2. Install Python 3 with PyYAML (Required for process_config.sh)
+#### 2. Install Python 3 with PyYAML and ruamel.yaml (Required for process_config.sh)
 
-The `process_config.sh` script requires Python 3 with the PyYAML library for YAML configuration parsing:
+The `process_config.sh` script uses **PyYAML** for read-only parsing and **`ruamel.yaml`** whenever it **writes** `configs.yaml` (node addresses, management keys, Relayer URL, Browser HTTPS, etc.) so **comments in the prototype file are preserved**.
 
 **Ubuntu/Debian:**
 ```bash
 sudo apt-get update && \
-sudo apt-get install python3 python3-pip -y && \
+sudo apt-get install python3 python3-pip python3-ruamel.yaml -y && \
 pip3 install pyyaml
 ```
 
 **CentOS/RHEL:**
 ```bash
 sudo yum install python3 python3-pip -y && \
-pip3 install pyyaml
+pip3 install pyyaml ruamel.yaml
 ```
 
 **macOS:**
 ```bash
 brew install python3 && \
-pip3 install pyyaml
+pip3 install pyyaml ruamel.yaml
 ```
 
 **Alternative: Install yq (YAML processor)**
@@ -192,7 +192,7 @@ sudo chmod +x /usr/local/bin/yq
 brew install yq
 ```
 
-**Note:** The `process_config.sh` script will use `yq` if available, otherwise it will fall back to Python 3 with PyYAML. If neither is available, some configuration validations will be skipped.
+**Note:** `yq` is used for some **read-only** parsing when available. **Updating** `configs.yaml` requires **`ruamel.yaml`** (e.g. `python3-ruamel.yaml` via apt). Without it, the script will error when a merge step runs. PyYAML alone is not sufficient for writes because a round-trip would strip comments.
 
 #### 3. MQTT Broker Setup (Per-Group, Default)
 

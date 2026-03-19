@@ -64,6 +64,56 @@ print_step() {
     echo -e "\n${BLUE}==> $1${NC}"
 }
 
+# PyYAML safe_load/dump strips all comments. ruamel.yaml round-trips the prototype configs.yaml.
+require_ruamel_yaml() {
+    if ! python3 -c "import ruamel.yaml" 2>/dev/null; then
+        print_error "ruamel.yaml is required to update configs.yaml without stripping comments."
+        print_info "Install:  sudo apt install python3-ruamel.yaml"
+        print_info "     or:  python3 -m pip install 'ruamel.yaml'  (use a venv on PEP 668 / externally-managed Python)"
+        return 1
+    fi
+    return 0
+}
+
+# Merge PreSigningVerification.RelayerAPIURL (preserves file comments).
+configs_yaml_merge_relayer_api_url() {
+    local config_file="$1"
+    local url="$2"
+    require_ruamel_yaml || return 1
+    RELAYER_MERGE_CFG="$config_file" RELAYER_MERGE_URL="$url" python3 << 'PYRELAYERMERGE'
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.stderr.write("configs.yaml: install ruamel.yaml (pip install --user 'ruamel.yaml')\n")
+    sys.exit(1)
+
+path = os.environ["RELAYER_MERGE_CFG"]
+url = os.environ["RELAYER_MERGE_URL"].strip().rstrip("/")
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)
+
+with open(path, "r") as f:
+    data = yaml.load(f)
+if not isinstance(data, dict):
+    sys.stderr.write("invalid yaml root (expected mapping)\n")
+    sys.exit(1)
+
+ps = data.get("PreSigningVerification")
+if not isinstance(ps, dict):
+    ps = {}
+    data["PreSigningVerification"] = ps
+ps["RelayerAPIURL"] = url
+
+with open(path, "w") as f:
+    yaml.dump(data, f)
+PYRELAYERMERGE
+}
+
 # Find mosquitto.conf file
 find_mosquitto_conf() {
     local script_dir="$(cd "$(dirname "$0")" && pwd)"
@@ -953,22 +1003,7 @@ PYRELAYERNEED
     env_url="${env_url%"${env_url##*[![:space:]]}"}"
     if [ -n "$env_url" ]; then
         env_url="${env_url%/}"
-        RELAYER_MERGE_CFG="$config_file" RELAYER_MERGE_URL="$env_url" python3 << 'PYRELAYERMERGE'
-import os, yaml
-path = os.environ["RELAYER_MERGE_CFG"]
-url = os.environ["RELAYER_MERGE_URL"].strip().rstrip("/")
-with open(path, "r") as f:
-    data = yaml.safe_load(f)
-if not isinstance(data, dict):
-    raise SystemExit("invalid yaml")
-ps = data.get("PreSigningVerification")
-if not isinstance(ps, dict):
-    ps = {}
-ps["RelayerAPIURL"] = url
-data["PreSigningVerification"] = ps
-with open(path, "w") as f:
-    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-PYRELAYERMERGE
+        configs_yaml_merge_relayer_api_url "$config_file" "$env_url" || return 1
         print_success "Set PreSigningVerification.RelayerAPIURL from RELAYER_API_URL environment variable"
         return 0
     fi
@@ -998,23 +1033,8 @@ PYRELAYERMERGE
             print_error "URL must start with http:// or https:// (e.g. https://relayer.example.com:8080)"
             continue
         fi
-        RELAYER_MERGE_CFG="$config_file" RELAYER_MERGE_URL="$url_in" python3 << 'PYRELAYERMERGE'
-import os, yaml
-path = os.environ["RELAYER_MERGE_CFG"]
-url = os.environ["RELAYER_MERGE_URL"].strip().rstrip("/")
-with open(path, "r") as f:
-    data = yaml.safe_load(f)
-if not isinstance(data, dict):
-    raise SystemExit("invalid yaml")
-ps = data.get("PreSigningVerification")
-if not isinstance(ps, dict):
-    ps = {}
-ps["RelayerAPIURL"] = url
-data["PreSigningVerification"] = ps
-with open(path, "w") as f:
-    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-PYRELAYERMERGE
-        print_success "Wrote PreSigningVerification.RelayerAPIURL to configs.yaml"
+        configs_yaml_merge_relayer_api_url "$config_file" "$url_in" || return 1
+        print_success "Wrote PreSigningVerification.RelayerAPIURL to configs.yaml (comments preserved)"
         echo ""
         return 0
     done
@@ -1423,27 +1443,58 @@ prompt_fill_empty_node_addresses() {
         return 1
     fi
     
+    require_ruamel_yaml || return 1
+    
     local hosts_tmp
     hosts_tmp=$(mktemp)
     printf '%s\n' "${hosts[@]}" > "$hosts_tmp"
     
     if ! CONFIG_FILE_MERGE_NA="$config_file" HOSTS_LIST_FILE="$hosts_tmp" PORT_MERGE_NA="$MPC_NODE_HTTP_PORT" python3 << 'PYNA'
-import os, yaml
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+    from ruamel.yaml.comments import CommentedMap
+except ImportError:
+    sys.stderr.write("configs.yaml: install ruamel.yaml (pip install --user 'ruamel.yaml')\n")
+    sys.exit(1)
+
 path = os.environ["CONFIG_FILE_MERGE_NA"]
 hosts_path = os.environ["HOSTS_LIST_FILE"]
 port = os.environ.get("PORT_MERGE_NA", "8081")
 with open(hosts_path) as f:
     hosts = [ln.strip() for ln in f if ln.strip()]
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)
+
 with open(path, "r") as f:
-    data = yaml.safe_load(f)
+    data = yaml.load(f)
 if not data or not data.get("MPCGroups"):
     raise SystemExit("no MPCGroups")
-na = {}
+
+grp = data["MPCGroups"][0]
+na = grp.get("nodeAddresses")
+if na is None:
+    na = CommentedMap()
+    grp["nodeAddresses"] = na
+elif not isinstance(na, dict):
+    na = CommentedMap()
+    grp["nodeAddresses"] = na
+
+new_keys = []
 for i, h in enumerate(hosts, 1):
-    na[f"node{i}_key"] = f"http://{h}:{port}"
-data["MPCGroups"][0]["nodeAddresses"] = na
+    k = f"node{i}_key"
+    new_keys.append(k)
+    na[k] = f"http://{h}:{port}"
+for k in list(na.keys()):
+    if k not in new_keys:
+        del na[k]
+
 with open(path, "w") as f:
-    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    yaml.dump(data, f)
 PYNA
     then
         rm -f "$hosts_tmp"
@@ -1674,8 +1725,17 @@ print(s.lower())
     fi
     
     if [ "$nk_empty" = "1" ] || [ -n "$set_node" ] || [ -n "$set_pub" ]; then
+        require_ruamel_yaml || return 1
         CONFIG_FILE_MGT_MERGE="$config_file" MGT_NODE_VAL="${set_node:-}" MGT_PUB_VAL="${set_pub:-}" python3 << 'PYMGT'
-import os, yaml, re
+import os
+import re
+import sys
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.stderr.write("configs.yaml: install ruamel.yaml (pip install --user 'ruamel.yaml')\n")
+    sys.exit(1)
+
 path = os.environ["CONFIG_FILE_MGT_MERGE"]
 node_v = (os.environ.get("MGT_NODE_VAL") or "").strip()
 pub_v = (os.environ.get("MGT_PUB_VAL") or "").strip()
@@ -1700,8 +1760,13 @@ def is_placeholder_nk(val):
     b = eth_body_40(val)
     return b is not None and b == PLACEHOLDER_BODY
 
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)
+
 with open(path, "r") as f:
-    data = yaml.safe_load(f)
+    data = yaml.load(f)
 if not isinstance(data, dict):
     raise SystemExit("invalid yaml root")
 if node_v:
@@ -1711,9 +1776,9 @@ elif is_placeholder_nk(data.get("NodeMgtKey")):
 if pub_v:
     data["PublicMgtKey"] = pub_v
 with open(path, "w") as f:
-    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    yaml.dump(data, f)
 PYMGT
-        print_success "Updated configs.yaml (management keys)."
+        print_success "Updated configs.yaml (management keys; comments preserved)."
         echo ""
     fi
     
@@ -2908,19 +2973,41 @@ EOF
         print_warning "python3 not found — update configs.yaml BrowserHTTPS manually (see docs-internal/railway-browser-https-deployment.md)"
         return 0
     fi
+    require_ruamel_yaml || return 1
     CONFIG_FILE_MERGE="$config_file" DEFAULT_ORIGIN_MERGE="$DEFAULT_BROWSER_HTTPS_ORIGIN" \
     CONTAINER_CERT_MERGE="$BROWSER_HTTPS_CONTAINER_CERT" CONTAINER_KEY_MERGE="$BROWSER_HTTPS_CONTAINER_KEY" \
     python3 << 'PYMERGE'
-import os, yaml
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+    from ruamel.yaml.comments import CommentedMap
+except ImportError:
+    sys.stderr.write("configs.yaml: install ruamel.yaml (pip install --user 'ruamel.yaml')\n")
+    sys.exit(1)
+
 path = os.environ["CONFIG_FILE_MERGE"]
 default_origin = os.environ.get("DEFAULT_ORIGIN_MERGE", "https://mpa.continuumdao.org")
 cert = os.environ["CONTAINER_CERT_MERGE"]
 key = os.environ["CONTAINER_KEY_MERGE"]
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)
+
 with open(path, "r") as f:
-    data = yaml.safe_load(f) or {}
-bh = data.get("BrowserHTTPS") or {}
-if not isinstance(bh, dict):
-    bh = {}
+    data = yaml.load(f)
+if data is None:
+    data = {}
+if not isinstance(data, dict):
+    raise SystemExit("invalid yaml root")
+
+bh = data.get("BrowserHTTPS")
+if bh is None or not isinstance(bh, dict):
+    bh = CommentedMap()
+    data["BrowserHTTPS"] = bh
+
 bh["Port"] = 8443
 bh["CertFile"] = cert
 bh["KeyFile"] = key
@@ -2931,14 +3018,15 @@ bh["ExpectedAudience"] = bh.get("ExpectedAudience") or "mpc-node-read"
 if "ExpectedIssuer" not in bh:
     bh["ExpectedIssuer"] = ""
 bh["EnforceNodeIPClaim"] = bool(bh.get("EnforceNodeIPClaim", True))
-jwks = (bh.get("JWKSURL") or "").strip()
+_jw = bh.get("JWKSURL") or ""
+jwks = _jw.strip() if isinstance(_jw, str) else str(_jw).strip()
 if jwks:
     bh["JWKSURL"] = jwks
-data["BrowserHTTPS"] = bh
+
 with open(path, "w") as f:
-    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    yaml.dump(data, f)
 PYMERGE
-    print_success "configs.yaml updated: BrowserHTTPS block written (cert paths, AllowedOrigins, ExpectedAudience, EnforceNodeIPClaim)"
+    print_success "configs.yaml updated: BrowserHTTPS block written (comments preserved; cert paths, AllowedOrigins, ExpectedAudience, EnforceNodeIPClaim)"
     print_warning "JWKSURL is required for RS256 (see node/configs.go Enabled()). If it is not set in configs.yaml, the 8443 listener will not start."
     print_info "AllowedOrigins: https://mpa.continuumdao.org (edit if your browser Origin differs). Docker: port 8443, volume ./webTLS/config/certs. See docs-internal/railway-browser-https-deployment.md"
 }
@@ -2961,6 +3049,9 @@ show_process_config_help() {
     echo ""
     echo "If PreSigningVerification is set but RelayerAPIURL is empty, the script prompts for the URL"
     echo "(or use RELAYER_API_URL in the environment)."
+    echo ""
+    echo "Updates to configs.yaml require ruamel.yaml (e.g. apt install python3-ruamel.yaml, or pip in a venv)"
+    echo "so the prototype file's comments are preserved; plain PyYAML dump would strip them."
     echo ""
     echo "On RELAY NODE (first node):"
     echo "  - Validates configuration"
