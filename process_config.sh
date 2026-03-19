@@ -1368,19 +1368,31 @@ path = sys.argv[1]
 with open(path, "r") as f:
     d = yaml.safe_load(f) or {}
 nk = d.get("NodeMgtKey")
-nk = "" if nk is None else str(nk).strip().strip('"').strip("'")
 pk = d.get("PublicMgtKey")
 pk = "" if pk is None else str(pk).strip().strip('"').strip("'")
 
 PLACEHOLDER_ETH = "1234567890abcdef1234567890abcdef12345678"
 
-def valid_eth(s):
-    s = s.strip()
+def eth_body_40(val):
+    if val is None:
+        return None
+    if isinstance(val, int):
+        return format(val & ((1 << 160) - 1), "040x").lower()
+    s = str(val).strip().strip('"').strip("'")
+    if not s:
+        return None
     if s.startswith(("0x", "0X")):
         s = s[2:]
-    if not re.fullmatch(r"[0-9a-fA-F]{40}", s):
+    s = re.sub(r"\s+", "", s)
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", s, re.I):
+        return None
+    return s.lower()
+
+def valid_eth(val):
+    b = eth_body_40(val)
+    if b is None:
         return False
-    return s.lower() != PLACEHOLDER_ETH
+    return b != PLACEHOLDER_ETH
 
 def valid_ed25519_pub(s):
     s = s.strip()
@@ -1428,15 +1440,30 @@ ph = os.environ.get('PH_ETH', '').strip()
 if ph.startswith(('0x', '0X')):
     ph = ph[2:]
 ph = ph.lower()
+
+def eth_body_40(val):
+    if val is None:
+        return None
+    if isinstance(val, int):
+        h = format(val & ((1 << 160) - 1), '040x')
+        return h.lower()
+    s = str(val).strip().strip('\"').strip(\"'\")
+    if not s:
+        return None
+    if s.startswith(('0x', '0X')):
+        s = s[2:]
+    s = re.sub(r'\s+', '', s)
+    if not re.fullmatch(r'[0-9a-fA-F]{40}', s, re.I):
+        return None
+    return s.lower()
+
 with open(os.environ['CONFIG_FILE_MGT']) as f:
     d = yaml.safe_load(f) or {}
 v = d.get('NodeMgtKey')
-v = '' if v is None else str(v).strip().strip('\"').strip(\"'\")
-if not v:
+h = eth_body_40(v)
+if h is None:
     print('1')
 else:
-    h = v[2:] if v.startswith(('0x', '0X')) else v
-    h = h.lower() if re.fullmatch(r'[0-9a-fA-F]{40}', h) else ''
     print('1' if h == ph else '0')
 ")
     pk_empty=$(CONFIG_FILE_MGT="$config_file" python3 -c "
@@ -1539,18 +1566,41 @@ print(s.lower())
         done
     fi
     
-    if [ -n "$set_node" ] || [ -n "$set_pub" ]; then
+    if [ "$nk_empty" = "1" ] || [ -n "$set_node" ] || [ -n "$set_pub" ]; then
         CONFIG_FILE_MGT_MERGE="$config_file" MGT_NODE_VAL="${set_node:-}" MGT_PUB_VAL="${set_pub:-}" python3 << 'PYMGT'
-import os, yaml
+import os, yaml, re
 path = os.environ["CONFIG_FILE_MGT_MERGE"]
-node_v = os.environ.get("MGT_NODE_VAL", "")
-pub_v = os.environ.get("MGT_PUB_VAL", "")
+node_v = (os.environ.get("MGT_NODE_VAL") or "").strip()
+pub_v = (os.environ.get("MGT_PUB_VAL") or "").strip()
+PLACEHOLDER_BODY = "1234567890abcdef1234567890abcdef12345678"
+
+def eth_body_40(val):
+    if val is None:
+        return None
+    if isinstance(val, int):
+        return format(val & ((1 << 160) - 1), "040x").lower()
+    s = str(val).strip().strip('"').strip("'")
+    if not s:
+        return None
+    if s.startswith(("0x", "0X")):
+        s = s[2:]
+    s = re.sub(r"\s+", "", s)
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", s, re.I):
+        return None
+    return s.lower()
+
+def is_placeholder_nk(val):
+    b = eth_body_40(val)
+    return b is not None and b == PLACEHOLDER_BODY
+
 with open(path, "r") as f:
     data = yaml.safe_load(f)
 if not isinstance(data, dict):
     raise SystemExit("invalid yaml root")
 if node_v:
     data["NodeMgtKey"] = node_v
+elif is_placeholder_nk(data.get("NodeMgtKey")):
+    data["NodeMgtKey"] = ""
 if pub_v:
     data["PublicMgtKey"] = pub_v
 with open(path, "w") as f:
