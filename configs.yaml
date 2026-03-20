@@ -91,10 +91,11 @@ BrokerQos: 1
 # Access API documentation at: http://localhost:8080/swagger/index.html
 ManagementAPIsPort: 8080
 
-# Optional: HTTP port exposing only GET /getNodeMgtKey and GET /health (ContinuumDAO discovery on :80).
+# Optional: HTTP port exposing only GET /getNodeMgtKey and GET /health (ContinuumDAO discovery for DAO app / Railway).
 # Full management API (signatures, relayer, etc.) stays on ManagementAPIsPort. Use 0 to disable.
-# Binding :80 may require root, Docker -p 80:80, or setcap cap_net_bind_service.
-PublicDiscoveryPort: 0
+# Default 18080 avoids clashing with web servers on :80 and stays in the non-privileged range (>1024).
+# The continuumdao-node-app server calls this port (env NODE_DISCOVERY_PORT, default 18080) — keep them in sync on all nodes.
+PublicDiscoveryPort: 18080
 
 # Ignore client signature check (set to true for testing/development only)
 # Controls signature verification for CLIENT signatures used in MPC coordination

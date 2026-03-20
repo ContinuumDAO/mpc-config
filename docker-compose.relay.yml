@@ -43,7 +43,7 @@ services:
       - GOLOG_OUTPUT=file
     ports:
       - "8080:8080"
-      - "80:80"       # Public discovery GET /getNodeMgtKey (set PublicDiscoveryPort in configs.yaml; 0 disables listener)
+      - "18080:18080" # Public discovery (PublicDiscoveryPort; DAO app NODE_DISCOVERY_PORT)
       - "8443:8443"   # Browser HTTPS (DAO app); TLS certs in ./webTLS/config/certs
     depends_on:
       mongodb:
