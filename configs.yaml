@@ -110,18 +110,21 @@ IgnoreClientSigCheck: false
 # Set to false to enable API documentation
 DisableDocs: false
 
-# Browser HTTPS: run process_config.sh (mpc-auth: console/process_config.sh; mpc-config: ./process_config.sh at repo root); then add JWKSURL (+ optional ExpectedIssuer) from ContinuumDAO devs.
-# ContinuumDAO devs host an RS256 JWT issuer and provide the public JWKS URL so the node can verify GET Bearer tokens.
+# Browser HTTPS: run process_config.sh (mpc-auth: console/process_config.sh; mpc-config: ./process_config.sh at repo root); then set JWKSURL (+ ExpectedIssuer when enforcing iss).
+# ContinuumDAO hosts an RS256 JWT issuer; the node fetches JWKS over HTTPS to verify GET Bearer tokens.
+# Do not use Railway private DNS (e.g. continuumdao-jwks-service.railway.internal) for JWKSURL or issuer — browsers and nodes need public HTTPS URLs.
 # BrowserHTTPS:
 #   Port: 8443
 #   CertFile: "/webTLS/config/certs/browser.crt"
 #   KeyFile: "/webTLS/config/certs/browser.key"
 #   AllowedOrigins:
 #     - "https://mpa.continuumdao.org"
+#   # JWKSURL (RS256; required when browser HTTPS is enabled). Usual deployment (DAO app mints JWTs):
+#   JWKSURL: "https://mpa.continuumdao.org/api/node-read/jwks"
+#   # Alternative — standalone issuer on Railway only: "https://continuumdao-jwks-service-production.up.railway.app/.well-known/jwks.json"
 #   ExpectedAudience: "mpc-node-read"
-#   ExpectedIssuer: ""  # optional; set if you want to enforce JWT 'iss'
+#   ExpectedIssuer: "https://mpa.continuumdao.org"
 #   EnforceNodeIPClaim: true
-#   # JWKSURL: "https://<your-jwt-issuer>/.well-known/jwks.json"  # RS256 JWKS endpoint (required in production)
 
 # Allowed key types for MPC operations
 # List of cryptographic key types this node supports

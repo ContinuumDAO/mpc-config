@@ -36,6 +36,9 @@ BROWSER_HTTPS_KEY="${WEB_TLS_HOST_DIR}/browser.key"
 BROWSER_HTTPS_CONTAINER_CERT="/webTLS/config/certs/browser.crt"
 BROWSER_HTTPS_CONTAINER_KEY="/webTLS/config/certs/browser.key"
 DEFAULT_BROWSER_HTTPS_ORIGIN="https://mpa.continuumdao.org"
+# Pattern B (DAO app mints JWTs): public JWKS + issuer. Pattern A (standalone Railway issuer) — override in configs.yaml before merge.
+DEFAULT_BROWSER_HTTPS_JWKS_URL="https://mpa.continuumdao.org/api/node-read/jwks"
+DEFAULT_BROWSER_HTTPS_EXPECTED_ISSUER="https://mpa.continuumdao.org"
 
 # HTTP port written into nodeAddresses URLs (management API); default Docker mapping is often 8080—set to match your deployment.
 MPC_NODE_HTTP_PORT=8081
@@ -2975,6 +2978,8 @@ EOF
     fi
     require_ruamel_yaml || return 1
     CONFIG_FILE_MERGE="$config_file" DEFAULT_ORIGIN_MERGE="$DEFAULT_BROWSER_HTTPS_ORIGIN" \
+    DEFAULT_JWKS_MERGE="$DEFAULT_BROWSER_HTTPS_JWKS_URL" \
+    DEFAULT_EXPECTED_ISSUER_MERGE="$DEFAULT_BROWSER_HTTPS_EXPECTED_ISSUER" \
     CONTAINER_CERT_MERGE="$BROWSER_HTTPS_CONTAINER_CERT" CONTAINER_KEY_MERGE="$BROWSER_HTTPS_CONTAINER_KEY" \
     python3 << 'PYMERGE'
 import os
@@ -2988,6 +2993,8 @@ except ImportError:
 
 path = os.environ["CONFIG_FILE_MERGE"]
 default_origin = os.environ.get("DEFAULT_ORIGIN_MERGE", "https://mpa.continuumdao.org")
+default_jwks = os.environ.get("DEFAULT_JWKS_MERGE", "https://mpa.continuumdao.org/api/node-read/jwks").strip()
+default_expected_issuer = os.environ.get("DEFAULT_EXPECTED_ISSUER_MERGE", "https://mpa.continuumdao.org").strip()
 cert = os.environ["CONTAINER_CERT_MERGE"]
 key = os.environ["CONTAINER_KEY_MERGE"]
 
@@ -3015,20 +3022,21 @@ origins = bh.get("AllowedOrigins")
 if not origins or not isinstance(origins, list) or len(origins) == 0:
     bh["AllowedOrigins"] = [default_origin]
 bh["ExpectedAudience"] = bh.get("ExpectedAudience") or "mpc-node-read"
-if "ExpectedIssuer" not in bh:
-    bh["ExpectedIssuer"] = ""
+_ei = bh.get("ExpectedIssuer")
+if _ei is None or (isinstance(_ei, str) and not str(_ei).strip()):
+    bh["ExpectedIssuer"] = default_expected_issuer
 bh["EnforceNodeIPClaim"] = bool(bh.get("EnforceNodeIPClaim", True))
 _jw = bh.get("JWKSURL") or ""
 jwks = _jw.strip() if isinstance(_jw, str) else str(_jw).strip()
-if jwks:
-    bh["JWKSURL"] = jwks
+if not jwks:
+    jwks = default_jwks
+bh["JWKSURL"] = jwks
 
 with open(path, "w") as f:
     yaml.dump(data, f)
 PYMERGE
-    print_success "configs.yaml updated: BrowserHTTPS block written (comments preserved; cert paths, AllowedOrigins, ExpectedAudience, EnforceNodeIPClaim)"
-    print_warning "JWKSURL is required for RS256 (see node/configs.go Enabled()). If it is not set in configs.yaml, the 8443 listener will not start."
-    print_info "AllowedOrigins: https://mpa.continuumdao.org (edit if your browser Origin differs). Docker: port 8443, volume ./webTLS/config/certs. See docs-internal/railway-browser-https-deployment.md"
+    print_success "configs.yaml updated: BrowserHTTPS block written (comments preserved; cert paths, AllowedOrigins, JWKSURL, ExpectedIssuer, ExpectedAudience, EnforceNodeIPClaim)"
+    print_info "Defaults: JWKSURL=$DEFAULT_BROWSER_HTTPS_JWKS_URL, ExpectedIssuer=$DEFAULT_BROWSER_HTTPS_EXPECTED_ISSUER (Pattern B). Override in configs.yaml for standalone issuer (Pattern A). Docker: port 8443, volume ./webTLS/config/certs. See docs-internal/railway-browser-https-deployment.md"
 }
 
 show_process_config_help() {

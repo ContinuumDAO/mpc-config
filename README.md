@@ -11,18 +11,29 @@ This repository contains the configuration files and setup scripts needed to dep
 
 ## Quick Start
 
-### 1. Clone This Repository
+### 1. Create `mpcnode` (with sudo) and clone this repository in its home folder
+
+On each VPS, use a dedicated account **`mpcnode`** with **sudo** (see **Installation §0** for alternative sudo setup, e.g. `visudo`). Then clone the repo **as `mpcnode`** into the home directory (the clone creates `~/mpc-config`):
 
 ```bash
+# Once per machine, as root or another user with sudo:
+sudo adduser mpcnode
+sudo usermod -aG sudo mpcnode
+
+# Log in as mpcnode (e.g. ssh mpcnode@<your-vps-ip> or: su - mpcnode)
+cd ~
 git clone https://github.com/ContinuumDAO/mpc-config.git
 cd mpc-config
 ```
 
 ### 2. Configure Your Node
 
-Edit `configs.yaml` with your settings:
-- Set `NodeMgtKey` to your Ethereum address
-- Configure `MPCGroups` with your node addresses
+- Choose which Ethereum address you wish to manage your node (in configs.yaml - NodeMgtKey), and/or which ed25519 key (in configs.yaml PublicMgtKey).
+One or both of these will be required by process_config.sh (the next step)
+- Decide what IPv4 addresses will be included in the Node Addresses in your config. You may need to coordinate with other people to fetch these.
+You can see your own IP address using the command hostname -i
+You will be asked to enter each IPv4 address in process_config.sh and you and the other nodes in your group must add the same IPs IN THE SAME ORDER 
+on each node. this is IMPORTANT. The FIRST node IP address is the RELAY node for your group.
 
 ### 3. Validate Configuration and Generate Certificates
 
@@ -32,9 +43,12 @@ Edit `configs.yaml` with your settings:
 
 This script will:
 - Validate your configuration
+- Add your NodeMgtKey and/or your PublicMgtKey
+- Add the IPv4 addresses of each node in your group.
 - Generate TLS certificates for the MQTT broker (on relay node)
 - Create certificate directories (on client nodes)
 - Provide instructions for certificate sharing
+- Configure your node for https TLS 1.3 encryption, so that all data to the MPA app is encrypted EXCEPT your IP address, which will be public.
 
 ### 4. Deploy with Docker
 
@@ -45,7 +59,7 @@ docker-compose up -d
 This starts:
 - **MongoDB** - Local database (port 27017)
 - **Mosquitto** - MQTT broker (port 8883 for TLS)
-- **mpc-auth** - MPC node (port 8080)
+- **mpc-auth** - MPC node: HTTP management API on **:8080** (`ManagementAPIsPort`); optional **Browser HTTPS** (TLS 1.3) on a separate port when `BrowserHTTPS` is enabled in `configs.yaml` (browser-facing API with JWT on GET; see comments in `configs.yaml`)
 
 The `docker-compose.yml` pulls the Docker image from the registry: `continuumdao/mpc-auth:v1.0`
 
@@ -61,13 +75,13 @@ For detailed setup instructions, certificate sharing, group creation, and more, 
 
 Blockchain information (token / assets / chain) distributed authentication toolkit.
 
-## Supported Signature Algorithms
+## Signature Algorithms
 
 - **ECDSA** (secp256k1) - Bitcoin, Ethereum, and most EVM chains
 - **EdDSA** (ed25519) - Solana, Polkadot, and other modern chains
-- **Schnorr Signature** - Bitcoin Taproot
-- **SR25519** - Substrate/Polkadot
-- **StarkCurve** - StarkNet
+- **Schnorr Signature** - Bitcoin Taproot (Coming)
+- **SR25519** - Substrate/Polkadot (Coming)
+- **StarkCurve** - StarkNet (Coming)
 - **BLS** - Advanced threshold signatures
 - And more...
 
@@ -90,25 +104,96 @@ Blockchain information (token / assets / chain) distributed authentication toolk
 
 ## Prerequisites
 
+- **Dedicated OS user `mpcnode` with sudo** (recommended on every VPS; same steps as the [mpc-auth](https://github.com/ContinuumDAO/mpc-auth) repo — see **Installation §0** below)
 - **Docker & Docker Compose** (required)
-- **Python 3 with PyYAML and ruamel.yaml** (required for `process_config.sh`: parsing plus **round-trip YAML updates** that **keep comments** in `configs.yaml`; on Debian/Ubuntu: `sudo apt install python3 python3-pip python3-ruamel.yaml` — see Installation §2)
+- **Python 3 with PyYAML and ruamel.yaml** (required for `process_config.sh`; on Debian/Ubuntu they are installed in **Installation §1**)
 - **Sudo/root access** (may be required on client nodes to create `mosquitto/config/certs/` directory - see Certificate Setup section)
-- **Same username with sudo access on all nodes** (recommended for simplified certificate sharing - see Certificate Setup section)
+- **Same username with sudo access on all nodes** (recommended for simplified certificate sharing; use **`mpcnode`** on each node if following §0)
 
 ### Installation
 
-#### 1. Install Docker Compose
+#### 0. Create the `mpcnode` user and grant sudo (recommended; aligns with mpc-auth)
+
+Run node operations as a dedicated account (default name **`mpcnode`**) with **sudo** on **each** VPS. This matches the **mpc-auth** repository and keeps ownership consistent for Docker, `process_config.sh`, and CA certificate workflows.
+
+**1. Create the user on each node (Ubuntu/Debian):**
+
+```bash
+# On each node (Ubuntu/Debian):
+sudo adduser mpcnode  # Replace 'mpcnode' with your desired username
+```
+
+**2. Grant sudo access to the user**
+
+**Method A: Add user to sudo group (Ubuntu/Debian - RECOMMENDED):**
+
+```bash
+# On each node:
+sudo usermod -aG sudo mpcnode
+```
+
+**Method B: Edit sudoers file directly (all Linux distributions):**
+
+```bash
+# On each node, edit sudoers file:
+sudo visudo
+
+# Add this line at the end of the file (replace 'mpcnode' with your username):
+mpcnode ALL=(ALL:ALL) NOPASSWD: ALL
+
+# Or for password-protected sudo (more secure):
+mpcnode ALL=(ALL:ALL) ALL
+
+# Save and exit (Ctrl+X, then Y, then Enter in nano)
+```
+
+**Verify sudo access:**
+
+```bash
+su - mpcnode
+sudo whoami  # Should output 'root'
+sudo -v      # Should succeed without errors
+```
+
+**Note:** The `NOPASSWD` option allows sudo without password prompts, which is useful for automated scripts. For production, consider using password-protected sudo or restricting sudo to specific commands.
+
+**3. Next steps:** SSH into the VPS as `mpcnode` (`ssh mpcnode@<vps-ip>`) and continue with **§1** (install packages) and **§1.1** (add **`mpcnode`** to the **`docker`** group).
+
+#### 1. Install Docker, Docker Compose, base tools, and Python (Debian / Ubuntu)
+
+On a minimal VPS, install everything in **one** step: Docker engine, Compose, TLS/HTTPS basics, common CLI tools, OpenSSL (certificates), Git, **Python 3** plus **`python3-yaml`** and **`python3-ruamel.yaml`** (required by `process_config.sh`), and `jq`. **Run as root or with `sudo`.** Optionally run `sudo apt upgrade -y` first for security patches.
 
 ```bash
 sudo apt update && \
-sudo apt-get install docker-compose -y
+sudo apt install -y \
+  ca-certificates \
+  curl \
+  wget \
+  git \
+  openssl \
+  gnupg \
+  iptables \
+  docker.io \
+  docker-compose \
+  python3 \
+  python3-pip \
+  python3-yaml \
+  python3-ruamel.yaml \
+  jq \
+  && sudo systemctl enable --now docker
 ```
+
+**Notes:**
+- **`docker.io`** is the Docker daemon; **`docker-compose`** provides the `docker-compose` command used in this README. If your release has no `docker-compose` package, install **`docker-compose-plugin`** and use **`docker compose`** (with a space) instead of `docker-compose`.
+- **`python3-yaml`** is PyYAML from apt (avoids `pip` / PEP 668 issues on newer Debian/Ubuntu). If `process_config.sh` ever needs a newer PyYAML, use `pip3 install --user pyyaml`.
+- **Ubuntu/Debian:** There is no separate Python install step—**§1** is the only `apt install` you need for Python + YAML on Debian/Ubuntu.
+- After install, confirm: `docker --version`, `docker-compose --version` or `docker compose version`, `curl --version`, `python3 -c "import yaml, ruamel.yaml"`.
 
 #### 1.1. Configure Docker Access on VPS (Required)
 
 If you encounter the error `Couldn't connect to Docker daemon at http+docker://localhost - is it running?` when running `docker-compose up -d`, this is typically a permissions issue on VPS systems.
 
-**Solution: Add your user to the docker group**
+**Solution: Add your user to the docker group** (use **`mpcnode`** if you followed **§0**)
 
 1. **Check if Docker is running:**
    ```bash
@@ -122,9 +207,9 @@ If you encounter the error `Couldn't connect to Docker daemon at http+docker://l
 
 2. **Add your user to the docker group:**
    ```bash
-   sudo usermod -aG docker $USER
+   sudo usermod -aG docker mpcnode
    ```
-   Replace `$USER` with your actual username if needed (e.g., `sudo usermod -aG docker mpcnode`).
+   If you use a different account than `mpcnode`, replace it (or use `sudo usermod -aG docker $USER` while logged in as that user).
 
 3. **Apply the group changes:**
    You need to log out and log back in, or start a new session for the group changes to take effect:
@@ -154,16 +239,11 @@ If you encounter the error `Couldn't connect to Docker daemon at http+docker://l
 
 **Note:** After adding your user to the docker group, you may need to restart your SSH session or run `newgrp docker` for the changes to take effect in your current terminal session.
 
-#### 2. Install Python 3 with PyYAML and ruamel.yaml (Required for process_config.sh)
+#### 2. Python / YAML for `process_config.sh` (non-Debian, or reference)
 
 The `process_config.sh` script uses **PyYAML** for read-only parsing and **`ruamel.yaml`** whenever it **writes** `configs.yaml` (node addresses, management keys, Relayer URL, Browser HTTPS, etc.) so **comments in the prototype file are preserved**.
 
-**Ubuntu/Debian:**
-```bash
-sudo apt-get update && \
-sudo apt-get install python3 python3-pip python3-ruamel.yaml -y && \
-pip3 install pyyaml
-```
+**Ubuntu/Debian:** Install **§1** above—**`python3`**, **`python3-pip`**, **`python3-yaml`**, and **`python3-ruamel.yaml`** are already included there. Do not duplicate a second `apt install` for Python.
 
 **CentOS/RHEL:**
 ```bash
@@ -192,7 +272,7 @@ sudo chmod +x /usr/local/bin/yq
 brew install yq
 ```
 
-**Note:** `yq` is used for some **read-only** parsing when available. **Updating** `configs.yaml` requires **`ruamel.yaml`** (e.g. `python3-ruamel.yaml` via apt). Without it, the script will error when a merge step runs. PyYAML alone is not sufficient for writes because a round-trip would strip comments.
+**Note:** `yq` is used for some **read-only** parsing when available. **Updating** `configs.yaml` requires **`ruamel.yaml`** (on Debian/Ubuntu: **`python3-ruamel.yaml`** from **Installation §1**). Without it, the script will error when a merge step runs. PyYAML alone is not sufficient for writes because a round-trip would strip comments.
 
 #### 3. MQTT Broker Setup (Per-Group, Default)
 
@@ -257,15 +337,15 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    
    **Simplified Approach: Same Username with Sudo Access (RECOMMENDED)**
    
-   If all nodes are created using the same username with sudo access, certificate sharing becomes much simpler:
+   If all nodes are created using the same username with sudo access, certificate sharing becomes much simpler. **If you already completed Installation §0** (`mpcnode` + sudo on each VPS), skip to step **3** below.
    
-   1. **Create the same user on all nodes:**
+   1. **Create the same user on all nodes** (skip if §0 is done):
       ```bash
       # On each node (Ubuntu/Debian):
       sudo adduser mpcnode  # Replace 'mpcnode' with your desired username
       ```
    
-   2. **Grant sudo access to the user:**
+   2. **Grant sudo access to the user** (skip if §0 is done):
       
       **Method A: Add user to sudo group (Ubuntu/Debian - RECOMMENDED):**
       ```bash
