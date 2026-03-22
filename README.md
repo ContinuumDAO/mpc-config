@@ -4,10 +4,12 @@ This repository contains the configuration files and setup scripts needed to dep
 
 ## What's Included
 
-- **`configs.yaml`** - Main node configuration file (at **repo root** here; in the **mpc-auth** repo the equivalent file is **`console/configs.yaml`**)
+- **`configs.yaml`** - Main node configuration file 
 - **`process_config.sh`** - Configuration validator and certificate generator
 - **`docker-compose.yml`** - Docker Compose configuration for running the node
 - **`mosquitto/config/mosquitto.conf`** - MQTT broker configuration
+- ** sign-clipboard in tools/ ** - Utility to sign Ed25519 messages
+- **`webTLS/config/certs`** - certs to allow TLS 1.3 encryption to the browser
 
 ## Quick Start
 
@@ -33,7 +35,7 @@ One or both of these will be required by process_config.sh (the next step)
 - Decide what IPv4 addresses will be included in the Node Addresses in your config. You may need to coordinate with other people to fetch these.
 You can see your own IP address using the command hostname -i
 You will be asked to enter each IPv4 address in process_config.sh and you and the other nodes in your group must add the same IPs IN THE SAME ORDER 
-on each node. this is IMPORTANT. The FIRST node IP address is the RELAY node for your group.
+on each node. this is IMPORTANT. The FIRST node IP address is the RELAY node for your group. The other nodes can be added afterwards manually if required.
 
 ### 3. Validate Configuration and Generate Certificates
 
@@ -49,7 +51,7 @@ This script will:
 - Generate TLS certificates for the MQTT broker (on relay node)
 - Create certificate directories (on client nodes)
 - Provide instructions for certificate sharing
-- Configure your node for https TLS 1.3 encryption, so that all data to the MPA app is encrypted EXCEPT your IP address, which will be public.
+- Configure your node for https TLS 1.3 encryption, so that all data to the MPA app is encrypted **EXCEPT your IP address**, which will be public.
 
 ### 4. Deploy with Docker
 
@@ -59,7 +61,7 @@ docker-compose up -d
 
 This starts:
 - **MongoDB** - Local database (port 27017)
-- **Mosquitto** - MQTT broker (port 8883 for TLS)
+- **Mosquitto** - MQTT broker (port 8883 for TLS) BUT ONLY on the RELAY node. The other nodes are clients.
 - **mpc-auth** - MPC node: HTTP management API on **:8080** (`ManagementAPIsPort`); optional **Browser HTTPS** (TLS 1.3) on a separate port when `BrowserHTTPS` is enabled in `configs.yaml` (browser-facing API with JWT on GET; see comments in `configs.yaml`)
 
 The `docker-compose.yml` pulls the Docker image from the registry: `continuumdao/mpc-auth:v1.0`
@@ -88,7 +90,7 @@ Blockchain information (token / assets / chain) distributed authentication toolk
 
 ## Key Features
 
-- **Programmable authentication logic** - Flexible message validation
+- **A Multi-Party Agent wallet** - allows multiple addresses/chains. Suitable to run with AI agents through an API
 - **Multiple signature algorithms** - Support for various cryptographic schemes
 - **TEE secured** - Trusted execution environment support
 - **Configurable party weights** - Customizable threshold schemes
@@ -98,6 +100,7 @@ Blockchain information (token / assets / chain) distributed authentication toolk
 - **MQTT TLS support** - Encrypted communication channels
 - **Relayer management** - Whitelist and manage signing relayers
 - **Node registration** - Decentralized node discovery and management
+- **Self signed certs** for TLS encryption with the browser
 
 **Note:** Security verifiable code base from [Multichain FastMPC](https://github.com/anyswap/FastMulThreshold-DSA), [Binance tss-lib](https://github.com/bnb-chain/tss-lib).
 
