@@ -45,6 +45,7 @@ This script will:
 - Validate your configuration
 - Add your NodeMgtKey and/or your PublicMgtKey
 - Add the IPv4 addresses of each node in your group.
+- Add the Relayer IP address, so that your wallet can help secure cross-chain transactions, if you wish to.
 - Generate TLS certificates for the MQTT broker (on relay node)
 - Create certificate directories (on client nodes)
 - Provide instructions for certificate sharing
