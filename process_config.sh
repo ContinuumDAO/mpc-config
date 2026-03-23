@@ -1361,6 +1361,275 @@ normalize_node_address_input() {
     printf '%s' "$raw"
 }
 
+# Write MPCGroups[0].nodeAddresses as node1_key..nodeN_key -> http://HOST:PORT (PORT=MPC_NODE_HTTP_PORT). Replaces entire map.
+# Args: config_file, path to temp file with one host/hostname per line (normalized).
+write_mpcgroup0_node_addresses_from_host_lines_file() {
+    local config_file="$1"
+    local hosts_tmp="$2"
+    require_ruamel_yaml || return 1
+    if ! CONFIG_FILE_MERGE_NA="$config_file" HOSTS_LIST_FILE="$hosts_tmp" PORT_MERGE_NA="$MPC_NODE_HTTP_PORT" python3 << 'PYNA'
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+    from ruamel.yaml.comments import CommentedMap
+except ImportError:
+    sys.stderr.write("configs.yaml: install ruamel.yaml (pip install --user 'ruamel.yaml')\n")
+    sys.exit(1)
+
+path = os.environ["CONFIG_FILE_MERGE_NA"]
+hosts_path = os.environ["HOSTS_LIST_FILE"]
+port = os.environ.get("PORT_MERGE_NA", "8081")
+with open(hosts_path) as f:
+    hosts = [ln.strip() for ln in f if ln.strip()]
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)
+
+with open(path, "r") as f:
+    data = yaml.load(f)
+if not data or not data.get("MPCGroups"):
+    raise SystemExit("no MPCGroups")
+
+grp = data["MPCGroups"][0]
+na = grp.get("nodeAddresses")
+if na is None:
+    na = CommentedMap()
+    grp["nodeAddresses"] = na
+elif not isinstance(na, dict):
+    na = CommentedMap()
+    grp["nodeAddresses"] = na
+
+new_keys = []
+for i, h in enumerate(hosts, 1):
+    k = f"node{i}_key"
+    new_keys.append(k)
+    na[k] = f"http://{h}:{port}"
+for k in list(na.keys()):
+    if k not in new_keys:
+        del na[k]
+
+with open(path, "w") as f:
+    yaml.dump(data, f)
+PYNA
+    then
+        return 1
+    fi
+    return 0
+}
+
+# Print one hostname/host per line in map iteration order for MPCGroups[0].nodeAddresses (for menu display and edits).
+extract_ordered_hosts_mpcgroup0() {
+    local config_file="$1"
+    if [ ! -f "$config_file" ]; then
+        return 1
+    fi
+    python3 - "$config_file" << 'PYEX'
+import sys
+try:
+    from ruamel.yaml import YAML
+    from urllib.parse import urlparse
+except ImportError:
+    sys.exit(1)
+
+path = sys.argv[1]
+_ry = YAML()
+with open(path) as f:
+    d = _ry.load(f) or {}
+groups = d.get("MPCGroups") or []
+if not groups:
+    sys.exit(1)
+na = groups[0].get("nodeAddresses")
+if not isinstance(na, dict) or not na:
+    sys.exit(1)
+for v in na.values():
+    if v is None:
+        continue
+    s = str(v).strip().strip('"').strip("'")
+    if not s:
+        continue
+    if "://" in s:
+        p = urlparse(s)
+        h = p.hostname
+        if h:
+            print(h)
+            continue
+    before = s.split("/")[0]
+    if ":" in before:
+        print(before.split(":")[0])
+    else:
+        print(before)
+PYEX
+}
+
+# Interactive menu: add/remove nodes in MPCGroups[0].nodeAddresses (relay = first). Skipped if not a TTY or ruamel missing.
+prompt_menu_edit_node_addresses() {
+    local config_file="$1"
+    if [ "${SKIP_NODE_ADDRESS_MENU:-}" = "1" ]; then
+        return 0
+    fi
+    if [ ! -t 0 ] || [ ! -r /dev/tty ]; then
+        return 0
+    fi
+    if ! command -v python3 &>/dev/null; then
+        return 0
+    fi
+    if ! python3 -c "import ruamel.yaml" 2>/dev/null; then
+        return 0
+    fi
+
+    local hosts_tmp hosts=() line norm lower choice
+    if ! hosts_tmp=$(mktemp); then
+        return 0
+    fi
+    if ! extract_ordered_hosts_mpcgroup0 "$config_file" >"$hosts_tmp" 2>/dev/null; then
+        rm -f "$hosts_tmp"
+        return 0
+    fi
+    mapfile -t hosts < "$hosts_tmp"
+    rm -f "$hosts_tmp"
+    if [ ${#hosts[@]} -eq 0 ]; then
+        return 0
+    fi
+
+    while true; do
+        echo ""
+        print_step "nodeAddresses (optional edit)"
+        print_info "Relay node = first entry. Use the same order on every machine's configs.yaml."
+        echo ""
+        local i=0
+        for h in "${hosts[@]}"; do
+            i=$((i + 1))
+            echo "  $i) http://${h}:${MPC_NODE_HTTP_PORT}  ($h)"
+        done
+        echo ""
+        echo "  1) Continue without changes"
+        echo "  2) Add node(s) at end"
+        echo "  3) Remove node(s) by number"
+        echo ""
+        read -r -p "Choice [1]: " choice < /dev/tty || true
+        choice="${choice:-1}"
+        choice="${choice//[[:space:]]/}"
+
+        case "$choice" in
+            1|"")
+                echo ""
+                return 0
+                ;;
+            2)
+                echo ""
+                local host_count_before=${#hosts[@]}
+                print_info "Enter one public IP or hostname per line; type done or finished when finished (port :${MPC_NODE_HTTP_PORT} is added)."
+                while true; do
+                    read -r -p "Add node host (or done): " line < /dev/tty || true
+                    lower=$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')
+                    lower="${lower#"${lower%%[![:space:]]*}"}"
+                    lower="${lower%"${lower##*[![:space:]]}"}"
+                    if [ "$lower" = "done" ] || [ "$lower" = "finished" ]; then
+                        break
+                    fi
+                    norm=$(normalize_node_address_input "$line")
+                    if [ -z "$norm" ]; then
+                        print_warning "Skipped empty line"
+                        continue
+                    fi
+                    local dup=false hh
+                    for hh in "${hosts[@]}"; do
+                        if [ "$hh" = "$norm" ]; then
+                            dup=true
+                            break
+                        fi
+                    done
+                    if [ "$dup" = true ]; then
+                        print_warning "Already in list: $norm"
+                        continue
+                    fi
+                    hosts+=("$norm")
+                    print_success "Queued node ${#hosts[@]}: $norm"
+                done
+                if [ ${#hosts[@]} -eq "$host_count_before" ]; then
+                    print_info "No new nodes added."
+                    continue
+                fi
+                hosts_tmp=$(mktemp)
+                printf '%s\n' "${hosts[@]}" > "$hosts_tmp"
+                if write_mpcgroup0_node_addresses_from_host_lines_file "$config_file" "$hosts_tmp"; then
+                    rm -f "$hosts_tmp"
+                    mapfile -t hosts < <(extract_ordered_hosts_mpcgroup0 "$config_file" 2>/dev/null || true)
+                    print_success "Updated MPCGroups[0].nodeAddresses (${#hosts[@]} nodes)."
+                else
+                    rm -f "$hosts_tmp"
+                    print_error "Failed to update nodeAddresses."
+                    return 1
+                fi
+                ;;
+            3)
+                if [ ${#hosts[@]} -le 1 ]; then
+                    print_warning "Cannot remove the only remaining node. Add another node first, then remove."
+                    continue
+                fi
+                echo ""
+                read -r -p "Number(s) to remove (e.g. 2 or 2 3), or 0 to cancel: " line < /dev/tty || true
+                line="${line//,/ }"
+                if [ -z "${line//[[:space:]]/}" ] || [ "$line" = "0" ]; then
+                    continue
+                fi
+                local -a new_hosts=() remove_idx=()
+                local tok err=0
+                read -r -a remove_idx <<< "$line"
+                for tok in "${remove_idx[@]}"; do
+                    if ! [[ "$tok" =~ ^[0-9]+$ ]]; then
+                        print_error "Invalid number: $tok"
+                        err=1
+                        break
+                    fi
+                    if [ "$tok" -lt 1 ] || [ "$tok" -gt ${#hosts[@]} ]; then
+                        print_error "Out of range: $tok (1–${#hosts[@]})"
+                        err=1
+                        break
+                    fi
+                done
+                if [ "$err" -ne 0 ]; then
+                    continue
+                fi
+                local idx skip
+                for idx in $(seq 1 ${#hosts[@]}); do
+                    skip=false
+                    for tok in "${remove_idx[@]}"; do
+                        if [ "$idx" -eq "$tok" ]; then
+                            skip=true
+                            break
+                        fi
+                    done
+                    if [ "$skip" = false ]; then
+                        new_hosts+=("${hosts[$((idx - 1))]}")
+                    fi
+                done
+                if [ ${#new_hosts[@]} -eq 0 ]; then
+                    print_error "You must keep at least one node."
+                    continue
+                fi
+                hosts_tmp=$(mktemp)
+                printf '%s\n' "${new_hosts[@]}" > "$hosts_tmp"
+                if write_mpcgroup0_node_addresses_from_host_lines_file "$config_file" "$hosts_tmp"; then
+                    rm -f "$hosts_tmp"
+                    mapfile -t hosts < <(extract_ordered_hosts_mpcgroup0 "$config_file" 2>/dev/null || true)
+                    print_success "Updated MPCGroups[0].nodeAddresses (${#hosts[@]} nodes)."
+                else
+                    rm -f "$hosts_tmp"
+                    print_error "Failed to update nodeAddresses."
+                    return 1
+                fi
+                ;;
+            *)
+                print_warning "Invalid choice. Enter 1, 2, or 3."
+                ;;
+        esac
+    done
+}
+
 # If first group's nodeAddresses is empty or only the default example URLs, prompt for IPs/hostnames and write http://HOST:MPC_NODE_HTTP_PORT entries.
 prompt_fill_empty_node_addresses() {
     local config_file="$1"
@@ -1433,60 +1702,11 @@ prompt_fill_empty_node_addresses() {
         return 1
     fi
     
-    require_ruamel_yaml || return 1
-    
     local hosts_tmp
     hosts_tmp=$(mktemp)
     printf '%s\n' "${hosts[@]}" > "$hosts_tmp"
     
-    if ! CONFIG_FILE_MERGE_NA="$config_file" HOSTS_LIST_FILE="$hosts_tmp" PORT_MERGE_NA="$MPC_NODE_HTTP_PORT" python3 << 'PYNA'
-import os
-import sys
-try:
-    from ruamel.yaml import YAML
-    from ruamel.yaml.comments import CommentedMap
-except ImportError:
-    sys.stderr.write("configs.yaml: install ruamel.yaml (pip install --user 'ruamel.yaml')\n")
-    sys.exit(1)
-
-path = os.environ["CONFIG_FILE_MERGE_NA"]
-hosts_path = os.environ["HOSTS_LIST_FILE"]
-port = os.environ.get("PORT_MERGE_NA", "8081")
-with open(hosts_path) as f:
-    hosts = [ln.strip() for ln in f if ln.strip()]
-
-yaml = YAML()
-yaml.preserve_quotes = True
-yaml.width = 4096
-yaml.indent(mapping=2, sequence=4, offset=2)
-
-with open(path, "r") as f:
-    data = yaml.load(f)
-if not data or not data.get("MPCGroups"):
-    raise SystemExit("no MPCGroups")
-
-grp = data["MPCGroups"][0]
-na = grp.get("nodeAddresses")
-if na is None:
-    na = CommentedMap()
-    grp["nodeAddresses"] = na
-elif not isinstance(na, dict):
-    na = CommentedMap()
-    grp["nodeAddresses"] = na
-
-new_keys = []
-for i, h in enumerate(hosts, 1):
-    k = f"node{i}_key"
-    new_keys.append(k)
-    na[k] = f"http://{h}:{port}"
-for k in list(na.keys()):
-    if k not in new_keys:
-        del na[k]
-
-with open(path, "w") as f:
-    yaml.dump(data, f)
-PYNA
-    then
+    if ! write_mpcgroup0_node_addresses_from_host_lines_file "$config_file" "$hosts_tmp"; then
         rm -f "$hosts_tmp"
         print_error "Failed to write nodeAddresses to configs.yaml (python3 / ruamel.yaml error)."
         return 1
@@ -3053,6 +3273,8 @@ show_process_config_help() {
     echo ""
     echo "If MPCGroups[0].nodeAddresses is empty or still the default 203.0.113.10–12:8080 examples, the script prompts"
     echo "and writes http://...:${MPC_NODE_HTTP_PORT} URLs (first entry = relay; same order on all nodes)."
+    echo "On later runs (interactive TTY), an optional menu lets you add or remove node IPs without editing YAML by hand."
+    echo "Set SKIP_NODE_ADDRESS_MENU=1 to skip that menu (e.g. automation)."
     echo ""
     echo "If NodeMgtKey or PublicMgtKey is empty, the script may prompt: Ethereum (MetaMask) and/or"
     echo "Ed25519 public key for non-MetaMask management. At least one valid key is required."
@@ -3061,7 +3283,7 @@ show_process_config_help() {
     echo "(or use RELAYER_API_URL in the environment)."
     echo ""
     echo "Updates to configs.yaml require ruamel.yaml (e.g. apt install python3-ruamel.yaml, or pip in a venv)"
-    echo "so the prototype file's comments are preserved; plain PyYAML dump would strip them."
+    echo "so the prototype file's comments are preserved on round-trip."
     echo ""
     echo "On RELAY NODE (first node):"
     echo "  - Validates configuration"
@@ -3314,6 +3536,8 @@ main() {
     echo ""
     
     prompt_fill_empty_node_addresses "$CONFIG_FILE" || exit 1
+    
+    prompt_menu_edit_node_addresses "$CONFIG_FILE" || exit 1
     
     prompt_configure_management_keys "$CONFIG_FILE" || exit 1
     

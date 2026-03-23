@@ -4,11 +4,12 @@ This repository contains the configuration files and setup scripts needed to dep
 
 ## What's Included
 
-- **`configs.yaml`** - Main node configuration file 
+- **`configs.yaml`** - Main node configuration file
+- **`configs-original.yaml`** - Pristine copy of the default `configs.yaml` from this repo; use `cp configs-original.yaml configs.yaml` to revert if something goes wrong
 - **`process_config.sh`** - Configuration validator and certificate generator
 - **`docker-compose.yml`** - Docker Compose configuration for running the node
 - **`mosquitto/config/mosquitto.conf`** - MQTT broker configuration
-- ** sign-clipboard in tools/ ** - Utility to sign Ed25519 messages
+- **`sign-clipboard in tools/`** - Utility to sign Ed25519 messages
 - **`webTLS/config/certs`** - certs to allow TLS 1.3 encryption to the browser
 
 ## Quick Start

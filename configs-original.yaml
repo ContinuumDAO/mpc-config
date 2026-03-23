@@ -1,0 +1,392 @@
+# =============================================================================
+# Distributed Auth Node Configuration File
+# =============================================================================
+# This file configures the MPC (Multi-Party Computation) signer node.
+# All fields can be overridden by environment variables.
+# =============================================================================
+
+# Node management key for API authentication
+# Format: Ethereum address (0x followed by 40 hex characters)
+# Used to verify signatures on management API requests (e.g. MetaMask personal_sign)
+NodeMgtKey: "0x1234567890ABCDEF1234567890ABCDEF12345678"
+
+# Optional: Ed25519 public key for direct API management without a frontend (bootstrap key)
+# Format: 64 hex characters (32-byte Ed25519 public key)
+# This is the first permitted machine; it can add more keys via POST /addManagementKey (signed
+# with this key). When set, the node accepts NodeMgtKey (MetaMask) or any Ed25519 key (this one
+# plus any added via addManagementKey) for management endpoints. Leave empty if you only use
+# the frontend with MetaMask for management.
+PublicMgtKey: ""
+
+# Ignore management key signature check (for testing/development only)
+# Controls signature verification for MANAGEMENT API endpoints (e.g., /newGroupRequest, /presignRequest)
+# These endpoints are used by node operators/administrators to manage the node
+# If true, skips signature verification on management API requests
+# WARNING: Set to false in production for security
+# NOTE: This does NOT affect relayer authentication - relayer signatures are always required
+IgnoreMgtKeySigCheck: true
+
+# MongoDB connection URI (optional, defaults to mongodb://localhost:27017)
+# MongoDB MUST be on localhost (127.0.0.1) - remote connections are not allowed
+# Each node uses its own local MongoDB instance running on the same machine
+# Only specify if using a custom port (e.g., mongodb://localhost:27018)
+# Format: mongodb://[username:password@]localhost[:port][/database][?options]
+# When running in Docker, the app auto-detects and uses mongodb://mongodb:27017
+MongodbUri: ""
+
+# MongoDB database name (optional, defaults to "DistributedAuth" for backwards compatibility)
+# Database where all node data (keys, groups, signing requests, etc.) is stored.
+# Existing MongoDB instances use "DistributedAuth"; new installs can set e.g. "MPCAuth" or "DA".
+DBName: ""
+
+# Log level (0-7, higher = more verbose)
+# 0: Panic, 1: Fatal, 2: Error, 3: Warn, 4: Info, 5: Debug, 6: Trace, 7: All
+# Recommended: 4 (Info) for production, 6 (Trace) for debugging
+LogLevel: 6
+
+# Log file path
+# Path where log files will be written
+# Relative paths are relative to the working directory
+LogPath: "logs/MPCAuth.log"
+
+# MQTT TLS configuration (CLIENT-SIDE - for mpc-auth nodes to verify broker certificates)
+# This configures how mpc-auth nodes verify the MQTT broker's TLS certificate
+# IMPORTANT: TLS certificate verification is ALWAYS enforced - cannot be disabled
+# 
+# NOTE: The MQTT broker's TLS endpoint is configured separately in mosquitto.conf
+#       See: mosquitto/config/mosquitto.conf or /etc/mosquitto/mosquitto.conf
+#       The broker must have its own TLS listener configured (e.g., listener 8883)
+MQTTTLS:
+  # REQUIRED for self-signed certificates (default): Path to CA certificate file
+  # This is the path INSIDE the Docker container (absolute path)
+  # The process_config.sh script automatically copies the generated certificate
+  # to the corresponding host path (./mosquitto/config/certs/ca.crt relative to project directory).
+  # 
+  # The broker generates a CA certificate (ca.crt) that must be shared with all nodes
+  # Each node needs the CA certificate to verify the broker's self-signed certificate
+  # 
+  # IMPORTANT: This path is the container path. Docker mounts ./mosquitto/config
+  #            (relative to project directory) to /mosquitto/config in the container.
+  #            The process_config.sh script handles copying the cert to the correct host location.
+  # 
+  # Optional for Let's Encrypt/certbot certificates: Leave empty
+  # System CA store will be used automatically (Let's Encrypt is publicly trusted)
+  # 
+  # Broker TLS configuration is done in mosquitto.conf (separate file):
+  #   - Default uses self-signed certificates (no domain registration needed)
+  #   - Configure TLS listener: listener 8883
+  #   - Set certificate files: certfile, keyfile, cafile
+  #   - See MOSQUITTO_ENCRYPTION_ANALYSIS.md for details
+  CAFile: "/mosquitto/config/certs/ca.crt"
+
+# MQTT broker Quality of Service (QoS) level
+# REQUIRED: Must be 1 or higher - MPC operations require reliable message delivery
+# 1: At least once (guaranteed delivery, may duplicate) - RECOMMENDED - deduplication handled
+# 2: Exactly once (guaranteed delivery, no duplicates) - Alternative option, slightly more overhead
+# Default: 1 (enforced minimum for reliable MPC key generation and signing)
+BrokerQos: 1
+
+# Management API server port
+# Port where the HTTP API server will listen
+# Access API documentation at: http://localhost:8080/swagger/index.html
+ManagementAPIsPort: 8080
+
+# Optional: single CORS allow list for management HTTP only (same port as ManagementAPIsPort). Empty = permissive default.
+# Separate from BrowserHTTPS.AllowedOrigins (8443). Relayer/scanner/agents do not use CORS.
+# Example:
+# ManagementAllowedOrigins:
+#   - "http://127.0.0.1:3000"
+#   - "https://my-admin-ui.example.com"
+
+# Public discovery HTTP (minimal: GET /getNodeMgtKey, /getPublicMgtKey, /health).
+# When ScannerRelayerPort > 0 (and distinct), governance + relayer routes move to that port; this port stays minimal only.
+# When ScannerRelayerPort is 0 (legacy), this port also serves scanner governance GETs (getKeyGenResultById, new-group routes).
+# Full management API stays on ManagementAPIsPort. Use 0 to disable a separate discovery listener.
+# Default 18080 — keep in sync with continuumdao-node-app NODE_DISCOVERY_PORT.
+PublicDiscoveryPort: 18080
+
+# Scanner + relayer dedicated HTTP: governance GETs + relayer POST/GET (signRequest, updateRelayer, admin relayer, sign polling).
+# Default 18081 matches c3caller-scanner / c3caller-relayer mpc_config.port. PublicDiscoveryPort 18080 stays minimal (getNodeMgtKey, etc.).
+# Set to 0 for legacy (bundle scanner GETs on PublicDiscoveryPort only; relayer uses ManagementAPIsPort :8080).
+# Existing MySQL mpc_config rows may still have port=18080 — run: UPDATE mpc_config SET port=18081 WHERE port=18080;
+ScannerRelayerPort: 18081
+
+# Scanner HTTP base URL(s) for firewall: process_config.sh resolves each host to an IPv4 address (or uses a literal IPv4 / IPv4 CIDR)
+# and runs: ufw allow from <source> to any port <ScannerRelayerPort> proto tcp
+# Use the same hostnames/IPs the scanner uses to reach this node (egress). Example:
+# ScannerAPIURLs:
+#   - "http://scanner.internal:9090"
+#   - "203.0.113.50"
+#   - "198.51.100.0/24"
+# Empty list [] uses DEFAULT_SCANNER_API_URLS in console/process_config.sh for UFW (override there or set entries here).
+ScannerAPIURLs: []
+
+# Ignore client signature check (set to true for testing/development only)
+# Controls signature verification for CLIENT signatures used in MPC coordination
+# When nodes communicate during signing operations, they verify each other's signatures using client keys
+# If true, skips client signature verification during MPC coordination
+# WARNING: Set to false in production for security
+# NOTE: This does NOT affect relayer authentication - relayer signatures are always required for /signRequest
+IgnoreClientSigCheck: false
+
+# Disable API documentation (Swagger)
+# If true, disables the /swagger/index.html endpoint
+# Set to false to enable API documentation
+DisableDocs: false
+
+# Browser HTTPS: run process_config.sh (mpc-auth: console/process_config.sh; mpc-config: ./process_config.sh at repo root); then set JWKSURL (+ ExpectedIssuer when enforcing iss).
+# ContinuumDAO hosts an RS256 JWT issuer; the node fetches JWKS over HTTPS to verify GET Bearer tokens.
+# Do not use Railway private DNS (e.g. continuumdao-jwks-service.railway.internal) for JWKSURL or issuer — browsers and nodes need public HTTPS URLs.
+# BrowserHTTPS:
+#   Port: 8443
+#   CertFile: "/webTLS/config/certs/browser.crt"
+#   KeyFile: "/webTLS/config/certs/browser.key"
+#   AllowedOrigins:
+#     - "https://mpa.continuumdao.org"
+#   # JWKSURL (RS256; required when browser HTTPS is enabled). Usual deployment (DAO app mints JWTs):
+#   JWKSURL: "https://mpa.continuumdao.org/api/node-read/jwks"
+#   # Alternative — standalone issuer on Railway only: "https://continuumdao-jwks-service-production.up.railway.app/.well-known/jwks.json"
+#   ExpectedAudience: "mpc-node-read"
+#   ExpectedIssuer: "https://mpa.continuumdao.org"
+#   EnforceNodeIPClaim: true
+
+# Allowed key types for MPC operations
+# List of cryptographic key types this node supports
+# Supported values: "secp256k1" (Bitcoin/Ethereum), "ed25519" (Edwards curve)
+AllowedKeyTypeList:
+  - "secp256k1"
+  - "ed25519"
+
+# Allowed message check types
+# Types of message validation that can be performed
+# - "multi-agree": Multi-party agreement validation
+# - "tx-check": Transaction validation
+AllowedMsgCheckTypes:
+  - "multi-agree"
+  - "tx-check"
+
+# Transaction check endpoint URL
+# Optional: External service endpoint for transaction validation
+# Leave empty to disable transaction checking
+# Format: http://host:port/path or https://host:port/path
+# NOTE: Currently this is not implemented
+TxCheckEndPoint: ""
+
+# Bloom filter hash count
+# Number of hash functions used in the bloom filter for message deduplication
+# Higher values = fewer false positives but more memory usage
+# Recommended: 4-8
+BloomFilterHashCount: 4
+
+# Node ping timeout for availability checks
+# Timeout for pinging nodes to check availability before signing operations
+# When a signing request arrives, the system pings all nodes in the keyList via MQTT
+# to determine which nodes are online before proceeding with the signing operation
+# 
+# Format: Go duration string (e.g., "5s", "10s", "1m", "500ms")
+# Default: "5s" if not specified
+# 
+# The ping check ensures:
+#   - The first node (relay channel) is online (required for MQTT communication)
+#   - At least (threshold + 1) nodes are online (required for signing)
+#   - Only online nodes are used for the signing operation
+# 
+# If insufficient nodes are online, the signing request fails immediately
+# Recommended values:
+#   - Fast networks: "3s" to "5s"
+#   - Slower networks: "10s" to "15s"
+#   - High latency: "20s" or higher
+# 
+# Can also be set via environment variable: NodePingTimeout
+NodePingTimeout: "5s"
+
+# Delay before first poll for ping replies (reduces intermittent "insufficient online nodes")
+# Format: Go duration (e.g., "500ms", "1s"). Set to "0" to disable.
+# Default: "800ms" if not specified. Env: NodePingInitialDelay
+NodePingInitialDelay: "800ms"
+
+# Pre-signing verification configuration
+# Pre-validate transactions before signing to prevent invalid operations
+# Always enabled when configured - requires database credentials from the DAO
+# Verification is always required - signing will fail if verification cannot be performed
+PreSigningVerification:
+  # Relayer API URL
+  # Base URL of the relayer API server where /v1/mpc/chain_info is served.
+  # REQUIRED for pre-signing verification - mpc-auth fetches active RPC from this endpoint.
+  # IMPORTANT: Keep the relayer's real HTTP API port in this URL (e.g. :8080). That is where mpc-auth *calls* the relayer.
+  # process_config.sh parses only the *hostname* from RelayerAPIURL for UFW *inbound* allow rules on ScannerRelayerPort (it does not strip :8080).
+  # node_addresses are for MPC peer nodes; RelayerAPIURL points to the relayer (different service).
+  # Format: Full URL with protocol (http:// or https://) and port
+  # Examples:
+  #   - "https://relayer.example.com"
+  #   - "http://203.0.113.10:8080"
+  #   - "https://relayer.example.com:8443"
+  # Leave empty to disable pre-signing verification
+  RelayerAPIURL: ""
+
+  # Verification timeout
+  # Maximum time to wait for fetching transaction from blockchain RPC
+  # This applies to the blockchain RPC call, not the relayer API call
+  # Format: Go duration string (e.g., "10s", "30s", "1m")
+  VerificationTimeout: "10s"
+
+  # Enable caching of verification results
+  # If true, verification results are cached to reduce blockchain RPC calls
+  # The cache stores hash verification results (not API responses)
+  CacheEnabled: true
+
+  # Cache time-to-live (TTL)
+  # How long cached verification results are valid
+  # Format: Go duration string (e.g., "5m", "1h")
+  CacheTTL: "5m"
+
+  # Note: Test transactions are automatically whitelisted when SourceTxHash or SourceChainID is empty
+  # This allows test transactions from the relayer (when new MPC signers are added) to bypass pre-validation
+
+# Automatic presigning configuration
+# Controls whether the MPC group automatically creates and maintains presign requests
+# Enable automatic presign request creation
+# If true, the background worker will automatically create presign requests
+# for all key groups when they are missing or cache is low
+# If false, presign requests must be created manually via /presignRequest API
+# Default: false
+InitiatePreSigning: false
+
+# Target number of presignatures to maintain per key group
+# The background worker will generate presignatures up to this amount
+# Must be between 1 and 50 (inclusive)
+# Default: 5
+PreSigningCacheSize: 5
+
+# Minimum threshold before creating new presignatures
+# When the cache drops below this number, new presignatures will be generated
+# Must be less than PreSigningCacheSize
+# Default: 2
+PreSigningMinThreshold: 2
+
+# Maximum number of batch sign TSS rounds that can run concurrently (per node)
+# When a batch sign request has N messages, only this many TSS signing workers run at once;
+# as each completes, the next message in the batch is started until all N are done.
+# Reduces CPU/memory load and channel pressure for large batches.
+# Default: 2 if not set or <= 0
+MaxConcurrentBatchSignatures: 1
+
+# Pre-configured MPC groups
+# Each node should only include groups it belongs to
+# Groups are isolated with their own MQTT brokers
+# Groups can also be configured via environment variables (see documentation)
+#
+# ⚠️ IMPORTANT: Two Ways to Configure Groups
+# 
+# METHOD 1: API-Based Group Creation (RECOMMENDED for new groups)
+#   This solves the chicken-and-egg problem where nodes need keys before they exist.
+#   
+#   Workflow:
+#     1. Start all nodes WITHOUT keyList in configs.yaml (only provide nodeAddresses)
+#     2. Each node generates its own public key on first startup
+#     3. Query each node's key: GET http://node-ip:8080/getNodeKey
+#     4. Create group via API: POST /newGroupRequest with complete keyList
+#     5. All nodes agree via: POST /newGroupRequestAgree
+#     6. Group is created and stored in each node's local database
+#   
+#   Benefits:
+#     - No need to know node keys before starting nodes
+#     - No need to update configs.yaml after collecting keys
+#     - Groups can be created/updated without restarting nodes
+#     - Completely decentralized (no backend required)
+# 
+# METHOD 2: Pre-Configured Groups in configs.yaml
+#   For groups where all node keys are known beforehand.
+#   
+#   Workflow:
+#     1. Generate or collect all node public keys
+#     2. Configure complete keyList in all nodes' configs.yaml files
+#     3. Start all nodes
+#     4. Nodes automatically join groups on startup
+#   
+#   Note: All nodes must have the SAME keyList for the same group.
+#
+MPCGroups:
+  # Example MPC group configuration
+  # 
+  # For API-Based Group Creation (METHOD 1 - RECOMMENDED):
+  #   - Provide nodeAddresses with placeholder keys (or actual keys if known)
+  #   - Leave keyList empty or omit it
+  #   - Create group via API after all nodes have started
+  #
+  # For Pre-Configured Groups (METHOD 2):
+  #   - Provide complete keyList with actual node public keys
+  #   - All nodes must have the SAME keyList
+  #   - Nodes will join group automatically on startup
+  #
+  - # Optional: Group ID (deterministic hash of sorted keyList)
+    # If not provided, will be computed as hash of sorted keyList
+    # Format: SHA256 hex string
+    groupId: ""
+
+    # List of node public keys in this group
+    # OPTIONAL for API-based group creation (METHOD 1 - RECOMMENDED)
+    # REQUIRED for pre-configured groups (METHOD 2)
+    # 
+    # For API-Based Creation (RECOMMENDED):
+    #   - Leave empty [] - DO NOT manually add keys here, DO NOT edit this field
+    #   - Keys will be collected automatically via GET http://node-ip:8080/getNodeKey endpoint
+    #   - Keys are provided in the API request (POST /newGroupRequest), NOT in this config file
+    #   - After creating the group via API, the keyList is stored in the database, not in configs.yaml
+    #   - You never need to modify this field for API-based group creation
+    #   - process_config.sh does NOT update this field - it only validates configuration
+    #
+    # For Pre-Configured Groups:
+    #   - Must manually add ACTUAL node public keys here (128 hex characters each)
+    #   - Get node keys via: GET http://node-ip:8080/getNodeKey
+    #   - All nodes in the group must have the SAME keyList
+    #   - If a node's key is not in this list, that node will skip this group
+    #   - You must manually update this file on each node after collecting keys
+    #
+    # Format: YAML array (NOT comma-separated), each key is a string (128 hex characters)
+    # Example for pre-configured groups:
+    #   keyList:
+    #     - "node1_actual_public_key_128_chars_hex"
+    #     - "node2_actual_public_key_128_chars_hex"
+    #     - "node3_actual_public_key_128_chars_hex"
+    keyList: []  # Empty by default - leave empty for API-based group creation (keys collected via API)
+
+    # Map of node keys to their HTTP API addresses
+    # REQUIRED: Used for direct HTTP communication between nodes
+    # 
+    # For API-Based Creation:
+    #   - Use placeholder keys (e.g., "node1_key") or actual keys if known
+    #   - These addresses are used when creating the group via API
+    #
+    # For Pre-Configured Groups:
+    #   - Keys must match the actual node public keys in keyList
+    #
+    # IMPORTANT: All addresses must use EXTERNAL (public) IP addresses only
+    # Private IP ranges (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16) are NOT allowed
+    # If nodes are behind NAT, use the public IP address or a public hostname
+    # Format: nodeKey -> "http://external-ip:port" or "https://hostname:port"
+    # Examples:
+    #   - "http://203.0.113.10:8080" (external IP)
+    #   - "https://node1.example.com:8080" (public hostname)
+    #   - NOT: "http://192.168.1.10:8080" (private IP - will be rejected)
+    #
+    # CRITICAL - Order must be the SAME on all nodes: The first entry is the relay node (runs MQTT broker).
+    # process_config.sh uses this order to enable mosquitto only on the first node and disable it on others.
+    # If order differs between nodes, the wrong node may start mosquitto.
+    nodeAddresses:
+      node1_key: "http://203.0.113.10:8080"
+      node2_key: "http://203.0.113.11:8080"
+      node3_key: "http://203.0.113.12:8080"
+
+    # Optional: MQTT broker address for this group
+    # If not provided, will be automatically derived from the first node's address
+    # (extracts host/IP and uses ssl://host:8883 with TLS - TLS is the default)
+    # Format: "tcp://host:port" (unencrypted, testing only), "ssl://host:port", or "tls://host:port" (TLS - default)
+    # Examples:
+    #   - Omit this field to auto-derive: ssl://203.0.113.10:8883 (TLS, default)
+    #   - "ssl://203.0.113.10:8883" (TLS encrypted - recommended, default)
+    #   - "ssl://mqtt-group1.example.com:8883" (TLS with hostname)
+    #   - "tls://mosquitto:8883" (TLS, Docker service name)
+    #   - "tcp://192.168.1.100:1883" (unencrypted - testing only, not recommended)
+    mqttBroker: ""  # Leave empty to auto-derive from first node (ssl://<first-node-ip>:8883 with TLS)
+
