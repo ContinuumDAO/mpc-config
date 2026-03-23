@@ -175,6 +175,105 @@ if empty:
 PYSCANNERMERGE
 }
 
+# When ScannerAPIURLs is empty: interactive prompt (Enter = defaults), else merge defaults with a clear message.
+# Uses /dev/tty like RelayerAPIURL so prompts work when stdin is not a TTY.
+prompt_scanner_api_urls_if_empty() {
+    local config_file="$1"
+    if [ ! -f "$config_file" ]; then
+        return 0
+    fi
+
+    local cnt=0
+    if command -v yq &>/dev/null; then
+        cnt=$(yq eval '(.ScannerAPIURLs // []) | map(select(. != null and . != "" and . != "null")) | length' "$config_file" 2>/dev/null || echo 0)
+    fi
+    if [ "${cnt:-0}" -gt 0 ]; then
+        return 0
+    fi
+
+    require_ruamel_yaml || return 1
+
+    local default_display
+    default_display=$(IFS=, ; echo "${DEFAULT_SCANNER_API_URLS[*]}")
+
+    if [ -t 0 ] && [ -t 1 ] && [ -r /dev/tty ]; then
+        echo ""
+        print_step "ScannerAPIURLs empty — UFW uses these hostnames/IPs for scoped rules on ScannerRelayerPort"
+        print_info "Press Enter for the default list, or enter comma-separated HTTP(S) URLs (host matters for firewall; path/port ignored for allow rules)."
+        local line=""
+        while true; do
+            read -r -p "ScannerAPIURLs [${default_display}]: " line < /dev/tty || true
+            line="${line#"${line%%[![:space:]]*}"}"
+            line="${line%"${line##*[![:space:]]}"}"
+            if [ -z "$line" ]; then
+                configs_yaml_merge_scanner_api_urls_if_empty "$config_file" || return 1
+                print_success "Set ScannerAPIURLs in configs.yaml to defaults (edit if your scanner egress differs)"
+                break
+            fi
+            local -a urls=()
+            local part
+            local _ifs="$IFS"
+            IFS=','
+            read -r -a _parts <<< "$line"
+            IFS="$_ifs"
+            for part in "${_parts[@]}"; do
+                part="${part#"${part%%[![:space:]]*}"}"
+                part="${part%"${part##*[![:space:]]}"}"
+                [ -z "$part" ] && continue
+                if ! printf '%s' "$part" | grep -qE '^https?://[^[:space:]]+'; then
+                    print_error "Each URL must start with http:// or https:// (comma-separated), or press Enter for defaults"
+                    continue 2
+                fi
+                part="${part%/}"
+                urls+=("$part")
+            done
+            if [ ${#urls[@]} -eq 0 ]; then
+                print_error "No valid URLs; press Enter for defaults or provide http(s)://..."
+                continue
+            fi
+            local _lines
+            _lines=$(printf '%s\n' "${urls[@]}")
+            SCANNER_MERGE_CFG="$config_file" SCANNER_MERGE_LINES="$_lines" python3 << 'PYSCANNERMERGE'
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.stderr.write("configs.yaml: install ruamel.yaml\n")
+    sys.exit(1)
+
+path = os.environ["SCANNER_MERGE_CFG"]
+raw = os.environ.get("SCANNER_MERGE_LINES", "")
+defaults = [s.strip() for s in raw.splitlines() if s.strip()]
+if not defaults:
+    sys.exit(1)
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)
+
+with open(path, "r") as f:
+    data = yaml.load(f)
+if not isinstance(data, dict):
+    sys.stderr.write("invalid yaml root\n")
+    sys.exit(1)
+
+data["ScannerAPIURLs"] = defaults
+with open(path, "w") as f:
+    yaml.dump(data, f)
+PYSCANNERMERGE
+            print_success "Set ScannerAPIURLs in configs.yaml (comments preserved)"
+            break
+        done
+        echo ""
+    else
+        configs_yaml_merge_scanner_api_urls_if_empty "$config_file" || return 1
+        print_info "Non-interactive: set ScannerAPIURLs to defaults ${default_display} (override in configs.yaml or set RELAYER flow interactively; see DEFAULT_SCANNER_API_URLS in process_config.sh)"
+    fi
+    return 0
+}
+
 # Find mosquitto.conf file
 find_mosquitto_conf() {
     local script_dir="$(cd "$(dirname "$0")" && pwd)"
@@ -1005,7 +1104,7 @@ prompt_relayer_api_url_if_missing() {
     local api_url
     api_url=$(_extract_relayer_api_url_from_config "$config_file")
     if [ -n "${api_url//[[:space:]]/}" ] && [ "$api_url" != "null" ]; then
-        configs_yaml_merge_scanner_api_urls_if_empty "$config_file" || return 1
+        prompt_scanner_api_urls_if_empty "$config_file" || return 1
         return 0
     fi
 
@@ -1016,7 +1115,7 @@ prompt_relayer_api_url_if_missing() {
         env_url="${env_url%/}"
         configs_yaml_merge_relayer_api_url "$config_file" "$env_url" || return 1
         print_success "Set PreSigningVerification.RelayerAPIURL from RELAYER_API_URL environment variable"
-        configs_yaml_merge_scanner_api_urls_if_empty "$config_file" || return 1
+        prompt_scanner_api_urls_if_empty "$config_file" || return 1
         return 0
     fi
 
@@ -1048,10 +1147,7 @@ prompt_relayer_api_url_if_missing() {
 
     configs_yaml_merge_relayer_api_url "$config_file" "$url_in" || return 1
     print_success "Wrote PreSigningVerification.RelayerAPIURL to configs.yaml (comments preserved)"
-    configs_yaml_merge_scanner_api_urls_if_empty "$config_file" || return 1
-    if [ -n "${DEFAULT_SCANNER_API_URLS[*]}" ]; then
-        print_success "Set ScannerAPIURLs in configs.yaml when it was empty (defaults match firewall allowlist; edit if your scanner egress differs)"
-    fi
+    prompt_scanner_api_urls_if_empty "$config_file" || return 1
     echo ""
     return 0
 }
@@ -3295,7 +3391,7 @@ bh["JWKSURL"] = jwks
 with open(path, "w") as f:
     yaml.dump(data, f)
 PYMERGE
-    print_success "configs.yaml updated: BrowserHTTPS block written (comments preserved; cert paths, AllowedOrigins, JWKSURL, ExpectedIssuer, ExpectedAudience, EnforceNodeIPClaim)"
+    print_success "configs.yaml updated: BrowserHTTPS merged in place at end of file (header comments stay above the block; cert paths, AllowedOrigins, JWKSURL, ExpectedIssuer, ExpectedAudience, EnforceNodeIPClaim)"
     print_info "Defaults: JWKSURL=$DEFAULT_BROWSER_HTTPS_JWKS_URL, ExpectedIssuer=$DEFAULT_BROWSER_HTTPS_EXPECTED_ISSUER (Pattern B). Override in configs.yaml for standalone issuer (Pattern A). Docker: port 8443, volume ./webTLS/config/certs. See docs-internal/railway-browser-https-deployment.md"
 }
 
@@ -3320,6 +3416,7 @@ show_process_config_help() {
     echo ""
     echo "If PreSigningVerification is set but RelayerAPIURL is empty, the script prompts for the URL"
     echo "(or use RELAYER_API_URL in the environment)."
+    echo "If ScannerAPIURLs is empty, it prompts (Enter = defaults) for UFW-scoped ScannerRelayer rules."
     echo ""
     echo "Updates to configs.yaml require ruamel.yaml (e.g. apt install python3-ruamel.yaml, or pip in a venv)"
     echo "so the prototype file's comments are preserved on round-trip."
@@ -3346,7 +3443,7 @@ show_process_config_help() {
     echo "  Browser HTTPS (8443), PublicDiscoveryPort (18080), ScannerRelayerPort (18081 if set),"
     echo "  ManagementAPIsPort (8080), relay MQTT (8883). ScannerRelayerPort uses *scoped* UFW rules when"
     echo "  PreSigningVerification.RelayerAPIURL and/or ScannerAPIURLs resolve to IPv4 (see configs.yaml)."
-    echo "  Review rules before: sudo ufw enable"
+    echo "  If UFW is inactive, you are prompted (via /dev/tty) to run sudo ufw enable, or enable manually."
     echo "  Use --no-firewall to skip (not recommended for production / financial nodes)."
     echo ""
 }
@@ -3512,17 +3609,25 @@ apply_process_config_firewall() {
     print_info "UFW rules added (or already present). UFW status:"
     sudo ufw status numbered 2>/dev/null || true
 
-    if echo "$ufw_state" | grep -qi "inactive"; then
+    if echo "$ufw_state" | grep -qiE "inactive|disabled"; then
         print_warning "UFW is still inactive — the host will not filter inbound traffic until you run: sudo ufw enable"
-        if [ -t 0 ] && [ -t 1 ]; then
-            read -r -p "Enable UFW now? This may disrupt SSH if port 22 is wrong. [y/N]: " _ufw_en
+        # Read from /dev/tty (not stdin) so the prompt appears when stdin is redirected or not a TTY.
+        if [ -r /dev/tty ] && [ -w /dev/tty ]; then
+            read -r -p "Enable UFW now? This may disrupt SSH if port 22 is wrong. [y/N]: " _ufw_en < /dev/tty || true
             if [[ "${_ufw_en:-}" =~ ^[Yy]$ ]]; then
                 sudo ufw --force enable && print_success "UFW enabled" || print_error "ufw enable failed"
             else
                 print_info "Skipped. When ready: sudo ufw enable"
             fi
         else
-            print_info "Non-interactive session: run manually when ready: sudo ufw enable"
+            print_info "No controlling terminal (/dev/tty) — run manually when ready: sudo ufw enable"
+        fi
+    else
+        # Match "Status: active" but not "inactive" ("inactive" contains substring "active").
+        if echo "$ufw_state" | grep -qiE '^Status:[[:space:]]+active([[:space:]]|$)'; then
+            print_info "UFW is already active — inbound rules apply."
+        else
+            print_warning "UFW status unclear: ${ufw_state:-unknown}. If rules should apply, run: sudo ufw status && sudo ufw enable"
         fi
     fi
 }
