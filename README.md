@@ -643,7 +643,6 @@ MPCGroups:
       node3_actual_public_key_128_chars_hex: "http://203.0.113.12:8081"
     # mqttBroker: ""  # Omit or leave empty to auto-derive from first node (ssl://203.0.113.10:8883 with TLS)
     # Or specify custom broker: mqttBroker: "tcp://custom-broker:1883"
-    threshold: 2
 ```
 
 **Note:** All addresses must use **EXTERNAL (public) IP addresses only**. Private IP ranges are NOT allowed. If nodes are behind NAT, use the public IP address or a public hostname.

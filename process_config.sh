@@ -446,131 +446,6 @@ is_default_example_ip() {
     esac
 }
 
-# Get threshold value from first MPC group
-get_threshold_from_yaml() {
-    local config_file="$1"
-    
-    if [ ! -f "$config_file" ]; then
-        return 1
-    fi
-    
-    # Use yq if available
-    if command -v yq &> /dev/null; then
-        local threshold=$(yq eval '.MPCGroups[0].threshold' "$config_file" 2>/dev/null)
-        if [ -n "$threshold" ] && [ "$threshold" != "null" ]; then
-            echo "$threshold"
-            return 0
-        fi
-    fi
-    
-    # Use Python if available
-    if command -v python3 &> /dev/null; then
-        local threshold=$(python3 -c "
-import yaml
-import sys
-try:
-    with open('$config_file', 'r') as f:
-        data = yaml.safe_load(f)
-        groups = data.get('MPCGroups', [])
-        if groups:
-            threshold = groups[0].get('threshold')
-            if threshold is not None:
-                print(threshold)
-except Exception:
-    sys.exit(1)
-" 2>/dev/null)
-        if [ -n "$threshold" ]; then
-            echo "$threshold"
-            return 0
-        fi
-    fi
-    
-    # Fallback: simple grep parsing
-    while IFS= read -r line; do
-        if echo "$line" | grep -qE '^\s*threshold:\s*[0-9]+'; then
-            local threshold=$(echo "$line" | grep -oE '[0-9]+' | head -1)
-            if [ -n "$threshold" ]; then
-                echo "$threshold"
-                return 0
-            fi
-        fi
-    done < "$config_file"
-    
-    return 1
-}
-
-# Validate threshold is less than number of nodes
-validate_threshold() {
-    local config_file="$1"
-    
-    if [ ! -f "$config_file" ]; then
-        return 0  # Skip if config not found
-    fi
-    
-    print_step "Validating threshold value..."
-    
-    # Get number of nodes
-    local node_addresses=()
-    while IFS= read -r addr; do
-        [ -n "$addr" ] && node_addresses+=("$addr")
-    done < <(parse_node_addresses_from_yaml "$config_file")
-    
-    local num_nodes=${#node_addresses[@]}
-    
-    if [ $num_nodes -eq 0 ]; then
-        print_warning "No node addresses found - skipping threshold validation"
-        return 0
-    fi
-    
-    # Get threshold
-    local threshold=$(get_threshold_from_yaml "$config_file")
-    
-    if [ -z "$threshold" ]; then
-        print_warning "Could not determine threshold value - skipping validation"
-        return 0
-    fi
-    
-    # Validate threshold is a positive integer
-    if ! echo "$threshold" | grep -qE '^[0-9]+$'; then
-        print_error "Invalid threshold value: '$threshold' (must be a positive integer)"
-        exit 1
-    fi
-    
-    # Convert to integer for comparison
-    threshold=$((threshold + 0))
-    num_nodes=$((num_nodes + 0))
-    
-    # Check threshold < number of nodes (strictly less than)
-    # In threshold cryptography, threshold + 1 nodes must agree, so threshold must be < number of nodes
-    if [ $threshold -ge $num_nodes ]; then
-        print_error "Threshold ($threshold) must be less than number of nodes ($num_nodes)"
-        echo ""
-        print_error "The threshold must be strictly less than the number of nodes in the group."
-        print_error "In threshold cryptography, threshold + 1 nodes must agree to perform operations."
-        print_info "Current configuration:"
-        echo "  - Number of nodes: $num_nodes"
-        echo "  - Threshold: $threshold"
-        echo ""
-        print_info "Valid examples:"
-        echo "  - 2 nodes: threshold = 1 (requires 2 nodes to agree)"
-        echo "  - 3 nodes: threshold = 1 or 2 (requires 2 or 3 nodes to agree)"
-        echo "  - 4 nodes: threshold = 1, 2, or 3 (requires 2, 3, or 4 nodes to agree)"
-        echo ""
-        print_info "Please update the threshold in configs.yaml to be < $num_nodes"
-        exit 1
-    fi
-    
-    # Check threshold is at least 1
-    if [ $threshold -lt 1 ]; then
-        print_error "Threshold ($threshold) must be at least 1"
-        echo ""
-        print_info "Please update the threshold in configs.yaml to be at least 1"
-        exit 1
-    fi
-    
-    print_success "Threshold validation passed (threshold: $threshold, nodes: $num_nodes)"
-}
-
 # Validate presign configuration fields
 validate_presign_config() {
     local config_file="$1"
@@ -2662,14 +2537,8 @@ EOF
     
         # Fallback: Use sed for simple update/add (may not preserve all formatting but preserves comments)
         if [ "$mqtt_broker_exists" = false ]; then
-        # Add mqttBroker after threshold if it exists, otherwise after nodeAddresses
-        if grep -qE '^\s*threshold\s*:' "$config_file"; then
-            # Add after threshold (use awk to avoid sed issues with / and " in broker_addr e.g. ssl://host:8883)
-            awk -v broker="$broker_addr" '
-                /^[[:space:]]*threshold[[:space:]]*:/ { print; print "    mqttBroker: \"" broker "\""; next }
-                { print }
-            ' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
-        elif grep -qE '^\s*nodeAddresses\s*:' "$config_file"; then
+        # Add mqttBroker after nodeAddresses block
+        if grep -qE '^\s*nodeAddresses\s*:' "$config_file"; then
             # Find where nodeAddresses block ends and add there
             # This is a simple approach - finds the line after nodeAddresses that has less indentation
             awk -v broker="$broker_addr" '
@@ -2697,7 +2566,7 @@ EOF
             { print }
             ' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
         else
-            print_warning "Could not find threshold or nodeAddresses - cannot auto-add mqttBroker"
+            print_warning "Could not find nodeAddresses - cannot auto-add mqttBroker"
             print_info "Please manually add to configs.yaml:"
             echo "  MPCGroups:"
             echo "    - mqttBroker: \"$broker_addr\""
@@ -3135,7 +3004,6 @@ main() {
     # Validate configuration
     validate_no_default_ips "$CONFIG_FILE"
     validate_external_ips_only "$CONFIG_FILE"
-    validate_threshold "$CONFIG_FILE"
     validate_presign_config "$CONFIG_FILE"
     
     # Determine relay vs client and configure docker-compose FIRST (so client always gets mosquitto commented out)
