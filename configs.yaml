@@ -91,11 +91,35 @@ BrokerQos: 1
 # Access API documentation at: http://localhost:8080/swagger/index.html
 ManagementAPIsPort: 8080
 
-# Optional: HTTP port exposing only GET /getNodeMgtKey and GET /health (ContinuumDAO discovery for DAO app / Railway).
-# Full management API (signatures, relayer, etc.) stays on ManagementAPIsPort. Use 0 to disable.
-# Default 18080 avoids clashing with web servers on :80 and stays in the non-privileged range (>1024).
-# The continuumdao-node-app server calls this port (env NODE_DISCOVERY_PORT, default 18080) — keep them in sync on all nodes.
+# Optional: single CORS allow list for management HTTP only (same port as ManagementAPIsPort). Empty = permissive default.
+# Separate from BrowserHTTPS.AllowedOrigins (8443). Relayer/scanner/agents do not use CORS.
+# Example:
+# ManagementAllowedOrigins:
+#   - "http://127.0.0.1:3000"
+#   - "https://my-admin-ui.example.com"
+
+# Public discovery HTTP (minimal: GET /getNodeMgtKey, /getPublicMgtKey, /health).
+# When ScannerRelayerPort > 0 (and distinct), governance + relayer routes move to that port; this port stays minimal only.
+# When ScannerRelayerPort is 0 (legacy), this port also serves scanner governance GETs (getKeyGenResultById, new-group routes).
+# Full management API stays on ManagementAPIsPort. Use 0 to disable a separate discovery listener.
+# Default 18080 — keep in sync with continuumdao-node-app NODE_DISCOVERY_PORT.
 PublicDiscoveryPort: 18080
+
+# Scanner + relayer dedicated HTTP: governance GETs + relayer POST/GET (signRequest, updateRelayer, admin relayer, sign polling).
+# Default 18081 matches c3caller-scanner / c3caller-relayer mpc_config.port. PublicDiscoveryPort 18080 stays minimal (getNodeMgtKey, etc.).
+# Set to 0 for legacy (bundle scanner GETs on PublicDiscoveryPort only; relayer uses ManagementAPIsPort :8080).
+# Existing MySQL mpc_config rows may still have port=18080 — run: UPDATE mpc_config SET port=18081 WHERE port=18080;
+ScannerRelayerPort: 18081
+
+# Scanner HTTP base URL(s) for firewall: process_config.sh resolves each host to an IPv4 address (or uses a literal IPv4 / IPv4 CIDR)
+# and runs: ufw allow from <source> to any port <ScannerRelayerPort> proto tcp
+# Use the same hostnames/IPs the scanner uses to reach this node (egress). Example:
+# ScannerAPIURLs:
+#   - "http://scanner.internal:9090"
+#   - "203.0.113.50"
+#   - "198.51.100.0/24"
+# Empty list [] uses DEFAULT_SCANNER_API_URLS in process_config.sh for UFW (mpc-config: repo root; mpc-auth: console/process_config.sh).
+ScannerAPIURLs: []
 
 # Ignore client signature check (set to true for testing/development only)
 # Controls signature verification for CLIENT signatures used in MPC coordination
@@ -189,15 +213,16 @@ PreSigningVerification:
   # Relayer API URL
   # Base URL of the relayer API server where /v1/mpc/chain_info is served.
   # REQUIRED for pre-signing verification - mpc-auth fetches active RPC from this endpoint.
-  # IMPORTANT: Use the relayer's HTTP API port (e.g. 8080), NOT any port from node_addresses.
+  # IMPORTANT: Keep the relayer's real HTTP API port in this URL (e.g. :8080). That is where mpc-auth *calls* the relayer.
+  # process_config.sh parses only the *hostname* from RelayerAPIURL for UFW *inbound* allow rules on ScannerRelayerPort (it does not strip :8080).
   # node_addresses are for MPC peer nodes; RelayerAPIURL points to the relayer (different service).
   # Format: Full URL with protocol (http:// or https://) and port
   # Examples:
   #   - "https://relayer.example.com"
   #   - "http://203.0.113.10:8080"
   #   - "https://relayer.example.com:8443"
-  # Default ContinuumDAO relayer; set to "" to disable pre-signing verification
-  RelayerAPIURL: "http://82.208.20.136:8080"
+  # Leave empty to disable pre-signing verification
+  RelayerAPIURL: ""
 
   # Verification timeout
   # Maximum time to wait for fetching transaction from blockchain RPC

@@ -46,6 +46,12 @@ MPC_NODE_HTTP_PORT=8081
 # Default example NodeMgtKey in configs.yaml — treated like unset (must be replaced for a real deployment).
 NODE_MGT_ETH_PLACEHOLDER="0x1234567890abcdef1234567890abcdef12345678"
 
+# UFW sources for ScannerRelayerPort: used when configs.yaml has ScannerAPIURLs: [] (or key missing).
+# Full URLs are fine; :port is ignored for firewall (only host/IP/CIDR matter—same as RelayerAPIURL).
+DEFAULT_SCANNER_API_URLS=(
+    "http://82.208.20.136:8080"
+)
+
 # Functions
 print_error() {
     echo -e "${RED}ERROR: $1${NC}" >&2
@@ -2914,6 +2920,7 @@ show_process_config_help() {
     echo "Arguments:"
     echo "  --copy-certs      On the relay: after MQTT certs are generated, copy the CA to clients over SSH"
     echo "  --no-copy-certs   Do not copy via SSH (default); kept for explicit use / backward compatibility"
+    echo "  --no-firewall     Skip the default host firewall step (ufw allow rules). Not recommended for production."
     echo "  --help | -h | -help | help   Show this message (arguments above + relay/client behavior below)"
     echo ""
     echo "This script validates configuration and generates certificates."
@@ -2947,12 +2954,197 @@ show_process_config_help() {
     echo "      If PreSigningVerification is configured, ensure RelayerAPIURL is set"
     echo "      in configs.yaml (obtain from the DAO)."
     echo ""
+    echo "Host firewall:"
+    echo "  By default this script runs a host firewall step (ufw when available): allow SSH (22),"
+    echo "  Browser HTTPS (8443), PublicDiscoveryPort (18080), ScannerRelayerPort (18081 if set),"
+    echo "  ManagementAPIsPort (8080), relay MQTT (8883). ScannerRelayerPort uses *scoped* UFW rules when"
+    echo "  PreSigningVerification.RelayerAPIURL and/or ScannerAPIURLs resolve to IPv4 (see configs.yaml)."
+    echo "  Review rules before: sudo ufw enable"
+    echo "  Use --no-firewall to skip (not recommended for production / financial nodes)."
+    echo ""
+}
+
+# Resolve RelayerAPIURL / ScannerAPIURLs entry to a UFW "from" source (IPv4 or IPv4 CIDR).
+# Accepts full URLs (port in URL is ignored for firewall—only host matters), bare hostnames, IPv4, or x.x.x.x/nn.
+_firewall_entry_to_ufw_source() {
+    local raw="$1"
+    python3 -c '
+import sys, socket, urllib.parse, re
+s = (sys.argv[1] or "").strip()
+if not s:
+    sys.exit(1)
+if re.match(r"^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$", s):
+    print(s)
+    sys.exit(0)
+if re.match(r"^(\d{1,3}\.){3}\d{1,3}$", s):
+    print(s)
+    sys.exit(0)
+u = s if "://" in s else "http://" + s
+p = urllib.parse.urlparse(u)
+h = p.hostname
+if not h:
+    sys.exit(1)
+if re.match(r"^(\d{1,3}\.){3}\d{1,3}$", h):
+    print(h)
+    sys.exit(0)
+try:
+    infos = socket.getaddrinfo(h, None, socket.AF_INET, socket.SOCK_STREAM)
+    print(infos[0][4][0])
+except Exception:
+    sys.exit(1)
+' "$raw" 2>/dev/null
+}
+
+# Collect unique IPv4/CIDR sources for ScannerRelayerPort from configs.yaml (RelayerAPIURL host + ScannerAPIURLs).
+# When ScannerAPIURLs is empty, DEFAULT_SCANNER_API_URLS applies (see top of script).
+_firewall_collect_scanner_relayer_sources() {
+    local config_file="$1"
+    local tmpf
+    tmpf=$(mktemp) || return 1
+    local ru line src _yaml_had_scanner
+    _yaml_had_scanner=false
+    ru=$(yq eval '.PreSigningVerification.RelayerAPIURL // ""' "$config_file" 2>/dev/null || echo "")
+    if [[ -n "${ru//[[:space:]]/}" ]]; then
+        src=$(_firewall_entry_to_ufw_source "$ru")
+        [[ -n "$src" ]] && echo "$src" >>"$tmpf"
+    fi
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        [[ -z "$line" || "$line" == "null" ]] && continue
+        _yaml_had_scanner=true
+        src=$(_firewall_entry_to_ufw_source "$line")
+        [[ -n "$src" ]] && echo "$src" >>"$tmpf"
+    done < <(yq eval '.ScannerAPIURLs[]?' "$config_file" 2>/dev/null || true)
+    if [[ "$_yaml_had_scanner" != "true" ]]; then
+        for line in "${DEFAULT_SCANNER_API_URLS[@]}"; do
+            [[ -z "${line//[[:space:]]/}" ]] && continue
+            src=$(_firewall_entry_to_ufw_source "$line")
+            [[ -n "$src" ]] && echo "$src" >>"$tmpf"
+        done
+    fi
+    if [[ ! -s "$tmpf" ]]; then
+        rm -f "$tmpf"
+        return 1
+    fi
+    sort -u "$tmpf"
+    rm -f "$tmpf"
+}
+
+# Apply baseline ufw allow rules for mpc-auth (does not enable ufw unless user confirms interactively).
+# See docs-internal/firewall-and-cors-design.md
+apply_process_config_firewall() {
+    local config_file="$1"
+    local skip_firewall="$2"
+    local is_relay="$3"
+
+    if [ "$skip_firewall" = "true" ]; then
+        print_warning "Host firewall step skipped (--no-firewall)."
+        print_warning "Not recommended for production or financial MPC nodes—configure ufw/nftables or cloud security groups yourself."
+        print_info "See: docs-internal/firewall-and-cors-design.md"
+        return 0
+    fi
+
+    print_step "Host firewall (recommended for financial / MPC nodes)"
+
+    local mgt_port pub_port bh_port sr_port
+    mgt_port=$(yq eval '.ManagementAPIsPort // 8080' "$config_file" 2>/dev/null || echo 8080)
+    pub_port=$(yq eval '.PublicDiscoveryPort // 18080' "$config_file" 2>/dev/null || echo 18080)
+    bh_port=$(yq eval '(.BrowserHTTPS // {}).Port // 8443' "$config_file" 2>/dev/null || echo 8443)
+    sr_port=$(yq eval '.ScannerRelayerPort // 0' "$config_file" 2>/dev/null || echo 0)
+
+    print_info "Ports from configs.yaml: ManagementAPIsPort=$mgt_port, PublicDiscoveryPort=$pub_port, BrowserHTTPS.Port=$bh_port, ScannerRelayerPort=${sr_port:-0}"
+    print_info "Narrow inbound to scanner/DAO/relayer CIDRs in production; see docs-internal/firewall-and-cors-design.md"
+    if [ "$is_relay" = "true" ]; then
+        print_info "Relay node: MQTT broker TLS typically uses 8883/tcp (docker-compose)."
+    fi
+
+    if ! command -v ufw >/dev/null 2>&1; then
+        print_warning "ufw is not installed. Install with: sudo apt install ufw"
+        print_info "Or configure nftables / cloud SGs. Baseline inbound to consider: 22 (SSH), $bh_port (Browser HTTPS), $pub_port (discovery), $mgt_port (management—often restrict to localhost in production)."
+        if [ "$is_relay" = "true" ]; then
+            print_info "Relay: also 8883/tcp (MQTT TLS to broker from peer nodes)."
+        fi
+        return 0
+    fi
+
+    local ufw_state
+    ufw_state=$(sudo ufw status 2>/dev/null | head -1 || true)
+    print_info "UFW: $ufw_state"
+
+    apply_one_ufw() {
+        local port="$1"
+        local note="$2"
+        if sudo ufw status 2>/dev/null | grep -qE "${port}/tcp"; then
+            print_info "UFW rule already present for ${port}/tcp ($note)"
+            return 0
+        fi
+        if sudo ufw allow "${port}/tcp" comment "$note" 2>/dev/null; then
+            print_success "UFW: allowed ${port}/tcp ($note)"
+        else
+            print_warning "Could not add UFW rule for ${port}/tcp (need sudo?)"
+        fi
+    }
+
+    # With IPV6=yes in /etc/default/ufw (Ubuntu default), each "ufw allow <port>/tcp" adds IPv4 + IPv6 rules.
+    print_info "UFW baseline uses dual-stack when IPv6 is enabled (see /etc/default/ufw). Add v6-only rules manually if needed."
+
+    # SSH first — avoid lockout if ufw is later enabled
+    apply_one_ufw 22 "ssh"
+    apply_one_ufw "$bh_port" "mpc-auth BrowserHTTPS"
+    apply_one_ufw "$pub_port" "mpc-auth PublicDiscovery"
+    if [ -n "$sr_port" ] && [ "$sr_port" != "0" ] && [ "$sr_port" != "$pub_port" ] && [ "$sr_port" != "$mgt_port" ]; then
+        if command -v python3 >/dev/null 2>&1; then
+            local _sr_sources _sr_line _applied_sr
+            _applied_sr=false
+            _sr_sources=$(_firewall_collect_scanner_relayer_sources "$config_file") || _sr_sources=""
+            if [[ -n "${_sr_sources//[[:space:]]/}" ]]; then
+                while IFS= read -r _sr_line || [[ -n "${_sr_line:-}" ]]; do
+                    [[ -z "${_sr_line//[[:space:]]/}" ]] && continue
+                    if sudo ufw allow from "$_sr_line" to any port "$sr_port" proto tcp comment "mpc-auth ScannerRelayer scoped" 2>/dev/null; then
+                        print_success "UFW: allow from $_sr_line to ${sr_port}/tcp (ScannerRelayer)"
+                        _applied_sr=true
+                    else
+                        print_warning "Could not add UFW rule from $_sr_line to port $sr_port (need sudo?)"
+                    fi
+                done <<< "$_sr_sources"
+            fi
+            if [[ "$_applied_sr" != "true" ]]; then
+                print_warning "No inbound sources resolved from RelayerAPIURL / ScannerAPIURLs — opening ${sr_port}/tcp to ANY (not recommended). Set PreSigningVerification.RelayerAPIURL and ScannerAPIURLs."
+                apply_one_ufw "$sr_port" "mpc-auth ScannerRelayer (world — set RelayerAPIURL/ScannerAPIURLs)"
+            fi
+        else
+            print_warning "python3 not found — cannot resolve RelayerAPIURL/ScannerAPIURLs; opening ${sr_port}/tcp to ANY."
+            apply_one_ufw "$sr_port" "mpc-auth ScannerRelayer"
+        fi
+    fi
+    apply_one_ufw "$mgt_port" "mpc-auth ManagementAPI"
+    if [ "$is_relay" = "true" ]; then
+        apply_one_ufw 8883 "mpc-auth MQTT TLS broker"
+    fi
+
+    print_info "UFW rules added (or already present). UFW status:"
+    sudo ufw status numbered 2>/dev/null || true
+
+    if echo "$ufw_state" | grep -qi "inactive"; then
+        print_warning "UFW is still inactive — the host will not filter inbound traffic until you run: sudo ufw enable"
+        if [ -t 0 ] && [ -t 1 ]; then
+            read -r -p "Enable UFW now? This may disrupt SSH if port 22 is wrong. [y/N]: " _ufw_en
+            if [[ "${_ufw_en:-}" =~ ^[Yy]$ ]]; then
+                sudo ufw --force enable && print_success "UFW enabled" || print_error "ufw enable failed"
+            else
+                print_info "Skipped. When ready: sudo ufw enable"
+            fi
+        else
+            print_info "Non-interactive session: run manually when ready: sudo ufw enable"
+        fi
+    fi
 }
 
 # Main execution
 main() {
     local COPY_CERTS=false
-    
+    local SKIP_FIREWALL=false
+
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -2962,6 +3154,10 @@ main() {
                 ;;
             --no-copy-certs)
                 COPY_CERTS=false
+                shift
+                ;;
+            --no-firewall)
+                SKIP_FIREWALL=true
                 shift
                 ;;
             --help|-h|-help|help)
@@ -3309,6 +3505,8 @@ main() {
         print_info "Replace 'relay-node-user' with the SSH username on the relay node."
         echo ""
     fi
+
+    apply_process_config_firewall "$CONFIG_FILE" "$SKIP_FIREWALL" "$IS_RELAY_NODE"
 }
 
 # Run main function (pass through CLI arguments)
