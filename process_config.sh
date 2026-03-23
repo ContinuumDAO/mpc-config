@@ -2582,13 +2582,15 @@ check_sudo_access() {
     return 0
 }
 
-# Check if certificate directory exists and is writable
+# Check if certificate directory exists and is writable (call only when generating MQTT TLS certs).
 check_cert_dir() {
-    if [ ! -d "$(dirname "$0")" ]; then
-        print_error "Certificate directory parent does not exist: $(dirname "$0")"
+    local _cert_parent
+    _cert_parent=$(dirname "$CERT_DIR")
+    if [ ! -d "$_cert_parent" ]; then
+        print_error "Certificate directory parent does not exist: $_cert_parent"
         exit 1
     fi
-    
+
     if [ ! -d "$CERT_DIR" ]; then
         print_info "Creating certificate directory: $CERT_DIR"
         if ! mkdir -p "$CERT_DIR" 2>/dev/null; then
@@ -2597,14 +2599,14 @@ check_cert_dir() {
             print_info "If the directory is owned by another user (e.g., mosquitto service user),"
             echo "you may need to:"
             echo "  - Run with sudo: sudo ./process_config.sh"
-            echo "  - Or change ownership: sudo chown -R \$USER:$(dirname "$0")"
+            echo "  - Or change ownership: sudo chown -R \$USER:\$USER $_cert_parent"
             exit 1
         fi
         print_success "Certificate directory created"
     else
         print_success "Certificate directory exists: $CERT_DIR"
     fi
-    
+
     # Check if directory is writable
     if [ ! -w "$CERT_DIR" ]; then
         print_error "Certificate directory is not writable: $CERT_DIR"
@@ -2612,7 +2614,7 @@ check_cert_dir() {
         print_info "Troubleshooting:"
         echo "  - Check ownership: ls -ld $CERT_DIR"
         echo "  - If owned by another user (e.g., mosquitto), you may need:"
-        echo "    sudo chown -R \$USER:$USER $(dirname "$0")"
+        echo "    sudo chown -R \$USER:\$USER $CERT_DIR"
         echo "  - Or run with sudo: sudo ./process_config.sh"
         echo "  - After generating, ensure mosquitto can read the files:"
         echo "    sudo chown -R mosquitto:mosquitto $CERT_DIR  # if mosquitto runs as 'mosquitto' user"
@@ -3993,8 +3995,8 @@ main() {
             
             # Only generate self-signed certs if Let's Encrypt is not configured
             if ! is_letsencrypt_configured "$MOSQUITTO_CONF"; then
-                check_cert_dir
                 if confirm_overwrite_mqtt_certs; then
+                    check_cert_dir
                     print_step "Generating self-signed Mosquitto (MQTT TLS) certificates for the broker..."
                     generate_ca_key
                     generate_ca_cert
@@ -4046,8 +4048,8 @@ main() {
         else
             print_warning "Could not find mosquitto.conf"
             print_info "Proceeding with self-signed Mosquitto (MQTT TLS) certificate generation..."
-            check_cert_dir
             if confirm_overwrite_mqtt_certs; then
+                check_cert_dir
                 generate_ca_key
                 generate_ca_cert
                 generate_server_key
