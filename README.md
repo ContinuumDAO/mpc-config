@@ -5,7 +5,7 @@ This repository contains the configuration files and setup scripts needed to dep
 ## What's Included
 
 - **`configs.yaml`** - Main node configuration file
-- **`configs-original.yaml`** - Pristine copy of the default `configs.yaml` from this repo; use `cp configs-original.yaml configs.yaml` to revert if something goes wrong
+- **`configs-original.yaml`** - Pristine copy of the default `configs.yaml` from this repo; use `cp configs-original.yaml configs.yaml` to revert if something goes wrong. **`process_config.sh` copies it to `configs.yaml` automatically** if `configs.yaml` is missing.
 - **`process_config.sh`** - Configuration validator and certificate generator
 - **`docker-compose.yml`** - Docker Compose configuration for running the node
 - **`mosquitto/config/mosquitto.conf`** - MQTT broker configuration

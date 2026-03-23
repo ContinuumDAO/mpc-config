@@ -427,6 +427,45 @@ find_configs_yaml() {
     return 0
 }
 
+# If configs.yaml is missing, copy from configs-original.yaml next to the script or at repo root.
+# Uses the same script_dir / repo_root logic as find_configs.yaml. Writes to script_dir/configs.yaml
+# so the next find_configs_yaml() finds it.
+ensure_configs_yaml_from_original() {
+    local script_dir="$(cd "$(dirname "$0")" && pwd)"
+    local repo_root="$script_dir"
+    if [ ! -d "$repo_root/mosquitto/config" ] && [ -d "$script_dir/../mosquitto/config" ]; then
+        repo_root="$(cd "$script_dir/.." && pwd)"
+    fi
+
+    local dest="$script_dir/configs.yaml"
+    if [ -f "$dest" ]; then
+        return 0
+    fi
+
+    local original_paths=(
+        "$script_dir/configs-original.yaml"
+        "$repo_root/configs-original.yaml"
+        "$(pwd)/configs-original.yaml"
+    )
+    local orig=""
+    for p in "${original_paths[@]}"; do
+        if [ -f "$p" ]; then
+            orig="$p"
+            break
+        fi
+    done
+    if [ -z "$orig" ]; then
+        return 0
+    fi
+
+    if cp "$orig" "$dest"; then
+        print_success "configs.yaml was missing; created it from configs-original.yaml"
+        return 0
+    fi
+    print_error "Failed to copy $orig to $dest"
+    return 1
+}
+
 # Extract IP address from URL (http://ip:port or https://ip:port)
 extract_ip_from_url() {
     local url="$1"
@@ -3528,8 +3567,13 @@ main() {
     # Require configs.yaml first (fail fast before any other checks)
     CONFIG_FILE=$(find_configs_yaml)
     if [ -z "$CONFIG_FILE" ]; then
+        ensure_configs_yaml_from_original
+        CONFIG_FILE=$(find_configs_yaml)
+    fi
+    if [ -z "$CONFIG_FILE" ]; then
         print_error "Could not find configs.yaml"
         print_info "Expected locations: next to this script (configs.yaml), repo root, ./configs.yaml, or ./console/configs.yaml"
+        print_info "If configs-original.yaml is present, it will be copied to configs.yaml automatically; ensure the repo is complete."
         exit 1
     fi
     print_success "Found config: $CONFIG_FILE"
