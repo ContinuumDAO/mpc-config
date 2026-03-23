@@ -1419,7 +1419,9 @@ except Exception:
     return 1
 }
 
-# Exit 0 if MPCGroups[0].nodeAddresses is missing, empty, or only the default example URLs (203.0.113.10–12:8080);
+# Exit 0 if MPCGroups[0].nodeAddresses is missing, empty, or still uses documentation example IPs
+# (203.0.113.10–12 in RFC 5737 TEST-NET-3 — any port). Do NOT match only the exact three URLs with :8080;
+# that caused the fill prompt to be skipped when the port was edited to :8081 while IPs stayed examples.
 # 1 if configured; 2 if no MPCGroups; 4 if ruamel.yaml is not installed (python3 -c "import ruamel.yaml" fails).
 first_mpc_group_node_addresses_empty() {
     local config_file="$1"
@@ -1430,30 +1432,48 @@ first_mpc_group_node_addresses_empty() {
 import sys
 try:
     from ruamel.yaml import YAML
+    from urllib.parse import urlparse
 except ImportError:
     sys.exit(4)  # distinct from 0=need fill, 1=configured, 2=no groups
 path = sys.argv[1]
-PLACEHOLDER_URLS = frozenset(
-    (
-        "http://203.0.113.10:8080",
-        "http://203.0.113.11:8080",
-        "http://203.0.113.12:8080",
-    )
-)
 
-def norm_node_url(u):
-    s = str(u).strip().strip('"').strip("'")
-    return s.lower()
+# Documentation-only IPs from configs-original / README — must be replaced for production.
+DOC_EXAMPLE_IPV4 = frozenset({"203.0.113.10", "203.0.113.11", "203.0.113.12"})
 
-def is_only_placeholder_node_addresses(na):
-    if not isinstance(na, dict) or len(na) != 3:
+
+def host_from_node_url(s):
+    s = str(s).strip().strip('"').strip("'")
+    if not s:
+        return None
+    if "://" in s:
+        p = urlparse(s)
+        if p.hostname:
+            return p.hostname.lower()
+        nl = (p.netloc or "").strip()
+        if nl.startswith("["):
+            return nl.split("]")[0].lstrip("[").lower()
+        if ":" in nl:
+            hostpart, _, maybe_port = nl.rpartition(":")
+            if maybe_port.isdigit():
+                return hostpart.lower()
+        return None
+    before = s.split("/")[0]
+    if ":" in before:
+        return before.split(":")[0].lower()
+    return before.lower()
+
+
+def has_documentation_example_ip(na):
+    if not isinstance(na, dict):
         return False
-    vals = []
     for v in na.values():
         if v is None or not str(v).strip():
-            return False
-        vals.append(norm_node_url(v))
-    return len(vals) == 3 and frozenset(vals) == PLACEHOLDER_URLS
+            continue
+        h = host_from_node_url(v)
+        if h and h in DOC_EXAMPLE_IPV4:
+            return True
+    return False
+
 
 _ry = YAML()
 with open(path, "r") as f:
@@ -1472,7 +1492,7 @@ if len(na) == 0:
     sys.exit(0)
 if not any(v and str(v).strip() for v in na.values()):
     sys.exit(0)
-if is_only_placeholder_node_addresses(na):
+if has_documentation_example_ip(na):
     sys.exit(0)
 sys.exit(1)
 PYNAEMPTY
@@ -1522,7 +1542,8 @@ path = os.environ["CONFIG_FILE_MERGE_NA"]
 hosts_path = os.environ["HOSTS_LIST_FILE"]
 port = os.environ.get("PORT_MERGE_NA", "8081")
 with open(hosts_path) as f:
-    hosts = [ln.strip() for ln in f if ln.strip()]
+    raw = f.read()
+hosts = [ln.strip() for ln in raw.splitlines() if ln.strip()]
 
 yaml = YAML()
 yaml.preserve_quotes = True
@@ -1535,22 +1556,16 @@ if not data or not data.get("MPCGroups"):
     raise SystemExit("no MPCGroups")
 
 grp = data["MPCGroups"][0]
-na = grp.get("nodeAddresses")
-if na is None:
-    na = CommentedMap()
-    grp["nodeAddresses"] = na
-elif not isinstance(na, dict):
-    na = CommentedMap()
-    grp["nodeAddresses"] = na
-
-new_keys = []
+# Fresh CommentedMap in strict line order (node1_key..nodeN_key). In-place delete+assign on an
+# existing map can confuse ruamel's ordering and YAML key order on dump (e.g. node10 before node2).
+new_na = CommentedMap()
 for i, h in enumerate(hosts, 1):
     k = f"node{i}_key"
-    new_keys.append(k)
-    na[k] = f"http://{h}:{port}"
-for k in list(na.keys()):
-    if k not in new_keys:
-        del na[k]
+    new_na[k] = f"http://{h}:{port}"
+grp["nodeAddresses"] = new_na
+
+if len(hosts) != len(new_na):
+    raise SystemExit("internal: hosts/nodeAddresses length mismatch")
 
 with open(path, "w") as f:
     yaml.dump(data, f)
@@ -1561,19 +1576,43 @@ PYNA
     return 0
 }
 
-# Print one hostname/host per line in map iteration order for MPCGroups[0].nodeAddresses (for menu display and edits).
+# Print one hostname/host per line for MPCGroups[0].nodeAddresses (YAML insertion order).
+# Writer above emits node1_key..nodeN_key in relay order; do not re-sort keys here (avoids confusion with IP order).
 extract_ordered_hosts_mpcgroup0() {
     local config_file="$1"
     if [ ! -f "$config_file" ]; then
         return 1
     fi
     python3 - "$config_file" << 'PYEX'
+import re
 import sys
 try:
     from ruamel.yaml import YAML
     from urllib.parse import urlparse
 except ImportError:
     sys.exit(1)
+
+def host_from_node_url(s):
+    s = str(s).strip().strip('"').strip("'")
+    if not s:
+        return None
+    if "://" in s:
+        p = urlparse(s)
+        if p.hostname:
+            return p.hostname
+        # Rare: hostname None — parse netloc (IPv4 host:port)
+        nl = (p.netloc or "").strip()
+        if nl.startswith("["):
+            return nl.split("]")[0].lstrip("[")
+        if ":" in nl:
+            hostpart, _, maybe_port = nl.rpartition(":")
+            if maybe_port.isdigit() and re.match(r"^(\d{1,3}\.){3}\d{1,3}$", hostpart):
+                return hostpart
+        return None
+    before = s.split("/")[0]
+    if ":" in before:
+        return before.split(":")[0]
+    return before
 
 path = sys.argv[1]
 _ry = YAML()
@@ -1585,23 +1624,12 @@ if not groups:
 na = groups[0].get("nodeAddresses")
 if not isinstance(na, dict) or not na:
     sys.exit(1)
-for v in na.values():
+for k, v in na.items():
     if v is None:
         continue
-    s = str(v).strip().strip('"').strip("'")
-    if not s:
-        continue
-    if "://" in s:
-        p = urlparse(s)
-        h = p.hostname
-        if h:
-            print(h)
-            continue
-    before = s.split("/")[0]
-    if ":" in before:
-        print(before.split(":")[0])
-    else:
-        print(before)
+    h = host_from_node_url(v)
+    if h:
+        print(h)
 PYEX
 }
 
@@ -1840,7 +1868,7 @@ prompt_fill_empty_node_addresses() {
     fi
     
     if [ ! -r /dev/tty ]; then
-        print_error "MPCGroups[0].nodeAddresses is empty or still the default example (203.0.113.10–12:8080). Edit configs.yaml or run this script in an interactive terminal."
+        print_error "MPCGroups[0].nodeAddresses is empty or still the default example IPs (203.0.113.10–12). Edit configs.yaml or run this script in an interactive terminal."
         return 1
     fi
     
@@ -3503,7 +3531,7 @@ show_process_config_help() {
     echo ""
     echo "This script validates configuration and generates certificates."
     echo ""
-    echo "If MPCGroups[0].nodeAddresses is empty or still the default 203.0.113.10–12:8080 examples, the script prompts"
+    echo "If MPCGroups[0].nodeAddresses is empty or still uses the default 203.0.113.10–12 example IPs, the script prompts"
     echo "and writes http://...:${MPC_NODE_HTTP_PORT} URLs (first entry = relay; same order on all nodes)."
     echo "On later runs (interactive TTY), an optional menu (0=continue, 1=add, 2=remove) lets you edit node IPs."
     echo "Set SKIP_NODE_ADDRESS_MENU=1 to skip that menu (e.g. automation)."
@@ -3611,6 +3639,54 @@ _firewall_collect_scanner_relayer_sources() {
     rm -f "$tmpf"
 }
 
+# Read listener ports from configs.yaml root (same semantics as mpc-auth node). Uses ruamel.yaml so we do not
+# depend on which `yq` binary is installed (mikefarah `yq eval` vs python-yq — the latter breaks `.ScannerRelayerPort`).
+# Prints: ManagementAPIsPort|PublicDiscoveryPort|BrowserHTTPSFirewallPort|ScannerRelayerPort
+_firewall_read_listener_ports_from_configs_yaml() {
+    local config_file="$1"
+    FW_PORTS_CFG="$config_file" python3 << 'PYFWPORTS'
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.exit(2)
+
+path = os.environ.get("FW_PORTS_CFG", "")
+if not path:
+    sys.exit(1)
+
+y = YAML()
+with open(path) as f:
+    d = y.load(f)
+if not isinstance(d, dict):
+    d = {}
+
+def _scalar_int(v, default):
+    if v is None:
+        return default
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+mgt = _scalar_int(d.get("ManagementAPIsPort"), 8080)
+pub = _scalar_int(d.get("PublicDiscoveryPort"), 18080)
+sr = _scalar_int(d.get("ScannerRelayerPort"), 0)
+bh = d.get("BrowserHTTPS")
+bp = None
+if isinstance(bh, dict):
+    bp = bh.get("Port")
+# Match prior yq intent: missing or 0 → use 8443 for firewall allow line (Browser HTTPS listener default)
+if bp is None or bp == 0:
+    bh_fw = 8443
+else:
+    bh_fw = _scalar_int(bp, 8443)
+
+print(f"{mgt}|{pub}|{bh_fw}|{sr}")
+PYFWPORTS
+}
+
 # Apply baseline ufw allow rules for mpc-auth (does not enable ufw unless user confirms interactively).
 # See docs-internal/firewall-and-cors-design.md
 apply_process_config_firewall() {
@@ -3628,12 +3704,32 @@ apply_process_config_firewall() {
     print_step "Host firewall (recommended for financial / MPC nodes)"
 
     local mgt_port pub_port bh_port sr_port
-    mgt_port=$(yq eval '.ManagementAPIsPort // 8080' "$config_file" 2>/dev/null || echo 8080)
-    pub_port=$(yq eval '.PublicDiscoveryPort // 18080' "$config_file" 2>/dev/null || echo 18080)
-    bh_port=$(yq eval '(.BrowserHTTPS // {}).Port // 8443' "$config_file" 2>/dev/null || echo 8443)
-    sr_port=$(yq eval '.ScannerRelayerPort // 0' "$config_file" 2>/dev/null || echo 0)
+    local _pl
+    if _pl=$(_firewall_read_listener_ports_from_configs_yaml "$config_file" 2>/dev/null) && [ -n "$_pl" ]; then
+        IFS='|' read -r mgt_port pub_port bh_port sr_port <<< "$_pl"
+    else
+        # Fallback if ruamel.yaml missing: yq (mikefarah) — may fail if only python-yq is installed
+        mgt_port=$(yq eval '.ManagementAPIsPort // 8080' "$config_file" 2>/dev/null || echo 8080)
+        pub_port=$(yq eval '.PublicDiscoveryPort // 18080' "$config_file" 2>/dev/null || echo 18080)
+        bh_port=$(yq eval '(.BrowserHTTPS // {}).Port // 8443' "$config_file" 2>/dev/null || echo 8443)
+        sr_port=$(yq eval '.ScannerRelayerPort // 0' "$config_file" 2>/dev/null || echo 0)
+        mgt_port="${mgt_port//[$'\t\r\n']/}"
+        pub_port="${pub_port//[$'\t\r\n']/}"
+        sr_port="${sr_port//[$'\t\r\n']/}"
+        bh_port="${bh_port//[$'\t\r\n']/}"
+        print_warning "Could not read ports via ruamel.yaml — using yq fallback (install: sudo apt install python3-ruamel.yaml)"
+    fi
+    # BOM / odd indent: last-chance grep for ScannerRelayerPort if still 0
+    if [ -z "$sr_port" ] || [ "$sr_port" = "null" ] || [ "$sr_port" = "0" ]; then
+        local _sr_grep
+        _sr_grep=$(LC_ALL=C awk '/^[[:space:]]*ScannerRelayerPort:/ { sub(/#.*/,""); sub(/^[[:space:]]*ScannerRelayerPort:[[:space:]]*/, ""); gsub(/["'\'']/, ""); print; exit }' "$config_file" 2>/dev/null || true)
+        _sr_grep="${_sr_grep//[$'\t\r\n']/}"
+        if [ -n "$_sr_grep" ] && [ "$_sr_grep" != "null" ]; then
+            sr_port="$_sr_grep"
+        fi
+    fi
 
-    print_info "Ports from configs.yaml: ManagementAPIsPort=$mgt_port, PublicDiscoveryPort=$pub_port, BrowserHTTPS.Port=$bh_port, ScannerRelayerPort=${sr_port:-0}"
+    print_info "Ports from configs.yaml: ManagementAPIsPort=$mgt_port, PublicDiscoveryPort=$pub_port, BrowserHTTPS (firewall allow port)=$bh_port, ScannerRelayerPort=${sr_port:-0}"
     print_info "Narrow inbound to scanner/DAO/relayer CIDRs in production; see docs-internal/firewall-and-cors-design.md"
     if [ "$is_relay" = "true" ]; then
         print_info "Relay node: MQTT broker TLS typically uses 8883/tcp (docker-compose)."
@@ -3660,7 +3756,12 @@ apply_process_config_firewall() {
     apply_one_ufw() {
         local port="$1"
         local note="$2"
-        if sudo ufw status 2>/dev/null | grep -qE "${port}/tcp"; then
+        if [ -z "$port" ] || [ "$port" = "0" ]; then
+            print_warning "Skipping UFW rule for invalid port (${port:-empty}) ($note)"
+            return 0
+        fi
+        # Anchor to start of line so e.g. port 0 does not match 18080/tcp; ufw status lists as "8080/tcp ..."
+        if sudo ufw status 2>/dev/null | grep -qE "^[[:space:]]*${port}/tcp"; then
             print_info "UFW rule already present for ${port}/tcp ($note)"
             return 0
         fi
@@ -3678,7 +3779,10 @@ apply_process_config_firewall() {
     apply_one_ufw 22 "ssh"
     apply_one_ufw "$bh_port" "mpc-auth BrowserHTTPS"
     apply_one_ufw "$pub_port" "mpc-auth PublicDiscovery"
-    if [ -n "$sr_port" ] && [ "$sr_port" != "0" ] && [ "$sr_port" != "$pub_port" ] && [ "$sr_port" != "$mgt_port" ]; then
+    # ScannerRelayerPort: open unless same port already covered by another listener rule above.
+    # Include bh_port so we do not duplicate rules when BrowserHTTPS.Port == ScannerRelayerPort.
+    if [ -n "$sr_port" ] && [ "$sr_port" != "0" ] && [ "$sr_port" != "null" ] \
+        && [ "$sr_port" != "$pub_port" ] && [ "$sr_port" != "$mgt_port" ] && [ "$sr_port" != "$bh_port" ]; then
         if command -v python3 >/dev/null 2>&1; then
             local _sr_sources _sr_line _applied_sr
             _applied_sr=false

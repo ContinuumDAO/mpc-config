@@ -350,7 +350,7 @@ MPCGroups:
     # If nodes are behind NAT, use the public IP address or a public hostname
     # Format: nodeKey -> "http://external-ip:port" or "https://hostname:port"
     # Examples:
-    #   - "http://203.0.113.10:8080" (external IP)
+    #   - "http://203.0.113.10:8081" (external IP; match MPC_NODE_HTTP_PORT in process_config.sh)
     #   - "https://node1.example.com:8080" (public hostname)
     #   - NOT: "http://192.168.1.10:8080" (private IP - will be rejected)
     #
@@ -358,9 +358,9 @@ MPCGroups:
     # process_config.sh uses this order to enable mosquitto only on the first node and disable it on others.
     # If order differs between nodes, the wrong node may start mosquitto.
     nodeAddresses:
-      node1_key: "http://203.0.113.10:8080"
-      node2_key: "http://203.0.113.11:8080"
-      node3_key: "http://203.0.113.12:8080"
+      node1_key: "http://203.0.113.10:8081"
+      node2_key: "http://203.0.113.11:8081"
+      node3_key: "http://203.0.113.12:8081"
 
     # Optional: MQTT broker address for this group
     # If not provided, will be automatically derived from the first node's address
