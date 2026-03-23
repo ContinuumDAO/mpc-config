@@ -1479,6 +1479,7 @@ PYNAEMPTY
 }
 
 # Strip whitespace, optional scheme/path, and trailing :port from user input (host or IPv4).
+# Only strip :port when there is a single ':' (IPv4:port or hostname:port). Multiple colons = IPv6 — do not strip.
 normalize_node_address_input() {
     local raw="$1"
     raw="${raw#"${raw%%[![:space:]]*}"}"
@@ -1488,9 +1489,14 @@ normalize_node_address_input() {
     raw="${raw%%/*}"
     raw="${raw%%\?*}"
     if [[ "$raw" == *:* ]]; then
-        local after="${raw##*:}"
-        if [[ "$after" =~ ^[0-9]+$ ]]; then
-            raw="${raw%:*}"
+        local ncolon
+        ncolon=$(grep -o ':' <<< "$raw" | wc -l)
+        ncolon="${ncolon//[[:space:]]/}"
+        if [ "${ncolon:-0}" -eq 1 ]; then
+            local after="${raw##*:}"
+            if [[ "$after" =~ ^[0-9]+$ ]]; then
+                raw="${raw%:*}"
+            fi
         fi
     fi
     printf '%s' "$raw"
@@ -1637,52 +1643,98 @@ prompt_menu_edit_node_addresses() {
         local i=0
         for h in "${hosts[@]}"; do
             i=$((i + 1))
-            echo "  $i) http://${h}:${MPC_NODE_HTTP_PORT}  ($h)"
+            echo "  [$i] http://${h}:${MPC_NODE_HTTP_PORT}  ($h)"
         done
         echo ""
-        echo "  1) Continue without changes"
-        echo "  2) Add node(s) at end"
-        echo "  3) Remove node(s) by number"
+        echo "  0) Continue without changes (default)"
+        echo "  1) Add node(s) at end"
+        echo "  2) Remove node(s) by number"
         echo ""
-        read -r -p "Choice [1]: " choice < /dev/tty || true
-        choice="${choice:-1}"
+        read -r -p "Choice [0]: " choice < /dev/tty || true
+        choice="${choice:-0}"
         choice="${choice//[[:space:]]/}"
 
         case "$choice" in
-            1|"")
+            0|"")
                 echo ""
                 return 0
                 ;;
-            2)
+            1)
                 echo ""
                 local host_count_before=${#hosts[@]}
-                print_info "Enter one public IP or hostname per line; type done or finished when finished (port :${MPC_NODE_HTTP_PORT} is added)."
+                print_info "Enter one public IP or hostname per line (or space-separated); type done or finished when finished (port :${MPC_NODE_HTTP_PORT} is added)."
+                print_info "Same line OK: 203.0.113.10 finished"
+                local line_add lower_add norm_add hh dup_add
+                local -a tok_add
                 while true; do
-                    read -r -p "Add node host (or done): " line < /dev/tty || true
-                    lower=$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')
-                    lower="${lower#"${lower%%[![:space:]]*}"}"
-                    lower="${lower%"${lower##*[![:space:]]}"}"
-                    if [ "$lower" = "done" ] || [ "$lower" = "finished" ]; then
+                    read -r -p "Add node host (or done): " line_add < /dev/tty || true
+                    line_add="${line_add%$'\r'}"
+                    lower_add=$(printf '%s' "$line_add" | tr '[:upper:]' '[:lower:]')
+                    lower_add="${lower_add#"${lower_add%%[![:space:]]*}"}"
+                    lower_add="${lower_add%"${lower_add##*[![:space:]]}"}"
+                    if [ "$lower_add" = "done" ] || [ "$lower_add" = "finished" ]; then
                         break
                     fi
-                    norm=$(normalize_node_address_input "$line")
-                    if [ -z "$norm" ]; then
+                    if [[ "$lower_add" =~ ^([^[:space:]]+)[[:space:]]+(finished|done)$ ]]; then
+                        norm_add=$(normalize_node_address_input "${BASH_REMATCH[1]}")
+                        if [ -n "$norm_add" ]; then
+                            dup_add=false
+                            for hh in "${hosts[@]}"; do
+                                if [ "$hh" = "$norm_add" ]; then dup_add=true; break; fi
+                            done
+                            if [ "$dup_add" != true ]; then
+                                hosts+=("$norm_add")
+                                print_success "Queued node ${#hosts[@]}: $norm_add"
+                            else
+                                print_warning "Already in list: $norm_add"
+                            fi
+                        fi
+                        break
+                    fi
+                    read -r -a tok_add <<< "$line_add"
+                    if [ ${#tok_add[@]} -gt 1 ]; then
+                        for fl in "${tok_add[@]}"; do
+                            [ -z "${fl//[[:space:]]/}" ] && continue
+                            lower_add=$(printf '%s' "$fl" | tr '[:upper:]' '[:lower:]')
+                            if [ "$lower_add" = "finished" ] || [ "$lower_add" = "done" ]; then
+                                break 2
+                            fi
+                            norm_add=$(normalize_node_address_input "$fl")
+                            if [ -z "$norm_add" ]; then
+                                print_warning "Skipped empty token"
+                                continue
+                            fi
+                            dup_add=false
+                            for hh in "${hosts[@]}"; do
+                                if [ "$hh" = "$norm_add" ]; then dup_add=true; break; fi
+                            done
+                            if [ "$dup_add" = true ]; then
+                                print_warning "Already in list: $norm_add"
+                                continue
+                            fi
+                            hosts+=("$norm_add")
+                            print_success "Queued node ${#hosts[@]}: $norm_add"
+                        done
+                        continue
+                    fi
+                    norm_add=$(normalize_node_address_input "$line_add")
+                    if [ -z "$norm_add" ]; then
                         print_warning "Skipped empty line"
                         continue
                     fi
-                    local dup=false hh
+                    dup_add=false
                     for hh in "${hosts[@]}"; do
-                        if [ "$hh" = "$norm" ]; then
-                            dup=true
+                        if [ "$hh" = "$norm_add" ]; then
+                            dup_add=true
                             break
                         fi
                     done
-                    if [ "$dup" = true ]; then
-                        print_warning "Already in list: $norm"
+                    if [ "$dup_add" = true ]; then
+                        print_warning "Already in list: $norm_add"
                         continue
                     fi
-                    hosts+=("$norm")
-                    print_success "Queued node ${#hosts[@]}: $norm"
+                    hosts+=("$norm_add")
+                    print_success "Queued node ${#hosts[@]}: $norm_add"
                 done
                 if [ ${#hosts[@]} -eq "$host_count_before" ]; then
                     print_info "No new nodes added."
@@ -1700,7 +1752,7 @@ prompt_menu_edit_node_addresses() {
                     return 1
                 fi
                 ;;
-            3)
+            2)
                 if [ ${#hosts[@]} -le 1 ]; then
                     print_warning "Cannot remove the only remaining node. Add another node first, then remove."
                     continue
@@ -1759,7 +1811,7 @@ prompt_menu_edit_node_addresses() {
                 fi
                 ;;
             *)
-                print_warning "Invalid choice. Enter 1, 2, or 3."
+                print_warning "Invalid choice. Enter 0, 1, or 2."
                 ;;
         esac
     done
@@ -1798,26 +1850,71 @@ prompt_fill_empty_node_addresses() {
     print_info "The first address you enter is the RELAY NODE (runs the MQTT broker). Use the SAME order on every machine's configs.yaml."
     print_info "Port :${MPC_NODE_HTTP_PORT} is added automatically (http://...:${MPC_NODE_HTTP_PORT})."
     print_info "If your API listens on a different port, set MPC_NODE_HTTP_PORT at the top of this script (or edit configs.yaml afterward)."
-    print_info "Enter one address per line. When you are done, type: finished (or done)"
+    print_info "Enter one address per line (or space-separated on one line). When done: finished (or done)"
+    print_info "You can also use the same line: 203.0.113.10 finished"
     echo ""
     
     local hosts=()
-    local line norm lower
+    local line norm lower h dup fl
+    local -a tok
     while true; do
         read -r -p "Node IP or hostname (or 'finished' to save): " line < /dev/tty || true
+        line="${line%$'\r'}"
         lower=$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')
         lower="${lower#"${lower%%[![:space:]]*}"}"
         lower="${lower%"${lower##*[![:space:]]}"}"
         if [ "$lower" = "finished" ] || [ "$lower" = "done" ]; then
             break
         fi
+        # Same line: "IP finished" or "host done"
+        if [[ "$lower" =~ ^([^[:space:]]+)[[:space:]]+(finished|done)$ ]]; then
+            norm=$(normalize_node_address_input "${BASH_REMATCH[1]}")
+            if [ -n "$norm" ]; then
+                dup=false
+                for h in "${hosts[@]}"; do
+                    if [ "$h" = "$norm" ]; then dup=true; break; fi
+                done
+                if [ "$dup" != true ]; then
+                    hosts+=("$norm")
+                    print_success "Added node ${#hosts[@]}: $norm (will become http://${norm}:${MPC_NODE_HTTP_PORT})"
+                else
+                    print_warning "Already in list: $norm"
+                fi
+            fi
+            break
+        fi
+        read -r -a tok <<< "$line"
+        if [ ${#tok[@]} -gt 1 ]; then
+            for fl in "${tok[@]}"; do
+                [ -z "${fl//[[:space:]]/}" ] && continue
+                lower=$(printf '%s' "$fl" | tr '[:upper:]' '[:lower:]')
+                if [ "$lower" = "finished" ] || [ "$lower" = "done" ]; then
+                    break 2
+                fi
+                norm=$(normalize_node_address_input "$fl")
+                if [ -z "$norm" ]; then
+                    print_warning "Skipped empty token"
+                    continue
+                fi
+                dup=false
+                for h in "${hosts[@]}"; do
+                    if [ "$h" = "$norm" ]; then dup=true; break; fi
+                done
+                if [ "$dup" = true ]; then
+                    print_warning "Already in list: $norm"
+                    continue
+                fi
+                hosts+=("$norm")
+                print_success "Added node ${#hosts[@]}: $norm (will become http://${norm}:${MPC_NODE_HTTP_PORT})"
+            done
+            continue
+        fi
         norm=$(normalize_node_address_input "$line")
         if [ -z "$norm" ]; then
             print_warning "Skipped empty line"
             continue
         fi
-        local dup=false
-        local h
+        dup=false
         for h in "${hosts[@]}"; do
             if [ "$h" = "$norm" ]; then
                 dup=true
@@ -3408,7 +3505,7 @@ show_process_config_help() {
     echo ""
     echo "If MPCGroups[0].nodeAddresses is empty or still the default 203.0.113.10–12:8080 examples, the script prompts"
     echo "and writes http://...:${MPC_NODE_HTTP_PORT} URLs (first entry = relay; same order on all nodes)."
-    echo "On later runs (interactive TTY), an optional menu lets you add or remove node IPs without editing YAML by hand."
+    echo "On later runs (interactive TTY), an optional menu (0=continue, 1=add, 2=remove) lets you edit node IPs."
     echo "Set SKIP_NODE_ADDRESS_MENU=1 to skip that menu (e.g. automation)."
     echo ""
     echo "If NodeMgtKey or PublicMgtKey is empty, the script may prompt: Ethereum (MetaMask) and/or"
@@ -3551,9 +3648,14 @@ apply_process_config_firewall() {
         return 0
     fi
 
-    local ufw_state
-    ufw_state=$(sudo ufw status 2>/dev/null | head -1 || true)
-    print_info "UFW: $ufw_state"
+    local ufw_state ufw_full
+    # Capture stderr too — sudo may fail silently with 2>/dev/null and leave status empty.
+    ufw_full=$(sudo ufw status 2>&1) || true
+    ufw_state=$(printf '%s\n' "$ufw_full" | head -1)
+    print_info "UFW: ${ufw_state:-<no output>}"
+    if [ -z "$ufw_state" ]; then
+        print_warning "Could not read UFW status (sudo may need a password, or ufw failed). Run: sudo ufw status"
+    fi
 
     apply_one_ufw() {
         local port="$1"
@@ -3716,6 +3818,9 @@ main() {
     setup_browser_https "$CONFIG_FILE"
     
     prompt_relayer_api_url_if_missing "$CONFIG_FILE" || exit 1
+
+    # Host firewall must run before Relayer validation — if validation exits 1, we still showed UFW status + enable prompt.
+    apply_process_config_firewall "$CONFIG_FILE" "$SKIP_FIREWALL" "$IS_RELAY_NODE"
     
     # Validate Relayer API connection (MANDATORY for relay before certificate generation; may exit 1 on failure)
     validate_relayer_api_connection "$CONFIG_FILE"
@@ -4004,8 +4109,6 @@ main() {
         print_info "Replace 'relay-node-user' with the SSH username on the relay node."
         echo ""
     fi
-
-    apply_process_config_firewall "$CONFIG_FILE" "$SKIP_FIREWALL" "$IS_RELAY_NODE"
 }
 
 # Run main function (pass through CLI arguments)
