@@ -118,7 +118,7 @@ ScannerRelayerPort: 18081
 #   - "http://scanner.internal:9090"
 #   - "203.0.113.50"
 #   - "198.51.100.0/24"
-# Empty list [] uses DEFAULT_SCANNER_API_URLS in process_config.sh for UFW (mpc-config: repo root; mpc-auth: console/process_config.sh).
+# Empty list [] uses DEFAULT_SCANNER_API_URLS in console/process_config.sh for UFW (override there or set entries here).
 ScannerAPIURLs: []
 
 # Ignore client signature check (set to true for testing/development only)

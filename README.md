@@ -110,7 +110,7 @@ Blockchain information (token / assets / chain) distributed authentication toolk
 
 - **Dedicated OS user `mpcnode` with sudo** (recommended on every VPS; same steps as the [mpc-auth](https://github.com/ContinuumDAO/mpc-auth) repo — see **Installation §0** below)
 - **Docker & Docker Compose** (required)
-- **Python 3 with PyYAML and ruamel.yaml** (required for `process_config.sh`; on Debian/Ubuntu they are installed in **Installation §1**)
+- **Python 3 with ruamel.yaml** (required for `process_config.sh`; on Debian/Ubuntu install **`python3-ruamel.yaml`)
 - **Sudo/root access** (may be required on client nodes to create `mosquitto/config/certs/` directory - see Certificate Setup section)
 - **Same username with sudo access on all nodes** (recommended for simplified certificate sharing; use **`mpcnode`** on each node if following §0)
 
@@ -165,7 +165,7 @@ sudo -v      # Should succeed without errors
 
 #### 1. Install Docker, Docker Compose, base tools, and Python (Debian / Ubuntu)
 
-On a minimal VPS, install everything in **one** step: Docker engine, Compose, TLS/HTTPS basics, common CLI tools, OpenSSL (certificates), Git, **Python 3** plus **`python3-yaml`** and **`python3-ruamel.yaml`** (required by `process_config.sh`), and `jq`. **Run as root or with `sudo`.** Optionally run `sudo apt upgrade -y` first for security patches.
+On a minimal VPS, install everything in **one** step: Docker engine, Compose, TLS/HTTPS basics, common CLI tools, OpenSSL (certificates), Git, **Python 3** plus **`python3-ruamel.yaml`** (required by `process_config.sh` for reading and writing `configs.yaml` with comments preserved), and `jq`. **Run as root or with `sudo`.** Optionally run `sudo apt upgrade -y` first for security patches.
 
 ```bash
 sudo apt update && \
@@ -181,7 +181,6 @@ sudo apt install -y \
   docker-compose \
   python3 \
   python3-pip \
-  python3-yaml \
   python3-ruamel.yaml \
   jq \
   && sudo systemctl enable --now docker
@@ -189,9 +188,9 @@ sudo apt install -y \
 
 **Notes:**
 - **`docker.io`** is the Docker daemon; **`docker-compose`** provides the `docker-compose` command used in this README. If your release has no `docker-compose` package, install **`docker-compose-plugin`** and use **`docker compose`** (with a space) instead of `docker-compose`.
-- **`python3-yaml`** is PyYAML from apt (avoids `pip` / PEP 668 issues on newer Debian/Ubuntu). If `process_config.sh` ever needs a newer PyYAML, use `pip3 install --user pyyaml`.
+- **`python3-ruamel.yaml`** provides **`ruamel.yaml`**. The script does **not** use PyYAML (`python3-yaml`); Python fallbacks for YAML use **ruamel.yaml** only (read paths prefer **`yq`** when installed).
 - **Ubuntu/Debian:** There is no separate Python install step—**§1** is the only `apt install` you need for Python + YAML on Debian/Ubuntu.
-- After install, confirm: `docker --version`, `docker-compose --version` or `docker compose version`, `curl --version`, `python3 -c "import yaml, ruamel.yaml"`.
+- After install, confirm: `docker --version`, `docker-compose --version` or `docker compose version`, `curl --version`, `python3 -c "import ruamel.yaml"`.
 
 #### 1.1. Configure Docker Access on VPS (Required)
 
@@ -245,25 +244,25 @@ If you encounter the error `Couldn't connect to Docker daemon at http+docker://l
 
 #### 2. Python / YAML for `process_config.sh` (non-Debian, or reference)
 
-The `process_config.sh` script uses **PyYAML** for read-only parsing and **`ruamel.yaml`** whenever it **writes** `configs.yaml` (node addresses, management keys, Relayer URL, Browser HTTPS, etc.) so **comments in the prototype file are preserved**.
+The `process_config.sh` script uses **`ruamel.yaml`** for reading and writing `configs.yaml` (node addresses, management keys, Relayer URL, Browser HTTPS, ScannerAPIURLs, etc.) so **comments in the prototype file are preserved**. Read paths prefer **`yq`** when installed; Python fallbacks use **ruamel.yaml** only (not PyYAML).
 
-**Ubuntu/Debian:** Install **§1** above—**`python3`**, **`python3-pip`**, **`python3-yaml`**, and **`python3-ruamel.yaml`** are already included there. Do not duplicate a second `apt install` for Python.
+**Ubuntu/Debian:** Install **§1** above—**`python3`**, **`python3-pip`**, and **`python3-ruamel.yaml`** are already included there. Do not duplicate a second `apt install` for Python.
 
 **CentOS/RHEL:**
 ```bash
 sudo yum install python3 python3-pip -y && \
-pip3 install pyyaml ruamel.yaml
+pip3 install ruamel.yaml
 ```
 
 **macOS:**
 ```bash
 brew install python3 && \
-pip3 install pyyaml ruamel.yaml
+pip3 install ruamel.yaml
 ```
 
-**Alternative: Install yq (YAML processor)**
+**Optional: Install yq (YAML processor)**
 
-If you prefer not to use Python, you can install `yq` instead:
+`yq` speeds up some **read-only** parsing when available (optional; not a substitute for **ruamel.yaml** on writes):
 
 **Ubuntu/Debian:**
 ```bash
@@ -276,7 +275,7 @@ sudo chmod +x /usr/local/bin/yq
 brew install yq
 ```
 
-**Note:** `yq` is used for some **read-only** parsing when available. **Updating** `configs.yaml` requires **`ruamel.yaml`** (on Debian/Ubuntu: **`python3-ruamel.yaml`** from **Installation §1**). Without it, the script will error when a merge step runs. PyYAML alone is not sufficient for writes because a round-trip would strip comments.
+**Note:** **Updating** `configs.yaml` requires **`ruamel.yaml`** (on Debian/Ubuntu: **`python3-ruamel.yaml`** from **Installation §1**). Without it, the script will error when a merge step runs.
 
 #### 3. MQTT Broker Setup (Per-Group, Default)
 

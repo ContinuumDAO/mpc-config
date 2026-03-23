@@ -46,7 +46,10 @@ MPC_NODE_HTTP_PORT=8081
 # Default example NodeMgtKey in configs.yaml — treated like unset (must be replaced for a real deployment).
 NODE_MGT_ETH_PLACEHOLDER="0x1234567890abcdef1234567890abcdef12345678"
 
-# UFW sources for ScannerRelayerPort: used when configs.yaml has ScannerAPIURLs: [] (or key missing).
+# Default relayer HTTP base (pre-signing verification). Used when PreSigningVerification is set but RelayerAPIURL is empty.
+DEFAULT_RELAYER_API_URL="http://82.208.20.136:8080"
+
+# UFW + configs.yaml: used when ScannerAPIURLs is [] / missing (same host as default relayer unless you override).
 # Full URLs are fine; :port is ignored for firewall (only host/IP/CIDR matter—same as RelayerAPIURL).
 DEFAULT_SCANNER_API_URLS=(
     "http://82.208.20.136:8080"
@@ -73,7 +76,7 @@ print_step() {
     echo -e "\n${BLUE}==> $1${NC}"
 }
 
-# PyYAML safe_load/dump strips all comments. ruamel.yaml round-trips the prototype configs.yaml.
+# Writes use ruamel.yaml (round-trip, preserves comments). Reads use yq when possible; Python fallbacks use ruamel.yaml only — not PyYAML (no python3-yaml package).
 require_ruamel_yaml() {
     if ! python3 -c "import ruamel.yaml" 2>/dev/null; then
         print_error "ruamel.yaml is required to update configs.yaml without stripping comments."
@@ -121,6 +124,55 @@ ps["RelayerAPIURL"] = url
 with open(path, "w") as f:
     yaml.dump(data, f)
 PYRELAYERMERGE
+}
+
+# If ScannerAPIURLs is missing or empty [], set it from DEFAULT_SCANNER_API_URLS (preserves comments).
+configs_yaml_merge_scanner_api_urls_if_empty() {
+    local config_file="$1"
+    require_ruamel_yaml || return 1
+    local _lines
+    _lines=$(printf '%s\n' "${DEFAULT_SCANNER_API_URLS[@]}")
+    SCANNER_MERGE_CFG="$config_file" SCANNER_MERGE_LINES="$_lines" python3 << 'PYSCANNERMERGE'
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.stderr.write("configs.yaml: install ruamel.yaml\n")
+    sys.exit(1)
+
+path = os.environ["SCANNER_MERGE_CFG"]
+raw = os.environ.get("SCANNER_MERGE_LINES", "")
+defaults = [s.strip() for s in raw.splitlines() if s.strip()]
+if not defaults:
+    sys.exit(0)
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)
+
+with open(path, "r") as f:
+    data = yaml.load(f)
+if not isinstance(data, dict):
+    sys.stderr.write("invalid yaml root\n")
+    sys.exit(1)
+
+existing = data.get("ScannerAPIURLs")
+empty = False
+if existing is None:
+    empty = True
+elif isinstance(existing, list):
+    nonempty = [x for x in existing if x is not None and str(x).strip() and str(x).strip().lower() != "null"]
+    empty = len(nonempty) == 0
+else:
+    empty = True
+
+if empty:
+    data["ScannerAPIURLs"] = defaults
+    with open(path, "w") as f:
+        yaml.dump(data, f)
+PYSCANNERMERGE
 }
 
 # Find mosquitto.conf file
@@ -480,22 +532,28 @@ validate_presign_config() {
             cache_size=$(yq eval '.PreSigningCacheSize' "$config_file" 2>/dev/null)
             min_threshold=$(yq eval '.PreSigningMinThreshold' "$config_file" 2>/dev/null)
         elif command -v python3 &> /dev/null; then
-            # Only use Python as last resort with strict timeout
-            if python3 -c "import yaml" 2>/dev/null; then
+            # Only use Python as last resort with strict timeout (ruamel.yaml, same as config merges)
+            if python3 -c "import ruamel.yaml" 2>/dev/null; then
                 # Use a simple one-liner with explicit timeout
                 local py_script="/tmp/presign_$$.py"
                 cat > "$py_script" << 'PYEOF'
-import yaml, sys, os
+import sys, os
 try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.exit(1)
+try:
+    _ry = YAML()
     with open(os.environ['PRESIGN_CONFIG_FILE'], 'r') as f:
-        d = yaml.safe_load(f) or {}
+        d = _ry.load(f) or {}
     i = d.get('InitiatePreSigning')
     c = d.get('PreSigningCacheSize')
     t = d.get('PreSigningMinThreshold')
     if i is not None: print('INITIATE:' + ('true' if i else 'false'))
     if c is not None: print('CACHE:' + str(c))
     if t is not None: print('THRESHOLD:' + str(t))
-except: sys.exit(1)
+except Exception:
+    sys.exit(1)
 PYEOF
                 export PRESIGN_CONFIG_FILE="$config_file"
                 local py_output=""
@@ -847,41 +905,71 @@ validate_relayer_api_connection() {
     print_success "Relayer API configuration validated successfully"
 }
 
-# When PreSigningVerification exists but RelayerAPIURL is empty, prompt (or use RELAYER_API_URL) before validate_relayer_api_connection.
-prompt_relayer_api_url_if_missing() {
+# Extract RelayerAPIURL from configs.yaml (empty if missing). Uses yq when available, else line scan (no PyYAML required).
+_extract_relayer_api_url_from_config() {
     local config_file="$1"
-    
-    if ! command -v python3 &> /dev/null; then
+    local api_url=""
+    if [ ! -f "$config_file" ]; then
+        echo ""
         return 0
     fi
+    if command -v yq &>/dev/null; then
+        api_url=$(yq eval '.PreSigningVerification.RelayerAPIURL // ""' "$config_file" 2>/dev/null || echo "")
+        printf '%s' "$api_url" | tr -d '\r\n'
+        return 0
+    fi
+    local in_ps_verif=false ps_indent=""
+    while IFS= read -r line; do
+        if echo "$line" | grep -qE '^\s*PreSigningVerification\s*:'; then
+            in_ps_verif=true
+            ps_indent=$(echo "$line" | sed 's/[^ ].*//')
+            continue
+        fi
+        if [ "$in_ps_verif" = true ]; then
+            local current_indent
+            current_indent=$(echo "$line" | sed 's/[^ ].*//')
+            if [ -n "$current_indent" ] && [ "${#current_indent}" -le "${#ps_indent}" ] && echo "$line" | grep -qE '^\s*[A-Za-z_]+:'; then
+                in_ps_verif=false
+            fi
+        fi
+        if [ "$in_ps_verif" = true ] && [ -z "$api_url" ] && echo "$line" | grep -qE '^\s+RelayerAPIURL\s*:'; then
+            api_url=$(echo "$line" | sed -E 's/^\s*RelayerAPIURL\s*:\s*["'\'']?([^"'\''#]+)["'\'']?.*/\1/' | sed 's/[[:space:]]*$//' | head -1)
+            if [ "$api_url" = '""' ] || [ "$api_url" = "''" ]; then
+                api_url=""
+            fi
+        fi
+    done < "$config_file"
+    printf '%s' "$api_url" | tr -d '\r\n'
+}
+
+# When PreSigningVerification exists but RelayerAPIURL is empty: RELAYER_API_URL env, then DEFAULT_RELAYER_API_URL, or prompt (empty line = default).
+# Also fills ScannerAPIURLs in configs.yaml when empty (DEFAULT_SCANNER_API_URLS).
+prompt_relayer_api_url_if_missing() {
+    local config_file="$1"
+
     if [ ! -f "$config_file" ]; then
         return 0
     fi
-    
-    local need_url
-    need_url=$(RELAYER_CFG="$config_file" python3 << 'PYRELAYERNEED'
-import os, yaml
-path = os.environ["RELAYER_CFG"]
-with open(path, "r") as f:
-    d = yaml.safe_load(f) or {}
-ps = d.get("PreSigningVerification")
-if ps is None or not isinstance(ps, dict):
-    print("no")
-    raise SystemExit(0)
-u = ps.get("RelayerAPIURL")
-if u is None:
-    print("yes")
-elif isinstance(u, str) and not u.strip():
-    print("yes")
-else:
-    print("no")
-PYRELAYERNEED
-)
-    need_url=$(printf '%s' "$need_url" | tr -d '\r\n')
-    if [ "$need_url" != "yes" ]; then
+
+    local has_ps=false
+    if command -v yq &>/dev/null; then
+        has_ps=$(yq eval '.PreSigningVerification != null' "$config_file" 2>/dev/null || echo false)
+    else
+        if grep -qE '^[[:space:]]*PreSigningVerification[[:space:]]*:' "$config_file" 2>/dev/null; then
+            has_ps=true
+        fi
+    fi
+    if [ "$has_ps" != "true" ]; then
         return 0
     fi
-    
+
+    local api_url
+    api_url=$(_extract_relayer_api_url_from_config "$config_file")
+    if [ -n "${api_url//[[:space:]]/}" ] && [ "$api_url" != "null" ]; then
+        configs_yaml_merge_scanner_api_urls_if_empty "$config_file" || return 1
+        return 0
+    fi
+
     local env_url="${RELAYER_API_URL:-}"
     env_url="${env_url#"${env_url%%[![:space:]]*}"}"
     env_url="${env_url%"${env_url##*[![:space:]]}"}"
@@ -889,39 +977,44 @@ PYRELAYERNEED
         env_url="${env_url%/}"
         configs_yaml_merge_relayer_api_url "$config_file" "$env_url" || return 1
         print_success "Set PreSigningVerification.RelayerAPIURL from RELAYER_API_URL environment variable"
+        configs_yaml_merge_scanner_api_urls_if_empty "$config_file" || return 1
         return 0
     fi
-    
-    if [ ! -r /dev/tty ]; then
-        print_error "PreSigningVerification is configured but RelayerAPIURL is empty."
-        print_info "Set RELAYER_API_URL before running this script, or edit configs.yaml and add:"
-        echo "  PreSigningVerification:"
-        echo "    RelayerAPIURL: \"https://your-relayer-host:port\""
-        return 1
-    fi
-    
-    echo ""
-    print_step "RelayerAPIURL missing — required when PreSigningVerification is configured"
-    print_info "Obtain the relayer HTTP base URL from the DAO (serves /v1/mpc/chain_info). Not the same as MPC node addresses."
+
     local url_in=""
-    while true; do
-        read -r -p "RelayerAPIURL (https://... or http://host:port): " url_in < /dev/tty || true
-        url_in="${url_in#"${url_in%%[![:space:]]*}"}"
-        url_in="${url_in%"${url_in##*[![:space:]]}"}"
-        if [ -z "$url_in" ]; then
-            print_warning "RelayerAPIURL cannot be empty while PreSigningVerification is configured. Try again or remove that block from configs.yaml."
-            continue
-        fi
-        url_in="${url_in%/}"
-        if ! printf '%s' "$url_in" | grep -qE '^https?://[^[:space:]]+'; then
-            print_error "URL must start with http:// or https:// (e.g. https://relayer.example.com:8080)"
-            continue
-        fi
-        configs_yaml_merge_relayer_api_url "$config_file" "$url_in" || return 1
-        print_success "Wrote PreSigningVerification.RelayerAPIURL to configs.yaml (comments preserved)"
+    if [ -t 0 ] && [ -t 1 ] && [ -r /dev/tty ]; then
         echo ""
-        return 0
-    done
+        print_step "RelayerAPIURL missing — required when PreSigningVerification is configured"
+        print_info "Obtain the relayer HTTP base URL from the DAO (serves /v1/mpc/chain_info). Not the same as MPC node addresses."
+        print_info "Press Enter to use the default, or paste a URL."
+        while true; do
+            read -r -p "RelayerAPIURL [${DEFAULT_RELAYER_API_URL}]: " url_in < /dev/tty || true
+            url_in="${url_in#"${url_in%%[![:space:]]*}"}"
+            url_in="${url_in%"${url_in##*[![:space:]]}"}"
+            if [ -z "$url_in" ]; then
+                url_in="$DEFAULT_RELAYER_API_URL"
+                break
+            fi
+            url_in="${url_in%/}"
+            if ! printf '%s' "$url_in" | grep -qE '^https?://[^[:space:]]+'; then
+                print_error "URL must start with http:// or https:// (or press Enter for default)"
+                continue
+            fi
+            break
+        done
+    else
+        url_in="$DEFAULT_RELAYER_API_URL"
+        print_info "Non-interactive: setting PreSigningVerification.RelayerAPIURL to default ${DEFAULT_RELAYER_API_URL} (override with RELAYER_API_URL or edit configs.yaml)"
+    fi
+
+    configs_yaml_merge_relayer_api_url "$config_file" "$url_in" || return 1
+    print_success "Wrote PreSigningVerification.RelayerAPIURL to configs.yaml (comments preserved)"
+    configs_yaml_merge_scanner_api_urls_if_empty "$config_file" || return 1
+    if [ -n "${DEFAULT_SCANNER_API_URLS[*]}" ]; then
+        print_success "Set ScannerAPIURLs in configs.yaml when it was empty (defaults match firewall allowlist; edit if your scanner egress differs)"
+    fi
+    echo ""
+    return 0
 }
 
 # Validate that default example IPs have been replaced
@@ -1131,16 +1224,20 @@ parse_node_addresses_from_yaml() {
         while IFS= read -r addr; do
             [ -n "$addr" ] && addresses+=("$addr")
         done < <(python3 -c "
-import yaml
 import sys
 try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.exit(1)
+try:
+    _ry = YAML()
     with open('$config_file', 'r') as f:
-        data = yaml.safe_load(f)
-        for group in data.get('MPCGroups', []):
-            for addr in group.get('nodeAddresses', {}).values():
-                if addr:
-                    print(addr)
-except Exception as e:
+        data = _ry.load(f)
+    for group in (data or {}).get('MPCGroups', []) or []:
+        for addr in (group or {}).get('nodeAddresses', {}).values():
+            if addr:
+                print(addr)
+except Exception:
     sys.exit(1)
 " 2>/dev/null)
         if [ ${#addresses[@]} -gt 0 ]; then
@@ -1188,14 +1285,18 @@ except Exception as e:
 }
 
 # Exit 0 if MPCGroups[0].nodeAddresses is missing, empty, or only the default example URLs (203.0.113.10–12:8080);
-# 1 if configured; 2 if no MPCGroups.
+# 1 if configured; 2 if no MPCGroups; 4 if ruamel.yaml is not installed (python3 -c "import ruamel.yaml" fails).
 first_mpc_group_node_addresses_empty() {
     local config_file="$1"
     if ! command -v python3 &> /dev/null; then
         return 1
     fi
     python3 - "$config_file" << 'PYNAEMPTY'
-import yaml, sys
+import sys
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.exit(4)  # distinct from 0=need fill, 1=configured, 2=no groups
 path = sys.argv[1]
 PLACEHOLDER_URLS = frozenset(
     (
@@ -1219,8 +1320,9 @@ def is_only_placeholder_node_addresses(na):
         vals.append(norm_node_url(v))
     return len(vals) == 3 and frozenset(vals) == PLACEHOLDER_URLS
 
+_ry = YAML()
 with open(path, "r") as f:
-    d = yaml.safe_load(f)
+    d = _ry.load(f)
 if not d:
     sys.exit(2)
 groups = d.get("MPCGroups")
@@ -1266,6 +1368,10 @@ prompt_fill_empty_node_addresses() {
     local ec=$?
     if [ "$ec" -eq 1 ]; then
         return 0
+    fi
+    if [ "$ec" -eq 4 ]; then
+        print_error "ruamel.yaml is required to read nodeAddresses from configs.yaml. Install: sudo apt install python3-ruamel.yaml"
+        return 1
     fi
     if [ "$ec" -eq 2 ]; then
         print_error "configs.yaml has no MPCGroups (or file is empty). Add at least one group before running this script."
@@ -1382,7 +1488,7 @@ with open(path, "w") as f:
 PYNA
     then
         rm -f "$hosts_tmp"
-        print_error "Failed to write nodeAddresses to configs.yaml (python3 / PyYAML error)."
+        print_error "Failed to write nodeAddresses to configs.yaml (python3 / ruamel.yaml error)."
         return 1
     fi
     rm -f "$hosts_tmp"
@@ -1405,10 +1511,15 @@ verify_at_least_one_management_key() {
         return 1
     fi
     python3 - "$config_file" << 'PYVERIFY'
-import yaml, sys, re
+import sys, re
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.exit(1)
 path = sys.argv[1]
+_ry = YAML()
 with open(path, "r") as f:
-    d = yaml.safe_load(f) or {}
+    d = _ry.load(f) or {}
 nk = d.get("NodeMgtKey")
 pk = d.get("PublicMgtKey")
 pk = "" if pk is None else str(pk).strip().strip('"').strip("'")
@@ -1477,7 +1588,8 @@ prompt_configure_management_keys() {
     local set_node="" set_pub=""
     local nk_empty pk_empty
     nk_empty=$(CONFIG_FILE_MGT="$config_file" PH_ETH="$NODE_MGT_ETH_PLACEHOLDER" python3 -c "
-import yaml, os, re
+import os, re
+from ruamel.yaml import YAML
 ph = os.environ.get('PH_ETH', '').strip()
 if ph.startswith(('0x', '0X')):
     ph = ph[2:]
@@ -1499,8 +1611,9 @@ def eth_body_40(val):
         return None
     return s.lower()
 
+_ry = YAML()
 with open(os.environ['CONFIG_FILE_MGT']) as f:
-    d = yaml.safe_load(f) or {}
+    d = _ry.load(f) or {}
 v = d.get('NodeMgtKey')
 h = eth_body_40(v)
 if h is None:
@@ -1509,9 +1622,11 @@ else:
     print('1' if h == ph else '0')
 ")
     pk_empty=$(CONFIG_FILE_MGT="$config_file" python3 -c "
-import yaml, os
+import os
+from ruamel.yaml import YAML
+_ry = YAML()
 with open(os.environ['CONFIG_FILE_MGT']) as f:
-    d = yaml.safe_load(f) or {}
+    d = _ry.load(f) or {}
 v = d.get('PublicMgtKey')
 v = '' if v is None else str(v).strip().strip('\"').strip(\"'\")
 print('1' if not v else '0')
@@ -1694,19 +1809,22 @@ get_first_node_address() {
     # Use Python if available (good fallback)
     if command -v python3 &> /dev/null; then
         local first_addr=$(python3 -c "
-import yaml
 import sys
 try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.exit(1)
+try:
+    _ry = YAML()
     with open('$config_file', 'r') as f:
-        data = yaml.safe_load(f)
-        groups = data.get('MPCGroups', [])
-        if groups:
-            node_addresses = groups[0].get('nodeAddresses', {})
-            if node_addresses:
-                # First value = relay node (order must be same on all nodes)
-                first_value = next(iter(node_addresses.values()))
-                if first_value:
-                    print(first_value)
+        data = _ry.load(f) or {}
+    groups = data.get('MPCGroups', [])
+    if groups:
+        node_addresses = groups[0].get('nodeAddresses', {})
+        if node_addresses:
+            first_value = next(iter(node_addresses.values()))
+            if first_value:
+                print(first_value)
 except Exception:
     sys.exit(1)
 " 2>/dev/null)
@@ -1873,15 +1991,19 @@ validate_client_cafile() {
         fi
     elif command -v python3 &> /dev/null; then
         cafile=$(python3 -c "
-import yaml
 import sys
 try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.exit(1)
+try:
+    _ry = YAML()
     with open('$config_file', 'r') as f:
-        data = yaml.safe_load(f)
-        mqtt_tls = data.get('MQTTTLS', {})
-        cafile = mqtt_tls.get('CAFile', '')
-        if cafile:
-            print(cafile)
+        data = _ry.load(f) or {}
+    mqtt_tls = data.get('MQTTTLS', {})
+    cafile = mqtt_tls.get('CAFile', '')
+    if cafile:
+        print(cafile)
 except Exception:
     sys.exit(1)
 " 2>/dev/null)
@@ -2056,15 +2178,19 @@ relay_mqtt_ca_copy_or_manual_instructions() {
             fi
         elif command -v python3 &> /dev/null; then
             cafile=$(python3 -c "
-import yaml
 import sys
 try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.exit(1)
+try:
+    _ry = YAML()
     with open('$config_file', 'r') as f:
-        data = yaml.safe_load(f)
-        mqtt_tls = data.get('MQTTTLS', {})
-        cafile = mqtt_tls.get('CAFile', '')
-        if cafile:
-            print(cafile)
+        data = _ry.load(f) or {}
+    mqtt_tls = data.get('MQTTTLS', {})
+    cafile = mqtt_tls.get('CAFile', '')
+    if cafile:
+        print(cafile)
 except Exception:
     sys.exit(1)
 " 2>/dev/null)
