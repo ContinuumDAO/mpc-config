@@ -840,9 +840,7 @@ Returns comprehensive health status including MQTT connection, subscriptions, an
 - `mongodb.connected`: `true` if MongoDB connection is healthy
 - `mongodb.error`: Error message if MongoDB connection failed
 
-**HTTP Status Codes:**
-- `200 OK`: Node is healthy
-- `503 Service Unavailable`: Node is unhealthy (one or more checks failed)
+**HTTP status:** Always **`200 OK`** with a JSON body. When the node is unhealthy, **`code`** is **`1`**, **`error`** is non-empty, and **`data.status`** is **`"unhealthy"`** (do not rely on HTTP 503 — browsers and proxies often return a non-JSON body for 503, which breaks JSON consumers).
 
 **Example Usage:**
 ```bash

@@ -302,7 +302,7 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    This starts:
    - **mongodb**: Local MongoDB instance (port 27017)
    - **mosquitto**: MQTT broker (ports 8883:8883 for TLS, 9999:1883 for unencrypted, 9001:9001 for websockets) - **ONLY ON RELAY NODE**
-   - **app**: The mpc-auth node (port 8080)
+   - **app**: The mpc-auth node (**127.0.0.1:8080** management, **18080**/**18081**/**8443** per `docker-compose.yml`)
    
    **Verify mosquitto is running:**
    ```bash
@@ -557,12 +557,38 @@ cd mpc-config && \
 docker-compose up -d
 ```
 
-The docker-compose.yml includes:
-- **mongodb**: Local MongoDB instance (port 27017)
+The docker-compose files include:
+- **mongodb**: Local MongoDB instance (port 27017, **127.0.0.1** only)
 - **mosquitto**: MQTT broker (automatically configured from `mosquitto/config/mosquitto.conf` - port 8883 for TLS by default)
-- **app**: The mpc-auth node (port 8080) - pulls Docker image `continuumdao/mpc-auth:v1.0` from registry
+- **app**: The mpc-auth node — pulls Docker image **`continuumdao/mpc-auth:v1.0`** (rebuild/push when upgrading node code)
+  - **`127.0.0.1:8080:8080`** — management API (**localhost on the host** only; use **SSH tunnel** for remote `curl` / Swagger)
+  - **`18080`** — public discovery (`PublicDiscoveryPort`): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /health`**, **`GET /getNodeKey`**, **`GET /getConfiguredNodeKeys`** (no JWT on this port)
+  - **`18081`** — scanner/relayer HTTP when **`ScannerRelayerPort`** is set in `configs.yaml` (e.g. **`POST /signRequest`**)
+  - **`8443`** — Browser HTTPS (DAO app; JWT on GET per `BrowserHTTPS` in `configs.yaml`)
 
-**Note:** The default configuration uses version `v1.0`. If you encounter an error that the image is not found, see the Troubleshooting section below.
+**Note:** The default configuration uses image tag **`v1.0`**. If you encounter an error that the image is not found, see the Troubleshooting section below.
+
+#### Management API exposure (`ManagementAPIsPort`, default 8080)
+
+**Defaults in this repo**
+
+- **`docker-compose*.yml` publish management as `127.0.0.1:8080:8080`** — the full management API is **not** reachable on the host’s public IP; use **`ssh -L 8080:127.0.0.1:8080 user@node`** (or similar) for remote admin.
+- **`process_config.sh` does not add a UFW “allow” rule for the management port** unless you set **`UFW_OPEN_MANAGEMENT_PORT=1`**. Other ports (SSH, Browser HTTPS, PublicDiscovery, ScannerRelayer when configured, MQTT on relay) are still added as before.
+
+**Peer key probes (`GET /getConfiguredNodeKeys`)**
+
+- Probes use **`http://<peer>:<PublicDiscoveryPort>/getNodeKey`** (e.g. **18080**), then **`http://<peer>:<ManagementAPIsPort>/getNodeKey`**. Peers should use the **same** **`PublicDiscoveryPort`** in `configs.yaml`. See **`API_IMPLEMENTATION.md`** in the **mpc-auth** repo.
+
+**Redeploy:** Changing **only** compose port mapping needs **`docker compose up -d --force-recreate app`**. New **mpc-auth** features require a **new image** (build/push **`continuumdao/mpc-auth:…`**) and **`docker compose pull`** or **`--build`**.
+
+**If you intentionally need `http://<node-public-ip>:8080/...` from the internet (not recommended for production)**
+
+1. Change the publish line to **`"8080:8080"`** and use **`UFW_OPEN_MANAGEMENT_PORT=1 ./process_config.sh`** or a **scoped** UFW rule, e.g. `sudo ufw allow from <admin-cidr> to any port 8080 proto tcp`.
+2. **Protection** remains **application-layer** (signatures, `NodeMgtKey`, relayer auth).
+
+**Lockdown (this repo’s default)**
+
+- Management is **loopback-only** on the host via **`127.0.0.1:8080:8080`**. Remote **peer** **`getNodeKey`** probes use **18080** (then **8080** if needed), plus **18081** for scanner/relayer as designed — not raw **8080** on the public internet for management.
 
 **Production Setup:**
 - The **first node** in each group runs mosquitto (via Docker using docker-compose, or directly on the host)

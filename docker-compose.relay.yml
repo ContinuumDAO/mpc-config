@@ -42,8 +42,9 @@ services:
       - GOLOG_FILE=logs/MPCAuthCore.log
       - GOLOG_OUTPUT=file
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080" # Management API — localhost only; SSH tunnel for admin
       - "18080:18080" # Public discovery (PublicDiscoveryPort; DAO app NODE_DISCOVERY_PORT)
+      - "18081:18081" # ScannerRelayerPort (signRequest, governance GETs when split)
       - "8443:8443"   # Browser HTTPS (DAO app); TLS certs in ./webTLS/config/certs
     depends_on:
       mongodb:

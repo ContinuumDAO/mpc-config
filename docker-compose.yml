@@ -43,9 +43,11 @@ services:
       - GOLOG_FILE=logs/MPCAuthCore.log
       - GOLOG_OUTPUT=file
     ports:
-      - "8080:8080"
+      # Management API (ManagementAPIsPort): bound to loopback — use SSH tunnel to host:8080; not exposed on public IP.
+      - "127.0.0.1:8080:8080"
       - "18080:18080" # Public discovery GET /getNodeMgtKey (configs.yaml PublicDiscoveryPort; matches NODE_DISCOVERY_PORT on DAO app)
-      - "8443:8443"   # Browser HTTPS (DAO app)
+      - "18081:18081" # Scanner/relayer HTTP (configs.yaml ScannerRelayerPort); POST /signRequest etc. when split from 8080
+      - "8443:8443"   # Browser HTTPS (DAO app); GET routes use JWT per configs.yaml BrowserHTTPS
     depends_on:
       mongodb:
         condition: service_healthy
