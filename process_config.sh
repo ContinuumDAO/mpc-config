@@ -43,6 +43,11 @@ DEFAULT_BROWSER_HTTPS_EXPECTED_ISSUER="https://mpa.continuumdao.org"
 # HTTP port written into nodeAddresses URLs (management API); default Docker mapping is often 8080—set to match your deployment.
 MPC_NODE_HTTP_PORT=8081
 
+# Certificate regeneration: set to 1 or use --force-mqtt-certs / --force-browser-https-certs to overwrite existing files.
+# Default is to leave existing mosquitto/config/certs/* and webTLS/config/certs/* in place (avoids permission errors).
+FORCE_REGENERATE_MQTT_CERTS="${FORCE_REGENERATE_MQTT_CERTS:-0}"
+FORCE_REGENERATE_BROWSER_HTTPS_CERTS="${FORCE_REGENERATE_BROWSER_HTTPS_CERTS:-0}"
+
 # Default example NodeMgtKey in configs.yaml — treated like unset (must be replaced for a real deployment).
 NODE_MGT_ETH_PLACEHOLDER="0x1234567890abcdef1234567890abcdef12345678"
 
@@ -2624,18 +2629,26 @@ check_cert_dir() {
     fi
 }
 
-# Mosquitto/MQTT broker TLS only (under mosquitto/config/certs). Returns 0 = regenerate, 1 = keep existing.
+# Mosquitto/MQTT broker TLS only (under mosquitto/config/certs). Returns 0 = generate/regenerate, 1 = keep existing.
+# By default, if any of the MQTT TLS files already exist, skips generation (no overwrite) so protected/root-owned
+# certs do not cause openssl failures. Use FORCE_REGENERATE_MQTT_CERTS=1 or --force-mqtt-certs to prompt for overwrite.
 confirm_overwrite_mqtt_certs() {
     if [ ! -f "$CA_KEY" ] && [ ! -f "$CA_CRT" ] && [ ! -f "$SERVER_KEY" ] && [ ! -f "$SERVER_CRT" ]; then
         return 0
     fi
-    print_warning "Some Mosquitto (MQTT TLS) broker certificate files already exist — these are for the MQTT broker (e.g. port 8883), not for Browser HTTPS (webTLS, port 8443):"
+    print_info "Some Mosquitto (MQTT TLS) broker certificate files already exist (MQTT broker, e.g. port 8883 — not Browser HTTPS / webTLS):"
     [ -f "$CA_KEY" ] && echo "  - $CA_KEY"
     [ -f "$CA_CRT" ] && echo "  - $CA_CRT"
     [ -f "$SERVER_KEY" ] && echo "  - $SERVER_KEY"
     [ -f "$SERVER_CRT" ] && echo "  - $SERVER_CRT"
     echo ""
-    read -p "Overwrite these Mosquitto (MQTT) TLS files? (yes/no): " overwrite
+    if [ "${FORCE_REGENERATE_MQTT_CERTS:-0}" != "1" ]; then
+        print_info "Leaving existing Mosquitto (MQTT TLS) files unchanged (not overwriting)."
+        print_info "To replace them: remove the files above, run as a user that can write $CERT_DIR, or set FORCE_REGENERATE_MQTT_CERTS=1 / use --force-mqtt-certs (you will be asked to confirm)."
+        return 1
+    fi
+    print_warning "Regeneration requested — existing Mosquitto (MQTT) TLS files will be replaced if you confirm."
+    read -r -p "Overwrite these Mosquitto (MQTT) TLS files? (yes/no): " overwrite
     if [ "$overwrite" != "yes" ] && [ "$overwrite" != "y" ]; then
         return 1
     fi
@@ -3409,10 +3422,23 @@ setup_browser_https() {
 
     local need_cert=true
     if [ -f "$BROWSER_HTTPS_CRT" ] && [ -f "$BROWSER_HTTPS_KEY" ]; then
-        if openssl x509 -in "$BROWSER_HTTPS_CRT" -noout -text 2>/dev/null | grep -Fq "IP Address:${browser_ip}"; then
+        if [ "${FORCE_REGENERATE_BROWSER_HTTPS_CERTS:-0}" != "1" ]; then
+            print_info "Browser HTTPS (webTLS) certificate files already exist — leaving them unchanged (not overwriting):"
+            echo "  - $BROWSER_HTTPS_CRT"
+            echo "  - $BROWSER_HTTPS_KEY"
+            if openssl x509 -in "$BROWSER_HTTPS_CRT" -noout -text 2>/dev/null | grep -Fq "IP Address:${browser_ip}"; then
+                print_success "Existing certificate includes SAN for IP $browser_ip"
+            else
+                print_warning "Existing certificate may not include SAN for IP $browser_ip — verify Browser HTTPS / Docker if connections fail"
+                print_info "To regenerate: remove browser.crt/browser.key under $WEB_TLS_HOST_DIR or run with --force-browser-https-certs"
+            fi
             need_cert=false
         else
-            print_info "Regenerating Browser HTTPS (web) TLS cert — IP SAN mismatch or new IP (not MQTT certs)"
+            if openssl x509 -in "$BROWSER_HTTPS_CRT" -noout -text 2>/dev/null | grep -Fq "IP Address:${browser_ip}"; then
+                need_cert=false
+            else
+                print_info "Regenerating Browser HTTPS (web) TLS cert — IP SAN mismatch or new IP (--force-browser-https-certs)"
+            fi
         fi
     fi
 
@@ -3450,7 +3476,11 @@ EOF
             return 1
         fi
     else
-        print_success "Browser HTTPS (web) certificate already valid for IP $browser_ip"
+        # With --force-browser-https-certs and SAN already matches, we only skipped regen — say so here.
+        # When leaving existing files without --force, messages were already printed above.
+        if [ "${FORCE_REGENERATE_BROWSER_HTTPS_CERTS:-0}" = "1" ]; then
+            print_success "Browser HTTPS (web) certificate already valid for IP $browser_ip"
+        fi
     fi
 
     if ! command -v python3 &> /dev/null; then
@@ -3527,7 +3557,11 @@ show_process_config_help() {
     echo "  --copy-certs      On the relay: after MQTT certs are generated, copy the CA to clients over SSH"
     echo "  --no-copy-certs   Do not copy via SSH (default); kept for explicit use / backward compatibility"
     echo "  --no-firewall     Skip the default host firewall step (ufw allow rules). Not recommended for production."
+    echo "  --force-mqtt-certs              Prompt to overwrite existing mosquitto/config/certs/* (default: leave existing files)"
+    echo "  --force-browser-https-certs     Allow regenerating webTLS/config/certs/browser.* when SAN/IP mismatches (default: leave existing files)"
     echo "  --help | -h | -help | help   Show this message (arguments above + relay/client behavior below)"
+    echo ""
+    echo "Environment (optional): FORCE_REGENERATE_MQTT_CERTS=1 / FORCE_REGENERATE_BROWSER_HTTPS_CERTS=1 same as the flags above."
     echo ""
     echo "This script validates configuration and generates certificates."
     echo ""
@@ -3856,6 +3890,16 @@ main() {
                 ;;
             --no-firewall)
                 SKIP_FIREWALL=true
+                shift
+                ;;
+            --force-mqtt-certs)
+                FORCE_REGENERATE_MQTT_CERTS=1
+                export FORCE_REGENERATE_MQTT_CERTS
+                shift
+                ;;
+            --force-browser-https-certs)
+                FORCE_REGENERATE_BROWSER_HTTPS_CERTS=1
+                export FORCE_REGENERATE_BROWSER_HTTPS_CERTS
                 shift
                 ;;
             --help|-h|-help|help)
