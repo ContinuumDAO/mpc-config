@@ -11,6 +11,17 @@ The Distributed Auth Management API provides a RESTful interface for managing MP
 - Base path: `/`
 - Swagger UI: `/swagger/index.html` (if docs are enabled)
 
+<a id="peer-getnodekey-probes"></a>
+### Peer `getNodeKey` probes (`GET /getConfiguredNodeKeys`)
+
+When **`GET /getConfiguredNodeKeys`** contacts each configured peer, it uses **HTTP** in order: **`http://<host>:<PublicDiscoveryPort>/getNodeKey`** when **`PublicDiscoveryPort`** is set and distinct from **`ManagementAPIsPort`**, then **`http://<host>:<ManagementAPIsPort>/getNodeKey`**. Peers should use the **same** **`PublicDiscoveryPort`** in `configs.yaml` (e.g. **18080**) so probes hit the public listener. Ensure firewall/Docker bindings match your threat model.
+
+<a id="public-discovery-http"></a>
+### Public discovery HTTP
+If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /health`**, **`GET /getNodeKey`**, **`GET /getConfiguredNodeKeys`**, **`GET /getAllowedEd25519MgtKeys`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`8080`** private. **`GET /getConfiguredNodeKeys`** aggregates keys by probing each peer’s **`GET /getNodeKey`** (prefers **`PublicDiscoveryPort`**, then **`ManagementAPIsPort`** — see [Peer `getNodeKey` probes](#peer-getnodekey-probes)); restrict **18080** if needed. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
+
+**`GET /getPublicMgtKey`** returns the same Ed25519 public keys as the allow-list for management auth (config **`PublicMgtKey`** plus keys from **`POST /addManagementKey`**), as a JSON array of 64-hex strings (no labels). Issuers and apps can learn the public keys without reading `configs.yaml` or static Railway env maps.
+
 ### Response Format
 
 All endpoints return a standardized `APIResponse` structure:
@@ -41,7 +52,8 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getNodeMgtKey`](#get-getnodemgtkey) - Get node management key
 - [`GET /getNodeMgtKeyNonce`](#get-getnodemgtkeynonce) - Get current management key nonce
 - [`GET /hasPublicMgtKey`](#get-haspublicmgtkey) - Returns true if any Ed25519 management key is allowed (config or added via addManagementKey)
-- [`GET /getAllowedEd25519MgtKeys`](#get-getalloweded25519mgtkeys) - List allowed Ed25519 management keys with labels (bootstrap + added) so the app can show "Which key?"
+- [`GET /getAllowedEd25519MgtKeys`](#get-getalloweded25519mgtkeys) - List allowed Ed25519 management keys with labels (bootstrap + added) so the app can show "Which key?" **Also on `PublicDiscoveryPort`** (see [Public discovery HTTP](#public-discovery-http)).
+- [`GET /getPublicMgtKey`](#get-getpublicmgtkey) - List allowed Ed25519 public keys (plain `[]string`, 64 hex); same allow-list as above. **Also served on `PublicDiscoveryPort`** (see [Public discovery HTTP](#public-discovery-http)) alongside `GET /getNodeMgtKey`.
 - [`GET /getPublicMgtKeyNonce`](#get-getpublicmgtkeynonce) - Get current nonce for an Ed25519 key (optional `?publicKey=` for added keys)
 - [`POST /verifyMgtKey`](#post-verifymgtkey) - Verify Ed25519 management key (attach-time proof; no other side effects)
 - [`POST /addManagementKey`](#post-addmanagementkey) - Add another Ed25519 public key (request must be signed by an existing Ed25519 management key)
@@ -274,6 +286,8 @@ curl "http://localhost:8080/getMachineInfo?refresh=true"
 #### `GET /getNodeKey`
 Returns the node's unique public key (node ID). This is the 128-character hex string that identifies the node in MPC operations.
 
+Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is split from **ManagementAPIsPort** — see [Public discovery HTTP](#public-discovery-http). Browser HTTPS (**8443**) requires JWT on GET.
+
 **Response:**
 ```json
 {
@@ -286,6 +300,7 @@ Returns the node's unique public key (node ID). This is the 128-character hex st
 **Example:**
 ```bash
 curl "http://localhost:8080/getNodeKey"
+curl "http://localhost:18080/getNodeKey"   # when PublicDiscoveryPort is split (e.g. 18080)
 ```
 
 <a id="get-getnodemgtkey"></a>
@@ -418,6 +433,30 @@ Returns the list of Ed25519 public keys allowed for management API auth (config 
 **Example:**
 ```bash
 curl "http://localhost:8080/getAllowedEd25519MgtKeys"
+curl "http://localhost:18080/getAllowedEd25519MgtKeys"   # when PublicDiscoveryPort is split (e.g. 18080)
+```
+
+<a id="get-getpublicmgtkey"></a>
+#### `GET /getPublicMgtKey`
+Returns every allowed Ed25519 public key for management API auth as a **plain array of strings** (each 64 hex characters, no `0x` prefix): config **`PublicMgtKey`** (if valid) plus keys added via **`POST /addManagementKey`**. Same keys as **`GET /getAllowedEd25519MgtKeys`**, but without labels.
+
+**Use cases:** discovery for JWKS issuers, DAO apps, or scripts that need the public key(s) to verify Ed25519 challenges or to populate **`NODE_PUBLIC_MGT_KEYS_JSON`**, without reading the node config file.
+
+**Response (success):**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": ["a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"]
+}
+```
+
+When no Ed25519 key is configured, `data` is `[]`.
+
+**Examples:**
+```bash
+curl "http://localhost:8080/getPublicMgtKey"
+curl "http://localhost:18080/getPublicMgtKey"
 ```
 
 <a id="get-getpublicmgtkeynonce"></a>
@@ -1488,6 +1527,10 @@ See [Known Addresses schema](docs/KNOWN_ADDRESSES_SCHEMA.md) for the full docume
 #### `GET /getConfiguredNodeKeys`
 Returns node public keys for all configured node addresses in `configs.yaml`. Queries each node's `/getNodeKey` endpoint to retrieve their actual public keys.
 
+**Where served:** Same handler is registered on the **management** port, **Browser HTTPS** (GET requires JWT), and **PublicDiscoveryPort** (e.g. **18080**, no JWT) when that listener is enabled — see [Public discovery HTTP](#public-discovery-http).
+
+**Peer probe transport:** Each peer is queried over **HTTP** in order: **`PublicDiscoveryPort`**, then **`ManagementAPIsPort`** (see [Peer `getNodeKey` probes](#peer-getnodekey-probes)).
+
 **Response:**
 ```json
 {
@@ -1536,6 +1579,8 @@ Returns node public keys for all configured node addresses in `configs.yaml`. Qu
 **Example:**
 ```bash
 curl "http://localhost:8080/getConfiguredNodeKeys"
+# When PublicDiscoveryPort is split (e.g. 18080):
+curl "http://localhost:18080/getConfiguredNodeKeys"
 ```
 
 **Use Cases:**
@@ -2478,6 +2523,8 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
   - `shelved`: Sign requests with status `shelved` (originator shelved the request)
 - `pagenum` (optional, default: 0)
 - `pagesize` (optional, default: 10)
+- `fromTime` (optional): Only include requests with `timepoint` ≥ this value (Unix timestamp in seconds).
+- `toTime` (optional): Only include requests with `timepoint` ≤ this value (Unix timestamp in seconds). If both `fromTime` and `toTime` are set, `fromTime` must be ≤ `toTime`.
 
 **Response:**
 ```json
@@ -2549,6 +2596,7 @@ curl "http://localhost:8080/listSignRequests?filter=pending&pagenum=0&pagesize=1
 curl "http://localhost:8080/listSignRequests?filter=success&pagenum=0&pagesize=10"
 curl "http://localhost:8080/listSignRequests?filter=blocked&pagenum=0&pagesize=10"
 curl "http://localhost:8080/listSignRequests?filter=shelved&pagenum=0&pagesize=10"
+curl "http://localhost:8080/listSignRequests?filter=all&pagenum=0&pagesize=10&fromTime=1704067200&toTime=1704153600"
 ```
 
 <a id="get-getsignrequestbyid"></a>
