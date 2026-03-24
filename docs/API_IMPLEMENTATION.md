@@ -163,6 +163,8 @@ KeyGen messaging is documented in [API_KEYGEN_MESSAGING.md](API_KEYGEN_MESSAGING
 #### `GET /version`
 Returns the current node version and the date it was changed.
 
+Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is split from **ManagementAPIsPort**. **Not** registered on **Browser HTTPS** (**8443**); use discovery or management URL (no JWT for this route).
+
 **Response:**
 ```json
 {
@@ -281,7 +283,7 @@ curl "http://localhost:8080/getMachineInfo?refresh=true"
 #### `GET /getNodeKey`
 Returns the node's unique public key (node ID). This is the 128-character hex string that identifies the node in MPC operations.
 
-Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is split from **ManagementAPIsPort** — see [Public discovery HTTP](#public-discovery-http). Browser HTTPS (**8443**) requires JWT on GET.
+Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is split from **ManagementAPIsPort** — see [Public discovery HTTP](#public-discovery-http). **Not** registered on **Browser HTTPS** (**8443**); use discovery or management URL (no JWT for this route).
 
 **Response:**
 ```json
@@ -1522,7 +1524,7 @@ See [Known Addresses schema](docs/KNOWN_ADDRESSES_SCHEMA.md) for the full docume
 #### `GET /getConfiguredNodeKeys`
 Returns node public keys for all configured node addresses in `configs.yaml`. Queries each node's `/getNodeKey` endpoint to retrieve their actual public keys.
 
-**Where served:** Same handler is registered on the **management** port, **Browser HTTPS** (GET requires JWT), and **PublicDiscoveryPort** (e.g. **18080**, no JWT) when that listener is enabled — see [Public discovery HTTP](#public-discovery-http).
+**Where served:** Registered on the **management** port and **Browser HTTPS** (GET requires JWT on **8443**). **`GET /getNodeKey`** (used to build this response) is on **PublicDiscoveryPort** / management only — see [Public discovery HTTP](#public-discovery-http).
 
 **Peer probe transport:** Each peer is queried over **HTTP** in order: **`PublicDiscoveryPort`**, then **`ManagementAPIsPort`** (see [Peer `getNodeKey` probes](#peer-getnodekey-probes)).
 
@@ -1574,8 +1576,8 @@ Returns node public keys for all configured node addresses in `configs.yaml`. Qu
 **Example:**
 ```bash
 curl "http://localhost:8080/getConfiguredNodeKeys"
-# When PublicDiscoveryPort is split (e.g. 18080):
-curl "http://localhost:18080/getConfiguredNodeKeys"
+# Browser HTTPS (JWT required on GET):
+curl -H "Authorization: Bearer <JWT>" "https://localhost:8443/getConfiguredNodeKeys"
 ```
 
 **Use Cases:**

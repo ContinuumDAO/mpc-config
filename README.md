@@ -188,6 +188,9 @@ sudo apt install -y \
 ```
 
 **Notes:**
+- **`containerd.io` vs `containerd`:** If `apt` fails with `containerd.io : Conflicts: containerd`, you already have **Docker CE** (from Docker’s apt repo) or a leftover **`containerd.io`** package. **Either** remove the Docker CE stack and then install **`docker.io`** as below, **or** skip **`docker.io`** / **`docker-compose`** in §1 and only install the non-Docker packages—Docker CE already satisfies the prerequisite. To switch to Ubuntu’s packages:  
+  `sudo apt remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras 2>/dev/null; sudo apt autoremove -y`  
+  then re-run the §1 `apt install` line.
 - **`docker.io`** is the Docker daemon; **`docker-compose`** provides the `docker-compose` command used in this README. If your release has no `docker-compose` package, install **`docker-compose-plugin`** and use **`docker compose`** (with a space) instead of `docker-compose`.
 - **`python3-ruamel.yaml`** provides **`ruamel.yaml`**. The script does **not** use PyYAML (`python3-yaml`); Python fallbacks for YAML use **ruamel.yaml** only (read paths prefer **`yq`** when installed).
 - **Ubuntu/Debian:** There is no separate Python install step—**§1** is the only `apt install` you need for Python + YAML on Debian/Ubuntu.
