@@ -11,14 +11,9 @@ The Distributed Auth Management API provides a RESTful interface for managing MP
 - Base path: `/`
 - Swagger UI: `/swagger/index.html` (if docs are enabled)
 
-<a id="peer-getnodekey-probes"></a>
-### Peer `getNodeKey` probes (`GET /getConfiguredNodeKeys`)
-
-When **`GET /getConfiguredNodeKeys`** contacts each configured peer, it uses **HTTP** in order: **`http://<host>:<PublicDiscoveryPort>/getNodeKey`** when **`PublicDiscoveryPort`** is set and distinct from **`ManagementAPIsPort`**, then **`http://<host>:<ManagementAPIsPort>/getNodeKey`**. Peers should use the **same** **`PublicDiscoveryPort`** in `configs.yaml` (e.g. **18080**) so probes hit the public listener. Ensure firewall/Docker bindings match your threat model.
-
 <a id="public-discovery-http"></a>
 ### Public discovery HTTP
-If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /health`**, **`GET /getNodeKey`**, **`GET /getConfiguredNodeKeys`**, **`GET /getAllowedEd25519MgtKeys`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`8080`** private. **`GET /getConfiguredNodeKeys`** aggregates keys by probing each peer’s **`GET /getNodeKey`** (prefers **`PublicDiscoveryPort`**, then **`ManagementAPIsPort`** — see [Peer `getNodeKey` probes](#peer-getnodekey-probes)); restrict **18080** if needed. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
+If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /health`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`8080`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
 
 **`GET /getPublicMgtKey`** returns the same Ed25519 public keys as the allow-list for management auth (config **`PublicMgtKey`** plus keys from **`POST /addManagementKey`**), as a JSON array of 64-hex strings (no labels). Issuers and apps can learn the public keys without reading `configs.yaml` or static Railway env maps.
 
