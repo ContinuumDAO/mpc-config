@@ -63,9 +63,9 @@ Use when the node uses an Ethereum address as the management key (e.g. MetaMask)
 
 ---
 
-## Option A: Python script (recommended for agents)
+## Python script
 
-**Location:** `scripts/generateSignRequestWithFoundryScript.py` in this repo (mpc-auth).
+**Location:** `scripts/generateSignRequestWithFoundryScript.py` in this repo.
 
 **Dependency:**  
 ```bash
@@ -91,12 +91,45 @@ python3 scripts/generateSignRequestWithFoundryScript.py \
   --file=broadcast/MyScript.s.sol/11155111/run-latest.json
 ```
 
-**Optional overrides:**
+**Common overrides (chain, purpose, API):**
 ```bash
 python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... --file=... \
   --destination-chain-id=11155111 \
   --purpose="Deploy and configure contract" \
   --mpc-auth-url=http://localhost:8080   # replace 8080 with ManagementAPIsPort from configs.yaml
+```
+
+**Destination and display (optional):** `--destination-address` (single tx), `--destination-addresses` (batch: JSON array), `--signature-text`, `--signature-texts` (batch: JSON array), `--extra-json` (merged with batch `batchMeta` when batching).
+
+**Nonce and sender (optional):** If the broadcast used a different `from` (e.g. Anvil default) but you will execute with the MPC key’s address, override the sender and assign sequential nonces without re-running Foundry:
+
+- **`--override-sender=ADDR`** — use this address as `from` for every transaction.
+- **`--first-nonce=N`** — set nonces to `N`, `N+1`, `N+2`, … (defaults to `0` when combined with `--override-sender` if omitted).
+
+Example: broadcast from another key, sign with the KeyGen address and current nonce `5`:
+
+```bash
+python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... \
+  --override-sender=0xYourKeyGenAddress --first-nonce=5 \
+  < broadcast/.../run-latest.json
+```
+
+**Gas and fees (optional):** By default the script keeps gas and fee fields from the broadcast. If you pass **any** of the flags below, it augments the broadcast (e.g. dry-run output with missing fees). EIP-1559 is the default when augmenting unless you pass **`--legacy`**.
+
+| Area | Flags |
+|------|--------|
+| Mode | `--legacy` (gas price), or `--is-eip1559` (EIP-1559; default when augmenting if not `--legacy`) |
+| EIP-1559 | `--base-fee-gwei`, `--priority-fee-gwei`, `--base-fee-multiplier` (percent, ≥100, default 100) |
+| Legacy | `--gas-price-gwei`, `--gas-price` (minimum gwei; max with `--gas-price-gwei`), `--gas-multiplier` (extra % on gas price) |
+| Both | `--gas-limit` (per-tx when augmenting) |
+
+Example: dry-run JSON with no fees, EIP-1559 and fresh sender/nonce:
+
+```bash
+python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... \
+  --is-eip1559 --base-fee-gwei=30 --priority-fee-gwei=2 \
+  --first-nonce=0 --override-sender=0xYourKeyGen \
+  < broadcast/.../run-latest.json
 ```
 
 **Output:** One JSON object to stdout, for example:
@@ -114,26 +147,9 @@ python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... -
 }
 ```
 
-- **`endpoint`:** Always `"multiSignRequest"` for this flow (Python/TS utilities below). Ignore **signRequest** unless you are on a separate tx-check / relayer integration.
+- **`endpoint`:** Always `"multiSignRequest"` for this flow. Ignore **signRequest** unless you are on a separate tx-check / relayer integration.
 - **`body`:** Already includes `keyList` and `pubKey` from the node. Add **`clientSig`** (management key), then **POST /multiSignRequest**.
 - **`count`:** Number of transactions in the broadcast (1 still uses **multiSignRequest** with `msgHash` / `msgRaw`).
-
----
-
-## Option B: TypeScript (frontend / Node)
-
-**Location (utility):** `app/utils/generateSignRequestWithFoundryScript.ts` in **continuumdao-node-app** (sibling repo).
-
-**CLI (if you have Node/ts-node in that repo):**
-```bash
-cd ../continuumdao-node-app
-npx ts-node scripts/generateSignRequestFromForge.ts < path/to/run-latest.json
-# or
-npx ts-node scripts/generateSignRequestFromForge.ts --file=path/to/run-latest.json
-```
-
-**From code:**  
-Import `generateSignRequestWithFoundryScriptFromJson` or `generateSignRequestWithFoundryScript`, pass the broadcast JSON (object or string) and optional overrides; you get the same shape as above (`endpoint`, `body`, `chainId`, `count`).
 
 ---
 
@@ -142,9 +158,9 @@ Import `generateSignRequestWithFoundryScriptFromJson` or `generateSignRequestWit
 The script expects **Foundry broadcast JSON** with a `transactions` array. Typical sources:
 
 1. **Broadcast file (recommended)**  
-   After:
+   Do **not** pass **`--broadcast`**. You **must** pass **`--sender`** (the address that will execute the txs on-chain—often overridden later via the Python script’s `--override-sender` when the broadcast used a stand-in key). Use **`--rpc-url`** for the chain you simulate against. Example:
    ```bash
-   forge script script/MyScript.s.sol --broadcast
+   forge script script/MyScript.s.sol --rpc-url https://... --sender 0x...
    ```
    Foundry writes e.g.:
    ```text
@@ -153,9 +169,9 @@ The script expects **Foundry broadcast JSON** with a `transactions` array. Typic
    Use that file path with `--file=...` or pipe its contents to the script.
 
 2. **Forge script with JSON output**  
-   If your Foundry version writes broadcast-style JSON to stdout when using `--json`, you can pipe it:
+   If your Foundry version writes broadcast-style JSON to stdout when using `--json`, you can pipe it (still **without** `--broadcast`, **with** `--sender` and **`--rpc-url`** as needed):
    ```bash
-   forge script script/MyScript.s.sol --broadcast --json 2>/dev/null | python3 scripts/generateSignRequestWithFoundryScript.py
+   forge script script/MyScript.s.sol --rpc-url https://... --sender 0x... --json 2>/dev/null | python3 scripts/generateSignRequestWithFoundryScript.py
    ```
    (Adjust flags if your Foundry version uses a different way to emit JSON.)
 
@@ -198,7 +214,7 @@ So you can also generate or edit such JSON in your agent and pass it to the scri
 ## Checklist for the agent
 
 - [ ] Obtain or generate Foundry broadcast JSON (e.g. `run-latest.json` or forge script JSON output).
-- [ ] Run the Python script (or TypeScript) with that JSON as input.
+- [ ] Run the Python script with that JSON as input.
 - [ ] Parse the JSON output; use `body` for **POST /multiSignRequest**.
 - [ ] Add `clientSig` to `body` (`keyList`/`pubKey` already filled if using the Python script with `--key-gen-id`).
 - [ ] POST the complete body to **POST /multiSignRequest** (not `/signRequest` for multi-agree keys).
@@ -209,4 +225,3 @@ So you can also generate or edit such JSON in your agent and pass it to the scri
 ## References
 
 - **API:** `API_IMPLEMENTATION.md` in this repo (§ POST /multiSignRequest, GET /getSignResultById). **signRequest** is documented there for tx-check / relayer flows only.
-- **Batch design:** `docs-internal/MULTI_SIGNREQUEST_DESIGN.md`.

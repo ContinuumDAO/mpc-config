@@ -1759,6 +1759,19 @@ The `data` field contains the `requestId` which can be used to track the group c
 5. When all nodes agree, group is created and nodes subscribe to the broker
 6. Check results via `GET /getNewGroupResultById`
 
+**Persistence:** Each node stores at most one `NewGroup` document per `requestid` (upsert on save, plus a unique index on `requestid` when the database allows it). Duplicate MQTT deliveries of the same `NEWGROUPREQUEST` therefore do not create duplicate rows in `GET /listNewGroupRequests`. The initiator is stored as **`MsgPb.From`** on that document; list/get new-group request APIs return it as **`originator`**.
+
+<a id="newgroup-request-status-values"></a>
+**New group request `status` (stored on `MsgPb` in the `NewGroup` collection):**
+
+| Value | Meaning |
+|--------|---------|
+| **`pending`** | Waiting for more nodes to sign the key list. Set on initial save and while replies are merged but the request is not yet in a terminal success state. Empty/missing status in legacy data is treated as **`pending`** in APIs. |
+| **`agree`** | Agreement succeeded: all keys in `KeyList` have signatures recorded, or **`NewGroupRequestConfirmSuccess`** was processed. **`GET /listNewGroupRequests?filter=success`** lists rows where **`status` is `agree`** (the query parameter is named `success`, not a stored value `"success"`). |
+| **`failed`** | Terminal failure (e.g. worker timeout, expiry, insufficient **`NewGroupResultConfirmSuccess`** within the window). |
+
+**`GET /listNewGroupRequests` `filter` vs JSON `status`:** `filter=success` → **`status === "agree"`**; `filter=pending` → **`status` is not `agree` and not `failed`**; `filter=failed` → **`status === "failed"`**.
+
 **Error Responses:**
 - `400 Bad Request`: Missing required fields, invalid `keyList`, or `BrokerArray` cannot be derived
 - `500 Internal Server Error`: Failed to send messages, group already exists, or other internal errors
@@ -1768,7 +1781,7 @@ The `data` field contains the `requestId` which can be used to track the group c
 Lists all new group requests with filtering and pagination.
 
 **Query Parameters:**
-- `filter` (optional): `all`, `pending`, `success`, `failed` (default: `all`). Use `failed` to list group requests that were marked as failed.
+- `filter` (optional): `all`, `pending`, `success`, `failed` (default: `all`). **`success`** matches documents whose stored **`status` is `agree`**; **`pending`** matches non-terminal requests (`status` not `agree` and not `failed`); **`failed`** matches `status === "failed"`. See [New group request `status`](#newgroup-request-status-values).
 - `pagenum` (optional, default: 0)
 - `pagesize` (optional, default: 10)
 
@@ -1787,13 +1800,17 @@ Lists all new group requests with filtering and pagination.
         "SigList": {...},
         "BrokerArray": ["ssl://82.180.145.77:8883"]
       },
-      "Timepoint": "2024-12-28T12:34:56Z"
+      "Timepoint": "2024-12-28T12:34:56Z",
+      "status": "pending",
+      "originator": "033d741c45434993c6b994eb0b28debe18234188505425f827680a5d2ce82cb7509ea0bec0b652ba4a533d331631c5165e3e1415e378a39c942f0975c8e7d0bf"
     }
   ]
 }
 ```
 
-**Note:** The `Addresses` field contains HTTP API addresses for each node, where `Addresses[i]` corresponds to `KeyList[i]`.
+**Note:** The `Addresses` field contains HTTP API addresses for each node, where `Addresses[i]` corresponds to `KeyList[i]`. Each item includes **`status`** (see [New group request `status`](#newgroup-request-status-values)).
+
+**`originator`:** Node public key (128 hex characters) of the node that initiated the new-group flow—the same value as **`MsgPb.From`** on the stored **`NEWGROUPREQUEST`** document. Omitted when empty (legacy rows). Not to be confused with the `filter` query parameter value **`originator`** on keygen list (see [`GET /listKeyGenRequests`](#get-listkeygenrequests)).
 
 <a id="get-getnewgrouprequestbyid"></a>
 #### `GET /getNewGroupRequestById`
@@ -1801,6 +1818,8 @@ Gets a specific group request by ID.
 
 **Query Parameters:**
 - `id` (required): Request ID from `newGroupRequest` response
+
+**Response:** Same shape as one element of `GET /listNewGroupRequests` `data`, including **`status`** ([reference](#newgroup-request-status-values)) and **`originator`** (initiator node key; see note under [`GET /listNewGroupRequests`](#get-listnewgrouprequests)).
 
 <a id="post-newgrouprequestagree"></a>
 #### `POST /newGroupRequestAgree`
@@ -1836,31 +1855,38 @@ Gets a specific group result by ID (requestId) or by group_id (after group is su
 
 **Note:** Either `id` or `group_id` must be provided, but not both.
 
-**Response:**
+**Response (success):** `data` is a **flat** object (no nested protobuf wrapper). Field names may use `Code`/`Data` or `code`/`data` at the top level depending on serialization; clients should accept both.
+
 ```json
 {
   "code": 0,
   "error": "",
   "data": {
-    "RequestId": "NewGroup20241228123456789abc123",
-    "NewGroupDataPb": {
-      "GroupId": "566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9",
-      "KeyList": ["node1_key", "node2_key", "node3_key"],
-      "Addresses": ["http://203.0.113.10:8080", "http://203.0.113.11:8080", "http://203.0.113.12:8080"],
-      "SigList": {...},
-      "BrokerArray": ["ssl://82.180.145.77:8883"]
+    "requestid": "NewGroup20241228123456789abc123",
+    "GroupId": "566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9",
+    "KeyList": ["node1_key", "node2_key", "node3_key"],
+    "Addresses": ["http://203.0.113.10:8080", "http://203.0.113.11:8080", "http://203.0.113.12:8080"],
+    "SigList": {
+      "node1_key": "signature_hex",
+      "node2_key": "signature_hex",
+      "node3_key": "signature_hex"
     },
-    "Timepoint": "2024-12-28T12:34:56Z"
+    "BrokerArray": ["ssl://82.180.145.77:8883"],
+    "timepoint": "2024-12-28T12:34:56.000",
+    "originator": "033d741c45434993c6b994eb0b28debe18234188505425f827680a5d2ce82cb7509ea0bec0b652ba4a533d331631c5165e3e1415e378a39c942f0975c8e7d0bf"
   }
 }
 ```
 
-**Response Field Descriptions:**
-- `GroupId`: Unique identifier for the group (deterministic hash)
-- `KeyList`: Array of node public keys (128 hex characters each) that form the group
-- `Addresses`: Array of HTTP API addresses corresponding to each node in `KeyList`. Each address at index `i` corresponds to the node key at `KeyList[i]`. Format: `http://ip:port` or `https://hostname:port`
-- `SigList`: Map of node signatures agreeing to the group creation (nodeKey → signature)
-- `BrokerArray`: Array of MQTT broker addresses for the group (typically one broker, e.g., `["ssl://82.180.145.77:8883"]`)
+**`data` field descriptions:**
+- `requestid`: The new-group request ID (same as the `id` query parameter when querying by request id).
+- `GroupId`: Unique identifier for the group (deterministic hash of the sorted key list).
+- `KeyList`: Array of node public keys (128 hex characters each) that form the group.
+- `Addresses`: Array of HTTP API addresses corresponding to each node in `KeyList`. Index `i` matches `KeyList[i]`. Format: `http://ip:port` or `https://hostname:port`.
+- `SigList`: Map of node key → signature (hex) for nodes that agreed to the group creation.
+- `BrokerArray`: MQTT broker addresses for the group (typically one entry, e.g. `["ssl://host:8883"]`).
+- `timepoint`: When this result was recorded (node-local string).
+- `originator`: Node public key of the initiator of the original new-group **request** (persisted when the group result is saved). May be empty on older documents that were written before this field existed.
 
 **Examples:**
 
@@ -1877,6 +1903,22 @@ curl "http://localhost:8080/getNewGroupResultById?group_id=566633a647306335d3ad6
 **Note:** Groups can also be pre-configured in `configs.yaml` and will be automatically created on node startup. API-based creation is recommended for new groups to avoid the chicken-and-egg problem.
 
 ### 6. Key Generation
+
+<a id="keygen-request-status-values"></a>
+**KeyGen request `status` field (stored values):** Each node persists a keygen request document per request id. The JSON field **`status`** on that document can be one of:
+
+| Value | Meaning |
+|--------|---------|
+| **`pending`** | Waiting for more nodes to complete the agreement: the request exists, but **not every** key in the group’s **`KeyList`** has a non-empty signature in **`SigList`** yet (peers still need to call `keyGenRequestAgree`, or the initiator is still merging partial `KEYGENREQUESTREPLY` updates). New requests are saved with this status. |
+| **`agree`** | **All** group nodes have signed the keygen request off-chain. Set when **`KEYGENREQUESTREPLY`** / **`KEYGENREQUESTCONFIRMSUCCESS`** / **`POST /keyGenRequestAgree`** reflects a full **`SigList`**. The keygen **request** row can remain **`agree`** until TSS finishes; **`success`** is written when encrypted **`SaveData`** is stored on the keygen result. |
+| **`success`** | TSS completed on this node: the keygen **result** document has non-nil **`savedata`** (encrypted share). The server sets **`status`** to **`success`** on the keygen request when **`UpdateKeyGenResultSaveDataFull`** / **`UpdateEDKeyGenResultSaveDataFull`** completes. |
+| **`failed`** | Terminal failure: e.g. TSS/worker error or timeout, expiry of a long-pending request, or fewer than threshold+1 KEYGENRESULT confirmations within the configured window (the keygen **result** may be removed; the **request** row can remain with this status). |
+
+**Initiator (`originator`):** The node that created the keygen request is stored as **`MsgPb.From`** on the keygen request document; **`GET /listKeyGenRequests`** and **`GET /getKeyGenRequestById`** return it as the JSON field **`originator`**.
+
+**API “effective” status** (for **`GET /getKeyGenRequestById`**, **`GET /listKeyGenRequests`**, **`GET /getKeyGenResultById`**): if the stored request status is **`agree`** but this node’s keygen **result** row already has **`savedata`**, responses return **`status`** **`success`** (so clients see completion even if the request document was not yet updated to **`success`**).
+
+**`GET /listKeyGenRequests` `filter` vs stored / effective status:** `filter=pending` → effective status is not **`agree`**, **`success`**, or **`failed`**; `filter=success` → effective status is **`success`** (TSS complete / **`SaveData`** present); `filter=agree` → **stored** status is **`agree`** and this node’s keygen result has **no** **`savedata`** yet (off-chain agreement done, TSS still in progress); `filter=failed` → stored **`status === "failed"`**.
 
 <a id="post-keygenrequest"></a>
 #### `POST /keyGenRequest`
@@ -1933,7 +1975,7 @@ curl -X POST http://localhost:8080/keyGenRequest \
 Lists all key generation requests with filtering and pagination.
 
 **Query Parameters:**
-- `filter` (optional): `all`, `pending`, `success`, `failed` (default: `all`). Use `failed` to list requests that failed (TSS error or timeout).
+- `filter` (optional): `all`, `pending`, `success`, `failed`, `agree`, `originator` (default: `all`). For keygen: **`success`** = TSS complete (effective status includes **`SaveData`**); **`agree`** = stored **`agree`** with no **`savedata`** on the result yet; **`failed`** = failed keygen.
 - `pagenum` (optional, default: 0)
 - `pagesize` (optional, default: 10)
 
@@ -1957,7 +1999,9 @@ Lists all key generation requests with filtering and pagination.
         "7a5781dc05f06ad0e5c192a6762598ab5db53b6339b3faa63180cc5a68ea9f2eccd34e9b9c004c3fe855f0a81561db85fc4cd9149bbd321dc64ee2b5de54c742": "04073ed1c4c54b8a3fc186fe1af42303ae814d436be51c9f144b2706c68d2537a61136c00c5f0fa2975c323171c9293d63cdd6b79ad9d21c7abf55cab71abe2a"
       },
       "Threshold": 1,
-      "timepoint": "2026-02-17 13:05:29.157"
+      "timepoint": "2026-02-17 13:05:29.157",
+      "status": "agree",
+      "originator": "033d741c45434993c6b994eb0b28debe18234188505425f827680a5d2ce82cb7509ea0bec0b652ba4a533d331631c5165e3e1415e378a39c942f0975c8e7d0bf"
     }
   ]
 }
@@ -1965,6 +2009,7 @@ Lists all key generation requests with filtering and pagination.
 
 **Response field descriptions (each item in `Data`):**
 - `requestid`: Key generation request ID
+- `status`: Lifecycle status from the keygen request document in the database. **All possible values and meanings:** see [KeyGen request `status` field (stored values)](#keygen-request-status-values). Omitted when unset.
 - `ClientKeys`: Map of node public key (128 hex) to client key / placeholder (e.g. `"0x1234"` or `""`)
 - `GroupId`: Group identifier (hash of sorted keyList)
 - `KeyType`: Key type, e.g. `"secp256k1"` or `"ed25519"`
@@ -1972,6 +2017,7 @@ Lists all key generation requests with filtering and pagination.
 - `SigList`: Map of node public key (128 hex) to signature (hex) for nodes that agreed
 - `Threshold`: Signing threshold (number of nodes required to sign is threshold + 1)
 - `timepoint`: Timestamp when the request was recorded (with optional fractional seconds)
+- `originator`: Node public key (128 hex characters) of the node that created the keygen **request**—the same value as **`MsgPb.From`** on the stored **`KEYGENREQUEST`** document. Omitted when empty.
 
 **Example:**
 ```bash
@@ -1985,6 +2031,8 @@ Gets a specific key generation request by ID.
 
 **Query Parameters:**
 - `id` (required): Key generation request ID
+
+**Response:** Same shape as one element of `GET /listKeyGenRequests` `Data`, including `requestid`, embedded keygen request fields (`GroupId`, `KeyType`, `SigList`, etc.), `timepoint`, **`status`** (see [KeyGen request `status` field (stored values)](#keygen-request-status-values)), and **`originator`** (initiator node key; see field list under [`GET /listKeyGenRequests`](#get-listkeygenrequests)).
 
 **Example:**
 ```bash
@@ -2038,12 +2086,15 @@ A result is returned (Code 0) only when this node completed the TSS and has the 
     "tonaddress": "",
     "savedata": "HIDE ENCRYPTED DATA",
     "timepoint": "2026-01-11T00:37:20.999Z",
-    "globalnonce": 0
+    "globalnonce": 0,
+    "status": "agree"
   }
 }
 ```
 
 **Note:** The `keylist` field contains all node keys that participated in key generation. **globalnonce** is the number of sign results created for this keyGen (secp256k1); it is also available via `GET /getGlobalNonceByKeyGenId`. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration.
+
+**`status`:** Same **effective** lifecycle as the keygen request (see [KeyGen request `status` field (stored values)](#keygen-request-status-values)): not stored on the keygen result row; if the request is still **`agree`** but this node has **`savedata`**, responses return **`success`**. Omitted if the request record cannot be loaded.
 
 **Example:**
 ```bash
@@ -3475,8 +3526,14 @@ curl "http://localhost:8080/getLogs?hours=24"
 ### 5. Querying Key Generation Information
 
 ```bash
-# Get keyGen result
+# Get keyGen result (response includes status from the keygen request: pending, agree, or failed)
 curl "http://localhost:8080/getKeyGenResultById?id=KeyGen20260111003720999cf104d0f"
+
+# Get keyGen request by id (includes status)
+curl "http://localhost:8080/getKeyGenRequestById?id=KeyGen20260111003720999cf104d0f"
+
+# List keyGen requests (each item includes status)
+curl "http://localhost:8080/listKeyGenRequests?filter=all&pagenum=0&pagesize=10"
 
 # Get GroupId for a keyGen
 curl "http://localhost:8080/getKeyGenGroupId?id=KeyGen20260111003720999cf104d0f"
