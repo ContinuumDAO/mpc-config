@@ -5,27 +5,18 @@ This doc describes how a **node owner** can set up their node so that an **AI ag
 ## Summary
 
 1. **Node** stores only the **public** key in config (`PublicMgtKey`). It verifies signatures over the port; it never holds the private key.
-2. **You (the node owner)** generate an Ed25519 keypair and put the **public** key in the node config. You keep the **private** key at `~/.ssh/mpc_auth_ed25519` on your PC, or on the agent's machine at the same path.
-3. **Signing** is done by you (via a local helper or by pasting the 128-hex signature in the frontend) or by the agent (using its key and then calling the node API over the port with the signature). Access to the node is over the port and is secure.
-4. No new node endpoints are required; the app uses **hasPublicMgtKey** and the existing management APIs.
+2. **You (the node owner)** bootstrap the node with one Ed25519 key in config (`PublicMgtKey`) and then add additional allowed Ed25519 management keys via **`POST /addManagementKey`** (signed by an already-allowed Ed25519 key), as documented in `API_IMPLEMENTATION.md`.
+3. **Agent key onboarding** is done by adding the agent’s **public** key to the allowed set via **`POST /addManagementKey`**. The agent keeps its **private** key (e.g. at `~/.ssh/mpc_auth_ed25519`) and uses it to sign management requests; the node never holds private keys.
+4. **Signing** is done by you (via a local helper or by pasting the 128-hex signature in the frontend) or by the agent (using its key and then calling the node API over the port with the signature). Access to the node is over the port and is secure.
+5. No new node endpoints are required; the app uses **hasPublicMgtKey** and the existing management APIs.
 
 ## 1. Node setup (one-time, by the node owner)
 
-### 1.1 Generate Ed25519 keypair
+### 1.1 Bootstrap the node with an Ed25519 management key (PublicMgtKey)
 
-On your PC (or the machine where the agent will run), create the key and save it as **`~/.ssh/mpc_auth_ed25519`** (this path only; it keeps things consistent):
+The node needs **at least one** allowed Ed25519 management key to start with (the “bootstrap key”). This is provided via config as `PublicMgtKey` (64-hex Ed25519 public key). After that, you can add more keys (e.g. an agent key) via `POST /addManagementKey` without editing config again.
 
-```bash
-mkdir -p ~/.ssh
-openssl genpkey -algorithm Ed25519 -out ~/.ssh/mpc_auth_ed25519
-chmod 600 ~/.ssh/mpc_auth_ed25519
-```
-
-Get the public key as 64 hex characters (for mpc-auth config):
-
-```bash
-openssl pkey -in ~/.ssh/mpc_auth_ed25519 -pubout -outform DER 2>/dev/null | tail -c 32 | xxd -p -c 32
-```
+How you generate the bootstrap keypair is up to you (the repo previously documented CLI generation). The important part is: **you end up with a 64-hex Ed25519 public key** to place in `PublicMgtKey`, and you keep the corresponding private key somewhere safe for signing (human helper or the agent).
 
 ### 1.2 Configure the node (mpc-auth) with the public key
 
@@ -49,7 +40,44 @@ curl http://<node-host>:<port>/hasPublicMgtKey
 # Expect: {"code":0,"data":true,...}
 ```
 
-### 1.3 Frontend: connect the node
+### 1.3 Add the agent’s Ed25519 public key via `POST /addManagementKey` (recommended)
+
+Once the node is bootstrapped with `PublicMgtKey`, add the agent’s public key to the allowed set using the API described in `API_IMPLEMENTATION.md`.
+
+- **Goal**: allow the agent to sign management API requests with its own Ed25519 key, without changing node config.
+- **Auth**: the `POST /addManagementKey` request **must be signed by an already-allowed Ed25519 key** (the bootstrap `PublicMgtKey`, or a key previously added).
+
+**Request body (canonical message to sign):**
+
+- Fetch nonce for the signer key:
+
+```bash
+curl "http://<node-host>:<port>/getPublicMgtKeyNonce"
+# or, if you have multiple allowed keys and need the signer’s nonce explicitly:
+# curl "http://<node-host>:<port>/getPublicMgtKeyNonce?publicKey=<64-hex-signer-public-key>"
+```
+
+- Build the exact JSON string and sign it with the signer’s Ed25519 private key (signature must be **128 hex**). The canonical string is the JSON body **with `sig` set to empty string**:
+
+```json
+{"newPublicKey":"<64-hex-agent-public-key>","nonce":<nonce_from_getPublicMgtKeyNonce>,"sig":""}
+```
+
+- Then POST the same body with `sig` filled in:
+
+```bash
+curl -X POST "http://<node-host>:<port>/addManagementKey" \
+  -H "Content-Type: application/json" \
+  -d '{"newPublicKey":"<64-hex-agent-public-key>","nonce":<n>,"sig":"<128-hex-ed25519-signature>"}'
+```
+
+Optional: list allowed keys (bootstrap + added) so you can confirm it’s present:
+
+```bash
+curl "http://<node-host>:<port>/getAllowedEd25519MgtKeys"
+```
+
+### 1.4 Frontend: connect the node
 
 From the app, attach the node by its URL (e.g. `https://your-node.example.com`). You can connect MetaMask for your own use; the agent will use Ed25519.
 
@@ -75,6 +103,19 @@ Once PublicMgtKey is set on the node, the backend will accept Ed25519 signatures
 | Shelve request      | `POST /shelveSignRequest`    | Body shape: Nonce, RequestId, Sig. Sign the JSON string; send Sig (Ed25519 128 hex). |
 | KeyGen create/join  | `POST /keyGenRequest`, `POST /keyGenRequestAgree` | Use clientPk = 64-hex Ed25519 public key; sign payload with Ed25519. |
 
+| KeyGen Actions                | Endpoint                      | Notes |
+| ------------------------------|-------------------------------|-------|
+| Send a message                | `POST /sendMessage`           | Send a message (top-level or reply) in a keyGen channel (mgt key required) |
+| List messages                 | `GET /listMessages`           | List messages (with unread, time range, top_level, pagination) |
+| Get a single message by id    | `GET /getMessageById`         | Get message thread |
+| Get a top-level message       | `GET /getMessageThread`       | Get a top-level message and its reply tree (nested, max depth 3) |
+| Mark a message as read        | `POST /markMessageRead`       | Mark a message as read (add read receipt) (mgt key required) |
+| Mark multiple messages as read| `POST /multiMarkMessagesRead` | Mark multiple messages as read (list of message ids) (mgt key required) |
+| Delete a message              | `POST /deleteMessage`         | Delete a message and all its replies (originator only) (mgt key required) |
+| Delete multiple messages      | `POST /multiDeleteMessages`   | Delete multiple messages (and their reply trees); originator-only per message; mgt key required |
+
+The agent should communicate its actions and intentions using the message channel to all nodes in the group of the KeyGen.
+
 The agent needs to:
 
 1. Call `GET /getNodeMgtKeyNonce` (or equivalent) where a nonce is required.
@@ -95,12 +136,13 @@ So you can use the frontend without MetaMask for that key by signing elsewhere a
 
 On the **Info** page, once the wallet is connected and the node URL matches:
 
-- The app uses **`GET /hasPublicMgtKey`** (existing mpc-auth API) to see if the node has Ed25519 configured. If so, it shows "Ed25519 management key is configured" and instructions.
+- The app uses **`GET /hasPublicMgtKey`** (mpc-auth API) to see if the node allows Ed25519 management keys (bootstrap `PublicMgtKey` or keys added via `POST /addManagementKey`).
+- If configured, it can show "Ed25519 management key is configured" and you can use Ed25519 for management operations. At this point, the recommended way to onboard an **agent key** is to add the agent’s **public** key via **`POST /addManagementKey`** (see section 1.3 and `API_IMPLEMENTATION.md`) rather than editing node config.
 - If not configured, a **Create new key pair** button is shown. Clicking it generates an Ed25519 keypair in the browser. You are shown:
-  - **Public key (64 hex)** with a copy button. Copy this into the `PublicMgtKey` field of `configs.yaml` on the node (or set the `PublicMgtKey` environment variable), then restart the node.
-  - **Private key** (PEM) with a copy button, and a warning that you will not be shown it again. Save it to `~/.ssh/mpc_auth_ed25519` on **your PC** or the machine where the agent runs; set permissions to 600. The node never holds the private key.
+  - **Public key (64 hex)** with a copy button. Use this as the **bootstrap key** by putting it into the `PublicMgtKey` field of `configs.yaml` on the node (or set the `PublicMgtKey` environment variable), then restart the node.
+  - **Private key** (PEM) with a copy button and a warning that you will not be shown it again. Save it to `~/.ssh/mpc_auth_ed25519` on **your PC** (or the machine that will do signing); set permissions to 600. The node never holds private keys.
 - After creation, the option to create again is hidden unless you click **"I've removed the key and config, create a new key pair"**.
-- For an AI agent on the same machine: put the private key in the agent's `~/.ssh/mpc_auth_ed25519` (chmod 600). The agent signs locally and calls the node over the port with the signature.
+- For an AI agent on the same machine: put the agent’s private key in `~/.ssh/mpc_auth_ed25519` (chmod 600). The agent signs locally and calls the node over the port with the signature.
 
 No new node endpoints are required; see `MPC_AUTH_ED25519_NODE_API.md` (in the node-app repo if applicable).
 
@@ -132,7 +174,7 @@ The node continues to run as its own user (e.g. the user that runs Docker or the
 
 ### 8.2 Node API URL and port
 
-The node exposes its management API on **port 8080** by default (configurable via `ManagementAPIsPort` in `configs.yaml`). When the agent runs on the same VPS:
+The node exposes its management API on **port 8080** by default (configurable via `ManagementAPIsPort` in `~mpcnode/mpc-config/configs.yaml`). When the agent runs on the same VPS:
 
 - **Base URL:** `http://localhost:8080` or `http://127.0.0.1:8080`
 - If you changed the port in config, use that port instead.
