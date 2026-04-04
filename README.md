@@ -191,7 +191,7 @@ sudo apt install -y \
 - **`containerd.io` vs `containerd`:** If `apt` fails with `containerd.io : Conflicts: containerd`, you already have **Docker CE** (from Docker’s apt repo) or a leftover **`containerd.io`** package. **Either** remove the Docker CE stack and then install **`docker.io`** as below, **or** skip **`docker.io`** / **`docker-compose`** in §1 and only install the non-Docker packages—Docker CE already satisfies the prerequisite. To switch to Ubuntu’s packages:  
   `sudo apt remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras 2>/dev/null; sudo apt autoremove -y`  
   then re-run the §1 `apt install` line.
-- **`docker.io`** is the Docker daemon; **`docker-compose`** provides the `docker-compose` command used in this README. If your release has no `docker-compose` package, install **`docker-compose-plugin`** and use **`docker compose`** (with a space) instead of `docker-compose`.
+- **`docker.io`** is the Docker daemon; **`docker-compose`** provides the `docker-compose` command used in this README. If your release has no `docker-compose` package, try **`docker-compose-plugin`** and **`docker compose`** (with a space). **Default Ubuntu/Debian repos often lack `docker-compose-plugin`** while still shipping old **`docker-compose` 1.25.x** — if **`apt`** cannot find the plugin or Compose errors on **`version: '3.8'`**, see **Troubleshooting → Compose file version unsupported** (install Compose V2 from Docker’s repo or as a CLI plugin binary).
 - **`python3-ruamel.yaml`** provides **`ruamel.yaml`**. The script does **not** use PyYAML (`python3-yaml`); Python fallbacks for YAML use **ruamel.yaml** only (read paths prefer **`yq`** when installed).
 - **Ubuntu/Debian:** There is no separate Python install step—**§1** is the only `apt install` you need for Python + YAML on Debian/Ubuntu.
 - After install, confirm: `docker --version`, `docker-compose --version` or `docker compose version`, `curl --version`, `python3 -c "import ruamel.yaml"`.
@@ -785,6 +785,59 @@ If you see the error `Couldn't connect to Docker daemon at http+docker://localho
    ```
 
 **Note:** After adding your user to the docker group, you must log out and log back in (or use `newgrp docker`) for the changes to take effect.
+
+### Compose file version unsupported (`version: '3.8'`)
+
+If `docker-compose up -d` fails with:
+
+```text
+ERROR: Version in "./docker-compose.yml" is unsupported. You might be seeing this error because you're using the wrong Compose file version.
+```
+
+**Cause:** This repo’s `docker-compose.yml` declares **`version: '3.8'`**. Older **standalone** Compose binaries (for example **`docker-compose` 1.25.x** from some distro packages) do not implement that schema version, even when **Docker Engine** itself is new (e.g. 26.x).
+
+**Check what you have:**
+
+```bash
+docker-compose --version   # standalone 1.x is often the problem
+docker compose version     # Compose V2 plugin (note the space)
+```
+
+**Fix (recommended): use Compose V2** — the **`docker compose`** subcommand (space, not hyphen) implements the current file format.
+
+**1. Try your distro package (when available):**
+
+```bash
+sudo apt update && sudo apt install -y docker-compose-plugin
+docker compose version
+```
+
+**2. If you see `E: Unable to locate package docker-compose-plugin`** — many default **Ubuntu/Debian** mirrors only ship old standalone **`docker-compose`** (1.25.x) with **`docker.io`**, not the V2 plugin. Use either path below.
+
+- **A. Docker’s APT repository (plugin via `apt`)** — follow Docker’s guide to [install Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/) or [Debian](https://docs.docker.com/engine/install/debian/) (add Docker’s repo, then `sudo apt install docker-compose-plugin`). If you use **`docker.io`** from Ubuntu and do not want to switch the engine, prefer **B**.
+
+- **B. Compose V2 binary as a CLI plugin (no `docker-compose-plugin` package)** — works with the **`docker`** you already have. Pick a current **`v2.x`** tag from [Compose releases](https://github.com/docker/compose/releases), then (example — replace **`v2.32.4`** with that tag):
+
+```bash
+VERSION="v2.32.4"
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+sudo curl -fSL "https://github.com/docker/compose/releases/download/${VERSION}/docker-compose-linux-$(uname -m)" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+docker compose version
+```
+
+Then:
+
+```bash
+docker compose up -d
+```
+
+Use **`docker compose`** everywhere this README shows **`docker-compose`** (e.g. `docker compose ps`, `docker compose logs app`).
+
+**Alternative:** replace the standalone **`docker-compose`** executable with a [current v1.x release](https://github.com/docker/compose/releases) that supports Compose file **3.8** (less ideal than V2). See also Docker’s [Compose install overview](https://docs.docker.com/compose/install/).
+
+**Do not** downgrade the repo’s compose file just to satisfy an obsolete `docker-compose` 1.25 — upgrading Compose is the supported path.
 
 ### Docker Image Not Found
 
