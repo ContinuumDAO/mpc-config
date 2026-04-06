@@ -1,0 +1,2 @@
+# For scripts/keygen_messaging_agent_poll.py (Ed25519 management signing)
+cryptography>=41.0.0
