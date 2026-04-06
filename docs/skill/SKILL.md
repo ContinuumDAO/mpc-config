@@ -7,8 +7,8 @@ Use this skill when operating an **AI agent** (e.g. **Open Claw**) that manages 
 This skill assumes the **operator has already provisioned an MPA wallet environment** in ContinuumDAO terms—not a single standalone node:
 
 - **At least two mpc-auth nodes** must exist: one run by a **human** and one run for the **AI agent**. Threshold signing requires multiple parties; a minimal useful setup pairs a human-controlled node with an agent-controlled node.
-- The **agent’s node** must use **Ed25519 management signing** (`PublicMgtKey` / `POST /addManagementKey` flow) so automated `POST` calls to the management API are authenticated without MetaMask. See **[./references/AGENT_ED25519_SETUP.md](./references/AGENT_ED25519_SETUP.md)** in this repo for technical steps.
-- A link from `~mpcnode/mpc-config/scripts` is made using `ln -s ~mpcnode/mpc-config/scripts ~/.`.
+- The **agent’s node** must use **Ed25519 management signing** (`PublicMgtKey` / `POST /addManagementKey` flow) so automated `POST` calls to the management API are authenticated without MetaMask. See **[$REFS_PATH/AGENT_ED25519_SETUP.md]($REFS_PATH/AGENT_ED25519_SETUP.md)** in this repo for technical steps.
+- A link from `~mpcnode/mpc-config/scripts` and `~mpcnode/mpc-config/docs/references` is made using `ln -s ~mpcnode/mpc-config/scripts ~/. && ln -s ~mpcnode/mpc-config/docs/references ~/.` (target other directories if using a custom $REFS_PATH or $SCRIPTS_PATH, see [environment](#environment-agent) below).
 
 **ContinuumDAO documentation** (end-user setup, before this skill applies):
 
@@ -24,7 +24,7 @@ Complete those guides first; then use this skill for **day-to-day agent behavior
 
 ## Overview (read this first)
 
-This section restates the ideas in **[`./references/instructions.md`](./references/instructions.md)** in a form suited for **users and agents** who do not yet see why **Group**, **KeyGen**, **threshold**, and **two signature types** matter.
+This section restates the ideas in **[`$REFS_PATH/instructions.md`]($REFS_PATH/instructions.md)** in a form suited for **users and agents** who do not yet see why **Group**, **KeyGen**, **threshold**, and **two signature types** matter.
 
 ### What you are operating
 
@@ -42,7 +42,7 @@ The MPC address works on **any EVM network**; it is **not** locked to one smart 
 
 ### Groups, KeyGen, signing (short)
 
-- **Group:** Peers configure each other, one node proposes a group, invitees accept → **Group ID**. See **Groups** / **KeyGen** / **Signing** in [`instructions.md`](./references/instructions.md).
+- **Group:** Peers configure each other, one node proposes a group, invitees accept → **Group ID**. See **Groups** / **KeyGen** / **Signing** in [`instructions.md`]($REFS_PATH/instructions.md).
 - **KeyGen:** Started inside a group; all participants must accept; yields **pubKey** / (secp256k1) an **Ethereum address** and fixes **threshold**.
 - **Signing:** A member proposes a sign request; each node **accepts or rejects**; optional **`Thoughts`** guide whether to **shelve** and revise. With **threshold+1** accepts, **`triggerSignRequestById`** runs MPC signing; then **broadcast** txs and **`updateSignResultStatusById`**.
 
@@ -79,10 +79,12 @@ Do **not** confuse **management signatures** (per-node API auth) with **MPC sign
 
 ## Environment (agent)
 
-| Variable | Purpose |
-|----------|--------|
-| **`KEYGEN_ID`** | If set, prefer this KeyGen for signing when unambiguous. If unset or ambiguous, ask the user via the configured channel (e.g. gateway **port 18789**). |
-| **`AUTH_KEY_PATH`** | Ed25519 **management** private key used to sign API bodies (default often `~/.ssh/mpc_auth_ed25519`). |
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| **`KEYGEN_ID`** | If set, prefer this KeyGen for signing when unambiguous. If unset or ambiguous, ask the user via the configured channel (e.g. gateway **port 18789**). | Unset |
+| **`AUTH_KEY_PATH`** | Ed25519 **management** private key used to sign API bodies. | `~/.ssh/mpc_auth_ed25519` |
+| **`REFS_PATH`** | If set, points to the references directory containing API specification and agent instructions. | ~/references |
+| **`SCRIPTS_PATH`** | If set, points to the scripts directory containing python scripts for API automation. | ~/scripts |
 
 Base URL for a co-located node: **`http://127.0.0.1:<ManagementAPIsPort>`** (see `configs.yaml`, often **8080**).
 
@@ -92,7 +94,7 @@ Base URL for a co-located node: **`http://127.0.0.1:<ManagementAPIsPort>`** (see
 
 1. **Discuss** in KeyGen messaging: human or other nodes **`POST /sendMessage`**; everyone reads **`GET /getMessageThread`** (and related list/get APIs).
 2. **Plan**: agent may research on the web; produce **Foundry** scripts and a **rationale**; optionally push to a shared Git repo.
-3. **Build tx intent**: run **`forge script … --sender <MPC address>`** → `broadcast/.../run-latest.json`; feed to **`scripts/generateSignRequestWithFoundryScript.py`** (see references) to build JSON for **`POST /multiSignRequest`**. Include a concise **`Purpose`** (≤256 chars).
+3. **Build tx intent**: run **`forge script … --sender <MPC address>`** → `broadcast/.../run-latest.json`; feed to **`$SCRIPTS_PATH/generateSignRequestWithFoundryScript.py`** (see references) to build JSON for **`POST /multiSignRequest`**. Include a concise **`Purpose`** (≤256 chars).
 4. **Agree**: each node **`POST /signRequestAgree`** (accept/reject); optional **`Thoughts`** per node to guide the agent (e.g. to **`POST /shelveSignRequest`** and revise).
 5. **Trigger & sign**: when **`/isSignRequestReadyById`** is true and the agent should proceed, **`POST /triggerSignRequestById`**; poll **`GET /getSignResultById`** until signatures exist.
 6. **Execute**: broadcast tx(s) with sufficient gas/credit; **`POST /updateSignResultStatusById`** with **`executed`** and **`transactionHash`** (or batch hashes).
@@ -103,7 +105,7 @@ Base URL for a co-located node: **`http://127.0.0.1:<ManagementAPIsPort>`** (see
 
 ## Other API capabilities (agent)
 
-Per **`./references/instructions.md`**, the agent may also: **`/keyGenRequest`**, **`/keyGenRequestAgree`**, **`/addKnownAddress`**, **`/postChainDetails`**, **`/addToken`**, health/version discovery, and **fee/credit** checks via **`GET /getGlobalNonceByKeyGenId`** (and top-up gas as needed). For **on-chain** fee state on **Linea mainnet**, use the subsection below.
+Per **`$REFS_PATH/instructions.md`**, the agent may also: **`/keyGenRequest`**, **`/keyGenRequestAgree`**, **`/addKnownAddress`**, **`/postChainDetails`**, **`/addToken`**, health/version discovery, and **fee/credit** checks via **`GET /getGlobalNonceByKeyGenId`** (and top-up gas as needed). For **on-chain** fee state on **Linea mainnet**, use the subsection below.
 
 ---
 
@@ -141,7 +143,7 @@ cast call 0x55aD6Df6d8f8824486C3fd3373f1CF29eCecF0A3 \
   "getRemainingNonces(address,uint256)(uint256)" $WALLET_ADDRESS $GNONCE --rpc-url $RPC
 ```
 
-**Note:** **`globalnonce`** here is the KeyGen’s MPC signing counter from the API. It is **not** the EVM account nonce from **`cast nonce`**. **Fee payment / top-up** can be sent as ordinary EVM transactions **from any funded wallet**—they do **not** require the **`multiSignRequest`** / threshold flow. Paying from a separate hot wallet or custodian is often more convenient than routing top-ups through the MPC wallet. If you do spend **from the MPC address** itself, those txs still go through **`multiSignRequest`** as usual. For ABI-level details of the fee contract, see **[./references/API_IMPLEMENTATION.md](./references/API_IMPLEMENTATION.md)** and on-chain docs your deployment publishes.
+**Note:** **`globalnonce`** here is the KeyGen’s MPC signing counter from the API. It is **not** the EVM account nonce from **`cast nonce`**. **Fee payment / top-up** can be sent as ordinary EVM transactions **from any funded wallet**—they do **not** require the **`multiSignRequest`** / threshold flow. Paying from a separate hot wallet or custodian is often more convenient than routing top-ups through the MPC wallet. If you do spend **from the MPC address** itself, those txs still go through **`multiSignRequest`** as usual. For ABI-level details of the fee contract, see **[$REFS_PATH/API_IMPLEMENTATION.md]($REFS_PATH/API_IMPLEMENTATION.md)** and on-chain docs your deployment publishes.
 
 ---
 
@@ -162,16 +164,16 @@ Remember: **threshold+1** accepts are required to generate the MPC signature.
 
 - Every **`POST`** to the management API requires a **management** signature (Ed25519 or MetaMask flow per node config).
 - **`clientSig`** on **`multiSignRequest`** signs the **canonical request body** with the **management** key—not the MPC key.
-- Setup details: **[references/AGENT_ED25519_SETUP.md](./references/AGENT_ED25519_SETUP.md)**.
+- Setup details: **[references/AGENT_ED25519_SETUP.md]($REFS_PATH/AGENT_ED25519_SETUP.md)**.
 
 ---
 
 ## Creating transactions (`multiSignRequest`)
 
-Skim-level recipe for agents (e.g. Open Claw). **Full commands, flags, and signing details:** **[./references/AI_AGENT_FORGE_SIGNREQUEST.md](./references/AI_AGENT_FORGE_SIGNREQUEST.md)**.
+Skim-level recipe for agents (e.g. Open Claw). **Full commands, flags, and signing details:** **[$REFS_PATH/AI_AGENT_FORGE_SIGNREQUEST.md]($REFS_PATH/AI_AGENT_FORGE_SIGNREQUEST.md)**.
 
 1. **Simulate with Foundry** — Run **`forge script`** with **`--rpc-url`** and **`--sender <MPC address>`**. **Do not** use **`--broadcast`** (the MPC key is not on disk). Consume the artifact **`broadcast/<Script>.s.sol/<chain_id>/run-latest.json`**.
-2. **Build the request JSON** — Run **`cast nonce <MPC address> --rpc-url $RPC`** and pass that value as **`--first-nonce`** to **`~/scripts/generateSignRequestWithFoundryScript.py`** (see **Scripts** below), together with **`--key-gen-id`**, **`--file`** pointing at **`run-latest.json`**, **`--purpose`**, and **`--mpc-auth-url`**. The helper needs Python **`eth_account`** (see the reference doc).
+2. **Build the request JSON** — Run **`cast nonce <MPC address> --rpc-url $RPC`** and pass that value as **`--first-nonce`** to **`$SCRIPTS_PATH/generateSignRequestWithFoundryScript.py`** (see **Scripts** below), together with **`--key-gen-id`**, **`--file`** pointing at **`run-latest.json`**, **`--purpose`**, and **`--mpc-auth-url`**. The helper needs Python **`eth_account`** (see the reference doc).
 3. **Sign and submit** — Clear **`clientSig`** / **`signedMessage`**, build **canonical JSON**, sign with the **management** key, set **`clientSig`**, then **`POST /multiSignRequest`**.
 4. **Notify the group** — **`POST /sendMessage`** on the KeyGen channel with a short title/body and the **request id** returned from **`multiSignRequest`** so peers can review.
 
@@ -183,11 +185,11 @@ Skim-level recipe for agents (e.g. Open Claw). **Full commands, flags, and signi
 
 ---
 
-## Scripts (linked in ~/scripts)
+## Scripts (linked in $SCRIPTS_PATH)
 
 | Location | Use |
 |----------|-----|
-| `~/scripts/generateSignRequestWithFoundryScript.py` | Forge broadcast JSON → **`multiSignRequest`** JSON helper. |
+| `$SCRIPTS_PATH/generateSignRequestWithFoundryScript.py` | Forge broadcast JSON → **`multiSignRequest`** JSON helper. |
 
 ---
 
@@ -195,12 +197,12 @@ Skim-level recipe for agents (e.g. Open Claw). **Full commands, flags, and signi
 
 | Document | Description |
 |----------|-------------|
-| [references/AGENT_BASICS.md](./references/AGENT_BASICS.md) | Overview of how an agent interacts with an MPA wallet. |
-| [references/instructions.md](./references/instructions.md) | Human-oriented full workflow; same story as above with more narrative. |
-| [references/AGENT_ED25519_SETUP.md](./references/AGENT_ED25519_SETUP.md) | Agent Ed25519 onboarding, `PublicMgtKey`, `addManagementKey`, localhost API port. |
-| [references/AI_AGENT_FORGE_SIGNREQUEST.md](./references/AI_AGENT_FORGE_SIGNREQUEST.md) | End-to-end: Foundry → Python helper → `multiSignRequest`; **`clientSig`** rules. |
-| [references/API_IMPLEMENTATION.md](./references/API_IMPLEMENTATION.md) | Canonical REST API specification (endpoints, auth, bodies). |
-| [references/swagger.yaml](./references/swagger.yaml) | OpenAPI/Swagger for tooling and codegen. |
+| [references/AGENT_BASICS.md]($REFS_PATH/AGENT_BASICS.md) | Overview of how an agent interacts with an MPA wallet. |
+| [references/instructions.md]($REFS_PATH/instructions.md) | Human-oriented full workflow; same story as above with more narrative. |
+| [references/AGENT_ED25519_SETUP.md]($REFS_PATH/AGENT_ED25519_SETUP.md) | Agent Ed25519 onboarding, `PublicMgtKey`, `addManagementKey`, localhost API port. |
+| [references/AI_AGENT_FORGE_SIGNREQUEST.md]($REFS_PATH/AI_AGENT_FORGE_SIGNREQUEST.md) | End-to-end: Foundry → Python helper → `multiSignRequest`; **`clientSig`** rules. |
+| [references/API_IMPLEMENTATION.md]($REFS_PATH/API_IMPLEMENTATION.md) | Canonical REST API specification (endpoints, auth, bodies). |
+| [references/swagger.yaml]($REFS_PATH/swagger.yaml) | OpenAPI/Swagger for tooling and codegen. |
 
 ---
 
