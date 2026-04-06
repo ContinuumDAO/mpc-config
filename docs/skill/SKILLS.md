@@ -103,7 +103,45 @@ Base URL for a co-located node: **`http://127.0.0.1:<ManagementAPIsPort>`** (see
 
 ## Other API capabilities (agent)
 
-Per **`./references/instructions.md`**, the agent may also: **`/keyGenRequest`**, **`/keyGenRequestAgree`**, **`/addKnownAddress`**, **`/postChainDetails`**, **`/addToken`**, health/version discovery, and **fee/credit** checks via **`GET /getGlobalNonceByKeyGenId`** (and top-up gas as needed).
+Per **`./references/instructions.md`**, the agent may also: **`/keyGenRequest`**, **`/keyGenRequestAgree`**, **`/addKnownAddress`**, **`/postChainDetails`**, **`/addToken`**, health/version discovery, and **fee/credit** checks via **`GET /getGlobalNonceByKeyGenId`** (and top-up gas as needed). For **on-chain** fee state on **Linea mainnet**, use the subsection below.
+
+---
+
+## Fee payment (Linea mainnet, chainId 59144)
+
+ContinuumDAO’s **fee / registration** contract on **Linea** is deployed at a fixed address. Agents should use **Foundry `cast`** against that contract with an RPC URL taken from the node’s chain config (same pattern as other on-chain checks).
+
+**Fee contract (Linea mainnet):** `0x55aD6Df6d8f8824486C3fd3373f1CF29eCecF0A3`
+
+**Variables:** Set **`KEYGEN_ID`** to your KeyGen result id (see **Environment**). Set **`WALLET_ADDRESS`** to the MPC wallet **Ethereum address** for that KeyGen (from **`GET /getKeyGenResultById`** / **`ethereumaddress`**). Use your co-located management API base URL instead of `localhost` if needed.
+
+**RPC URL from the node** (Linea `chain_id` **59144**):
+
+```bash
+RPC=$(curl -s "http://localhost:8080/getChainDetails?chain_id=59144" | jq -r '.Data.rpcGateway')
+```
+
+**Registration and fee state** (`cast` reads only):
+
+```bash
+# Is the KeyGen registered?
+cast call 0x55aD6Df6d8f8824486C3fd3373f1CF29eCecF0A3 \
+  "isRegistered(address)(bool)" $WALLET_ADDRESS --rpc-url $RPC
+
+# Fee config for this KeyGen
+cast call 0x55aD6Df6d8f8824486C3fd3373f1CF29eCecF0A3 \
+  "keyGenFeeConfig(address)(address,uint256,uint256,uint256,bytes32)" \
+  $WALLET_ADDRESS --rpc-url $RPC
+
+# Global nonce (for getRemainingNonces) — from the management API, not cast nonce
+GNONCE=$(curl -s "http://localhost:8080/getGlobalNonceByKeyGenId?id=$KEYGEN_ID" | jq -r '.Data.globalnonce')
+
+# Remaining signatures before top-up
+cast call 0x55aD6Df6d8f8824486C3fd3373f1CF29eCecF0A3 \
+  "getRemainingNonces(address,uint256)(uint256)" $WALLET_ADDRESS $GNONCE --rpc-url $RPC
+```
+
+**Note:** **`globalnonce`** here is the KeyGen’s MPC signing counter from the API. It is **not** the EVM account nonce from **`cast nonce`**. **Fee payment / top-up** can be sent as ordinary EVM transactions **from any funded wallet**—they do **not** require the **`multiSignRequest`** / threshold flow. Paying from a separate hot wallet or custodian is often more convenient than routing top-ups through the MPC wallet. If you do spend **from the MPC address** itself, those txs still go through **`multiSignRequest`** as usual. For ABI-level details of the fee contract, see **[./references/API_IMPLEMENTATION.md](./references/API_IMPLEMENTATION.md)** and on-chain docs your deployment publishes.
 
 ---
 
@@ -125,6 +163,23 @@ Remember: **threshold+1** accepts are required to generate the MPC signature.
 - Every **`POST`** to the management API requires a **management** signature (Ed25519 or MetaMask flow per node config).
 - **`clientSig`** on **`multiSignRequest`** signs the **canonical request body** with the **management** key—not the MPC key.
 - Setup details: **[references/AGENT_ED25519_SETUP.md](./references/AGENT_ED25519_SETUP.md)**.
+
+---
+
+## Creating transactions (`multiSignRequest`)
+
+Skim-level recipe for agents (e.g. Open Claw). **Full commands, flags, and signing details:** **[./references/AI_AGENT_FORGE_SIGNREQUEST.md](./references/AI_AGENT_FORGE_SIGNREQUEST.md)**.
+
+1. **Simulate with Foundry** — Run **`forge script`** with **`--rpc-url`** and **`--sender <MPC address>`**. **Do not** use **`--broadcast`** (the MPC key is not on disk). Consume the artifact **`broadcast/<Script>.s.sol/<chain_id>/run-latest.json`**.
+2. **Build the request JSON** — Run **`cast nonce <MPC address> --rpc-url $RPC`** and pass that value as **`--first-nonce`** to **`~/scripts/generateSignRequestWithFoundryScript.py`** (see **Scripts** below), together with **`--key-gen-id`**, **`--file`** pointing at **`run-latest.json`**, **`--purpose`**, and **`--mpc-auth-url`**. The helper needs Python **`eth_account`** (see the reference doc).
+3. **Sign and submit** — Clear **`clientSig`** / **`signedMessage`**, build **canonical JSON**, sign with the **management** key, set **`clientSig`**, then **`POST /multiSignRequest`**.
+4. **Notify the group** — **`POST /sendMessage`** on the KeyGen channel with a short title/body and the **request id** returned from **`multiSignRequest`** so peers can review.
+
+**Common mistakes**
+
+- Using **`forge script … --broadcast`** — wrong; simulation only until MPC signing completes.
+- Confusing **`globalnonce`** (KeyGen MPC counter from **`getGlobalNonceByKeyGenId`**) with **`cast nonce`** — for **`--first-nonce`**, use **EVM** **`cast nonce`** on the MPC address for **that chain**.
+- Forgetting **`sendMessage`** after submit — coordination and audit depend on it.
 
 ---
 
