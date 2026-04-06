@@ -115,7 +115,9 @@ Do **not** confuse **management signatures** (per-node API auth) with **MPC sign
 | **`REFS_PATH`** | If set, points to the references directory containing API specification and agent instructions. | ~/references |
 | **`SCRIPTS_PATH`** | If set, points to the scripts directory containing python scripts for API automation. | ~/scripts |
 
-Base URL for a co-located node: **`http://127.0.0.1:<ManagementAPIsPort>`** (see `configs.yaml`, often **8080**).
+Base URL for a co-located node: **`http://127.0.0.1:<ManagementAPIsPort>`** (see `configs.yaml`, often **8080**). For HTTP calls from scripts, set **`MPC_AUTH_URL`** to that base URL if it is not the default `http://127.0.0.1:8080`.
+
+**`scripts/keygen_messaging_agent_poll.py`** uses **`KEYGEN_ID`**, **`AUTH_KEY_PATH`**, and optional **`MPC_AUTH_URL`** (see the script docstring for poll-specific env vars).
 
 ---
 

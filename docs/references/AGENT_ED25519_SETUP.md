@@ -213,6 +213,26 @@ So the agent (e.g. Open Claw) should be configured with **node URL = `http://loc
 - **Restrict who can reach the node API:** If only the agent on the same host should talk to the node, bind the management API to `127.0.0.1` (if supported by the node config) or use a firewall so that port 8080 is only reachable from localhost.
 - **Key permissions:** Ensure only `ai-agent` can read `~/.ssh/mpc_auth_ed25519` (e.g. `chmod 600` and correct ownership).
 
+### 8.5 Open Claw: isolated cron + KeyGen message poll
+
+To react when someone `@mentions` the agent in the KeyGen channel, use **Open Claw’s Gateway cron** ([Scheduled Tasks / Cron](https://docs.openclaw.ai/cron)) with an **isolated** job whose prompt tells the agent to **run a small script** on the host, then **reply** with `POST /sendMessage` (management-signed) per [API_KEYGEN_MESSAGING.md](./API_KEYGEN_MESSAGING.md).
+
+**Poll helper in this repo:** `scripts/keygen_messaging_agent_poll.py`
+
+1. Install deps once: `pip install -r scripts/requirements-keygen-agent.txt`
+2. Export at least **`KEYGEN_ID`** (same as [SKILL.md](../skill/SKILL.md) / Open Claw skill) and, if needed, **`MPC_AUTH_URL`** for the management API (default `http://127.0.0.1:8080`). The script loads the Ed25519 management key from **`AUTH_KEY_PATH`** (default `~/.ssh/mpc_auth_ed25519`) or optional **`MPC_MGT_ED25519_SEED_HEX`**.
+3. The script prints one JSON line: `matches` (unread messages whose title/body match `@agent` by default), then calls `POST /multiMarkMessagesRead` so the next poll skips handled items. Use `--dry-run` to inspect without marking read.
+
+**Example cron** (adjust paths and schedule; ensure the job may run `exec`). Keep `--message` on one line so the shell parses it reliably:
+
+```bash
+openclaw cron add --name "keygen-agent-inbox" --every "3m" --session isolated \
+  --message "Run: python3 /home/ai-agent/mpc-config/scripts/keygen_messaging_agent_poll.py. Parse the one JSON line on stdout. If match_count > 0, reply via POST /sendMessage (Nonce, Sig, keyGenId, title or replyTo+body; see API_KEYGEN_MESSAGING.md). Body max 512 chars." \
+  --tools "exec,read"
+```
+
+The isolated job should inherit the same env as the agent service (**`KEYGEN_ID`**, **`AUTH_KEY_PATH`**, **`MPC_AUTH_URL`**, etc.). **Sending** messages remains an explicit agent step (sign with the same Ed25519 management key as other mgt endpoints); the poll script only **lists, filters, and marks read**.
+
 ## 7. Security notes
 
 - Keep the Ed25519 **private** key only where the agent (or you) can use it; never put it in the frontend or in the node config.
