@@ -119,11 +119,20 @@ Base URL for a co-located node: **`http://127.0.0.1:<ManagementAPIsPort>`** (see
 
 **`scripts/keygen_messaging_agent_poll.py`** uses **`KEYGEN_ID`**, **`AUTH_KEY_PATH`**, and optional **`MPC_AUTH_URL`** (see the script docstring for poll-specific env vars).
 
+### KeyGen inbox poll (`@agent`)
+
+To **notice unread channel messages directed at the agent** without manual **`GET /listMessages`** each time, run **`$SCRIPTS_PATH/keygen_messaging_agent_poll.py`** on a timer (recommended: **Open Claw Gateway isolated cron**; see **`$REFS_PATH/AGENT_ED25519_SETUP.md`** §8.5 and [Open Claw cron](https://docs.openclaw.ai/cron)).
+
+1. **Once:** `pip install -r $SCRIPTS_PATH/requirements-keygen-agent.txt` (needs **`cryptography`**).
+2. **Run:** `python3 $SCRIPTS_PATH/keygen_messaging_agent_poll.py` with **`KEYGEN_ID`** set (and **`AUTH_KEY_PATH`** / **`MPC_AUTH_URL`** if not defaults). **`--dry-run`** lists matching unread messages without calling **`multiMarkMessagesRead`**.
+3. **Output:** one JSON line: **`matches`**, **`match_count`**, **`marked_ids`**. The script marks matched messages read so the next poll does not repeat them.
+4. **After a non-empty `matches`:** interpret the thread, decide what to do, and reply with **`POST /sendMessage`** (management-signed; **`$REFS_PATH/API_KEYGEN_MESSAGING.md`**). Humans can **`@agent`** in title or body to target the agent.
+
 ---
 
 ## Default operational loop (high level)
 
-1. **Discuss** in KeyGen messaging: human or other nodes **`POST /sendMessage`**; everyone reads **`GET /getMessageThread`** (and related list/get APIs).
+1. **Discuss** in KeyGen messaging: human or other nodes **`POST /sendMessage`**; everyone reads **`GET /getMessageThread`** (and related list/get APIs). Optionally use the **KeyGen inbox poll** above when the agent should wake on **`@agent`** mentions.
 2. **Plan**: agent may research on the web; produce **Foundry** scripts and a **rationale**; optionally push to a shared Git repo.
 3. **Build tx intent**: run **`forge script … --sender <MPC address>`** → `broadcast/.../run-latest.json`; feed to **`$SCRIPTS_PATH/generateSignRequestWithFoundryScript.py`** (see references) to build JSON for **`POST /multiSignRequest`**. Include a concise **`Purpose`** (≤256 chars).
 4. **Agree**: each node **`POST /signRequestAgree`** (accept/reject); optional **`Thoughts`** per node to guide the agent (e.g. to **`POST /shelveSignRequest`** and revise).
