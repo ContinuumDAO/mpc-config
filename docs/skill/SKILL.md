@@ -1,3 +1,32 @@
+---
+name: mpa-wallet
+description: Operate and automate threshold multisignature workflows for MPC/MPA wallets.
+version: 1.0.1
+metadata:
+  openclaw:
+    requires:
+      env:
+        - KEYGEN_ID
+        - AUTH_KEY_PATH
+        - REFS_PATH
+        - SCRIPTS_PATH
+      bins:
+        - curl
+        - jq
+        - forge
+        - cast
+        - python3
+      config:
+        - "~/.ssh/mpc_auth_ed25519"
+        - "~mpcnode/mpc-config/configs.yaml"
+        - "~mpcnode/mpc-config/scripts"
+        - "~mpcnode/mpc-config/docs/references"
+    primaryEnv: AUTH_KEY_PATH
+    os:
+      - linux
+    homepage: https://clawhub.ai/patrickcure/mpa-wallet
+---
+
 # Skill: MPA / MPC wallet agent (Open Claw / Clawhub)
 
 Use this skill when operating an **AI agent** (e.g. **Open Claw**) that manages an **mpc-auth** node participating in a **Multi-Party Agent (MPA) wallet**: a single on-chain address (EVM today) whose **MPC signature** requires cooperation of **at least threshold+1** nodes in a **Group**. No single node holds the full private key.
