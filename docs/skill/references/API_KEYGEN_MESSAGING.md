@@ -190,4 +190,4 @@ Soft-deletes **multiple** messages (and their reply trees). Only the **message o
 - **Message:** `id`, `keyGenId`, `senderNodeKey`, `title` (top-level only), `replyTo` (replies only), `body`, `createdAt` (UTC), `read` (array of read receipts). Deleted messages are omitted from list/get/thread.
 - **Read receipt:** `nodeKey`, `signature`, `signedAt` (UTC). Stored when a node marks a message read; optional client `signature` in the request.
 
-For full semantics (ids, threading depth, broadcast, etc.) see [docs-internal/keygen-messaging-system.md](docs-internal/keygen-messaging-system.md).
+For full semantics (ids, threading depth, broadcast, etc.) see [KEYGEN_MESSAGING_SYSTEM.md](./KEYGEN_MESSAGING_SYSTEM.md).

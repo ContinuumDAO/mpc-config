@@ -103,12 +103,11 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /keyGenRequestAgree`](#post-keygenrequestagree) - Agree to key generation request (requires mgt key)
 - [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) - Get key generation result by ID
 - [`GET /getGlobalNonceByKeyGenId`](#get-getglobalnoncebykeygenid) - Get globalNonce by keyGen result id
-- [`GET /getKeyGenGroupId`](#get-getkeygengrouesultbyid) - Get key generation result by ID
-- [`GET /getKeyGenGroupId`](#get-getkeygengroupid) - Get GroupId for a keyGen request
+- [`GET /getKeyGenGroupId`](#get-getkeygengroupid) - Get key generation result and GroupId by keyGen ID
 - [`GET /getAllGroupIds`](#get-getallgroupids) - Get all GroupIds with their keyGens
 
 ### KeyGen Messaging
-KeyGen messaging is documented in [API_KEYGEN_MESSAGING.md](API_KEYGEN_MESSAGING.md). Response format and conventions follow this document ([API_IMPLEMENTATION.md](API_IMPLEMENTATION.md)). **sendMessage, markMessageRead, multiMarkMessagesRead, deleteMessage, and multiDeleteMessages require a management key signature** (MetaMask or Ed25519, depending on the client key in the keyGen); see API_KEYGEN_MESSAGING.md for Nonce/Sig and getMessageToSign / getNodeMgtKeyNonce / getAllowedEd25519MgtKeys.
+KeyGen messaging is documented in [API_KEYGEN_MESSAGING.md](./API_KEYGEN_MESSAGING.md). Response format and conventions follow this document ([API_IMPLEMENTATION.md](API_IMPLEMENTATION.md)). **sendMessage, markMessageRead, multiMarkMessagesRead, deleteMessage, and multiDeleteMessages require a management key signature** (MetaMask or Ed25519, depending on the client key in the keyGen); see API_KEYGEN_MESSAGING.md for Nonce/Sig and getMessageToSign / getNodeMgtKeyNonce / getAllowedEd25519MgtKeys.
 - `POST /sendMessage` - Send a message (top-level or reply) in a keyGen channel (mgt key required)
 - `GET /listMessages` - List messages (with unread, time range, top_level, pagination)
 - `GET /getMessageById` - Get a single message by id
@@ -1445,11 +1444,11 @@ Returns all token configs stored on this node, grouped by `chainType`. Response 
 
 **Response:** `{ "code": 0, "error": "", "data": { "ethereum": [ ... ], "solana": [ ... ], ... } }`
 
-See [Token storage schema](docs/TOKEN_STORAGE_SCHEMA.md) for the full JSON structure and CTMRWA1 transfer signatures.
+See [Token storage schema](./TOKEN_STORAGE_SCHEMA.md) for the full JSON structure and CTMRWA1 transfer signatures.
 
 ### Known Addresses (local node only)
 
-Known addresses are stored on the local node only (not propagated). Each entry is scoped by chain type (e.g. `ethereum`, `solana`) and includes an address, optional `name`, optional `chainIds` (empty = valid on all chains of that type), and `isContract` (false = EOA). See [Known Addresses schema](docs/KNOWN_ADDRESSES_SCHEMA.md).
+Known addresses are stored on the local node only (not propagated). Each entry is scoped by chain type (e.g. `ethereum`, `solana`) and includes an address, optional `name`, optional `chainIds` (empty = valid on all chains of that type), and `isContract` (false = EOA). See [Known Addresses schema](./KNOWN_ADDRESSES_SCHEMA.md).
 
 <a id="post-addknownaddress"></a>
 #### `POST /addKnownAddress`
@@ -1516,7 +1515,7 @@ Returns all known addresses stored on this node, grouped by chain type. Each ent
 
 **Response:** `{ "code": 0, "error": "", "data": { "ethereum": [ { "address": "0x...", "name": "My Wallet", "chainIds": ["1", "137"], "isContract": false, "updatedAt": "..." }, ... ], "solana": [ ... ], ... } }`
 
-See [Known Addresses schema](docs/KNOWN_ADDRESSES_SCHEMA.md) for the full document shape.
+See [Known Addresses schema](./KNOWN_ADDRESSES_SCHEMA.md) for the full document shape.
 
 ### 3. Node Tools
 
@@ -1526,6 +1525,7 @@ Returns node public keys for all configured node addresses in `configs.yaml`. Qu
 
 **Where served:** Registered on the **management** port and **Browser HTTPS** (GET requires JWT on **8443**). **`GET /getNodeKey`** (used to build this response) is on **PublicDiscoveryPort** / management only — see [Public discovery HTTP](#public-discovery-http).
 
+<a id="peer-getnodekey-probes"></a>
 **Peer probe transport:** Each peer is queried over **HTTP** in order: **`PublicDiscoveryPort`**, then **`ManagementAPIsPort`** (see [Peer `getNodeKey` probes](#peer-getnodekey-probes)).
 
 **Response:**
