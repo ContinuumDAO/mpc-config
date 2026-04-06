@@ -1,6 +1,6 @@
 ---
 name: mpa-wallet
-description: Operate and automate threshold multisignature workflows for MPC/MPA wallets.
+description: Operate and automate threshold multisignature workflows for MPC/MPA wallets on an isolated, dedicated host that contains no unrelated sensitive data or private keys.
 version: 1.0.1
 metadata:
   openclaw:
@@ -38,6 +38,14 @@ This skill assumes the **operator has already provisioned an MPA wallet environm
 - **At least two mpc-auth nodes** must exist: one run by a **human** and one run for the **AI agent**. Threshold signing requires multiple parties; a minimal useful setup pairs a human-controlled node with an agent-controlled node.
 - The **agent’s node** must use **Ed25519 management signing** (`PublicMgtKey` / `POST /addManagementKey` flow) so automated `POST` calls to the management API are authenticated without MetaMask. See **[$REFS_PATH/AGENT_ED25519_SETUP.md]($REFS_PATH/AGENT_ED25519_SETUP.md)** in this repo for technical steps.
 - A link from `~mpcnode/mpc-config/scripts` and `~mpcnode/mpc-config/docs/references` is made using `ln -s ~mpcnode/mpc-config/scripts ~/. && ln -s ~mpcnode/mpc-config/docs/references ~/.` (target other directories if using a custom $REFS_PATH or $SCRIPTS_PATH, see [environment](#environment-agent) below).
+
+## Host security requirements (mandatory)
+
+- Run this skill only on a **dedicated, isolated machine** used for MPC node operations.
+- Do **not** run this skill on hosts that contain unrelated secrets, wallets, SSH keys, cloud credentials, or developer tokens.
+- The only private key material available to the agent should be the **dedicated management key** used for management API authentication.
+- Restrict filesystem and network permissions to only what is required for the local mpc-auth node and expected RPC/API endpoints.
+- Prefer a dedicated key path (outside your normal user SSH key set) and ensure this key is not reused for other systems.
 
 **ContinuumDAO documentation** (end-user setup, before this skill applies):
 
