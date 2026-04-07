@@ -109,7 +109,7 @@ Blockchain information (token / assets / chain) distributed authentication toolk
 
 ## Prerequisites
 
-- **Dedicated OS user `mpcnode` with sudo** (recommended on every VPS; same steps as the [mpc-auth](https://github.com/ContinuumDAO/mpc-auth) repo — see **Installation §0** below)
+- **Dedicated OS user `mpcnode` with sudo** (recommended on every VPS; repo — see **Installation §0** below)
 - **Docker & Docker Compose** (required)
 - **Python 3 with ruamel.yaml** (required for `process_config.sh`; on Debian/Ubuntu install **`python3-ruamel.yaml`)
 - **Sudo/root access** (may be required on client nodes to create `mosquitto/config/certs/` directory - see Certificate Setup section)
@@ -117,9 +117,9 @@ Blockchain information (token / assets / chain) distributed authentication toolk
 
 ### Installation
 
-#### 0. Create the `mpcnode` user and grant sudo (recommended; aligns with mpc-auth)
+#### 0. Create the `mpcnode` user and grant sudo (recommended)
 
-Run node operations as a dedicated account (default name **`mpcnode`**) with **sudo** on **each** VPS. This matches the **mpc-auth** repository and keeps ownership consistent for Docker, `process_config.sh`, and CA certificate workflows.
+Run node operations as a dedicated account (default name **`mpcnode`**) with **sudo** on **each** VPS. This keeps ownership consistent for Docker, `process_config.sh`, and CA certificate workflows.
 
 **1. Create the user on each node (Ubuntu/Debian):**
 
@@ -580,7 +580,7 @@ The docker-compose files include:
 
 **Peer key probes (`GET /getConfiguredNodeKeys`)**
 
-- Probes use **`http://<peer>:<PublicDiscoveryPort>/getNodeKey`** (e.g. **18080**), then **`http://<peer>:<ManagementAPIsPort>/getNodeKey`**. Peers should use the **same** **`PublicDiscoveryPort`** in `configs.yaml`. See **`API_IMPLEMENTATION.md`** in the **mpc-auth** repo.
+- Probes use **`http://<peer>:<PublicDiscoveryPort>/getNodeKey`** (e.g. **18080**), then **`http://<peer>:<ManagementAPIsPort>/getNodeKey`**. Peers should use the **same** **`PublicDiscoveryPort`** in `configs.yaml`. 
 
 **Redeploy:** Changing **only** compose port mapping needs **`docker compose up -d --force-recreate app`**. New **mpc-auth** features require a **new image** (build/push **`continuumdao/mpc-auth:…`**) and **`docker compose pull`** or **`--build`**.
 
@@ -1039,11 +1039,11 @@ OpenSSL Error[0]: error:80000002:system library::No such file or directory
 
 ## Additional documentation
 
-- **[docs/API_IMPLEMENTATION.md](docs/API_IMPLEMENTATION.md)** – Full API reference (endpoints, request/response formats, Swagger).
-- **[docs/AGENT_ED25519_SETUP.md](docs/AGENT_ED25519_SETUP.md)** – Ed25519 agent setup for node management (no MetaMask).
+- **[docs/API_IMPLEMENTATION.md](docs/references/API_IMPLEMENTATION.md)** – Full API reference (endpoints, request/response formats, Swagger).
+- **[docs/AGENT_ED25519_SETUP.md](docs/references/AGENT_ED25519_SETUP.md)** – Ed25519 agent setup for node management (no MetaMask).
 
 ---
 
 ## Support
 
-For issues, questions, or contributions, please contact the DAO or refer to the main mpc-auth repository documentation.
+For issues, questions, or contributions, please contact the DAO.
