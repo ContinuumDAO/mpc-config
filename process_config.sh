@@ -2057,6 +2057,90 @@ sys.exit(0 if (ok_eth or ok_pub) else 1)
 PYVERIFY
 }
 
+# If PublicMgtKey in configs.yaml is an OpenSSH ssh-ed25519 line, rewrite it as 64 hex (ruamel round-trip).
+normalize_openssh_public_mgt_key_in_yaml() {
+    local config_file="$1"
+    if ! command -v python3 &> /dev/null; then
+        return 0
+    fi
+    local ossh_to_hex="${REPO_ROOT}/tools/openssh_ed25519_to_hex.py"
+    if [ ! -f "$ossh_to_hex" ]; then
+        ossh_to_hex="${SCRIPT_DIR}/tools/openssh_ed25519_to_hex.py"
+    fi
+    if [ ! -f "$ossh_to_hex" ]; then
+        return 0
+    fi
+    local conv_msg
+    conv_msg=$(
+        OPENSSH_HEX_TOOL="$ossh_to_hex" CONFIG_NORM="$config_file" python3 2>&1 << 'PYNORMSSH'
+import os
+import re
+import subprocess
+import sys
+
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.exit(0)
+
+path = os.environ.get("CONFIG_NORM", "")
+tool = os.environ.get("OPENSSH_HEX_TOOL", "")
+if not path or not tool or not os.path.isfile(tool):
+    sys.exit(0)
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)
+
+with open(path, "r") as f:
+    data = yaml.load(f)
+if not isinstance(data, dict):
+    sys.exit(0)
+pk = data.get("PublicMgtKey")
+if pk is None:
+    sys.exit(0)
+raw = str(pk).strip()
+if not raw:
+    sys.exit(0)
+line = raw.splitlines()[0].strip()
+parts = line.split()
+if len(parts) < 2 or parts[0] != "ssh-ed25519":
+    sys.exit(0)
+
+proc = subprocess.run(
+    [sys.executable, tool],
+    input=line + "\n",
+    text=True,
+    capture_output=True,
+)
+if proc.returncode != 0:
+    err = (proc.stderr or proc.stdout or "openssh_ed25519_to_hex.py failed").strip()
+    sys.stderr.write(err + "\n")
+    sys.exit(1)
+hexout = proc.stdout.strip()
+if len(hexout) != 64 or not re.fullmatch(r"[0-9a-f]{64}", hexout, re.I):
+    sys.stderr.write("error: OpenSSH converter did not return 64 hex\n")
+    sys.exit(1)
+
+data["PublicMgtKey"] = hexout.lower()
+with open(path, "w") as f:
+    yaml.dump(data, f)
+sys.stderr.write(
+    "Converted PublicMgtKey from OpenSSH (ssh-ed25519) line to 64 hex in configs.yaml.\n"
+)
+sys.exit(0)
+PYNORMSSH
+    ) || {
+        print_error "$conv_msg"
+        return 1
+    }
+    if [ -n "$conv_msg" ]; then
+        print_success "$conv_msg"
+    fi
+    return 0
+}
+
 # Prompt for NodeMgtKey / PublicMgtKey when empty; require at least one valid key after prompts.
 prompt_configure_management_keys() {
     local config_file="$1"
@@ -3592,6 +3676,7 @@ show_process_config_help() {
     echo ""
     echo "This script validates configuration and generates certificates."
     echo ""
+    echo "If PublicMgtKey in configs.yaml is an ssh-ed25519 line, it is rewritten to 64 hex (tools/openssh_ed25519_to_hex.py)."
     echo "If NodeMgtKey or PublicMgtKey is empty, the script prompts first (interactive TTY): Ethereum (MetaMask)"
     echo "and/or Ed25519 public key (64 hex or ssh-ed25519 .pub line; OpenSSH via tools/openssh_ed25519_to_hex.py)."
     echo "At least one valid key is required."
@@ -3969,6 +4054,7 @@ main() {
 
     # Management keys before nodeAddresses so re-runs offer NodeMgtKey / PublicMgtKey when missing
     # (otherwise users only see the node IP flow first).
+    normalize_openssh_public_mgt_key_in_yaml "$CONFIG_FILE" || exit 1
     prompt_configure_management_keys "$CONFIG_FILE" || exit 1
 
     prompt_fill_empty_node_addresses "$CONFIG_FILE" || exit 1
