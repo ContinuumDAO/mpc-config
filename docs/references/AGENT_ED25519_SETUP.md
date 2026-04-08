@@ -14,9 +14,18 @@ This doc describes how a **node owner** can set up their node so that an **AI ag
 
 ### 1.1 Bootstrap the node with an Ed25519 management key (PublicMgtKey)
 
-The node needs **at least one** allowed Ed25519 management key to start with (the “bootstrap key”). This is provided via config as `PublicMgtKey` (64-hex Ed25519 public key). After that, you can add more keys (e.g. an agent key) via `POST /addManagementKey` without editing config again.
+The node needs **at least one** allowed Ed25519 management key to start with (the “bootstrap key”). This is provided via config as **`PublicMgtKey`**: the raw **32-byte Ed25519 public key** written as **64 lowercase hex characters** (no `0x` prefix). After that, you can add more keys (e.g. an agent key) via **`POST /addManagementKey`** without editing config again.
 
-How you generate the bootstrap keypair is up to you (the repo previously documented CLI generation). The important part is: **you end up with a 64-hex Ed25519 public key** to place in `PublicMgtKey`, and you keep the corresponding private key somewhere safe for signing (human helper or the agent).
+**OpenSSH `.pub` format is not what mpc-auth stores**—if you only have a line like `ssh-ed25519 AAAA… comment` (or the **base64 middle field** alone), convert it first. In the **mpc-config** repo, **`tools/openssh_ed25519_to_hex.py`** (stdlib only) accepts the full line or the base64 blob and prints **64 hex** on stdout. Example (adjust path if you keep a symlink or copy of **`tools/`** next to the agent, e.g. under the agent’s home directory):
+
+```bash
+python3 /path/to/mpc-config/tools/openssh_ed25519_to_hex.py ~/.ssh/id_ed25519.pub
+# or: echo 'ssh-ed25519 AAAA…' | python3 …/openssh_ed25519_to_hex.py
+```
+
+**`process_config.sh`** (same repo) can also prompt for or normalize **`PublicMgtKey`** from OpenSSH / base64 when you run it interactively or when the value is already in **`configs.yaml`**. For a **private** key file (PEM / OpenSSH), use **`tools/ed25519_private_to_pubkey_hex.py`** (`pip install cryptography`).
+
+How you generate the bootstrap keypair is otherwise up to you. The important part is: **you end up with a 64-hex Ed25519 public key** for `PublicMgtKey`, and you keep the corresponding private key somewhere safe for signing (human helper or the agent).
 
 ### 1.2 Configure the node (mpc-auth) with the public key
 
