@@ -50,8 +50,7 @@ FORCE_REGENERATE_BROWSER_HTTPS_CERTS="${FORCE_REGENERATE_BROWSER_HTTPS_CERTS:-0}
 
 # UFW: set to 1 to add "ufw allow" for ManagementAPIsPort (default 8080). Default is 0 — the management
 # port is NOT opened in UFW; use cloud SG / VPN, or bind Docker to 127.0.0.1:8080:8080 for stricter lockdown.
-# Default 1: allow ManagementAPIsPort in UFW (co-located agents, local operators; matches historical behavior).
-UFW_OPEN_MANAGEMENT_PORT="${UFW_OPEN_MANAGEMENT_PORT:-1}"
+UFW_OPEN_MANAGEMENT_PORT="${UFW_OPEN_MANAGEMENT_PORT:-0}"
 
 # Default example NodeMgtKey in configs.yaml — treated like unset (must be replaced for a real deployment).
 NODE_MGT_ETH_PLACEHOLDER="0x1234567890abcdef1234567890abcdef12345678"
@@ -3491,7 +3490,7 @@ EOF
     fi
 
     if ! command -v python3 &> /dev/null; then
-        print_warning "python3 not found — update configs.yaml BrowserHTTPS manually (JWKSURL, ExpectedIssuer, cert paths, AllowedOrigins, etc.). See docs/internal/PROCESS_CONFIG_BROWSER_HTTPS.md"
+        print_warning "python3 not found — update configs.yaml BrowserHTTPS manually (see docs-internal/railway-browser-https-deployment.md)"
         return 0
     fi
     require_ruamel_yaml || return 1
@@ -3554,7 +3553,7 @@ with open(path, "w") as f:
     yaml.dump(data, f)
 PYMERGE
     print_success "configs.yaml updated: BrowserHTTPS merged in place at end of file (header comments stay above the block; cert paths, AllowedOrigins, JWKSURL, ExpectedIssuer, ExpectedAudience, EnforceNodeIPClaim)"
-    print_info "Defaults: JWKSURL=$DEFAULT_BROWSER_HTTPS_JWKS_URL, ExpectedIssuer=$DEFAULT_BROWSER_HTTPS_EXPECTED_ISSUER (Pattern B). Override in configs.yaml for standalone issuer (Pattern A). Docker: port 8443, volume ./webTLS/config/certs. Details: docs/internal/PROCESS_CONFIG_BROWSER_HTTPS.md"
+    print_info "Defaults: JWKSURL=$DEFAULT_BROWSER_HTTPS_JWKS_URL, ExpectedIssuer=$DEFAULT_BROWSER_HTTPS_EXPECTED_ISSUER (Pattern B). Override in configs.yaml for standalone issuer (Pattern A). Docker: port 8443, volume ./webTLS/config/certs. See docs-internal/railway-browser-https-deployment.md"
 }
 
 show_process_config_help() {
@@ -3569,7 +3568,7 @@ show_process_config_help() {
     echo "  --help | -h | -help | help   Show this message (arguments above + relay/client behavior below)"
     echo ""
     echo "Environment (optional): FORCE_REGENERATE_MQTT_CERTS=1 / FORCE_REGENERATE_BROWSER_HTTPS_CERTS=1 same as the flags above."
-    echo "  UFW_OPEN_MANAGEMENT_PORT=0 — do not add ufw allow for ManagementAPIsPort (default: management port is opened for local agents/operators)."
+    echo "  UFW_OPEN_MANAGEMENT_PORT=1 — add ufw allow for ManagementAPIsPort (default: management port not opened in UFW)."
     echo ""
     echo "This script validates configuration and generates certificates."
     echo ""
@@ -3610,11 +3609,9 @@ show_process_config_help() {
     echo "  Browser HTTPS (8443), PublicDiscoveryPort (18080), ScannerRelayerPort (18081 if set),"
     echo "  ManagementAPIsPort (8080), relay MQTT (8883). ScannerRelayerPort uses *scoped* UFW rules when"
     echo "  PreSigningVerification.RelayerAPIURL and/or ScannerAPIURLs resolve to IPv4 (see configs.yaml)."
-    echo "  ManagementAPIsPort is opened in UFW by default; set UFW_OPEN_MANAGEMENT_PORT=0 to skip (stricter: rely on loopback compose bind, VPN, or scoped SG rules only)."
+    echo "  ManagementAPIsPort is not opened in UFW by default; set UFW_OPEN_MANAGEMENT_PORT=1 if peers/operators need inbound HTTP to the management API."
     echo "  If UFW is inactive, you are prompted (via /dev/tty) to run sudo ufw enable, or enable manually."
     echo "  Use --no-firewall to skip (not recommended for production / financial nodes)."
-    echo ""
-    echo "Operator notes (this repo): docs/internal/README.md — Browser HTTPS, firewall, multi-sign design."
     echo ""
 }
 
@@ -3732,7 +3729,8 @@ print(f"{mgt}|{pub}|{bh_fw}|{sr}")
 PYFWPORTS
 }
 
-# Apply baseline ufw allow rules for the node (does not enable ufw unless user confirms interactively).
+# Apply baseline ufw allow rules for mpc-auth (does not enable ufw unless user confirms interactively).
+# See docs-internal/firewall-and-cors-design.md
 apply_process_config_firewall() {
     local config_file="$1"
     local skip_firewall="$2"
@@ -3740,7 +3738,8 @@ apply_process_config_firewall() {
 
     if [ "$skip_firewall" = "true" ]; then
         print_warning "Host firewall step skipped (--no-firewall)."
-        print_warning "Not recommended for production or financial MPC nodes—configure ufw/nftables or cloud security groups yourself. See docs/internal/PROCESS_CONFIG_FIREWALL.md"
+        print_warning "Not recommended for production or financial MPC nodes—configure ufw/nftables or cloud security groups yourself."
+        print_info "See: docs-internal/firewall-and-cors-design.md"
         return 0
     fi
 
@@ -3773,14 +3772,14 @@ apply_process_config_firewall() {
     fi
 
     print_info "Ports from configs.yaml: ManagementAPIsPort=$mgt_port, PublicDiscoveryPort=$pub_port, BrowserHTTPS (firewall allow port)=$bh_port, ScannerRelayerPort=${sr_port:-0}"
-    print_info "Narrow inbound to scanner/DAO/relayer CIDRs in production where applicable. See docs/internal/PROCESS_CONFIG_FIREWALL.md"
+    print_info "Narrow inbound to scanner/DAO/relayer CIDRs in production; see docs-internal/firewall-and-cors-design.md"
     if [ "$is_relay" = "true" ]; then
         print_info "Relay node: MQTT broker TLS typically uses 8883/tcp (docker-compose)."
     fi
 
     if ! command -v ufw >/dev/null 2>&1; then
         print_warning "ufw is not installed. Install with: sudo apt install ufw"
-        print_info "Or configure nftables / cloud SGs. Baseline inbound to consider: 22 (SSH), $bh_port (Browser HTTPS), $pub_port (discovery), management $mgt_port (unless UFW_OPEN_MANAGEMENT_PORT=0)."
+        print_info "Or configure nftables / cloud SGs. Baseline inbound to consider: 22 (SSH), $bh_port (Browser HTTPS), $pub_port (discovery); management $mgt_port only if UFW_OPEN_MANAGEMENT_PORT=1."
         if [ "$is_relay" = "true" ]; then
             print_info "Relay: also 8883/tcp (MQTT TLS to broker from peer nodes)."
         fi
@@ -3850,10 +3849,10 @@ apply_process_config_firewall() {
             apply_one_ufw "$sr_port" "mpc-auth ScannerRelayer"
         fi
     fi
-    if [ "${UFW_OPEN_MANAGEMENT_PORT:-1}" = "0" ]; then
-        print_info "UFW: not opening ManagementAPI port ${mgt_port}/tcp (UFW_OPEN_MANAGEMENT_PORT=0). Use loopback/VPN/scoped rules if you still need access."
-    else
+    if [ "${UFW_OPEN_MANAGEMENT_PORT:-0}" = "1" ]; then
         apply_one_ufw "$mgt_port" "mpc-auth ManagementAPI"
+    else
+        print_info "UFW: not opening ManagementAPI port ${mgt_port}/tcp (default). Set UFW_OPEN_MANAGEMENT_PORT=1 if inbound access is required, or rely on cloud SG / VPN."
     fi
     if [ "$is_relay" = "true" ]; then
         apply_one_ufw 8883 "mpc-auth MQTT TLS broker"
