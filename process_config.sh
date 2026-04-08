@@ -2103,9 +2103,33 @@ if pk is None:
 raw = str(pk).strip()
 if not raw:
     sys.exit(0)
+
+def is_64_hex_pub(s: str) -> bool:
+    t = s.strip()
+    if t.startswith(("0x", "0X")):
+        t = t[2:]
+    t = re.sub(r"\s+", "", t)
+    return bool(re.fullmatch(r"[0-9a-fA-F]{64}", t))
+
+if is_64_hex_pub(raw):
+    sys.exit(0)
+
 line = raw.splitlines()[0].strip()
 parts = line.split()
-if len(parts) < 2 or parts[0] != "ssh-ed25519":
+strict_openssh = len(parts) >= 2 and parts[0] == "ssh-ed25519"
+
+
+def looks_like_raw_openssh_b64(s: str) -> bool:
+    p = s.split()
+    if not p:
+        return False
+    t = p[0]
+    if len(t) < 43 or len(t) > 100:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9+/]+=*", t))
+
+
+if not strict_openssh and not looks_like_raw_openssh_b64(line):
     sys.exit(0)
 
 proc = subprocess.run(
@@ -2116,8 +2140,10 @@ proc = subprocess.run(
 )
 if proc.returncode != 0:
     err = (proc.stderr or proc.stdout or "openssh_ed25519_to_hex.py failed").strip()
-    sys.stderr.write(err + "\n")
-    sys.exit(1)
+    if strict_openssh:
+        sys.stderr.write(err + "\n")
+        sys.exit(1)
+    sys.exit(0)
 hexout = proc.stdout.strip()
 if len(hexout) != 64 or not re.fullmatch(r"[0-9a-f]{64}", hexout, re.I):
     sys.stderr.write("error: OpenSSH converter did not return 64 hex\n")
@@ -2127,7 +2153,7 @@ data["PublicMgtKey"] = hexout.lower()
 with open(path, "w") as f:
     yaml.dump(data, f)
 sys.stderr.write(
-    "Converted PublicMgtKey from OpenSSH (ssh-ed25519) line to 64 hex in configs.yaml.\n"
+    "Converted PublicMgtKey from OpenSSH ssh-ed25519 (full line or base64 blob) to 64 hex in configs.yaml.\n"
 )
 sys.exit(0)
 PYNORMSSH
@@ -2255,7 +2281,7 @@ print('0x' + low)
         print_step "PublicMgtKey is empty — optional Ed25519 public key (non-MetaMask management)"
         print_info "This lets you manage the node without MetaMask (no EIP-191); scripts and AI agents can sign with the matching Ed25519 secret key."
         print_info "You can set both NodeMgtKey and PublicMgtKey, or add PublicMgtKey later in configs.yaml."
-        print_info "Enter either: (1) 64 hex characters (32-byte public key), or (2) one OpenSSH line: ssh-ed25519 AAAA... (e.g. from ~/.ssh/*.pub). Press Enter to skip if you use NodeMgtKey only."
+        print_info "Enter: (1) 64 hex (32-byte public key), or (2) full OpenSSH line (ssh-ed25519 AAAA... [comment]), or (3) the base64 blob only from that line (no type prefix / comment). Press Enter to skip if you use NodeMgtKey only."
         echo ""
         local pk_in norm_pk ec ossh_to_hex
         ossh_to_hex="${REPO_ROOT}/tools/openssh_ed25519_to_hex.py"
@@ -2263,27 +2289,22 @@ print('0x' + low)
             ossh_to_hex="${SCRIPT_DIR}/tools/openssh_ed25519_to_hex.py"
         fi
         while true; do
-            read -r -p "Ed25519 public key (64 hex or ssh-ed25519 line, or Enter to skip): " pk_in < /dev/tty || true
+            read -r -p "Ed25519 public key (64 hex, ssh-ed25519 line, or base64 blob, or Enter to skip): " pk_in < /dev/tty || true
             pk_in="${pk_in#"${pk_in%%[![:space:]]*}"}"
             pk_in="${pk_in%"${pk_in##*[![:space:]]}"}"
             if [ -z "$pk_in" ]; then
                 break
             fi
+            ec=0
             norm_pk=""
-            # OpenSSH public key line -> 64 hex via repo tool (stdlib Python).
-            if printf '%s' "$pk_in" | grep -qE '^ssh-ed25519[[:space:]]+'; then
-                if [ ! -f "$ossh_to_hex" ]; then
-                    print_error "OpenSSH line detected but tools/openssh_ed25519_to_hex.py not found (expected under repo tools/). Paste 64 hex or add the mpc-config tools directory."
-                    continue
-                fi
+            # OpenSSH full line or base64-only middle field -> 64 hex (tools/openssh_ed25519_to_hex.py).
+            if [ -f "$ossh_to_hex" ]; then
                 norm_pk=$(printf '%s\n' "$pk_in" | python3 "$ossh_to_hex" 2>/dev/null) || ec=$?
-                if [ "$ec" -ne 0 ] || [ -z "$norm_pk" ]; then
-                    print_error "Could not parse OpenSSH ssh-ed25519 line (expected: ssh-ed25519 <base64> [comment])."
-                    continue
+                if [ "$ec" -eq 0 ] && [ -n "$norm_pk" ]; then
+                    set_pub="$norm_pk"
+                    print_success "PublicMgtKey will be set from OpenSSH / base64 input (64 hex, no 0x prefix in file)."
+                    break
                 fi
-                set_pub="$norm_pk"
-                print_success "PublicMgtKey will be set from OpenSSH line (64 hex, no 0x prefix in file)."
-                break
             fi
             ec=0
             norm_pk=$(printf '%s' "$pk_in" | python3 -c "
@@ -2303,11 +2324,11 @@ except ValueError:
 print(s.lower())
 " 2>/dev/null) || ec=$?
             if [ "$ec" -eq 2 ]; then
-                print_warning "That looks like a 128-hex Ed25519 *private* key (or seed+key material). Enter the *public* key only (64 hex), or an ssh-ed25519 .pub line."
+                print_warning "That looks like a 128-hex Ed25519 *private* key (or seed+key material). Enter the *public* key only (64 hex), or an ssh-ed25519 line / base64 blob from the .pub file."
                 continue
             fi
             if [ "$ec" -ne 0 ] || [ -z "$norm_pk" ]; then
-                print_error "Invalid input: use 64 hex (public key) or a full OpenSSH line starting with ssh-ed25519."
+                print_error "Invalid input: use 64 hex (public key), or ssh-ed25519 <base64> [comment], or the base64 key blob alone (tools/openssh_ed25519_to_hex.py)."
                 continue
             fi
             set_pub="$norm_pk"
@@ -2375,7 +2396,7 @@ PYMGT
     fi
     
     if ! verify_at_least_one_management_key "$config_file"; then
-        print_error "You must configure at least one of: NodeMgtKey (valid Ethereum address) or PublicMgtKey (valid Ed25519 public key: 64 hex or ssh-ed25519 line)."
+        print_error "You must configure at least one of: NodeMgtKey (valid Ethereum address) or PublicMgtKey (valid Ed25519 public key: 64 hex, ssh-ed25519 line, or OpenSSH base64 blob)."
         return 1
     fi
     return 0
@@ -3676,9 +3697,9 @@ show_process_config_help() {
     echo ""
     echo "This script validates configuration and generates certificates."
     echo ""
-    echo "If PublicMgtKey in configs.yaml is an ssh-ed25519 line, it is rewritten to 64 hex (tools/openssh_ed25519_to_hex.py)."
+    echo "If PublicMgtKey in configs.yaml is an ssh-ed25519 line or OpenSSH base64 blob, it is rewritten to 64 hex (tools/openssh_ed25519_to_hex.py)."
     echo "If NodeMgtKey or PublicMgtKey is empty, the script prompts first (interactive TTY): Ethereum (MetaMask)"
-    echo "and/or Ed25519 public key (64 hex or ssh-ed25519 .pub line; OpenSSH via tools/openssh_ed25519_to_hex.py)."
+    echo "and/or Ed25519 public key (64 hex, ssh-ed25519 line, or base64 blob; tools/openssh_ed25519_to_hex.py)."
     echo "At least one valid key is required."
     echo ""
     echo "Then, if MPCGroups[0].nodeAddresses is empty or still uses the default 203.0.113.10–12 example IPs, the script prompts"
