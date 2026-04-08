@@ -3592,14 +3592,14 @@ show_process_config_help() {
     echo ""
     echo "This script validates configuration and generates certificates."
     echo ""
-    echo "If MPCGroups[0].nodeAddresses is empty or still uses the default 203.0.113.10–12 example IPs, the script prompts"
+    echo "If NodeMgtKey or PublicMgtKey is empty, the script prompts first (interactive TTY): Ethereum (MetaMask)"
+    echo "and/or Ed25519 public key (64 hex or ssh-ed25519 .pub line; OpenSSH via tools/openssh_ed25519_to_hex.py)."
+    echo "At least one valid key is required."
+    echo ""
+    echo "Then, if MPCGroups[0].nodeAddresses is empty or still uses the default 203.0.113.10–12 example IPs, the script prompts"
     echo "and writes http://...:${MPC_NODE_HTTP_PORT} URLs (first entry = relay; same order on all nodes)."
     echo "On later runs (interactive TTY), an optional menu (0=continue, 1=add, 2=remove) lets you edit node IPs."
     echo "Set SKIP_NODE_ADDRESS_MENU=1 to skip that menu (e.g. automation)."
-    echo ""
-    echo "If NodeMgtKey or PublicMgtKey is empty, the script may prompt: Ethereum (MetaMask) and/or"
-    echo "Ed25519 public key (64 hex or ssh-ed25519 .pub line; OpenSSH is converted via tools/openssh_ed25519_to_hex.py)."
-    echo "At least one valid key is required."
     echo ""
     echo "If PreSigningVerification is set but RelayerAPIURL is empty, the script prompts for the URL"
     echo "(or use RELAYER_API_URL in the environment)."
@@ -3966,13 +3966,15 @@ main() {
     fi
     print_success "Found config: $CONFIG_FILE"
     echo ""
-    
-    prompt_fill_empty_node_addresses "$CONFIG_FILE" || exit 1
-    
-    prompt_menu_edit_node_addresses "$CONFIG_FILE" || exit 1
-    
+
+    # Management keys before nodeAddresses so re-runs offer NodeMgtKey / PublicMgtKey when missing
+    # (otherwise users only see the node IP flow first).
     prompt_configure_management_keys "$CONFIG_FILE" || exit 1
-    
+
+    prompt_fill_empty_node_addresses "$CONFIG_FILE" || exit 1
+
+    prompt_menu_edit_node_addresses "$CONFIG_FILE" || exit 1
+
     check_root
     check_openssl
     
