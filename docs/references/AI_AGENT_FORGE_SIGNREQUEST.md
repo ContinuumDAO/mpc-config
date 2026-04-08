@@ -1,10 +1,18 @@
 # AI Agent Guide: Forge Script → multiSignRequest
 
-This document is for **AI agents** (e.g. Open Claw, Cursor, or other automation) that turn a Foundry script’s transaction list into a payload for **POST /multiSignRequest** (multi-agree MPC keys). **POST /signRequest** is **only** for **tx-check / relayer** keys—not for multi-agree forge flows; do not use it here.
+This document is for **AI agents** and **other programmatic automation** that turn a Foundry script’s transaction list into a payload for **POST /multiSignRequest** (multi-agree MPC keys). **POST /signRequest** is **only** for **tx-check / relayer** keys—not for multi-agree forge flows; do not use it here.
 
-### Management API URL (co-located agents)
+### Checklist (multiSignRequest)
 
-When the agent runs on the **same machine as one of the MPC nodes**, point **`--mpc-auth-url`** at the node’s management HTTP API: **`http://localhost:<port>`**, where **`<port>`** is **`ManagementAPIsPort`** in the node’s **`configs.yaml`** (often `8080` in sample configs). See **[AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md)** §8.2. If you changed the port in config, pass that port to the script (e.g. `--mpc-auth-url=http://localhost:9000`).
+1. **Resolve** **`keyGenId`**, the MPC wallet **`from`** address, and the **management API base URL** for the node you call (e.g. **`GET /getKeyGenResultById`**, environment such as **`KEYGEN_ID`** / **`AUTH_KEY_PATH`**, port from **`configs.yaml`** or the operator).
+2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **this document** or **[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md](./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**.
+3. **Review** **`Purpose`** (≤256 characters) and transaction fields (chain id, calldata, gas, nonces) against group intent and messages.
+4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** requires for your deployment).
+5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → track peer responses → **`POST /triggerSignRequestById`** when ready → broadcast raw transactions → **`POST /updateSignResultStatusById`**. Narrative flow: **[instructions.md](./instructions.md)**.
+
+### Management API URL
+
+Point **`--mpc-auth-url`** at the node’s **management HTTP API** (scheme, host, and port your deployment uses). When the process calling the API runs **on the same host** as the node, **`http://127.0.0.1:<port>`** or **`http://localhost:<port>`** is typical, with **`<port>`** = **`ManagementAPIsPort`** in **`configs.yaml`** (often `8080` in sample configs). See **[AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md)** §8.2. If you changed the port in config, pass that port to the script (e.g. `--mpc-auth-url=http://localhost:9000`).
 
 ---
 

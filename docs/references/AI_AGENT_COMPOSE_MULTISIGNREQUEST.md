@@ -6,11 +6,19 @@ This document is for **AI agents** that build **POST /multiSignRequest** payload
 
 **Endpoint discipline:** **POST /multiSignRequest** is for **multi-agree** MPC keys only. **POST /signRequest** is for **tx-check / relayer** keys only.
 
+### Checklist (multiSignRequest)
+
+1. **Resolve** **`keyGenId`**, the MPC wallet **`from`** address, and the **management API base URL** for the node you call (e.g. **`GET /getKeyGenResultById`**, environment such as **`KEYGEN_ID`** / **`AUTH_KEY_PATH`**, port from **`configs.yaml`** or the operator).
+2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **[AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md)** or **this document**.
+3. **Review** **`Purpose`** (≤256 characters) and transaction fields (chain id, calldata, gas, nonces) against group intent and messages.
+4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** requires for your deployment).
+5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → track peer responses → **`POST /triggerSignRequestById`** when ready → broadcast raw transactions → **`POST /updateSignResultStatusById`**. Narrative flow: **[instructions.md](./instructions.md)**.
+
 ---
 
-## Management API URL (co-located agents)
+## Management API URL
 
-Point **`--mpc-auth-url`** at the node’s management HTTP API: **`http://localhost:<port>`**, where **`<port>`** is **`ManagementAPIsPort`** in **`configs.yaml`** (often `8080`). See **[AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md)** §8.2 if you use a non-default port.
+Point **`--mpc-auth-url`** at the node’s **management HTTP API** (scheme, host, and port your deployment uses). When the process calling the API runs **on the same host** as the node, **`http://127.0.0.1:<port>`** or **`http://localhost:<port>`** is typical, with **`<port>`** = **`ManagementAPIsPort`** in **`configs.yaml`** (often `8080`). See **[AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md)** §8.2 if you use a non-default port or remote access.
 
 The script calls:
 
@@ -27,7 +35,7 @@ It also performs **JSON-RPC** against that RPC (`eth_getTransactionCount`, `eth_
 2. Run **`generateMultiSignRequestFromCompose.py`** to obtain **`bodyForSign`** and **`messageToSign`** (same convention as the web app before management signing).
 3. Add **`clientSig`** (and **`signedMessage`** for MetaMask-style management keys), then **POST /multiSignRequest**.
 
-The script fills **`keyList`** and **`pubKey`** from the node. It computes **EVM tx signing hashes** using the same helpers as the Foundry script so **`msgHash`** / **`messageHashes`** match **unsigned EIP-1559 / legacy** serialization.
+The script fills **`keyList`** and **`pubKey`** from the node. It computes **EVM tx signing hashes** using the same helpers as the Foundry script so **`msgHash`** / **`messageHashes`** match **unsigned EIP-1559 / legacy** serialization. The numbered **Checklist** at the top of this file is the same sequence as **[instructions.md](./instructions.md)**.
 
 ---
 

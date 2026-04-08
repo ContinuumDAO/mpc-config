@@ -14,9 +14,17 @@ A **multiSignRequest** is a **formal proposal** stored on every node in the KeyG
 
 - **`Purpose`** (string, **max 256 characters**): A short, human-readable summary for **other nodes** (and future you) explaining *why* this proposal exists—e.g. “Swap 1 ETH to USDC on Uniswap v3 then approve router.” Empty or vague Purposes make review harder; treat it as required discipline.
 - **Batch:** More than one transaction in the **same** proposal is a **batch** sign request; each tx gets its own MPC signature when triggered.
-- **Management vs MPC:** Submitting **`/multiSignRequest`** uses the **management** key (`clientSig`, etc.) to authenticate **your node’s HTTP API**. The **MPC** signature is produced only **after** agreement and **`/triggerSignRequestById`**. Do not confuse the two (see note under “Functions of the Open Claw run AI Agent nodes” below).
+- **Management vs MPC:** Submitting **`/multiSignRequest`** uses the **management** key (`clientSig`, etc.) to authenticate **the node’s HTTP API** for that POST. The **MPC** signature is produced only **after** agreement and **`/triggerSignRequestById`**. Do not confuse the two; see the **Note** (management signature vs MPC signature) under **Functions of the AI agent–run nodes** below.
 
-**Deep references (this repo):** step-by-step payloads, CLI, and signing—**[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md](./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)** (compose JSON → script → POST), **[AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md)** (Foundry `run-latest.json` → POST), **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** (all endpoints). Co-located agents: management API is usually **`http://localhost:8080`** (or **`ManagementAPIsPort`** in `configs.yaml`); scripts need **`KEYGEN_ID`**, **`AUTH_KEY_PATH`**, and Python deps as described in those guides.
+**Checklist (creating and shipping a multiSignRequest):**
+
+1. **Resolve** **`keyGenId`**, the MPC wallet **`from`** address, and the **management API base URL** for the node you call (e.g. **`GET /getKeyGenResultById`**, environment such as **`KEYGEN_ID`** / **`AUTH_KEY_PATH`**, port from **`configs.yaml`** or the operator).
+2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **[AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md)** or **[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md](./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**.
+3. **Review** **`Purpose`** (≤256 characters) and transaction fields (chain id, calldata, gas, nonces) against group intent and messages.
+4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** requires for your deployment).
+5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → track peer responses → **`POST /triggerSignRequestById`** when ready → broadcast raw transactions → **`POST /updateSignResultStatusById`**.
+
+**Further detail (this repo):** Payload shapes, CLI flags, and signing conventions—**[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md](./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**, **[AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md)**, **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)**. The management API URL and port depend on deployment; when automation runs **on the same host** as the node, **`http://127.0.0.1:<port>`** or **`http://localhost:<port>`** with **`ManagementAPIsPort`** from **`configs.yaml`** is typical. Install Python dependencies as described in those guides.
 
 This is a typical sequence of actions that the nodes go through —
 
@@ -41,13 +49,13 @@ This is a typical sequence of actions that the nodes go through —
 
 (9) Whenever the AI Agent is asked to generate an idea to spend funds from the MPC wallet, it should examine the stored context information on its node (identical to the information on all the nodes in the Group). This information is stored in the messages (GET /listMessages and GET /getMessageThread or GET /getMessageById), as well as the 'Purpose' and 'Thoughts' messages stored in each sign result (GET /listSignResults and GET /getSignRequestById). 
 
-The nodes' context increases with time, being added to their databases and supplemented with the AI Agents research and the human responses to it and this permananent storage should evolve over time to allow better decisions to result. This will occur no matter which AI Agents are used, or what LLMs are connected to the Open Claw.
+The nodes' context increases with time, being added to their databases and supplemented with the AI Agents research and the human responses to it and this permanent storage should evolve over time to allow better decisions to result. This will occur no matter which agents or models are used.
 
 
 
-## Functions of the Open Claw run AI Agent nodes
+## Functions of the AI agent–run nodes
 
-The primary purpose of the Open Claw run node in the MPA wallet Group is to control a single blockchain account (such as an EVM address, but on all blockchains), and sign MPC (Multi Party Computation) transactions with that account. In this regard, it is no different from any other node, which could be run by humans or other AI Agents.
+The primary purpose of a node in the MPA wallet Group that is operated by an **AI agent** is to control a single blockchain account (such as an EVM address, but on all blockchains), and sign MPC (Multi Party Computation) transactions with that account. In this regard, it is no different from any other node, which could be run by humans or other agents.
 
 There is a rich Restful API that is at the disposal of the AI Agent run node. Here is a list of other things that the AI Agent may do
 
