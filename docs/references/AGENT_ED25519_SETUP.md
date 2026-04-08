@@ -236,6 +236,6 @@ The isolated job should inherit the same env as the agent service (**`KEYGEN_ID`
 ## 7. Security notes
 
 - Keep the Ed25519 **private** key only where the agent (or you) can use it; never put it in the frontend or in the node config.
-- Only the **public** key goes in mpc-auth (`PublicMgtKey`) and, for keyGen, as the node's client key (64 hex).
+- Only the **public** half of an **Ed25519** keypair goes in mpc-auth (`PublicMgtKey`) and, for keyGen, as the node's client key (**64 hex** = 32-byte public key). mpc-auth does not generate it: you create the keypair outside the node (any Ed25519 tool or library), then configure that public value. Practical paths in this doc: **§1.1** (bootstrap), **§5** (node app **Info** → **Create new key pair** → copy **Public key (64 hex)**), **§6** (private key in `~/.ssh/mpc_auth_ed25519`; the matching public key is the same identity as 64 hex).
 - Restrict access to the node API (TLS, firewall, auth) as you would for any management interface.
 - Protect `~/.ssh/mpc_auth_ed25519` (permissions, deploy keys only for the agent user) so only the intended process can use the key.
