@@ -3490,7 +3490,7 @@ EOF
     fi
 
     if ! command -v python3 &> /dev/null; then
-        print_warning "python3 not found — update configs.yaml BrowserHTTPS manually (see docs-internal/railway-browser-https-deployment.md)"
+        print_warning "python3 not found — update configs.yaml BrowserHTTPS manually (see docs/internal/PROCESS_CONFIG_BROWSER_HTTPS.md)"
         return 0
     fi
     require_ruamel_yaml || return 1
@@ -3553,7 +3553,7 @@ with open(path, "w") as f:
     yaml.dump(data, f)
 PYMERGE
     print_success "configs.yaml updated: BrowserHTTPS merged in place at end of file (header comments stay above the block; cert paths, AllowedOrigins, JWKSURL, ExpectedIssuer, ExpectedAudience, EnforceNodeIPClaim)"
-    print_info "Defaults: JWKSURL=$DEFAULT_BROWSER_HTTPS_JWKS_URL, ExpectedIssuer=$DEFAULT_BROWSER_HTTPS_EXPECTED_ISSUER (Pattern B). Override in configs.yaml for standalone issuer (Pattern A). Docker: port 8443, volume ./webTLS/config/certs. See docs-internal/railway-browser-https-deployment.md"
+    print_info "Defaults: JWKSURL=$DEFAULT_BROWSER_HTTPS_JWKS_URL, ExpectedIssuer=$DEFAULT_BROWSER_HTTPS_EXPECTED_ISSUER (Pattern B). Override in configs.yaml for standalone issuer (Pattern A). Docker: port 8443, volume ./webTLS/config/certs. See docs/internal/PROCESS_CONFIG_BROWSER_HTTPS.md"
 }
 
 show_process_config_help() {
@@ -3730,7 +3730,7 @@ PYFWPORTS
 }
 
 # Apply baseline ufw allow rules for mpc-auth (does not enable ufw unless user confirms interactively).
-# See docs-internal/firewall-and-cors-design.md
+# See docs/internal/PROCESS_CONFIG_FIREWALL.md
 apply_process_config_firewall() {
     local config_file="$1"
     local skip_firewall="$2"
@@ -3739,7 +3739,7 @@ apply_process_config_firewall() {
     if [ "$skip_firewall" = "true" ]; then
         print_warning "Host firewall step skipped (--no-firewall)."
         print_warning "Not recommended for production or financial MPC nodes—configure ufw/nftables or cloud security groups yourself."
-        print_info "See: docs-internal/firewall-and-cors-design.md"
+        print_info "See: docs/internal/PROCESS_CONFIG_FIREWALL.md"
         return 0
     fi
 
@@ -3772,7 +3772,7 @@ apply_process_config_firewall() {
     fi
 
     print_info "Ports from configs.yaml: ManagementAPIsPort=$mgt_port, PublicDiscoveryPort=$pub_port, BrowserHTTPS (firewall allow port)=$bh_port, ScannerRelayerPort=${sr_port:-0}"
-    print_info "Narrow inbound to scanner/DAO/relayer CIDRs in production; see docs-internal/firewall-and-cors-design.md"
+    print_info "Narrow inbound to scanner/DAO/relayer CIDRs in production; see docs/internal/PROCESS_CONFIG_FIREWALL.md"
     if [ "$is_relay" = "true" ]; then
         print_info "Relay node: MQTT broker TLS typically uses 8883/tcp (docker-compose)."
     fi
