@@ -2100,37 +2100,37 @@ if not isinstance(data, dict):
 pk = data.get("PublicMgtKey")
 if pk is None:
     sys.exit(0)
-raw = str(pk).strip()
+
+
+def strip_outer_quotes(s: str) -> str:
+    s = s.strip()
+    while len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
+        s = s[1:-1].strip()
+    return s
+
+
+raw = strip_outer_quotes(str(pk))
 if not raw:
     sys.exit(0)
 
+
 def is_64_hex_pub(s: str) -> bool:
-    t = s.strip()
+    t = strip_outer_quotes(s.strip())
     if t.startswith(("0x", "0X")):
         t = t[2:]
     t = re.sub(r"\s+", "", t)
     return bool(re.fullmatch(r"[0-9a-fA-F]{64}", t))
 
+
 if is_64_hex_pub(raw):
     sys.exit(0)
 
 line = raw.splitlines()[0].strip()
-parts = line.split()
-strict_openssh = len(parts) >= 2 and parts[0] == "ssh-ed25519"
-
-
-def looks_like_raw_openssh_b64(s: str) -> bool:
-    p = s.split()
-    if not p:
-        return False
-    t = p[0]
-    if len(t) < 43 or len(t) > 100:
-        return False
-    return bool(re.fullmatch(r"[A-Za-z0-9+/]+=*", t))
-
-
-if not strict_openssh and not looks_like_raw_openssh_b64(line):
+line = strip_outer_quotes(line)
+if not line:
     sys.exit(0)
+parts = line.split()
+strict_openssh = bool(parts) and parts[0] == "ssh-ed25519"
 
 proc = subprocess.run(
     [sys.executable, tool],

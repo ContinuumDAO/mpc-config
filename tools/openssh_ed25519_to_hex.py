@@ -5,6 +5,7 @@ Convert OpenSSH ssh-ed25519 material to 64 lowercase hex for mpc-auth PublicMgtK
 Accepts:
   - Full .pub line:  ssh-ed25519 <base64> [optional comment]
   - Base64 only:    the middle field from that line (no type prefix, no comment)
+  - Optional one or more matching outer " or ' wrappers (e.g. pasted quoted scalar)
 
   python3 tools/openssh_ed25519_to_hex.py ~/.ssh/id_ed25519.pub
   echo 'ssh-ed25519 AAAA... comment' | python3 tools/openssh_ed25519_to_hex.py
@@ -30,6 +31,13 @@ def _read_ssh_string(data: bytes, off: int):
     return data[off : off + ln], off + ln
 
 
+def _strip_outer_quotes(s: str) -> str:
+    s = s.strip()
+    while len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
+        s = s[1:-1].strip()
+    return s
+
+
 def _wire_blob_to_pubkey_hex(blob: bytes) -> str:
     off = 0
     key_type, off = _read_ssh_string(blob, off)
@@ -43,7 +51,7 @@ def _wire_blob_to_pubkey_hex(blob: bytes) -> str:
 
 def openssh_ed25519_input_to_hex(line: str) -> str:
     """Parse one line: full ssh-ed25519 line, or raw OpenSSH base64 blob for ed25519 public key."""
-    line = line.strip()
+    line = _strip_outer_quotes(line)
     if not line or line.startswith("#"):
         raise ValueError("empty or comment line")
     parts = line.split()
