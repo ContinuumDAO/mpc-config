@@ -576,7 +576,7 @@ The docker-compose files include:
 **Defaults in this repo**
 
 - **`docker-compose*.yml` publish management as `127.0.0.1:8080:8080`** — the full management API is **not** reachable on the host’s public IP; use **`ssh -L 8080:127.0.0.1:8080 user@node`** (or similar) for remote admin.
-- **`process_config.sh` adds a UFW “allow” rule for `ManagementAPIsPort` by default** (historical behavior: local operators and co-located AI agents can call the API after **`ufw enable`**). Set **`UFW_OPEN_MANAGEMENT_PORT=0`** to skip that rule. Other ports (SSH, Browser HTTPS, PublicDiscovery, ScannerRelayer when configured, MQTT on relay) are unchanged.
+- **`process_config.sh` does not add a UFW “allow” rule for the management port** unless you set **`UFW_OPEN_MANAGEMENT_PORT=1`**. Other ports (SSH, Browser HTTPS, PublicDiscovery, ScannerRelayer when configured, MQTT on relay) are still added as before.
 
 **Peer key probes (`GET /getConfiguredNodeKeys`)**
 
@@ -586,7 +586,7 @@ The docker-compose files include:
 
 **If you intentionally need `http://<node-public-ip>:8080/...` from the internet (not recommended for production)**
 
-1. Change the publish line to **`"8080:8080"`**. **`process_config.sh`** already allows **`ManagementAPIsPort`** in UFW by default; for stricter exposure use a **scoped** UFW rule (e.g. `sudo ufw allow from <admin-cidr> to any port 8080 proto tcp`) and/or **`UFW_OPEN_MANAGEMENT_PORT=0`** plus your own rules.
+1. Change the publish line to **`"8080:8080"`** and use **`UFW_OPEN_MANAGEMENT_PORT=1 ./process_config.sh`** or a **scoped** UFW rule, e.g. `sudo ufw allow from <admin-cidr> to any port 8080 proto tcp`.
 2. **Protection** remains **application-layer** (signatures, `NodeMgtKey`, relayer auth).
 
 **Lockdown (this repo’s default)**
