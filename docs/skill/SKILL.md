@@ -142,7 +142,7 @@ To **notice unread channel messages directed at the agent** without manual **`GE
 
 1. **Discuss** in KeyGen messaging: human or other nodes **`POST /sendMessage`**; everyone reads **`GET /getMessageThread`** (and related list/get APIs). Optionally use the **KeyGen inbox poll** above when the agent should wake on **`@agent`** mentions.
 2. **Plan**: agent may research on the web; produce **Foundry** scripts and a **rationale**; optionally push to a shared Git repo.
-3. **Build tx intent**: run **`forge script … --sender <MPC address>`** → `broadcast/.../run-latest.json`; feed to **`$SCRIPTS_PATH/generateSignRequestWithFoundryScript.py`** (see references) to build JSON for **`POST /multiSignRequest`**. Include a concise **`Purpose`** (≤256 chars).
+3. **Build tx intent**: either run **`forge script … --sender <MPC address>`** → `broadcast/.../run-latest.json` and feed **`$SCRIPTS_PATH/generateSignRequestWithFoundryScript.py`** to build JSON for **`POST /multiSignRequest`** (see **`$REFS_PATH/AI_AGENT_FORGE_SIGNREQUEST.md`**), **or** build **Compose-style** JSON (function signature + parameters) and run **`$SCRIPTS_PATH/generateMultiSignRequestFromCompose.py`** (see **`$REFS_PATH/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**). Include a concise **`Purpose`** (≤256 chars).
 4. **Agree**: each node **`POST /signRequestAgree`** (accept/reject); optional **`Thoughts`** per node to guide the agent (e.g. to **`POST /shelveSignRequest`** and revise).
 5. **Trigger & sign**: when **`/isSignRequestReadyById`** is true and the agent should proceed, **`POST /triggerSignRequestById`**; poll **`GET /getSignResultById`** until signatures exist.
 6. **Execute**: broadcast tx(s) with sufficient gas/credit; **`POST /updateSignResultStatusById`** with **`executed`** and **`transactionHash`** (or batch hashes).
@@ -218,7 +218,7 @@ Remember: **threshold+1** accepts are required to generate the MPC signature.
 
 ## Creating transactions (`multiSignRequest`)
 
-Skim-level recipe for agents (e.g. Open Claw). **Full commands, flags, and signing details:** **[$REFS_PATH/AI_AGENT_FORGE_SIGNREQUEST.md]($REFS_PATH/AI_AGENT_FORGE_SIGNREQUEST.md)**.
+Skim-level recipe for agents (e.g. Open Claw). **Foundry path:** **[$REFS_PATH/AI_AGENT_FORGE_SIGNREQUEST.md]($REFS_PATH/AI_AGENT_FORGE_SIGNREQUEST.md)**. **Compose-style JSON (no Foundry broadcast):** **[$REFS_PATH/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md]($REFS_PATH/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**.
 
 1. **Simulate with Foundry** — Run **`forge script`** with **`--rpc-url`** and **`--sender <MPC address>`**. **Do not** use **`--broadcast`** (the MPC key is not on disk). Consume the artifact **`broadcast/<Script>.s.sol/<chain_id>/run-latest.json`**.
 2. **Build the request JSON** — Run **`cast nonce <MPC address> --rpc-url $RPC`** and pass that value as **`--first-nonce`** to **`$SCRIPTS_PATH/generateSignRequestWithFoundryScript.py`** (see **Scripts** below), together with **`--key-gen-id`**, **`--file`** pointing at **`run-latest.json`**, **`--purpose`**, and **`--mpc-auth-url`**. The helper needs Python **`eth_account`** (see the reference doc).
@@ -238,6 +238,7 @@ Skim-level recipe for agents (e.g. Open Claw). **Full commands, flags, and signi
 | Location | Use |
 |----------|-----|
 | `$SCRIPTS_PATH/generateSignRequestWithFoundryScript.py` | Forge broadcast JSON → **`multiSignRequest`** JSON helper. |
+| `$SCRIPTS_PATH/generateMultiSignRequestFromCompose.py` | Compose-style JSON (function + args) → **`multiSignRequest`** body / **`messageToSign`**. |
 
 ---
 
@@ -249,6 +250,7 @@ Skim-level recipe for agents (e.g. Open Claw). **Full commands, flags, and signi
 | [references/instructions.md]($REFS_PATH/instructions.md) | Human-oriented full workflow; same story as above with more narrative. |
 | [references/AGENT_ED25519_SETUP.md]($REFS_PATH/AGENT_ED25519_SETUP.md) | Agent Ed25519 onboarding, `PublicMgtKey`, `addManagementKey`, localhost API port. |
 | [references/AI_AGENT_FORGE_SIGNREQUEST.md]($REFS_PATH/AI_AGENT_FORGE_SIGNREQUEST.md) | End-to-end: Foundry → Python helper → `multiSignRequest`; **`clientSig`** rules. |
+| [references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md]($REFS_PATH/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md) | Compose JSON → `multiSignRequest`; `generateMultiSignRequestFromCompose.py`. |
 | [references/API_IMPLEMENTATION.md]($REFS_PATH/API_IMPLEMENTATION.md) | Canonical REST API specification (endpoints, auth, bodies). |
 | [references/swagger.yaml]($REFS_PATH/swagger.yaml) | OpenAPI/Swagger for tooling and codegen. |
 

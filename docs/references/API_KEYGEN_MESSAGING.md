@@ -1,7 +1,7 @@
 # KeyGen Messaging API
 
 KeyGen messaging lets nodes in a keyGen (participants in that key’s `KeyList`) send and read short messages in a per-keyGen channel. 
-**Response format and general API conventions** (base URL, logging, `APIResponse` shape) follow the main [API_IMPLEMENTATION.md](API_IMPLEMENTATION.md).
+**Response format and general API conventions** (base URL, logging, `APIResponse` shape) follow the main [API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md).
 
 ---
 
@@ -14,8 +14,8 @@ KeyGen messaging lets nodes in a keyGen (participants in that key’s `KeyList`)
 
 These five endpoints require a **management key signature** in the request body: **`Nonce`** and **`Sig`**. The signature type depends on the **client key** for this node in the keyGen (from the keyGen’s `ClientKeys`):
 
-- **If the client key is an Ethereum address** (e.g. MetaMask): sign the request payload (exact JSON of the body with `Sig` set to `""`) using **MetaMask** `personal_sign` from the node’s management address (`NodeMgtKey`). Obtain the current nonce via `GET /getNodeMgtKeyNonce` (or from the key returned by `GET /getNodeMgtKey`). See `GET /getMessageToSign` in [API_IMPLEMENTATION.md](API_IMPLEMENTATION.md) for the signing flow.
-- **If the client key is Ed25519** (64 hex): sign the same payload with the **Ed25519** management key (config `PublicMgtKey` or a key added via `POST /addManagementKey`). Signature must be 128 hex characters. Use `GET /getAllowedEd25519MgtKeys` and `GET /getPublicMgtKeyNonce` for nonce. See [API_IMPLEMENTATION.md](API_IMPLEMENTATION.md) for Ed25519 mgt auth.
+- **If the client key is an Ethereum address** (e.g. MetaMask): sign the request payload (exact JSON of the body with `Sig` set to `""`) using **MetaMask** `personal_sign` from the node’s management address (`NodeMgtKey`). Obtain the current nonce via `GET /getNodeMgtKeyNonce` (or from the key returned by `GET /getNodeMgtKey`). See `GET /getMessageToSign` in [API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md) for the signing flow.
+- **If the client key is Ed25519** (64 hex): sign the same payload with the **Ed25519** management key (config `PublicMgtKey` or a key added via `POST /addManagementKey`). Signature must be 128 hex characters. Use `GET /getAllowedEd25519MgtKeys` and `GET /getPublicMgtKeyNonce` for nonce. See [API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md) for Ed25519 mgt auth.
 - If the client key is missing or of another form, the server accepts **either** MetaMask or Ed25519 (same as other mgt-protected endpoints).
 
 The server verifies the signature and consumes the nonce (replay protection). If signature check is disabled via config (`IgnoreMgtKeySigCheck`), the body may omit `Nonce` and `Sig`.

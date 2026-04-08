@@ -4,7 +4,7 @@ This document is for **AI agents** (e.g. Open Claw, Cursor, or other automation)
 
 ### Management API URL (co-located agents)
 
-When the agent runs on the **same machine as one of the MPC nodes**, point **`--mpc-auth-url`** at the node’s management HTTP API: **`http://localhost:<port>`**, where **`<port>`** is **`ManagementAPIsPort`** in the node’s **`configs.yaml`** (often `8080` in sample configs). See **`mpc-config/docs/AGENT_ED25519_SETUP.md`** §8.2. If you changed the port in config, pass that port to the script (e.g. `--mpc-auth-url=http://localhost:9000`).
+When the agent runs on the **same machine as one of the MPC nodes**, point **`--mpc-auth-url`** at the node’s management HTTP API: **`http://localhost:<port>`**, where **`<port>`** is **`ManagementAPIsPort`** in the node’s **`configs.yaml`** (often `8080` in sample configs). See **[AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md)** §8.2. If you changed the port in config, pass that port to the script (e.g. `--mpc-auth-url=http://localhost:9000`).
 
 ---
 
@@ -70,8 +70,6 @@ Use when the node uses an Ethereum address as the management key (e.g. MetaMask)
 **Dependency:**  
 ```bash
 pip install eth_account
-# or from repo:
-pip install -r scripts/requirements-forge-sign.txt
 ```
 
 **Input:** Foundry broadcast JSON (see “Where does the JSON come from?” below).
@@ -224,4 +222,5 @@ So you can also generate or edit such JSON in your agent and pass it to the scri
 
 ## References
 
-- **API:** `API_IMPLEMENTATION.md` in this repo (§ POST /multiSignRequest, GET /getSignResultById). **signRequest** is documented there for tx-check / relayer flows only.
+- **API:** [API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md) in this folder (§ POST /multiSignRequest, GET /getSignResultById). **signRequest** is documented there for tx-check / relayer flows only.
+- **Batch design (supplement):** [MULTI_SIGNREQUEST_DESIGN.md](../internal/MULTI_SIGNREQUEST_DESIGN.md) — how batch **`messageHashes`** / **`messageRawBatch`** fits the protocol.

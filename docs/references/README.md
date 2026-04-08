@@ -1,8 +1,8 @@
-# Reference documents (snapshot)
+# Reference documents
 
-This folder contains a **snapshot** of documents from the sibling repository **`mpc-config/docs`** (path: `../mpc-config/docs` relative to the `mpc-auth` repo root). They are copied here so **SKILLS.md** and tooling (e.g. Open Claw / Clawhub) can cite stable paths inside this repo.
+This folder is **`docs/references/`** in the **mpc-config** repository: API specs, agent guides, and related reference material. **SKILLS.md** and agent tooling can cite stable paths such as **`docs/references/API_IMPLEMENTATION.md`**.
 
-For the **full narrative** workflow (same source as the skill), see also **[`./instructions.md`](./instructions.md)** in this repo.
+For the **full narrative** workflow (same source as the skill), see also **[`./instructions.md`](./instructions.md)**.
 
 ---
 
@@ -39,8 +39,9 @@ The files below spell out **exact** HTTP paths, bodies, and signing rules.
 |------|------|
 | [AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md) | Ed25519 management key setup for agents; API base URL and auth patterns |
 | [AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md) | Foundry `forge script` → `POST /multiSignRequest`; Python helper and `clientSig` |
+| [AI_AGENT_COMPOSE_MULTISIGNREQUEST.md](./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md) | Compose-style JSON (function + args) → `POST /multiSignRequest`; `generateMultiSignRequestFromCompose.py` |
 | [API_KEYGEN_MESSAGING.md](./API_KEYGEN_MESSAGING.md) | KeyGen messaging: `sendMessage`, `getMessageThread`, management signatures |
 | [API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md) | Full REST API behavior, auth, and endpoint details |
 | [swagger.yaml](./swagger.yaml) | OpenAPI / Swagger specification for the management API |
 
-Cross-links inside these files may still mention `mpc-config/docs/...`; resolve them against the copies in this folder when working only inside `mpc-auth`.
+When linking between these files, use **relative** paths from this folder (e.g. **`./API_IMPLEMENTATION.md`**). From the **mpc-config** repo root, the stable path prefix is **`docs/references/`**.

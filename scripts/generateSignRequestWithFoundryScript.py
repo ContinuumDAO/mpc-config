@@ -3,7 +3,7 @@
 generateSignRequestWithFoundryScript
 
 **Designed for AI agents** running on the **same machine as one of the MPC nodes**
-(local management API). See ``docs-internal/AI_AGENT_FORGE_SIGNREQUEST.md`` for the
+(local management API). See ``docs/references/AI_AGENT_FORGE_SIGNREQUEST.md`` for the
 full agent workflow.
 
 For MPC keys with MsgCheck type **multi-agree** only. Output is always for
@@ -13,7 +13,7 @@ relayer keys). The server rejects multiSignRequest for non-multi-agree keys.
 **keyList** and **pubKey** are filled by calling **GET /getKeyGenResultById** on the
 local node. Set ``--mpc-auth-url`` to ``http://localhost:<port>`` where **port** is
 **ManagementAPIsPort** in the node’s ``configs.yaml`` (often 8080 in sample configs).
-See ``mpc-config/docs/AGENT_ED25519_SETUP.md`` §8.2. You must pass **--key-gen-id**.
+See ``docs/references/AGENT_ED25519_SETUP.md`` §8.2. You must pass **--key-gen-id**.
 
 Reads Foundry broadcast JSON (e.g. from `forge script` without --broadcast but with --rpc-url and --sender, or
 broadcast/.../run-latest.json) from stdin or a file and prints a JSON wrapper
@@ -614,7 +614,7 @@ def main() -> None:
         help=(
             "Management API base URL. Use http://localhost:<port> where <port> is "
             "ManagementAPIsPort in the node's configs.yaml (default here is 8080). "
-            "See mpc-config/docs/AGENT_ED25519_SETUP.md §8.2."
+            "See docs/references/AGENT_ED25519_SETUP.md §8.2."
         ),
     )
     ap.add_argument("--purpose", help="Purpose text")

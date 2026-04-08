@@ -1039,8 +1039,10 @@ OpenSSL Error[0]: error:80000002:system library::No such file or directory
 
 ## Additional documentation
 
-- **[docs/API_IMPLEMENTATION.md](docs/references/API_IMPLEMENTATION.md)** – Full API reference (endpoints, request/response formats, Swagger).
-- **[docs/AGENT_ED25519_SETUP.md](docs/references/AGENT_ED25519_SETUP.md)** – Ed25519 agent setup for node management (no MetaMask).
+- **[docs/references/API_IMPLEMENTATION.md](docs/references/API_IMPLEMENTATION.md)** – Full API reference (endpoints, request/response formats, Swagger).
+- **[docs/references/AGENT_ED25519_SETUP.md](docs/references/AGENT_ED25519_SETUP.md)** – Ed25519 agent setup for node management (no MetaMask).
+- **[docs/internal/README.md](docs/internal/README.md)** – Index of internal operator notes ( **`process_config.sh`**, Browser HTTPS, firewall).
+- **[docs/internal/MULTI_SIGNREQUEST_DESIGN.md](docs/internal/MULTI_SIGNREQUEST_DESIGN.md)** – Batch **`multiSignRequest`** design detail (signing flow).
 
 ---
 
