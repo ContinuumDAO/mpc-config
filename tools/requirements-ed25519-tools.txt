@@ -1,0 +1,2 @@
+# For tools/ed25519_private_to_pubkey_hex.py (OpenSSH / PEM Ed25519 private keys)
+cryptography>=41.0.0

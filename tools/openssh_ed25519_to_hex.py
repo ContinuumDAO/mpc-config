@@ -5,6 +5,8 @@ for mpc-auth PublicMgtKey / KeyGen Ed25519 client public key.
 
   python3 tools/openssh_ed25519_to_hex.py ~/.ssh/id_ed25519.pub
   echo 'ssh-ed25519 AAAA... comment' | python3 tools/openssh_ed25519_to_hex.py
+
+From a private key file instead, use tools/ed25519_private_to_pubkey_hex.py (needs cryptography).
 """
 
 from __future__ import annotations
