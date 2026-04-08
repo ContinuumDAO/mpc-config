@@ -2171,14 +2171,34 @@ print('0x' + low)
         print_step "PublicMgtKey is empty — optional Ed25519 public key (non-MetaMask management)"
         print_info "This lets you manage the node without MetaMask (no EIP-191); scripts and AI agents can sign with the matching Ed25519 secret key."
         print_info "You can set both NodeMgtKey and PublicMgtKey, or add PublicMgtKey later in configs.yaml."
-        print_info "Enter the 64-hex-character Ed25519 public key (32 bytes). Press Enter to skip if you use NodeMgtKey only."
+        print_info "Enter either: (1) 64 hex characters (32-byte public key), or (2) one OpenSSH line: ssh-ed25519 AAAA... (e.g. from ~/.ssh/*.pub). Press Enter to skip if you use NodeMgtKey only."
         echo ""
-        local pk_in norm_pk ec
+        local pk_in norm_pk ec ossh_to_hex
+        ossh_to_hex="${REPO_ROOT}/tools/openssh_ed25519_to_hex.py"
+        if [ ! -f "$ossh_to_hex" ]; then
+            ossh_to_hex="${SCRIPT_DIR}/tools/openssh_ed25519_to_hex.py"
+        fi
         while true; do
-            read -r -p "Ed25519 public key (64 hex, or Enter to skip): " pk_in < /dev/tty || true
+            read -r -p "Ed25519 public key (64 hex or ssh-ed25519 line, or Enter to skip): " pk_in < /dev/tty || true
             pk_in="${pk_in#"${pk_in%%[![:space:]]*}"}"
             pk_in="${pk_in%"${pk_in##*[![:space:]]}"}"
             if [ -z "$pk_in" ]; then
+                break
+            fi
+            norm_pk=""
+            # OpenSSH public key line -> 64 hex via repo tool (stdlib Python).
+            if printf '%s' "$pk_in" | grep -qE '^ssh-ed25519[[:space:]]+'; then
+                if [ ! -f "$ossh_to_hex" ]; then
+                    print_error "OpenSSH line detected but tools/openssh_ed25519_to_hex.py not found (expected under repo tools/). Paste 64 hex or add the mpc-config tools directory."
+                    continue
+                fi
+                norm_pk=$(printf '%s\n' "$pk_in" | python3 "$ossh_to_hex" 2>/dev/null) || ec=$?
+                if [ "$ec" -ne 0 ] || [ -z "$norm_pk" ]; then
+                    print_error "Could not parse OpenSSH ssh-ed25519 line (expected: ssh-ed25519 <base64> [comment])."
+                    continue
+                fi
+                set_pub="$norm_pk"
+                print_success "PublicMgtKey will be set from OpenSSH line (64 hex, no 0x prefix in file)."
                 break
             fi
             ec=0
@@ -2199,11 +2219,11 @@ except ValueError:
 print(s.lower())
 " 2>/dev/null) || ec=$?
             if [ "$ec" -eq 2 ]; then
-                print_warning "That looks like a 128-hex Ed25519 *private* key (or seed+key material). Enter the *public* key only (64 hex)."
+                print_warning "That looks like a 128-hex Ed25519 *private* key (or seed+key material). Enter the *public* key only (64 hex), or an ssh-ed25519 .pub line."
                 continue
             fi
             if [ "$ec" -ne 0 ] || [ -z "$norm_pk" ]; then
-                print_error "Invalid Ed25519 public key (expected 64 hex characters)."
+                print_error "Invalid input: use 64 hex (public key) or a full OpenSSH line starting with ssh-ed25519."
                 continue
             fi
             set_pub="$norm_pk"
@@ -2271,7 +2291,7 @@ PYMGT
     fi
     
     if ! verify_at_least_one_management_key "$config_file"; then
-        print_error "You must configure at least one of: NodeMgtKey (valid Ethereum address) or PublicMgtKey (valid Ed25519 public key, 64 hex)."
+        print_error "You must configure at least one of: NodeMgtKey (valid Ethereum address) or PublicMgtKey (valid Ed25519 public key: 64 hex or ssh-ed25519 line)."
         return 1
     fi
     return 0
@@ -3578,7 +3598,8 @@ show_process_config_help() {
     echo "Set SKIP_NODE_ADDRESS_MENU=1 to skip that menu (e.g. automation)."
     echo ""
     echo "If NodeMgtKey or PublicMgtKey is empty, the script may prompt: Ethereum (MetaMask) and/or"
-    echo "Ed25519 public key for non-MetaMask management. At least one valid key is required."
+    echo "Ed25519 public key (64 hex or ssh-ed25519 .pub line; OpenSSH is converted via tools/openssh_ed25519_to_hex.py)."
+    echo "At least one valid key is required."
     echo ""
     echo "If PreSigningVerification is set but RelayerAPIURL is empty, the script prompts for the URL"
     echo "(or use RELAYER_API_URL in the environment)."
