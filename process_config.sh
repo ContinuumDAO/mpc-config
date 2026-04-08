@@ -50,7 +50,8 @@ FORCE_REGENERATE_BROWSER_HTTPS_CERTS="${FORCE_REGENERATE_BROWSER_HTTPS_CERTS:-0}
 
 # UFW: set to 1 to add "ufw allow" for ManagementAPIsPort (default 8080). Default is 0 — the management
 # port is NOT opened in UFW; use cloud SG / VPN, or bind Docker to 127.0.0.1:8080:8080 for stricter lockdown.
-UFW_OPEN_MANAGEMENT_PORT="${UFW_OPEN_MANAGEMENT_PORT:-0}"
+# Default 1: allow ManagementAPIsPort in UFW (co-located agents, local operators; matches historical behavior).
+UFW_OPEN_MANAGEMENT_PORT="${UFW_OPEN_MANAGEMENT_PORT:-1}"
 
 # Default example NodeMgtKey in configs.yaml — treated like unset (must be replaced for a real deployment).
 NODE_MGT_ETH_PLACEHOLDER="0x1234567890abcdef1234567890abcdef12345678"
@@ -3568,7 +3569,7 @@ show_process_config_help() {
     echo "  --help | -h | -help | help   Show this message (arguments above + relay/client behavior below)"
     echo ""
     echo "Environment (optional): FORCE_REGENERATE_MQTT_CERTS=1 / FORCE_REGENERATE_BROWSER_HTTPS_CERTS=1 same as the flags above."
-    echo "  UFW_OPEN_MANAGEMENT_PORT=1 — add ufw allow for ManagementAPIsPort (default: management port not opened in UFW)."
+    echo "  UFW_OPEN_MANAGEMENT_PORT=0 — do not add ufw allow for ManagementAPIsPort (default: management port is opened for local agents/operators)."
     echo ""
     echo "This script validates configuration and generates certificates."
     echo ""
@@ -3609,7 +3610,7 @@ show_process_config_help() {
     echo "  Browser HTTPS (8443), PublicDiscoveryPort (18080), ScannerRelayerPort (18081 if set),"
     echo "  ManagementAPIsPort (8080), relay MQTT (8883). ScannerRelayerPort uses *scoped* UFW rules when"
     echo "  PreSigningVerification.RelayerAPIURL and/or ScannerAPIURLs resolve to IPv4 (see configs.yaml)."
-    echo "  ManagementAPIsPort is not opened in UFW by default; set UFW_OPEN_MANAGEMENT_PORT=1 if peers/operators need inbound HTTP to the management API."
+    echo "  ManagementAPIsPort is opened in UFW by default; set UFW_OPEN_MANAGEMENT_PORT=0 to skip (stricter: rely on loopback compose bind, VPN, or scoped SG rules only)."
     echo "  If UFW is inactive, you are prompted (via /dev/tty) to run sudo ufw enable, or enable manually."
     echo "  Use --no-firewall to skip (not recommended for production / financial nodes)."
     echo ""
@@ -3779,7 +3780,7 @@ apply_process_config_firewall() {
 
     if ! command -v ufw >/dev/null 2>&1; then
         print_warning "ufw is not installed. Install with: sudo apt install ufw"
-        print_info "Or configure nftables / cloud SGs. Baseline inbound to consider: 22 (SSH), $bh_port (Browser HTTPS), $pub_port (discovery); management $mgt_port only if UFW_OPEN_MANAGEMENT_PORT=1."
+        print_info "Or configure nftables / cloud SGs. Baseline inbound to consider: 22 (SSH), $bh_port (Browser HTTPS), $pub_port (discovery), management $mgt_port (unless UFW_OPEN_MANAGEMENT_PORT=0)."
         if [ "$is_relay" = "true" ]; then
             print_info "Relay: also 8883/tcp (MQTT TLS to broker from peer nodes)."
         fi
@@ -3849,10 +3850,10 @@ apply_process_config_firewall() {
             apply_one_ufw "$sr_port" "mpc-auth ScannerRelayer"
         fi
     fi
-    if [ "${UFW_OPEN_MANAGEMENT_PORT:-0}" = "1" ]; then
-        apply_one_ufw "$mgt_port" "mpc-auth ManagementAPI"
+    if [ "${UFW_OPEN_MANAGEMENT_PORT:-1}" = "0" ]; then
+        print_info "UFW: not opening ManagementAPI port ${mgt_port}/tcp (UFW_OPEN_MANAGEMENT_PORT=0). Use loopback/VPN/scoped rules if you still need access."
     else
-        print_info "UFW: not opening ManagementAPI port ${mgt_port}/tcp (default). Set UFW_OPEN_MANAGEMENT_PORT=1 if inbound access is required, or rely on cloud SG / VPN."
+        apply_one_ufw "$mgt_port" "mpc-auth ManagementAPI"
     fi
     if [ "$is_relay" = "true" ]; then
         apply_one_ufw 8883 "mpc-auth MQTT TLS broker"

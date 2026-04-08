@@ -16,18 +16,20 @@ Read from **`configs.yaml`** where noted:
 | Browser HTTPS | **`BrowserHTTPS.Port`** or **8443** | Public browser API (TLS). |
 | Public discovery | **`PublicDiscoveryPort`** (often **18080**) | Discovery HTTP. |
 | Scanner / relayer | **`ScannerRelayerPort`** (e.g. **18081**) when non-zero | Prefer **scoped** rules (see below). |
-| Management API | **`ManagementAPIsPort`** (often **8080**) | **Not** opened by default—see next section. |
+| Management API | **`ManagementAPIsPort`** (often **8080**) | **Opened by default** so co-located AI agents and local operators can use the API after **`ufw enable`**. Opt out with **`UFW_OPEN_MANAGEMENT_PORT=0`** (see below). |
 | MQTT TLS (relay only) | **8883/tcp** | When the node is the **relay** (`docker-compose` MQTT). |
 
 ## Management API port
 
-Inbound **`ManagementAPIsPort`** is **not** added to **`ufw`** unless you set:
+By default, **`process_config.sh`** adds **`ufw allow <ManagementAPIsPort>/tcp`** (usually **8080**) so the management API remains reachable on the host once **`ufw`** is enabled—this matches the long-standing behavior for **local operators** and **co-located AI agents** hitting the configured port.
+
+To **skip** that rule (stricter host firewall: rely on **`docker-compose`** binding management to **127.0.0.1** only, **SSH tunnel**, **VPN**, or **cloud security groups**):
 
 ```bash
-UFW_OPEN_MANAGEMENT_PORT=1 ./process_config.sh
+UFW_OPEN_MANAGEMENT_PORT=0 ./process_config.sh
 ```
 
-Otherwise rely on **VPN**, **SSH tunnel**, **cloud SG** allowing only your admin CIDR, etc. The script prints an info line explaining this default.
+**Note:** **`docker-compose.yml`** in this repo often publishes management as **`127.0.0.1:8080:8080`**, so the container is not on the public interface; the UFW rule still documents intent and helps if you change the publish mapping to **`0.0.0.0`**. For internet-exposed **8080**, use application-layer controls (signatures, keys) and prefer **scoped** **`ufw`** or cloud rules where possible.
 
 ## Scanner / relayer scoped rules
 
