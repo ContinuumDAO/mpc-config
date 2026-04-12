@@ -27,6 +27,7 @@ GOWORK=off go build -o sign-clipboard .
 - **`--bootstrap`** — Use only the bootstrap key (`~/.ssh/mpc_auth_bootstrap_ed25519`). If that file does not exist, the tool exits with a clear error. Use this when you selected **Bootstrap (config)** in the app’s “Which key are you using?” step.
 - **`--primary`** — Use only the primary key (`~/.ssh/mpc_auth_ed25519`). Fails if that file does not exist.
 - **`--key-file <path>`** — Use this key file (e.g. `~/.ssh/mpc_auth_2_ed25519`). Use when you have multiple added keys and need to sign with the key you selected in the app. Fails if the file does not exist.
+- **`--stdin`** — Read the message from standard input and write the 128-hex signature to **standard output** (status lines go to stderr). Does not use the clipboard. Use on **SSH or headless** hosts where `DISPLAY` / `WAYLAND_DISPLAY` are unset and `xclip` cannot run.
 - With no flags, the tool uses the first of (primary, bootstrap) that exists.
 
 ## Requirements
@@ -34,7 +35,10 @@ GOWORK=off go build -o sign-clipboard .
 - **Key file:** By default the tool looks for a key in this order: `~/.ssh/mpc_auth_ed25519`, then `~/.ssh/mpc_auth_bootstrap_ed25519` (uses the first that exists). Use `--bootstrap` or `--primary` to force one of those. Use `--key-file ~/.ssh/mpc_auth_2_ed25519` (or similar) when you have multiple added keys. Supports:
   - PKCS#8 PEM (`-----BEGIN PRIVATE KEY-----`) from the app’s “Create new key pair” flow.
   - OpenSSH format (`-----BEGIN OPENSSH PRIVATE KEY-----`).
-- **Clipboard:** On Linux, `xclip` or `xsel` must be installed for clipboard access.
+- **Clipboard:** On Linux, `xclip` or `xsel` must be installed for clipboard access (not needed if you use `--stdin`).
+- **Headless / SSH:** If `echo $DISPLAY` is empty, the clipboard path will not work. Put the exact message in a file and run:
+  `sign-clipboard --bootstrap --stdin < message.txt`
+  then copy the first line of output (the hex signature) into the app.
 
 ## Usage
 
@@ -43,6 +47,7 @@ GOWORK=off go build -o sign-clipboard .
 ./sign-clipboard --bootstrap                  # use only bootstrap key (fail if missing)
 ./sign-clipboard --primary                    # use only primary key (fail if missing)
 ./sign-clipboard --key-file ~/.ssh/mpc_auth_2_ed25519   # use specific key file (multiple added keys)
+./sign-clipboard --bootstrap --stdin < message.txt   # headless: message from file, signature on stdout
 ```
 
 - If the clipboard is empty or invalid, the tool exits with an error.

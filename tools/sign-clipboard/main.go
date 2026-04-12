@@ -1,8 +1,10 @@
-// sign-clipboard reads the message to sign from the clipboard, signs it with
-// the Ed25519 management key from ~/.ssh/mpc_auth_ed25519 (or, if that does
-// not exist, ~/.ssh/mpc_auth_bootstrap_ed25519), and writes the 128-hex
-// signature back to the clipboard.
+// sign-clipboard reads the message to sign from the clipboard (default) or
+// stdin (--stdin), signs it with the Ed25519 management key from
+// ~/.ssh/mpc_auth_ed25519 (or, if that does not exist,
+// ~/.ssh/mpc_auth_bootstrap_ed25519), and writes the 128-hex signature to the
+// clipboard or stdout.
 // Usage: copy the message in the app, run this binary, then paste the signature into the app.
+// For SSH sessions without DISPLAY, use --stdin and pipe the message or redirect from a file.
 package main
 
 import (
@@ -12,6 +14,7 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,8 +33,9 @@ func main() {
 	flagBootstrap := flag.Bool("bootstrap", false, "use only the bootstrap key (~/.ssh/mpc_auth_bootstrap_ed25519); fail if that file does not exist (use when you selected 'Bootstrap (config)' in the app)")
 	flagPrimary := flag.Bool("primary", false, "use only the primary key (~/.ssh/mpc_auth_ed25519); fail if that file does not exist")
 	flagKeyFile := flag.String("key-file", "", "use this key file path (e.g. ~/.ssh/mpc_auth_2_ed25519); use when you have multiple added keys and need to sign with a specific one")
+	flagStdin := flag.Bool("stdin", false, "read message from stdin and write the 128-hex signature to stdout (no clipboard; use on SSH/headless hosts without DISPLAY)")
 	flag.Parse()
-	if err := run(*flagBootstrap, *flagPrimary, *flagKeyFile); err != nil {
+	if err := run(*flagBootstrap, *flagPrimary, *flagKeyFile, *flagStdin); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
@@ -111,14 +115,27 @@ func resolveEd25519KeyPath(forceBootstrap, forcePrimary bool, keyFileOverride st
 	)
 }
 
-func run(forceBootstrap, forcePrimary bool, keyFileOverride string) error {
-	// Read message from clipboard
-	msg, err := clipboard.ReadAll()
-	if err != nil {
-		return fmt.Errorf("reading clipboard: %w", err)
+func run(forceBootstrap, forcePrimary bool, keyFileOverride string, stdinMode bool) error {
+	var msg string
+	var err error
+	if stdinMode {
+		var b []byte
+		b, err = io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("reading stdin: %w", err)
+		}
+		msg = string(b)
+	} else {
+		msg, err = clipboard.ReadAll()
+		if err != nil {
+			return fmt.Errorf("reading clipboard: %w", err)
+		}
 	}
 	msg = trimBOM(msg)
 	if strings.TrimSpace(msg) == "" {
+		if stdinMode {
+			return fmt.Errorf("stdin is empty; pipe or redirect the exact message to sign (same bytes as in the app)")
+		}
 		return fmt.Errorf("clipboard is empty; copy the message to sign from the app first")
 	}
 
@@ -144,7 +161,15 @@ func run(forceBootstrap, forcePrimary bool, keyFileOverride string) error {
 		return fmt.Errorf("unexpected signature length: %d hex chars", len(sigHex))
 	}
 
-	// Write signature to clipboard
+	if stdinMode {
+		if _, err := fmt.Fprintln(os.Stdout, sigHex); err != nil {
+			return fmt.Errorf("writing signature to stdout: %w", err)
+		}
+		fmt.Fprintln(os.Stderr, "128-hex signature written to stdout. Paste it into the app.")
+		fmt.Fprintln(os.Stderr, "Key used:", keyFile)
+		return nil
+	}
+
 	if err := clipboard.WriteAll(sigHex); err != nil {
 		return fmt.Errorf("writing to clipboard: %w", err)
 	}
