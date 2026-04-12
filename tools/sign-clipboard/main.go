@@ -5,6 +5,7 @@
 // clipboard or stdout.
 // Usage: copy the message in the app, run this binary, then paste the signature into the app.
 // For SSH sessions without DISPLAY, use --stdin and pipe the message or redirect from a file.
+// For POST bodies without shell-quoting huge JSON, use --inline-file <path>.
 package main
 
 import (
@@ -34,8 +35,20 @@ func main() {
 	flagPrimary := flag.Bool("primary", false, "use only the primary key (~/.ssh/mpc_auth_ed25519); fail if that file does not exist")
 	flagKeyFile := flag.String("key-file", "", "use this key file path (e.g. ~/.ssh/mpc_auth_2_ed25519); use when you have multiple added keys and need to sign with a specific one")
 	flagStdin := flag.Bool("stdin", false, "read message from stdin and write the 128-hex signature to stdout (no clipboard; use on SSH/headless hosts without DISPLAY)")
+	flagInline := flag.String("inline", "", "sign this exact UTF-8 string (e.g. canonical POST body JSON); write 128-hex signature to stdout; no clipboard (for management API POST bodies and automation)")
+	flagInlineFile := flag.String("inline-file", "", "read the message to sign from this file (exact bytes); write 128-hex signature to stdout; use for large JSON bodies (avoids shell quoting)")
 	flag.Parse()
-	if err := run(*flagBootstrap, *flagPrimary, *flagKeyFile, *flagStdin); err != nil {
+	inlinePath := strings.TrimSpace(*flagInlineFile)
+	inlineStr := strings.TrimSpace(*flagInline)
+	if *flagStdin && (inlineStr != "" || inlinePath != "") {
+		fmt.Fprintln(os.Stderr, "Error: --stdin cannot be combined with --inline or --inline-file")
+		os.Exit(1)
+	}
+	if inlineStr != "" && inlinePath != "" {
+		fmt.Fprintln(os.Stderr, "Error: use either --inline or --inline-file, not both")
+		os.Exit(1)
+	}
+	if err := run(*flagBootstrap, *flagPrimary, *flagKeyFile, *flagStdin, *flagInline, inlinePath); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
@@ -115,10 +128,24 @@ func resolveEd25519KeyPath(forceBootstrap, forcePrimary bool, keyFileOverride st
 	)
 }
 
-func run(forceBootstrap, forcePrimary bool, keyFileOverride string, stdinMode bool) error {
+func run(forceBootstrap, forcePrimary bool, keyFileOverride string, stdinMode bool, inlineMsg string, inlineFilePath string) error {
 	var msg string
 	var err error
-	if stdinMode {
+	inlineMsg = strings.TrimSpace(inlineMsg)
+	if inlineFilePath != "" {
+		path, errExp := expandTilde(inlineFilePath)
+		if errExp != nil {
+			return errExp
+		}
+		var b []byte
+		b, err = os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("reading --inline-file %s: %w", path, err)
+		}
+		msg = string(b)
+	} else if inlineMsg != "" {
+		msg = inlineMsg
+	} else if stdinMode {
 		var b []byte
 		b, err = io.ReadAll(os.Stdin)
 		if err != nil {
@@ -133,6 +160,12 @@ func run(forceBootstrap, forcePrimary bool, keyFileOverride string, stdinMode bo
 	}
 	msg = trimBOM(msg)
 	if strings.TrimSpace(msg) == "" {
+		if inlineFilePath != "" {
+			return fmt.Errorf("--inline-file is empty or only whitespace: %s", inlineFilePath)
+		}
+		if inlineMsg != "" {
+			return fmt.Errorf("--inline message is empty")
+		}
 		if stdinMode {
 			return fmt.Errorf("stdin is empty; pipe or redirect the exact message to sign (same bytes as in the app)")
 		}
@@ -161,11 +194,18 @@ func run(forceBootstrap, forcePrimary bool, keyFileOverride string, stdinMode bo
 		return fmt.Errorf("unexpected signature length: %d hex chars", len(sigHex))
 	}
 
-	if stdinMode {
+	if stdinMode || inlineMsg != "" || inlineFilePath != "" {
 		if _, err := fmt.Fprintln(os.Stdout, sigHex); err != nil {
 			return fmt.Errorf("writing signature to stdout: %w", err)
 		}
-		fmt.Fprintln(os.Stderr, "128-hex signature written to stdout. Paste it into the app.")
+		switch {
+		case inlineFilePath != "":
+			fmt.Fprintln(os.Stderr, "128-hex signature written to stdout (POST body signed from --inline-file). Paste clientSig into the app or curl.")
+		case inlineMsg != "":
+			fmt.Fprintln(os.Stderr, "128-hex signature written to stdout (POST body signed with --inline). Paste clientSig into the app or curl.")
+		default:
+			fmt.Fprintln(os.Stderr, "128-hex signature written to stdout. Paste it into the app.")
+		}
 		fmt.Fprintln(os.Stderr, "Key used:", keyFile)
 		return nil
 	}

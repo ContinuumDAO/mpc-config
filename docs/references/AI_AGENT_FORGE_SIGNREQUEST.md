@@ -190,6 +190,54 @@ So you can also generate or edit such JSON in your agent and pass it to the scri
 
 ---
 
+## Linea fee: approve + deposit (batch)
+
+The Linea **MultiSignFeeRegistry** at **`0x55aD6Df6d8f8824486C3fd3373f1CF29eCecF0A3`** (chain id **59144**) pulls the fee ERC20 from the MPC wallet via **`transferFrom`** in **`deposit(address,uint256)`**, so the MPC must **`approve`** that contract **before** **`deposit`**. This repo includes a Foundry script that records **both** calls in one broadcast (approve on the fee token, then **`deposit`** on the registry).
+
+**Script:** `forge/script/LineaFeeApproveDeposit.s.sol` (run from the `forge/` directory).
+
+**Environment:**
+
+| Variable | Meaning |
+|----------|---------|
+| `DEPOSIT_AMOUNT_WEI` | Deposit amount in fee-token smallest units (must be ≥ this KeyGen’s **`minimumDeposit`** from **`keyGenFeeConfig`**). |
+| `MPC_ADDRESS` | KeyGen **Ethereum** address (same as **`--sender`** and first arg to **`deposit`**). |
+| `FORGE_LINEA_FEE_SIMULATE` | Optional **`true`**: uses **`deal`** so a fork simulation can succeed **without** real fee-token balance (only for building **`run-latest.json`**; cheats do not exist on mainnet). |
+
+**1. Generate broadcast JSON** (from repo root `mpc-config/`):
+
+```bash
+cd forge
+export DEPOSIT_AMOUNT_WEI=5000000          # example; use your amount and respect minimumDeposit
+export MPC_ADDRESS=0xYourKeyGenAddress
+export FORGE_LINEA_FEE_SIMULATE=true       # omit if the MPC already holds enough fee token on the fork
+forge script script/LineaFeeApproveDeposit.s.sol:LineaFeeApproveDeposit \
+  --rpc-url "https://rpc.linea.build" \
+  --sender "$MPC_ADDRESS" \
+  --skip-simulation
+```
+
+Foundry writes **`broadcast/LineaFeeApproveDeposit.s.sol/59144/dry-run/run-latest.json`** (when using **`--skip-simulation`**). If you run **without** **`--skip-simulation`** and the MPC has enough fee token on the RPC you use, the file may be under **`broadcast/.../59144/run-latest.json`** instead.
+
+**2. Build `multiSignRequest` JSON** (repo root; **`--key-gen-id`** and **`--mpc-auth-url`** as elsewhere in this doc):
+
+```bash
+python3 scripts/generateSignRequestWithFoundryScript.py \
+  --key-gen-id=KeyGen... \
+  --mpc-auth-url=http://localhost:8080 \
+  --file=forge/broadcast/LineaFeeApproveDeposit.s.sol/59144/dry-run/run-latest.json \
+  --destination-chain-id=59144 \
+  --purpose="Linea fee token approve and deposit" \
+  --override-sender=0xYourKeyGenAddress \
+  --first-nonce="$(cast nonce 0xYourKeyGenAddress --rpc-url https://rpc.linea.build)" \
+  --is-eip1559 --base-fee-gwei=30 --priority-fee-gwei=2 --gas-limit=200000 \
+  --signature-texts='["ERC20 approve fee contract","Linea fee deposit"]'
+```
+
+Use **`--override-sender`** / **`--first-nonce`** when the broadcast **`from`** or nonces must match the live MPC account (see **Nonce and sender** under **Python script** above). Dry-run broadcast segments often omit **`gas`** and EIP-1559 fields; **use `--gas-limit` (e.g. 200000)** and fee flags so each transaction is encodable as type-2 txs. The Python output uses **`messageHashes`** / **`messageRawBatch`** for **two** transactions.
+
+---
+
 ## What to do with the output
 
 1. **Parse** the script’s stdout as JSON.

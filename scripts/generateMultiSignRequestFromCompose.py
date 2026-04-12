@@ -61,6 +61,12 @@ are **required**. Install with ``pip install eth_account PyNaCl``.
 and fee fields mirror values stored after **Simulate**; omit them to estimate on
 the fly via RPC.
 
+**Native currency transfer** (ETH / chain gas token to an address, no contract
+calldata): set ``"nativeTransfer": true``, ``destinationContract`` = recipient
+address, a single ``inputs`` entry ``uint256`` value, and ``paramUnits`` for
+index ``"0"``. Optional ``signature`` defaults to ``nativeTransfer``. Calldata is
+empty (``msgRaw`` is ``""`` for a single action).
+
 **Output:** JSON with ``endpoint``, ``bodyForSign``, ``messageToSign``, and
 optional ``postBody`` if signing flags were passed. Add ``clientSig`` (and for
 MetaMask flows ``signedMessage`` = ``messageToSign``) before POSTing.
@@ -206,9 +212,17 @@ def eth_get_transaction_count(rpc_url: str, address: str) -> int:
     return int(res, 16) if isinstance(res, str) else int(res)
 
 
-def eth_estimate_gas(rpc_url: str, from_addr: str, to_addr: str, data_hex: str) -> int:
+def eth_estimate_gas(
+    rpc_url: str,
+    from_addr: str,
+    to_addr: str,
+    data_hex: str,
+    value_wei: int | None = None,
+) -> int:
     fx = _eth_address_param(from_addr)
-    tx: dict[str, str] = {"from": fx, "to": _eth_address_param(to_addr), "data": data_hex}
+    tx: dict[str, Any] = {"from": fx, "to": _eth_address_param(to_addr), "data": data_hex}
+    if value_wei is not None and value_wei > 0:
+        tx["value"] = _to_hex_wei(value_wei)
     res = _rpc(rpc_url, "eth_estimateGas", [tx])
     return int(res, 16) if isinstance(res, str) else int(res)
 
@@ -557,7 +571,10 @@ def build_compose_multisign(
     for i, raw_act in enumerate(actions):
         if not isinstance(raw_act, dict):
             raise ValueError(f"composeActions[{i}] must be an object")
+        is_native = bool(raw_act.get("nativeTransfer") or raw_act.get("native_transfer"))
         sig = (raw_act.get("signature") or "").strip()
+        if is_native and not sig:
+            sig = "nativeTransfer"
         dest = (raw_act.get("destinationContract") or raw_act.get("destination_contract") or "").strip()
         if not sig or not dest:
             raise ValueError(f"composeActions[{i}]: signature and destinationContract required")
@@ -569,11 +586,37 @@ def build_compose_multisign(
             param_units = {}
         param_units_norm = {str(k): str(v) for k, v in param_units.items()}
 
-        calldata = encode_action_calldata(sig, inputs, param_units_norm)
+        value_wei: int | None = None
+        if is_native:
+            if len(inputs) != 1:
+                raise ValueError(
+                    f"composeActions[{i}]: nativeTransfer requires exactly one input (uint256 value)"
+                )
+            inp0 = inputs[0] or {}
+            typ0 = str(inp0.get("type") or "uint256").strip()
+            if not is_uint256_type(typ0):
+                raise ValueError(
+                    f"composeActions[{i}]: nativeTransfer input must be uint256 (got {typ0!r})"
+                )
+            unit_key = "0"
+            unit = param_units_norm.get(unit_key) or param_units_norm.get(unit_key.zfill(1)) or "Wei"
+            raw_v = inp0.get("value")
+            val = display_value_to_raw(str(raw_v if raw_v is not None else ""), unit)
+            try:
+                value_wei = int(val)
+            except ValueError as e:
+                raise ValueError(f"composeActions[{i}]: nativeTransfer value: {e}") from e
+            if value_wei < 0:
+                raise ValueError(f"composeActions[{i}]: nativeTransfer value must be >= 0")
+            calldata = "0x"
+            data_hex = "0x"
+        else:
+            calldata = encode_action_calldata(sig, inputs, param_units_norm)
+            data_hex = calldata if calldata.startswith("0x") else "0x" + calldata
+
         if i == 0:
             first_calldata = calldata if calldata.startswith("0x") else "0x" + calldata
 
-        data_hex = calldata if calldata.startswith("0x") else "0x" + calldata
         to_addr = _eth_address_param(dest)
 
         est = _maybe_int(raw_act.get("estimatedGas") or raw_act.get("estimated_gas"))
@@ -583,7 +626,9 @@ def build_compose_multisign(
         elif use_custom and gas_limit_config is not None and gas_limit_config > 0:
             gas_limit = gas_limit_config
         else:
-            gas_limit = eth_estimate_gas(rpc_url, executor, to_addr, data_hex)
+            gas_limit = eth_estimate_gas(
+                rpc_url, executor, to_addr, data_hex, value_wei if is_native else None
+            )
 
         current_nonce = nonce0 + i
 
@@ -602,12 +647,12 @@ def build_compose_multisign(
                     "txGasLimit": str(gas_limit),
                     "txGasPrice": str(gas_price_wei),
                 }
-            tx: dict[str, Any] = {
+            tx = {
                 "nonce": str(current_nonce),
                 "gasPrice": _to_hex_wei(gas_price_wei),
                 "gas": _to_hex_wei(gas_limit),
                 "to": to_addr,
-                "value": "0x0",
+                "value": _to_hex_wei(value_wei if is_native and value_wei is not None else 0),
                 "data": data_hex,
                 "chainId": str(dest_chain_num),
             }
@@ -637,7 +682,7 @@ def build_compose_multisign(
                 "maxFeePerGas": _to_hex_wei(max_fee),
                 "maxPriorityFeePerGas": _to_hex_wei(max_prio),
                 "to": to_addr,
-                "value": "0x0",
+                "value": _to_hex_wei(value_wei if is_native and value_wei is not None else 0),
                 "data": data_hex,
                 "chainId": str(dest_chain_num),
             }
@@ -656,6 +701,11 @@ def build_compose_multisign(
 
     first_dest = (actions[0].get("destinationContract") or actions[0].get("destination_contract") or "").strip()
     first_sig = (actions[0].get("signature") or "").strip()
+    if (
+        bool(actions[0].get("nativeTransfer") or actions[0].get("native_transfer"))
+        and not first_sig
+    ):
+        first_sig = "nativeTransfer"
     first_inputs = actions[0].get("inputs") or []
     if not isinstance(first_inputs, list):
         first_inputs = []
@@ -664,14 +714,18 @@ def build_compose_multisign(
 
     body: dict[str, Any] = {}
     if len(actions) == 1:
-        pu0 = actions[0].get("paramUnits") or actions[0].get("param_units") or {}
-        pu_map = {str(k): str(v) for k, v in pu0.items()} if isinstance(pu0, dict) else {}
-        cd = encode_action_calldata(
-            first_sig,
-            first_inputs if isinstance(first_inputs, list) else [],
-            pu_map,
-        )
-        msg_raw_calldata = cd[2:] if cd.startswith("0x") else cd
+        native0 = bool(actions[0].get("nativeTransfer") or actions[0].get("native_transfer"))
+        if native0:
+            msg_raw_calldata = ""
+        else:
+            pu0 = actions[0].get("paramUnits") or actions[0].get("param_units") or {}
+            pu_map = {str(k): str(v) for k, v in pu0.items()} if isinstance(pu0, dict) else {}
+            cd = encode_action_calldata(
+                first_sig,
+                first_inputs if isinstance(first_inputs, list) else [],
+                pu_map,
+            )
+            msg_raw_calldata = cd[2:] if cd.startswith("0x") else cd
         body["keyList"] = key_list
         body["pubKey"] = pub_key
         body["msgHash"] = message_hashes[0]

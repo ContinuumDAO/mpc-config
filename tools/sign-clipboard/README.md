@@ -28,6 +28,8 @@ GOWORK=off go build -o sign-clipboard .
 - **`--primary`** — Use only the primary key (`~/.ssh/mpc_auth_ed25519`). Fails if that file does not exist.
 - **`--key-file <path>`** — Use this key file (e.g. `~/.ssh/mpc_auth_2_ed25519`). Use when you have multiple added keys and need to sign with the key you selected in the app. Fails if the file does not exist.
 - **`--stdin`** — Read the message from standard input and write the 128-hex signature to **standard output** (status lines go to stderr). Does not use the clipboard. Use on **SSH or headless** hosts where `DISPLAY` / `WAYLAND_DISPLAY` are unset and `xclip` cannot run.
+- **`--inline '<string>'`** — Sign this **exact** UTF-8 string (e.g. the canonical JSON body for a management **`POST`**). Writes the 128-hex signature to **stdout**; no clipboard. **Do not** use together with **`--stdin`** or **`--inline-file`**. Prefer this for agents and scripts so the message matches the real request body without copy/paste.
+- **`--inline-file <path>`** — Read the message to sign from this file (**exact** bytes; `~` expanded). Writes the 128-hex signature to **stdout**. Use for **large** JSON bodies where shell-quoting **`--inline`** is impractical. **Do not** combine with **`--stdin`** or **`--inline`**.
 - With no flags, the tool uses the first of (primary, bootstrap) that exists.
 
 ## Requirements
@@ -48,6 +50,8 @@ GOWORK=off go build -o sign-clipboard .
 ./sign-clipboard --primary                    # use only primary key (fail if missing)
 ./sign-clipboard --key-file ~/.ssh/mpc_auth_2_ed25519   # use specific key file (multiple added keys)
 ./sign-clipboard --bootstrap --stdin < message.txt   # headless: message from file, signature on stdout
+./sign-clipboard --inline '{"foo":1}'                 # sign literal body; signature on stdout (POST / automation)
+./sign-clipboard --inline-file ./body.json            # sign file contents; signature on stdout (large POST bodies)
 ```
 
 - If the clipboard is empty or invalid, the tool exits with an error.
