@@ -37,7 +37,7 @@ LINEA_FEE_CONTRACT = "0x55aD6Df6d8f8824486C3fd3373f1CF29eCecF0A3"
 def build_linea_register_compose(
     key_gen_id: str,
     purpose: str = "",
-    use_custom_gas_config: bool = False,
+    no_custom_gas_params: bool = False,
 ) -> dict[str, Any]:
     """Compose JSON for a single register() call; RPC comes from getChainDetails."""
     pid = (key_gen_id or "").strip()
@@ -46,7 +46,6 @@ def build_linea_register_compose(
     out: dict[str, Any] = {
         "keyGenId": pid,
         "destinationChainId": str(LINEA_MAINNET_CHAIN_ID),
-        "useCustomGasConfig": use_custom_gas_config,
         "composeActions": [
             {
                 "signature": "register()",
@@ -58,6 +57,8 @@ def build_linea_register_compose(
     p = (purpose or "").strip()
     if p:
         out["purpose"] = p
+    if no_custom_gas_params:
+        out["noCustomGasParams"] = True
     return out
 
 
@@ -65,13 +66,13 @@ def linea_register_multisign_payload(
     mpc_auth_url: str,
     key_gen_id: str,
     purpose: str = "",
-    use_custom_gas_config: bool = False,
+    no_custom_gas_params: bool = False,
 ) -> dict[str, Any]:
     """Call GET /getKeyGenResultById and GET /getChainDetails via build_compose_multisign."""
     compose = build_linea_register_compose(
         key_gen_id=key_gen_id,
         purpose=purpose,
-        use_custom_gas_config=use_custom_gas_config,
+        no_custom_gas_params=no_custom_gas_params,
     )
     return _compose.build_compose_multisign(compose, mpc_auth_url.rstrip("/"))
 
@@ -100,9 +101,9 @@ def main() -> None:
         help="Purpose string for reviewers (default: %(default)s)",
     )
     ap.add_argument(
-        "--use-custom-gas-config",
+        "--no-custom-gas-params",
         action="store_true",
-        help="Apply gas limit / multipliers from chain details (off = estimate via RPC)",
+        help="Ignore ChainDetails gas fields; estimate gas limit and fees only from the RPC",
     )
     ap.add_argument(
         "--ed25519-seed-hex",
@@ -121,7 +122,7 @@ def main() -> None:
             mpc_auth_url=args.mpc_auth_url,
             key_gen_id=args.key_gen_id,
             purpose=args.purpose,
-            use_custom_gas_config=args.use_custom_gas_config,
+            no_custom_gas_params=args.no_custom_gas_params,
         )
     except (ValueError, RuntimeError) as e:
         print(str(e), file=sys.stderr)

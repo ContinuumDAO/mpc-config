@@ -3,8 +3,9 @@
 Build a POST /multiSignRequest payload for a standard ERC-20 transfer(address,uint256),
 using the node's stored RPC from GET /getChainDetails when rpcGateway is omitted.
 
-Optional --use-custom-gas-config applies gas limit and fee multipliers from chain details
-(same as the Compose "Use Custom Gas Config" checkbox in continuumdao-node-app).
+By default, gas limit and fees use **GET /getChainDetails** where set, and RPC
+estimates for missing fields. Pass **--no-custom-gas-params** to ignore chain gas
+config and estimate everything from the RPC only.
 
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
@@ -58,7 +59,7 @@ def build_erc20_transfer_compose(
     amount: str,
     amount_unit: str = "Wei",
     purpose: str = "",
-    use_custom_gas_config: bool = False,
+    no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -83,7 +84,6 @@ def build_erc20_transfer_compose(
     out: dict[str, Any] = {
         "keyGenId": pid,
         "destinationChainId": chain,
-        "useCustomGasConfig": use_custom_gas_config,
         "composeActions": [
             {
                 "signature": "transfer(address,uint256)",
@@ -102,6 +102,8 @@ def build_erc20_transfer_compose(
     rg = (rpc_gateway or "").strip()
     if rg:
         out["rpcGateway"] = rg
+    if no_custom_gas_params:
+        out["noCustomGasParams"] = True
     return out
 
 
@@ -114,7 +116,7 @@ def erc20_transfer_multisign_payload(
     amount: str,
     amount_unit: str = "Wei",
     purpose: str = "",
-    use_custom_gas_config: bool = False,
+    no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
 ) -> dict[str, Any]:
     compose = build_erc20_transfer_compose(
@@ -125,7 +127,7 @@ def erc20_transfer_multisign_payload(
         amount=amount,
         amount_unit=amount_unit,
         purpose=purpose,
-        use_custom_gas_config=use_custom_gas_config,
+        no_custom_gas_params=no_custom_gas_params,
         rpc_gateway=rpc_gateway,
     )
     return _compose.build_compose_multisign(compose, mpc_auth_url.rstrip("/"))
@@ -184,9 +186,9 @@ def main() -> None:
         help="Purpose string for reviewers (optional)",
     )
     ap.add_argument(
-        "--use-custom-gas-config",
+        "--no-custom-gas-params",
         action="store_true",
-        help="Apply gas limit / multipliers from GET /getChainDetails (custom chain gas config)",
+        help="Ignore ChainDetails gas fields; estimate gas limit and fees only from the RPC",
     )
     ap.add_argument(
         "--rpc-gateway",
@@ -218,7 +220,7 @@ def main() -> None:
             amount=args.amount,
             amount_unit=args.amount_unit,
             purpose=args.purpose,
-            use_custom_gas_config=args.use_custom_gas_config,
+            no_custom_gas_params=args.no_custom_gas_params,
             rpc_gateway=rpc,
         )
     except (ValueError, RuntimeError) as e:

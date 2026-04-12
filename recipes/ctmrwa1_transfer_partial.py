@@ -89,7 +89,7 @@ def build_ctmrwa1_partial_compose(
     version: str,
     fee_token_str: str,
     purpose: str = "",
-    use_custom_gas_config: bool = False,
+    no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
 ) -> dict[str, Any]:
     pid = (key_gen_id or "").strip()
@@ -114,7 +114,6 @@ def build_ctmrwa1_partial_compose(
     out: dict[str, Any] = {
         "keyGenId": pid,
         "destinationChainId": chain,
-        "useCustomGasConfig": use_custom_gas_config,
         "composeActions": [
             {
                 "signature": PARTIAL_SIG,
@@ -138,6 +137,8 @@ def build_ctmrwa1_partial_compose(
     rg = (rpc_gateway or "").strip()
     if rg:
         out["rpcGateway"] = rg
+    if no_custom_gas_params:
+        out["noCustomGasParams"] = True
     return out
 
 
@@ -155,7 +156,7 @@ def ctmrwa1_partial_multisign_payload(
     version: str,
     fee_token_str: str,
     purpose: str = "",
-    use_custom_gas_config: bool = False,
+    no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
 ) -> dict[str, Any]:
     compose = build_ctmrwa1_partial_compose(
@@ -171,7 +172,7 @@ def ctmrwa1_partial_multisign_payload(
         version=version,
         fee_token_str=fee_token_str,
         purpose=purpose,
-        use_custom_gas_config=use_custom_gas_config,
+        no_custom_gas_params=no_custom_gas_params,
         rpc_gateway=rpc_gateway,
     )
     return _compose.build_compose_multisign(compose, mpc_auth_url.rstrip("/"))
@@ -209,7 +210,11 @@ def main() -> None:
         help="feeTokenStr (opaque string, e.g. fee token address)",
     )
     ap.add_argument("--purpose", default="")
-    ap.add_argument("--use-custom-gas-config", action="store_true")
+    ap.add_argument(
+        "--no-custom-gas-params",
+        action="store_true",
+        help="Ignore ChainDetails gas fields; estimate gas limit and fees only from the RPC",
+    )
     ap.add_argument("--rpc-gateway", default="", metavar="URL")
     ap.add_argument("--ed25519-seed-hex", metavar="HEX", default="")
     ap.add_argument("--eip191-private-key-hex", metavar="HEX", default="")
@@ -233,7 +238,7 @@ def main() -> None:
             version=args.version,
             fee_token_str=args.fee_token_str,
             purpose=args.purpose,
-            use_custom_gas_config=args.use_custom_gas_config,
+            no_custom_gas_params=args.no_custom_gas_params,
             rpc_gateway=rpc,
         )
     except (ValueError, RuntimeError) as e:

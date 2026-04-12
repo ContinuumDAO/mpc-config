@@ -95,6 +95,7 @@ Each node stores the same logical data over time: **KeyGen messages** (`listMess
 - Proposing or evaluating **multi-sign requests** (`POST /multiSignRequest`, `POST /signRequestAgree`, `POST /triggerSignRequestById`).
 - Using **KeyGen messaging** (`POST /sendMessage`, `GET /getMessageThread`) for group coordination.
 - Generating **Foundry** scripts and turning **`forge script`** output into API payloads.
+- **Combining** two **`multiSignRequest`**-style JSON outputs (from recipes or **`generateSignRequestWithFoundryScript`**) into **one** batch with **`multiSignJoin.py`** before **`POST /multiSignRequest`**.
 - Configuring **Ed25519 management** authentication for automated `POST` calls to the node API.
 - Explaining **threshold**, **Purpose**, **Thoughts**, **shelve**, and **execute** flows.
 
@@ -144,10 +145,10 @@ To **notice unread channel messages directed at the agent** without manual **`GE
 
 1. **Discuss** in KeyGen messaging: human or other nodes **`POST /sendMessage`**; everyone reads **`GET /getMessageThread`** (and related list/get APIs). Optionally use the **KeyGen inbox poll** above when the agent should wake on **`@agent`** mentions.
 2. **Plan**: agent may research on the web; produce **Foundry** scripts and a **rationale**; optionally push to a shared Git repo.
-3. **Build tx intent**: for common flows, prefer **[recipes](#recipes-thin-cli-wrappers)** (**`linea_register.py`**, **`linea_fee_deposit.py`**, **`erc20_transfer.py`**, **`native_transfer.py`**, **`ctmerc20_transfer.py`**, **`ctmrwa1_transfer_whole.py`**, **`ctmrwa1_transfer_partial.py`**) which wrap **`generateMultiSignRequestFromCompose`** and use **`GET /getChainDetails`** when **`rpcGateway`** is omitted. Otherwise: run **`forge script … --sender <MPC address>`** → `broadcast/.../run-latest.json` and feed **`$SCRIPTS_PATH/generateSignRequestWithFoundryScript.py`** to build JSON for **`POST /multiSignRequest`** (see **`$REFS_PATH/AI_AGENT_FORGE_SIGNREQUEST.md`**), **or** build **Compose-style** JSON (function signature + parameters) and run **`$SCRIPTS_PATH/generateMultiSignRequestFromCompose.py`** (see **`$REFS_PATH/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**). Include a concise **`Purpose`** (≤256 chars).
+3. **Build tx intent**: for common flows, prefer **[recipes](#recipes-thin-cli-wrappers)** (**`linea_register.py`**, **`linea_fee_deposit.py`**, **`erc20_transfer.py`**, **`native_transfer.py`**, **`ctmerc20_transfer.py`**, **`ctmrwa1_transfer_whole.py`**, **`ctmrwa1_transfer_partial.py`**) which wrap **`generateMultiSignRequestFromCompose`** and use **`GET /getChainDetails`** when **`rpcGateway`** is omitted. Otherwise: run **`forge script … --sender <MPC address>`** → `broadcast/.../run-latest.json` and feed **`$SCRIPTS_PATH/generateSignRequestWithFoundryScript.py`** to build JSON for **`POST /multiSignRequest`** (see **`$REFS_PATH/AI_AGENT_FORGE_SIGNREQUEST.md`**), **or** build **Compose-style** JSON (function signature + parameters) and run **`$SCRIPTS_PATH/generateMultiSignRequestFromCompose.py`** (see **`$REFS_PATH/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**). When you need **two** such payloads (e.g. ERC-20 transfer then a second call) as **one** proposal with **one** agree/trigger cycle, run **`$SCRIPTS_PATH/multiSignJoin.py`** with **`--a`**, **`--b`**, and **`--first-nonce`** set to the MPC wallet’s **EVM** nonce on that chain (**`cast nonce <MPC> --rpc-url $RPC`**)—see [multiSignJoin](#multisignjoin-merge-two-multisignrequest-json-files). Include a concise **`Purpose`** (≤256 chars).
 4. **Agree**: each node **`POST /signRequestAgree`** (accept/reject); optional **`Thoughts`** per node to guide the agent (e.g. to **`POST /shelveSignRequest`** and revise).
 5. **Trigger & sign**: when **`/isSignRequestReadyById`** is true and the agent should proceed, **`POST /triggerSignRequestById`**; poll **`GET /getSignResultById`** until signatures exist.
-6. **Execute**: broadcast tx(s) with sufficient gas/credit; **`POST /updateSignResultStatusById`** with **`executed`** and **`transactionHash`** (or batch hashes).
+6. **Execute**: broadcast tx(s) with sufficient gas/credit. Prefer **`$SCRIPTS_PATH/executeSignResult.py`**: it loads **`GET /getSignResultById`** (and **`GET /getSignRequestById`** for **`msgRaw` / `messageRawBatch`**), resolves RPC from **`--rpc-url`** or **`GET /getChainDetails`**, submits **`eth_sendRawTransaction`**, and by default sends each tx **sequentially** and waits for receipts; pass **`--fast`** to confirm batched txs **concurrently**. Then **`POST /updateSignResultStatusById`** with **`executed`** and **`transactionHash`** (or batch hashes).
 7. **Report**: **`POST /sendMessage`** summarizing what was done and what to expect.
 8. **Context**: for future spends, use **messages** plus **`Purpose` / `Thoughts`** on sign results (**`GET /listSignResults`**, **`GET /getSignRequestById`** / **`getSignResultById`**).
 
@@ -272,6 +273,25 @@ Skim-level recipe for agents (e.g. Open Claw). **Foundry path:** **[$REFS_PATH/A
 3. **Sign and submit** — Clear **`clientSig`** / **`signedMessage`**, build **canonical JSON**, sign with the **management** key, set **`clientSig`**, then **`POST /multiSignRequest`**.
 4. **Notify the group** — **`POST /sendMessage`** on the KeyGen channel with a short title/body and the **request id** returned from **`multiSignRequest`** so peers can review.
 
+### multiSignJoin: merge two multiSignRequest JSON files
+
+Use **`$SCRIPTS_PATH/multiSignJoin.py`** when you already have **two** JSON blobs in the same shape as **`generateMultiSignRequestFromCompose.py`** or **`generateSignRequestWithFoundryScript.py`** stdout (wrapper with **`bodyForSign`** / **`messageToSign`** or a raw body) and you want **one** **`POST /multiSignRequest`** that batches both transactions.
+
+- **Inputs:** **`--a`** and **`--b`** paths (or stdin patterns from recipes saved to files).
+- **Chain:** both payloads must use the same **`destinationChainID`**; the script errors if they differ.
+- **Nonces:** the script rewrites serialized unsigned txs so nonces are **consecutive** starting at **`--first-nonce`**. Set that to the MPC address’s **current EVM pending nonce** on that chain (**`cast nonce <address> --rpc-url …`**), not **`globalnonce`** from **`getGlobalNonceByKeyGenId`**.
+- **Gas / fees:** values are **preserved** from each input’s unsigned tx (whatever the recipe or Foundry helper embedded). **`multiSignJoin`** only adjusts nonces and recomputes signing hashes; it does **not** re-estimate gas or fees.
+- **Output:** a **batch-shaped** body (**`messageHashes`**, **`messageRawBatch`**, **`extraJSON.batchMeta`**) when the merged count is at least two (or when either input was already a batch). Add **`clientSig`** to the merged JSON, then **`POST /multiSignRequest`** as usual.
+
+**Example:**
+
+```bash
+python3 "$RECIPES/erc20_transfer.py" ... > /tmp/a.json
+python3 "$RECIPES/ctmerc20_transfer.py" ... > /tmp/b.json
+NONCE=$(cast nonce "$WALLET_ADDRESS" --rpc-url "$RPC")
+python3 "$SCRIPTS_PATH/multiSignJoin.py" --a /tmp/a.json --b /tmp/b.json --first-nonce "$NONCE"
+```
+
 **Common mistakes**
 
 - Using **`forge script … --broadcast`** — wrong; simulation only until MPC signing completes.
@@ -286,6 +306,8 @@ Skim-level recipe for agents (e.g. Open Claw). **Foundry path:** **[$REFS_PATH/A
 |----------|-----|
 | `$SCRIPTS_PATH/generateSignRequestWithFoundryScript.py` | Forge broadcast JSON → **`multiSignRequest`** JSON helper. |
 | `$SCRIPTS_PATH/generateMultiSignRequestFromCompose.py` | Compose-style JSON (function + args) → **`multiSignRequest`** body / **`messageToSign`**. |
+| `$SCRIPTS_PATH/multiSignJoin.py` | Two recipe/helper JSON outputs → **one** batch **`multiSignRequest`**; **`--first-nonce`** = EVM **`cast nonce`**; same chain only; preserves gas/fees from inputs. Requires **`eth_account`**. See [multiSignJoin](#multisignjoin-merge-two-multisignrequest-json-files). |
+| `$SCRIPTS_PATH/executeSignResult.py` | After **`getSignResultById`**: build signed raw txs and broadcast (sequential by default; **`--fast`** for parallel confirm). Requires **`eth_account`**. |
 
 ### Recipes (thin CLI wrappers)
 
@@ -295,9 +317,9 @@ Resolve the directory as **`${RECIPES_PATH:-$(dirname "$SCRIPTS_PATH")/recipes}`
 
 | Script | Use |
 |--------|-----|
-| **`linea_register.py`** | **`register()`** on the Linea fee contract (**`59144`**); stored chain RPC + optional **`--use-custom-gas-config`**. |
+| **`linea_register.py`** | **`register()`** on the Linea fee contract (**`59144`**); stored chain RPC; optional **`--no-custom-gas-params`** (ignore ChainDetails gas; RPC-only estimates). |
 | **`linea_fee_deposit.py`** | **`deposit(address,uint256)`** on the Linea fee contract; **`--amount-wei`** (fee token smallest units); MPC **`ethereumaddress`** from **`getKeyGenResultById`**; **ERC20 approve** required before submit. |
-| **`erc20_transfer.py`** | **`transfer(address,uint256)`** on the token **`--token`**; **`--chain-id`**, **`--to`**, **`--amount`** / **`--amount-unit`**; optional **`--use-custom-gas-config`**, **`--rpc-gateway`**. |
+| **`erc20_transfer.py`** | **`transfer(address,uint256)`** on the token **`--token`**; **`--chain-id`**, **`--to`**, **`--amount`** / **`--amount-unit`**; optional **`--no-custom-gas-params`**, **`--rpc-gateway`**. |
 | **`native_transfer.py`** | Native gas token send to **`--to`** (compose **`nativeTransfer`**); same flags pattern as ERC-20. |
 | **`ctmerc20_transfer.py`** | CTMERC20 **`c3transfer(string,uint256,string)`** (same sig as **Add Asset** / **`GET /getTokens`** defaults in **`TOKEN_STORAGE_SCHEMA.md`**); **`--to-chain-id`** for the third arg (cross-chain); defaults to **`--chain-id`** when omitted. |
 | **`ctmrwa1_transfer_whole.py`** | CTMRWA1 **`transferWholeTokenX`** (whole **`fromTokenId`**); **`--from`**, **`--to`**, **`--from-token-id`**, **`--id`**, **`--version`**, **`--fee-token-str`**, optional **`--to-chain-id`**. |

@@ -1,0 +1,575 @@
+#!/usr/bin/env python3
+"""
+executeSignResult
+
+Broadcast EVM transactions from a **successful** MPC sign result (after
+``POST /triggerSignRequestById`` and ``GET /getSignResultById``).
+
+Loads ``messageRaw`` / ``messageRawBatch`` from ``GET /getSignRequestById`` (or a JSON file)
+and signatures from ``GET /getSignResultById`` (or a JSON file). Builds signed raw
+transactions with ``eth_account`` and submits ``eth_sendRawTransaction`` on ``--rpc-url``
+or the node's ``GET /getChainDetails`` RPC for ``DestinationChainID``.
+
+**Execution mode**
+
+- **Default (slow / sequential):** send transaction *i*, wait until a receipt is available,
+  then send *i+1*. Suitable when order or strict confirmation between steps matters.
+- **``--fast``:** submit and wait for receipts **concurrently** (one thread per transaction).
+  Works for batched txs with consecutive nonces because the mempool orders by nonce.
+
+Requires **eth_account** and **rlp** (``pip install eth_account``).
+
+Examples::
+
+  python3 scripts/executeSignResult.py \\
+    --sign-request-id Sign20260111003720999cf104d0f \\
+    --mpc-auth-url http://localhost:8080
+
+  python3 scripts/executeSignResult.py \\
+    --sign-result-file /tmp/result.json \\
+    --sign-request-file /tmp/request.json \\
+    --rpc-url https://linea-mainnet.g.alchemy.com/v2/SECRET
+
+  python3 scripts/executeSignResult.py --sign-request-id ... --mpc-auth-url ... --fast
+"""
+
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import importlib.util
+import json
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+from typing import Any, Union
+
+import rlp
+
+from eth_account._utils.legacy_transactions import (
+    encode_transaction,
+    serializable_unsigned_transaction_from_dict,
+)
+from eth_account.typed_transactions import TypedTransaction
+
+_scripts_dir = Path(__file__).resolve().parent
+if str(_scripts_dir) not in sys.path:
+    sys.path.insert(0, str(_scripts_dir))
+
+_spec = importlib.util.spec_from_file_location(
+    "forge_sign",
+    _scripts_dir / "generateSignRequestWithFoundryScript.py",
+)
+if _spec is None or _spec.loader is None:
+    raise RuntimeError("Could not load generateSignRequestWithFoundryScript.py")
+_forge = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_forge)
+
+hex_to_bytes = _forge.hex_to_bytes
+parse_chain_id = _forge.parse_chain_id
+
+_HTTP_UA = "executeSignResult/1.0 (Python-urllib)"
+DEFAULT_MPC_AUTH_URL = "http://localhost:8080"
+
+
+def http_get_json(url: str) -> dict[str, Any]:
+    req = urllib.request.Request(
+        url,
+        method="GET",
+        headers={"Accept": "application/json", "User-Agent": _HTTP_UA},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace") if e.fp else ""
+        raise ValueError(f"HTTP {e.code}: {body or e.reason}") from e
+    except urllib.error.URLError as e:
+        raise ValueError(f"Request failed: {e.reason}") from e
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON: {e}") from e
+
+
+def rpc_call(url: str, method: str, params: list[Any]) -> Any:
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode(
+        "utf-8"
+    )
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/json", "User-Agent": _HTTP_UA},
+    )
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        out = json.loads(resp.read().decode("utf-8"))
+    if "error" in out and out["error"]:
+        raise RuntimeError(str(out["error"]))
+    return out.get("result")
+
+
+def unwrap_api_response(resp: dict[str, Any], what: str) -> Any:
+    if resp.get("code") != 0:
+        err = resp.get("error") or str(resp)
+        raise ValueError(f"{what} failed (code={resp.get('code')}): {err}")
+    return resp.get("data")
+
+
+def fetch_sign_result(mpc_base: str, request_id: str) -> dict[str, Any]:
+    q = urllib.parse.urlencode({"id": request_id})
+    resp = http_get_json(f"{mpc_base.rstrip('/')}/getSignResultById?{q}")
+    data = unwrap_api_response(resp, "getSignResultById")
+    if not isinstance(data, dict):
+        raise ValueError("getSignResultById: expected data object")
+    return data
+
+
+def fetch_sign_request(mpc_base: str, request_id: str) -> dict[str, Any]:
+    q = urllib.parse.urlencode({"id": request_id})
+    resp = http_get_json(f"{mpc_base.rstrip('/')}/getSignRequestById?{q}")
+    data = unwrap_api_response(resp, "getSignRequestById")
+    if not isinstance(data, dict):
+        raise ValueError("getSignRequestById: expected data object")
+    return data
+
+
+def fetch_chain_detail_for_id(mpc_base: str, chain_id_num: int) -> dict[str, Any]:
+    base = mpc_base.rstrip("/")
+    resp = http_get_json(f"{base}/getChainDetails?chain_id={chain_id_num}")
+    if resp.get("code") != 0:
+        err = resp.get("error") or str(resp)
+        raise ValueError(f"getChainDetails failed (code={resp.get('code')}): {err}")
+    data = resp.get("data")
+    rows: list[dict[str, Any]]
+    if isinstance(data, list):
+        rows = [x for x in data if isinstance(x, dict)]
+    elif isinstance(data, dict):
+        rows = [data]
+    else:
+        rows = []
+    if not rows:
+        raise ValueError("getChainDetails: empty data")
+    want = str(chain_id_num)
+    for row in rows:
+        cid = row.get("chainId") if row.get("chainId") is not None else row.get("ChainId")
+        if cid is not None and str(cid).strip() == want:
+            return row
+    return rows[0]
+
+
+def pick_str(d: dict[str, Any], *keys: str) -> Any:
+    for k in keys:
+        if k in d:
+            return d[k]
+    lower = {str(a).lower(): b for a, b in d.items()}
+    for k in keys:
+        lk = k.lower()
+        if lk in lower:
+            return lower[lk]
+    return None
+
+
+def resolve_rpc_url(
+    mpc_base: str,
+    chain_id: int,
+    rpc_override: str | None,
+) -> str:
+    if rpc_override and str(rpc_override).strip():
+        return str(rpc_override).strip().rstrip("/")
+    row = fetch_chain_detail_for_id(mpc_base, chain_id)
+    url = str(pick_str(row, "rpcGateway", "RpcGateway", "rpc_gateway") or "").strip()
+    if not url:
+        raise ValueError(
+            "No --rpc-url provided and getChainDetails has no rpcGateway for this chain; "
+            "set --rpc-url or configure the chain on the node (postChainDetails)."
+        )
+    return url.rstrip("/")
+
+
+def unwrap_sign_body(obj: dict[str, Any]) -> dict[str, Any]:
+    if "bodyForSign" in obj and isinstance(obj["bodyForSign"], dict):
+        return obj["bodyForSign"]
+    if "body" in obj and isinstance(obj["body"], dict):
+        return obj["body"]
+    if "msgHash" in obj or "messageHashes" in obj or "destinationChainID" in obj:
+        return obj
+    raise ValueError("sign request JSON must contain bodyForSign, body, or a raw sign-request body")
+
+
+def _decode_type2_unsigned(raw: bytes) -> dict[str, Any]:
+    if len(raw) < 2 or raw[0] != 0x02:
+        raise ValueError("expected EIP-1559 type-2 unsigned transaction bytes")
+    inner = raw[1:]
+    decoded = rlp.decode(inner)
+    if not isinstance(decoded, list) or len(decoded) != 9:
+        raise ValueError(
+            f"unexpected type-2 unsigned RLP (got {len(decoded) if isinstance(decoded, list) else 'n/a'} fields)"
+        )
+    chain_id = int.from_bytes(decoded[0], "big")
+    nonce = int.from_bytes(decoded[1], "big")
+    max_prio = int.from_bytes(decoded[2], "big")
+    max_fee = int.from_bytes(decoded[3], "big")
+    gas = int.from_bytes(decoded[4], "big")
+    to_b = decoded[5]
+    value = int.from_bytes(decoded[6], "big")
+    data_b = decoded[7]
+    access = decoded[8]
+    if isinstance(access, list) and len(access) > 0:
+        raise ValueError("executeSignResult: non-empty accessList is not supported yet")
+    to_hex: str | None
+    if to_b and len(to_b) == 20:
+        to_hex = "0x" + to_b.hex()
+    elif to_b in (b"", None):
+        to_hex = None
+    else:
+        raise ValueError("invalid 'to' in type-2 transaction")
+    return {
+        "type": 2,
+        "chainId": chain_id,
+        "nonce": nonce,
+        "maxPriorityFeePerGas": max_prio,
+        "maxFeePerGas": max_fee,
+        "gas": gas,
+        "to": to_hex,
+        "value": value,
+        "data": data_b,
+        "accessList": [],
+    }
+
+
+def _decode_legacy_unsigned(raw: bytes) -> dict[str, Any]:
+    decoded = rlp.decode(raw)
+    if not isinstance(decoded, list):
+        raise ValueError("invalid legacy RLP")
+    if len(decoded) == 9:
+        nonce = int.from_bytes(decoded[0], "big")
+        gas_price = int.from_bytes(decoded[1], "big")
+        gas = int.from_bytes(decoded[2], "big")
+        to_b = decoded[3]
+        value = int.from_bytes(decoded[4], "big")
+        data_b = decoded[5]
+        chain_id = int.from_bytes(decoded[6], "big")
+        to_hex = "0x" + to_b.hex() if to_b and len(to_b) == 20 else None
+        return {
+            "nonce": nonce,
+            "gasPrice": gas_price,
+            "gas": gas,
+            "to": to_hex,
+            "value": value,
+            "data": data_b,
+            "chainId": chain_id,
+        }
+    raise ValueError(f"executeSignResult: unsupported legacy unsigned RLP length {len(decoded)}")
+
+
+def message_raw_hex_to_unsigned_dict(msg_raw: str) -> dict[str, Any]:
+    s = (msg_raw or "").strip()
+    if not s:
+        raise ValueError("empty messageRaw")
+    raw = hex_to_bytes(s)
+    if len(raw) == 0:
+        raise ValueError("empty messageRaw")
+    if raw[0] == 0x02:
+        return _decode_type2_unsigned(raw)
+    if raw[0] == 0x01:
+        raise ValueError("executeSignResult: EIP-2930 type-1 transactions are not supported yet")
+    if raw[0] == 0x03:
+        raise ValueError("executeSignResult: blob (type-3) transactions are not supported yet")
+    if raw[0] == 0x04:
+        raise ValueError("executeSignResult: set-code (type-4) transactions are not supported yet")
+    return _decode_legacy_unsigned(raw)
+
+
+def _pick_sig_field(d: dict[str, Any], *names: str) -> Any:
+    for n in names:
+        if n in d:
+            return d[n]
+    lower = {str(k).lower(): v for k, v in d.items()}
+    for n in names:
+        if n.lower() in lower:
+            return lower[n.lower()]
+    return None
+
+
+def _big_int_from_hexish(x: Any) -> int:
+    if x is None:
+        raise ValueError("missing integer field")
+    if isinstance(x, int):
+        return x
+    b = hex_to_bytes(str(x))
+    if not b:
+        return 0
+    return int.from_bytes(b[-32:].rjust(32, b"\x00"), "big")
+
+
+def parse_signature_components(sig: dict[str, Any]) -> tuple[int, int, int]:
+    """Return (r, s, v_byte) where v_byte is the last byte of a 65-byte eth sig when present."""
+    eth = _pick_sig_field(sig, "ethereumSignature", "ethereumsignature")
+    if eth:
+        h = hex_to_bytes(str(eth))
+        if len(h) == 65:
+            r = int.from_bytes(h[0:32], "big")
+            s = int.from_bytes(h[32:64], "big")
+            v = h[64]
+            return r, s, v
+        raise ValueError(f"ethereumSignature must be 65 bytes (130 hex chars), got {len(h)} bytes")
+
+    r = _big_int_from_hexish(_pick_sig_field(sig, "sigr", "sigR"))
+    s = _big_int_from_hexish(_pick_sig_field(sig, "sigs", "sigS"))
+    rec = _pick_sig_field(sig, "sigrecover", "sigRecover")
+    if rec is None:
+        raise ValueError("signature missing ethereumSignature and sigrecover")
+    rb = hex_to_bytes(str(rec))
+    if len(rb) == 0:
+        raise ValueError("empty sigrecover")
+    v = rb[-1]
+    return r, s, v
+
+
+def finalize_vrs(
+    r: int,
+    s: int,
+    v_byte: int,
+    *,
+    unsigned: Union[TypedTransaction, Any],
+    legacy_chain_id: int | None,
+) -> tuple[int, int, int]:
+    """Map MPC v byte to the ``v`` expected by ``encode_transaction`` for typed vs legacy."""
+    is_typed = isinstance(unsigned, TypedTransaction)
+    if is_typed:
+        if v_byte in (0, 1):
+            return r, s, v_byte
+        if v_byte in (27, 28):
+            return r, s, v_byte - 27
+        raise ValueError(f"typed transaction: expected v parity 0/1 or 27/28, got {v_byte}")
+
+    if v_byte >= 35:
+        return r, s, v_byte
+    if legacy_chain_id is not None and legacy_chain_id > 0:
+        if v_byte in (0, 1):
+            return r, s, legacy_chain_id * 2 + 35 + v_byte
+        if v_byte in (27, 28):
+            return r, s, legacy_chain_id * 2 + 35 + (v_byte - 27)
+        raise ValueError(f"legacy EIP-155: unexpected v/recovery byte {v_byte}")
+    if v_byte in (27, 28):
+        return r, s, v_byte
+    if v_byte in (0, 1):
+        return r, s, v_byte + 27
+    raise ValueError(f"legacy transaction: unexpected v byte {v_byte}")
+
+
+def build_signed_raw(
+    msg_raw: str,
+    sig: dict[str, Any],
+) -> bytes:
+    tx_dict = message_raw_hex_to_unsigned_dict(msg_raw)
+    utx = serializable_unsigned_transaction_from_dict(tx_dict)
+    r, s, v_byte = parse_signature_components(sig)
+    legacy_cid = None
+    if not isinstance(utx, TypedTransaction):
+        legacy_cid = tx_dict.get("chainId")
+        if legacy_cid is not None:
+            legacy_cid = int(legacy_cid)
+    r, s, v = finalize_vrs(r, s, v_byte, unsigned=utx, legacy_chain_id=legacy_cid)
+    return encode_transaction(utx, (v, r, s))
+
+
+def eth_send_raw_transaction(rpc_url: str, raw: bytes) -> str:
+    h = rpc_call(rpc_url, "eth_sendRawTransaction", ["0x" + raw.hex()])
+    if not isinstance(h, str):
+        raise RuntimeError(f"unexpected eth_sendRawTransaction result: {h!r}")
+    return h
+
+
+def wait_for_receipt(rpc_url: str, tx_hash: str, timeout_sec: float = 180.0) -> dict[str, Any]:
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        r = rpc_call(rpc_url, "eth_getTransactionReceipt", [tx_hash])
+        if r is not None:
+            if isinstance(r, dict):
+                return r
+            raise RuntimeError(f"unexpected receipt: {r!r}")
+        time.sleep(1.0)
+    raise TimeoutError(f"Timed out waiting for receipt for {tx_hash}")
+
+
+def load_json_file(path: str) -> dict[str, Any]:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8").strip()
+    if not text:
+        raise ValueError(f"empty file: {path}")
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError(f"expected JSON object in {path}")
+    return data
+
+
+def extract_message_raws(sign_body: dict[str, Any]) -> list[str]:
+    batch = sign_body.get("messageRawBatch") or sign_body.get("message_raw_batch")
+    if isinstance(batch, list) and len(batch) > 0:
+        return [str(x) for x in batch]
+    single = sign_body.get("msgRaw") or sign_body.get("messageRaw") or sign_body.get("msg_raw")
+    if single is not None and str(single).strip():
+        return [str(single).strip()]
+    raise ValueError("sign request has no msgRaw/messageRaw nor messageRawBatch")
+
+
+def extract_signatures(sign_data: dict[str, Any]) -> list[dict[str, Any]]:
+    batch = sign_data.get("batchSignatures") or sign_data.get("batchsignatures")
+    if isinstance(batch, list) and len(batch) > 0:
+        out = [x for x in batch if isinstance(x, dict)]
+        if len(out) != len(batch):
+            raise ValueError("batchSignatures entries must be objects")
+        return out
+    return [sign_data]
+
+
+def check_key_type(sign_data: dict[str, Any]) -> None:
+    kt = _pick_sig_field(sign_data, "keytype", "keyType", "KeyType")
+    if kt is None:
+        return
+    if str(kt).lower() == "ed25519":
+        raise ValueError(
+            "This script only broadcasts EVM (secp256k1) transactions; keytype is ed25519."
+        )
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Broadcast MPC sign results to an EVM chain.")
+    ap.add_argument(
+        "--sign-request-id",
+        help="Sign request id for API calls and reporting; optional if --sign-result-file "
+        "contains requestid",
+    )
+    ap.add_argument(
+        "--mpc-auth-url",
+        default=DEFAULT_MPC_AUTH_URL,
+        help=f"Management API base URL (default: {DEFAULT_MPC_AUTH_URL})",
+    )
+    ap.add_argument(
+        "--sign-result-file",
+        metavar="PATH",
+        help="JSON from getSignResultById (or raw data object); skips HTTP for the result",
+    )
+    ap.add_argument(
+        "--sign-request-file",
+        metavar="PATH",
+        help="JSON from getSignRequestById (or wrapper with body/bodyForSign); skips HTTP for the request",
+    )
+    ap.add_argument(
+        "--rpc-url",
+        help="JSON-RPC URL; if omitted, uses getChainDetails.rpcGateway for DestinationChainID",
+    )
+    ap.add_argument(
+        "--fast",
+        action="store_true",
+        help="Submit and confirm all transactions concurrently (default: sequential)",
+    )
+    ap.add_argument(
+        "--receipt-timeout",
+        type=float,
+        default=180.0,
+        help="Seconds to wait for each transaction receipt (default: 180)",
+    )
+    args = ap.parse_args()
+    mpc = args.mpc_auth_url.rstrip("/")
+
+    request_id = (args.sign_request_id or "").strip()
+
+    if args.sign_result_file:
+        loaded = load_json_file(args.sign_result_file)
+        sign_data = loaded.get("data") if isinstance(loaded.get("data"), dict) else loaded
+        if not request_id and isinstance(sign_data, dict):
+            rid = pick_str(sign_data, "requestid", "requestId", "RequestId")
+            if rid:
+                request_id = str(rid).strip()
+    else:
+        if not request_id:
+            raise SystemExit("error: --sign-request-id is required when not using --sign-result-file")
+        sign_data = fetch_sign_result(mpc, request_id)
+
+    if not request_id and not args.sign_request_file:
+        raise SystemExit(
+            "error: cannot fetch sign request without --sign-request-id or requestid in --sign-result-file; "
+            "pass --sign-request-file or --sign-request-id"
+        )
+
+    if not isinstance(sign_data, dict):
+        raise SystemExit("sign result must be a JSON object")
+
+    check_key_type(sign_data)
+
+    if args.sign_request_file:
+        loaded = load_json_file(args.sign_request_file)
+        raw_req = loaded.get("data") if isinstance(loaded.get("data"), dict) else loaded
+        sign_body = unwrap_sign_body(raw_req if isinstance(raw_req, dict) else loaded)
+    else:
+        if not request_id:
+            raise SystemExit("error: --sign-request-id is required when not using --sign-request-file")
+        sign_body = unwrap_sign_body(fetch_sign_request(mpc, request_id))
+
+    msg_raws = extract_message_raws(sign_body)
+    sigs = extract_signatures(sign_data)
+    if len(msg_raws) != len(sigs):
+        raise SystemExit(
+            f"message count ({len(msg_raws)}) != signature count ({len(sigs)}); "
+            "check messageRawBatch vs batchSignatures alignment."
+        )
+
+    dest_chain = (
+        pick_str(sign_data, "DestinationChainID", "destinationChainID")
+        or pick_str(sign_body, "destinationChainID", "destination_chain_id")
+    )
+    if dest_chain is None or str(dest_chain).strip() == "":
+        raise SystemExit("Could not determine destination chain id from sign result or request.")
+    chain_num = parse_chain_id(str(dest_chain).strip())
+    if chain_num <= 0:
+        raise SystemExit(f"Invalid destination chain id: {dest_chain!r}")
+
+    rpc_url = resolve_rpc_url(mpc, chain_num, args.rpc_url)
+
+    timeout = float(args.receipt_timeout)
+
+    def work(i: int, mr: str, sg: dict[str, Any]) -> dict[str, Any]:
+        raw = build_signed_raw(mr, sg)
+        tx_hash = eth_send_raw_transaction(rpc_url, raw)
+        receipt = wait_for_receipt(rpc_url, tx_hash, timeout_sec=timeout)
+        status = receipt.get("status")
+        return {
+            "index": i,
+            "transactionHash": tx_hash,
+            "status": status,
+            "blockNumber": receipt.get("blockNumber"),
+            "gasUsed": receipt.get("gasUsed"),
+        }
+
+    if args.fast:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(msg_raws))) as ex:
+            futs = [ex.submit(work, i, msg_raws[i], sigs[i]) for i in range(len(msg_raws))]
+            results = [f.result() for f in futs]
+        results.sort(key=lambda x: x["index"])
+    else:
+        results = []
+        for i in range(len(msg_raws)):
+            results.append(work(i, msg_raws[i], sigs[i]))
+
+    out = {
+        "rpcUrl": rpc_url,
+        "destinationChainID": chain_num,
+        "signRequestId": request_id or None,
+        "fast": bool(args.fast),
+        "results": results,
+    }
+    print(json.dumps(out, indent=2))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, RuntimeError, TimeoutError, OSError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)

@@ -69,7 +69,7 @@ def build_linea_fee_deposit_compose(
     key_gen_address: str,
     amount_wei: str,
     purpose: str = "",
-    use_custom_gas_config: bool = False,
+    no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
 ) -> dict[str, Any]:
     """Compose JSON for deposit(address,uint256) on the Linea fee contract."""
@@ -82,7 +82,6 @@ def build_linea_fee_deposit_compose(
     out: dict[str, Any] = {
         "keyGenId": pid,
         "destinationChainId": str(LINEA_MAINNET_CHAIN_ID),
-        "useCustomGasConfig": use_custom_gas_config,
         "composeActions": [
             {
                 "signature": DEPOSIT_SIG,
@@ -101,6 +100,8 @@ def build_linea_fee_deposit_compose(
     rg = (rpc_gateway or "").strip()
     if rg:
         out["rpcGateway"] = rg
+    if no_custom_gas_params:
+        out["noCustomGasParams"] = True
     return out
 
 
@@ -109,7 +110,7 @@ def linea_fee_deposit_multisign_payload(
     key_gen_id: str,
     amount_wei: str,
     purpose: str = "",
-    use_custom_gas_config: bool = False,
+    no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -126,7 +127,7 @@ def linea_fee_deposit_multisign_payload(
         key_gen_address=eth,
         amount_wei=amount_wei,
         purpose=purpose,
-        use_custom_gas_config=use_custom_gas_config,
+        no_custom_gas_params=no_custom_gas_params,
         rpc_gateway=rpc_gateway,
     )
     return _compose.build_compose_multisign(compose, base)
@@ -162,9 +163,9 @@ def main() -> None:
         help="Purpose string for reviewers (default: %(default)s)",
     )
     ap.add_argument(
-        "--use-custom-gas-config",
+        "--no-custom-gas-params",
         action="store_true",
-        help="Apply gas limit / multipliers from GET /getChainDetails",
+        help="Ignore ChainDetails gas fields; estimate gas limit and fees only from the RPC",
     )
     ap.add_argument(
         "--rpc-gateway",
@@ -192,7 +193,7 @@ def main() -> None:
             key_gen_id=args.key_gen_id,
             amount_wei=args.amount_wei,
             purpose=args.purpose,
-            use_custom_gas_config=args.use_custom_gas_config,
+            no_custom_gas_params=args.no_custom_gas_params,
             rpc_gateway=rpc,
         )
     except (ValueError, RuntimeError) as e:

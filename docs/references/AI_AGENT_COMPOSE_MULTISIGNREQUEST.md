@@ -63,7 +63,7 @@ Top-level fields (the script also accepts common **snake_case** aliases where no
 | **`composeActions`** | Yes | Non-empty array of actions (`compose_actions`). |
 | **`rpcGateway`** | No | If set, used as the JSON-RPC URL for nonce, estimateGas, and fee discovery. If omitted, the script loads RPC from **`GET /getChainDetails`** (`rpc_gateway` alias). |
 | **`purpose`** | No | Short text (app limit 256 chars for display on agree). |
-| **`useCustomGasConfig`** | No | Boolean; when **true**, applies chain-config **gasLimit**, **gasMultiplier**, **gasPrice** (legacy), **baseFeeMultiplier** (EIP-1559 refill path) from **`getChainDetails`**, matching the Compose **“Use Custom Gas Config”** checkbox (`use_custom_gas_config`). |
+| **`noCustomGasParams`** | No | When **true**, ignores **`getChainDetails`** gas fields and estimates gas limit and fees only from the RPC. When **false** or omitted (default), uses each gas-related field from chain config when set, and RPC estimates for missing fields. |
 | **`clientId`** | No | Override; otherwise first non-empty value from **`getKeyGenResultById`** → **`ClientKeys`** / **`clientkeys`**. |
 
 Each **compose action** object:
@@ -74,7 +74,7 @@ Each **compose action** object:
 | **`destinationContract`** | Yes | Called contract address (`destination_contract`). |
 | **`inputs`** | Yes | Array of **`{ "name", "type", "value" }`** in parameter order. Types follow Solidity ABI strings (`address`, `uint256`, `uint256[]`, etc.). |
 | **`paramUnits`** | No | Map **index as string** → **`Wei`** \| **`Ether`** \| **`Gwei`** \| **`USD`**. Applies only to **`uint256`** and **`uint256[]`**, same as the app (`param_units`). |
-| **`estimatedGas`** | No | If set and &gt; 0, used as gas limit; else configured gas limit (when **`useCustomGasConfig`**) or **`eth_estimateGas`** (`estimated_gas`). |
+| **`estimatedGas`** | No | If set and &gt; 0, used as gas limit; else chain-config **gasLimit** (when **`noCustomGasParams`** is false and configured) or **`eth_estimateGas`** (`estimated_gas`). |
 | **`gasPriceWei`** | No | Legacy: if set, used as gas price (wei); else RPC (`gas_price_wei`). |
 | **`maxFeePerGas`** / **`maxPriorityFeePerGas`** | No | EIP-1559: if **both** set and &gt; 0, used; else computed from RPC + chain multipliers (`max_fee_per_gas`, `max_priority_fee_per_gas`). |
 

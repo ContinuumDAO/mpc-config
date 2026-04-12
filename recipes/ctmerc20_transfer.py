@@ -78,7 +78,7 @@ def build_ctmerc20_c3transfer_compose(
     to_chain_id_str: str,
     amount_unit: str = "Wei",
     purpose: str = "",
-    use_custom_gas_config: bool = False,
+    no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -101,7 +101,6 @@ def build_ctmerc20_c3transfer_compose(
     out: dict[str, Any] = {
         "keyGenId": pid,
         "destinationChainId": chain,
-        "useCustomGasConfig": use_custom_gas_config,
         "composeActions": [
             {
                 "signature": CTMERC20_TRANSFER_SIG,
@@ -121,6 +120,8 @@ def build_ctmerc20_c3transfer_compose(
     rg = (rpc_gateway or "").strip()
     if rg:
         out["rpcGateway"] = rg
+    if no_custom_gas_params:
+        out["noCustomGasParams"] = True
     return out
 
 
@@ -134,7 +135,7 @@ def ctmerc20_transfer_multisign_payload(
     to_chain_id_str: str,
     amount_unit: str = "Wei",
     purpose: str = "",
-    use_custom_gas_config: bool = False,
+    no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
 ) -> dict[str, Any]:
     compose = build_ctmerc20_c3transfer_compose(
@@ -146,7 +147,7 @@ def ctmerc20_transfer_multisign_payload(
         to_chain_id_str=to_chain_id_str,
         amount_unit=amount_unit,
         purpose=purpose,
-        use_custom_gas_config=use_custom_gas_config,
+        no_custom_gas_params=no_custom_gas_params,
         rpc_gateway=rpc_gateway,
     )
     return _compose.build_compose_multisign(compose, mpc_auth_url.rstrip("/"))
@@ -213,9 +214,9 @@ def main() -> None:
         help="Purpose string for reviewers (optional)",
     )
     ap.add_argument(
-        "--use-custom-gas-config",
+        "--no-custom-gas-params",
         action="store_true",
-        help="Apply gas limit / multipliers from GET /getChainDetails",
+        help="Ignore ChainDetails gas fields; estimate gas limit and fees only from the RPC",
     )
     ap.add_argument(
         "--rpc-gateway",
@@ -249,7 +250,7 @@ def main() -> None:
             to_chain_id_str=to_chain,
             amount_unit=args.amount_unit,
             purpose=args.purpose,
-            use_custom_gas_config=args.use_custom_gas_config,
+            no_custom_gas_params=args.no_custom_gas_params,
             rpc_gateway=rpc,
         )
     except (ValueError, RuntimeError) as e:

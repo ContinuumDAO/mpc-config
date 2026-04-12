@@ -20,8 +20,7 @@ module so ``msgHash`` / ``messageHashes`` match EIP-1559 / legacy encoding.
 - Fetches pending **EVM nonce** for the MPC address from the RPC.
 - For each compose action: ABI-encodes calldata (same rules as
   ``encodeActionCalldata`` in ``app/utils/continuumDAO.ts``), applies gas limits
-  and fees like the app (simulated fields + ``useCustomGasConfig`` + chain
-  detail multipliers / minima).
+  and fees like the app (``noCustomGasParams`` + chain detail multipliers / minima).
 - Builds ``bodyForSign`` / ``messageToSign`` like the app (single tx:
   ``msgRaw`` = calldata hex **without** ``0x``; batch: ``messageHashes`` /
   ``messageRawBatch`` + first-item compatibility fields).
@@ -38,7 +37,7 @@ are **required**. Install with ``pip install eth_account PyNaCl``.
     "destinationChainId": "11155111",
     "rpcGateway": "https://...",
     "purpose": "optional, max 256 chars",
-    "useCustomGasConfig": false,
+    "noCustomGasParams": false,
     "composeActions": [
       {
         "signature": "transfer(address,uint256)",
@@ -460,6 +459,21 @@ def dumps_js(obj: Any) -> str:
     return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
 
 
+def parse_no_custom_gas_params(compose: dict[str, Any]) -> bool:
+    """
+    True  → ignore ChainDetails gas fields; derive gas limit and fees only from RPC
+            (``eth_estimateGas``, ``eth_gasPrice`` / block base fee, etc.).
+    False → use each gas-related field from ``getChainDetails`` when set; when a
+            field is empty in chain config, fill it from RPC (partial custom config).
+    Default when omitted: False.
+    """
+    if "noCustomGasParams" in compose:
+        return bool(compose["noCustomGasParams"])
+    if "no_custom_gas_params" in compose:
+        return bool(compose["no_custom_gas_params"])
+    return False
+
+
 def build_compose_multisign(
     compose: dict[str, Any],
     mpc_auth_url: str,
@@ -479,7 +493,7 @@ def build_compose_multisign(
     if not isinstance(actions, list) or not actions:
         raise ValueError("compose JSON: composeActions must be a non-empty array")
 
-    use_custom = bool(compose.get("useCustomGasConfig") or compose.get("use_custom_gas_config"))
+    no_custom_gas_params = parse_no_custom_gas_params(compose)
     purpose = (compose.get("purpose") or "").strip()
 
     rpc_override = (compose.get("rpcGateway") or compose.get("rpc_gateway") or "").strip()
@@ -536,10 +550,19 @@ def build_compose_multisign(
         except (TypeError, ValueError):
             pass
 
+    if no_custom_gas_params:
+        gas_limit_config = None
+        gas_fee_multiplier = None
+        chain_gas_price_gwei = None
+        base_fee_multiplier_pct = 100
+
     fee_params = fetch_chain_fee_params(rpc_url, dest_chain_num)
     # Mirror: const legacy = Boolean(chainDetail?.legacy) || !feeParams.isEip1559
-    legacy_from_chain = legacy_flag is True or str(legacy_flag).lower() == "true"
-    legacy = legacy_from_chain or not bool(fee_params.get("isEip1559"))
+    if no_custom_gas_params:
+        legacy = not bool(fee_params.get("isEip1559"))
+    else:
+        legacy_from_chain = legacy_flag is True or str(legacy_flag).lower() == "true"
+        legacy = legacy_from_chain or not bool(fee_params.get("isEip1559"))
 
     kg = fetch_keygen_bundle(mpc_auth_url, key_gen_id)
     key_list = kg.get("keylist") or kg.get("KeyList")
@@ -623,7 +646,7 @@ def build_compose_multisign(
         gas_limit: int
         if est is not None and est > 0:
             gas_limit = est
-        elif use_custom and gas_limit_config is not None and gas_limit_config > 0:
+        elif not no_custom_gas_params and gas_limit_config is not None and gas_limit_config > 0:
             gas_limit = gas_limit_config
         else:
             gas_limit = eth_estimate_gas(
@@ -635,9 +658,9 @@ def build_compose_multisign(
         if legacy:
             gp_item = _maybe_int(raw_act.get("gasPriceWei") or raw_act.get("gas_price_wei"))
             gas_price_wei = gp_item if gp_item is not None and gp_item > 0 else eth_gas_price(rpc_url)
-            if use_custom and gas_fee_multiplier is not None and gas_fee_multiplier > 0:
+            if not no_custom_gas_params and gas_fee_multiplier is not None and gas_fee_multiplier > 0:
                 gas_price_wei = (gas_price_wei * (100 + gas_fee_multiplier)) // 100
-            if use_custom and chain_gas_price_gwei is not None and chain_gas_price_gwei > 0:
+            if not no_custom_gas_params and chain_gas_price_gwei is not None and chain_gas_price_gwei > 0:
                 configured = _gwei_to_wei_ceil(chain_gas_price_gwei)
                 if configured > gas_price_wei:
                     gas_price_wei = configured
