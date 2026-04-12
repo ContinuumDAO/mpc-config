@@ -135,6 +135,8 @@ ANVIL_SIMULATION_CHAIN_ID = "364865"
 # --mpc-auth-url from ManagementAPIsPort in configs.yaml (see AGENT_ED25519_SETUP.md).
 DEFAULT_MPC_AUTH_URL = "http://localhost:8080"
 
+_HTTP_UA = "generateSignRequestWithFoundryScript/1.0 (Python-urllib)"
+
 
 def hex_to_int(s: str | None) -> int:
     if not s:
@@ -369,6 +371,13 @@ def tx_to_signing_hash_and_raw(tx: dict) -> tuple[str, str]:
         to_hex = "0x" + to.hex()
     else:
         to_hex = None
+    if to_hex:
+        try:
+            from eth_utils.address import to_checksum_address
+
+            to_hex = to_checksum_address(to_hex)
+        except Exception:
+            pass
 
     type_hex = tx.get("type")
     is_eip1559 = (
@@ -378,9 +387,14 @@ def tx_to_signing_hash_and_raw(tx: dict) -> tuple[str, str]:
     )
 
     if is_eip1559:
+        import rlp
+        from eth_account._utils.transaction_utils import transaction_rpc_to_rlp_structure
+        from eth_utils.toolz import dissoc, pipe
+
         max_fee = hex_to_int(tx.get("maxFeePerGas"))
         max_priority = hex_to_int(tx.get("maxPriorityFeePerGas"))
         d = {
+            "type": 2,
             "chainId": chain_id or 1,
             "nonce": nonce,
             "gas": gas,
@@ -395,13 +409,20 @@ def tx_to_signing_hash_and_raw(tx: dict) -> tuple[str, str]:
         try:
             typed = DynamicFeeTransaction.from_dict(d)
         except Exception:
-            typed = TypedTransaction.from_dict({**d, "type": 2})
-        encoded = typed.encode()
-        from eth_hash.auto import keccak
-
-        h = keccak(encoded)
-        message_hash = h.hex()
-        message_raw = "0x" + encoded.hex()
+            typed_tx = TypedTransaction.from_dict(d)
+            typed = typed_tx.transaction
+        message_hash = typed.hash().hex()
+        transaction_without_signature_fields = dissoc(typed.dictionary, "v", "r", "s")
+        rlp_structured_txn_without_sig_fields = transaction_rpc_to_rlp_structure(
+            transaction_without_signature_fields
+        )
+        rlp_serializer = typed.__class__._unsigned_transaction_serializer
+        unsigned_bytes = pipe(
+            rlp_serializer.from_dict(rlp_structured_txn_without_sig_fields),  # type: ignore[arg-type]
+            lambda val: rlp.encode(val),
+            lambda val: bytes([typed.__class__.transaction_type]) + val,
+        )
+        message_raw = "0x" + unsigned_bytes.hex()
         return message_hash, message_raw
     else:
         gas_price = hex_to_int(tx.get("gasPrice"))
@@ -532,7 +553,11 @@ def fetch_key_list_and_pubkey_from_keygen(mpc_auth_base_url: str, key_gen_id: st
     base = mpc_auth_base_url.rstrip("/")
     q = urllib.parse.urlencode({"id": key_gen_id})
     url = f"{base}/getKeyGenResultById?{q}"
-    req = urllib.request.Request(url, method="GET", headers={"Accept": "application/json"})
+    req = urllib.request.Request(
+        url,
+        method="GET",
+        headers={"Accept": "application/json", "User-Agent": _HTTP_UA},
+    )
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             raw = resp.read().decode("utf-8")

@@ -101,6 +101,9 @@ getcontext().prec = 78
 
 DEFAULT_MPC_AUTH_URL = "http://localhost:8080"
 
+# Public JSON-RPC gateways often return 403 if User-Agent is empty / Python-urllib default.
+_HTTP_UA = "generateMultiSignRequestFromCompose/1.0 (Python-urllib)"
+
 _scripts_dir = Path(__file__).resolve().parent
 if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
@@ -137,7 +140,10 @@ def _rpc(url: str, method: str, params: list[Any]) -> Any:
         url,
         data=body,
         method="POST",
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": _HTTP_UA,
+        },
     )
     with urllib.request.urlopen(req, timeout=120) as resp:
         out = json.loads(resp.read().decode("utf-8"))
@@ -213,7 +219,11 @@ def eth_gas_price(rpc_url: str) -> int:
 
 
 def http_get_json(url: str) -> dict[str, Any]:
-    req = urllib.request.Request(url, method="GET", headers={"Accept": "application/json"})
+    req = urllib.request.Request(
+        url,
+        method="GET",
+        headers={"Accept": "application/json", "User-Agent": _HTTP_UA},
+    )
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             raw = resp.read().decode("utf-8")
