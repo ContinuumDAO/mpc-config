@@ -21,7 +21,7 @@ metadata:
         - pipx
       config:
         - "$AUTH_KEY_PATH/mpc_auth_ed25519"
-        - "$MPC_CONFIG_PATH"
+        - "$MPC_CONFIG_PATH/configs.yaml"
         - "$MPA_PATH/.env"
     primaryEnv: MPC_AUTH_URL
     os:
@@ -29,9 +29,9 @@ metadata:
     homepage: https://clawhub.ai/patrickcure/mpa-wallet
 ---
 
-# Skill: MPA / MPC wallet agent (Open Claw / Clawhub)
+# Skill: MPA / MPC wallet agent (OpenClaw / Clawhub)
 
-Use this skill when operating an **AI agent** (e.g. **Open Claw**) that manages an **mpc-auth** node participating in a **Multi-Party Agent (MPA) wallet**: a single on-chain address (EVM today) whose **MPC signature** requires cooperation of **at least threshold+1** nodes in a **Group**. No single node holds the full private key.
+Use this skill when operating an **AI agent** (e.g. **OpenClaw**) that manages an **mpc-auth** node participating in a **Multi-Party Agent (MPA) wallet**: a single on-chain address (EVM today) whose **MPC signature** requires cooperation of **at least threshold+1** nodes in a **Group**. No single node holds the full private key.
 
 ## Prerequisites
 
@@ -47,6 +47,7 @@ This skill assumes the **operator has already provisioned an MPA wallet environm
 - The only private key material available to the agent should be the **dedicated management key** used for management API authentication.
 - Restrict filesystem and network permissions to only what is required for the local mpc-auth node and expected RPC/API endpoints.
 - Prefer a dedicated key path (outside your normal user SSH key set) and ensure this key is not reused for other systems.
+- Ensure that there is at least one human-controlled node in the threshold + 1 required by the MPC algorithm to prevent malicious takeover via prompt injection of management signing keys compromising the MPC KeyGen.
 
 ## Scope and egress guardrails (mandatory)
 
@@ -78,7 +79,7 @@ A **Multi-Party Agent (MPA) wallet** is **one** shared wallet address (EVM today
 
 The MPC address works on **any EVM network**; it is **not** locked to one smart contract.
 
-**Humans and AI agents are symmetric.** Some nodes are operated by people, others by an agent (e.g. Open Claw). All use the same REST ideas: **message** the group, **propose** txs via **`/multiSignRequest`**, **agree** or **reject** with **`/signRequestAgree`**, optionally add **`Thoughts`**, then **trigger** MPC signing and **broadcast**. The agent’s job is to take **intent** from the KeyGen messaging flow, produce **Foundry** scripts ([Foundry](https://www.getfoundry.sh/introduction/getting-started)), and turn outputs into **`multiSignRequest`** payloads—always subject to **threshold+1** agreement before **`triggerSignRequestById`**.
+**Humans and AI agents are symmetric.** Some nodes are operated by people, others by an agent (e.g. OpenClaw). All use the same REST ideas: **message** the group, **propose** txs via **`/multiSignRequest`**, **agree** or **reject** with **`/signRequestAgree`**, optionally add **`Thoughts`**, then **trigger** MPC signing and **broadcast**. The agent’s job is to take **intent** from the KeyGen messaging flow, produce **Foundry** scripts ([Foundry](https://www.getfoundry.sh/introduction/getting-started)), and turn outputs into **`multiSignRequest`** payloads—always subject to **threshold+1** agreement before **`triggerSignRequestById`**.
 
 ### The two signatures (critical distinction)
 
@@ -155,9 +156,9 @@ Use **[pipx](https://github.com/pypa/pipx)** for installing these packages (not 
 
 ### KeyGen inbox poll (`@agent`)
 
-To **notice unread channel messages directed at the agent** without manual **`GET /listMessages`** each time, run **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** on a timer (recommended: **Open Claw Gateway isolated cron**; see **`$MPA_PATH/references/AGENT_ED25519_SETUP.md`** §8.5 and [Open Claw cron](https://docs.openclaw.ai/cron)).
+To **notice unread channel messages directed at the agent** without manual **`GET /listMessages`** each time, run **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** on a timer (recommended: **OpenClaw Gateway isolated cron**; see **`$MPA_PATH/references/AGENT_ED25519_SETUP.md`** §8.5 and [OpenClaw cron](https://docs.openclaw.ai/cron)).
 
-**Ask the operator once** whether they want scheduled polling (and where: e.g. Open Claw cron) **before** you add or change a timer. **If they want a schedule, ask which period** from the fixed set: **every 1, 5, 10, 30, 60 minutes** or **every 2, 4, 6, 8, 10, 12, 24 hours**. Use **`$MPA_PATH/scripts/mpc_cron_schedules.py`** (**`--interactive`** on a TTY, or plain output for the table) to map the choice to Open Claw **`--every`** and crontab. Do **not** assume background polling: some setups only use ad-hoc **`GET /listMessages`** / **`getMessageThread`**, and the script **marks matched messages read**. If they already declined, a cron entry already exists, or they explicitly asked you to wire the poll, skip re-asking.
+**Ask the operator once** whether they want scheduled polling (and where: e.g. OpenClaw cron) **before** you add or change a timer. **If they want a schedule, ask which period** from the fixed set: **every 1, 5, 10, 30, 60 minutes** or **every 2, 4, 6, 8, 10, 12, 24 hours**. Use **`$MPA_PATH/scripts/mpc_cron_schedules.py`** (**`--interactive`** on a TTY, or plain output for the table) to map the choice to OpenClaw **`--every`** and crontab. Do **not** assume background polling: some setups only use ad-hoc **`GET /listMessages`** / **`getMessageThread`**, and the script **marks matched messages read**. If they already declined, a cron entry already exists, or they explicitly asked you to wire the poll, skip re-asking.
 
 1. **Once:** install **`cryptography`** into the pipx **`eth-account`** environment (**`pipx inject eth-account cryptography`** — see **[Python dependencies](#python-dependencies)**).
 2. **Run:** the venv **`python`** for **`eth-account`** with **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** (and **`KEYGEN_ID`** set; **`AUTH_KEY_PATH`** / **`MPC_AUTH_URL`** if not defaults). **`--dry-run`** lists matching unread messages without calling **`multiMarkMessagesRead`**.
@@ -296,7 +297,7 @@ curl -sS -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest" \
 
 ## Creating transactions (`multiSignRequest`)
 
-Skim-level recipe for agents (e.g. Open Claw). **Foundry path:** **[AI_AGENT_FORGE_SIGNREQUEST.md]($MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md)**. **Compose-style JSON (no Foundry broadcast):** **[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md]($MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**. **Shortcut:** see **[Recipes](#recipes-thin-cli-wrappers)** (**`linea_register`**, **`linea_fee_deposit`**, **`erc20_transfer`**, **`native_transfer`**, **`ctmerc20_transfer`**, **`ctmrwa1_transfer_whole`**, **`ctmrwa1_transfer_partial`**, …) before hand-writing compose JSON.
+Skim-level recipe for agents (e.g. OpenClaw). **Foundry path:** **[AI_AGENT_FORGE_SIGNREQUEST.md]($MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md)**. **Compose-style JSON (no Foundry broadcast):** **[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md]($MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**. **Shortcut:** see **[Recipes](#recipes-thin-cli-wrappers)** (**`linea_register`**, **`linea_fee_deposit`**, **`erc20_transfer`**, **`native_transfer`**, **`ctmerc20_transfer`**, **`ctmrwa1_transfer_whole`**, **`ctmrwa1_transfer_partial`**, …) before hand-writing compose JSON.
 
 ### `messageToSign`, `signedMessage`, and the POST body
 
@@ -353,7 +354,7 @@ python3 "$MPA_PATH/scripts/multiSignJoin.py" --a /tmp/a.json --b /tmp/b.json --f
 | `executeSignResult.py` | After **`getSignResultById`**: build signed raw txs and broadcast (sequential by default; **`--fast`** for parallel confirm). |
 | `keygen_messaging_agent_poll.py` | Poll KeyGen messaging for unread items that mention the agent, then mark them read. |
 | `mpc_event_listener.py` | Optional composed handlers (KeyGen poll, sign-ready trigger+execute); schedule one script for multiple event types. |
-| `mpc_cron_schedules.py` | Maps selectable poll periods (1–60 min, 2–24 h) to Open Claw `--every` and crontab. |
+| `mpc_cron_schedules.py` | Maps selectable poll periods (1–60 min, 2–24 h) to OpenClaw `--every` and crontab. |
 
 ## Recipes
 
