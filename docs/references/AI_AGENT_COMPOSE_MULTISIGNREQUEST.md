@@ -41,11 +41,10 @@ The script fills **`keyList`** and **`pubKey`** from the node. It computes **EVM
 
 ## Install dependencies (required)
 
-**Both** packages are **mandatory** (the script imports **PyNaCl** at startup):
+**Both** packages are **mandatory** (the script imports **PyNaCl** at startup). Use the venv at **`$MPA_PATH/.venv`** (create with **`python3 -m venv "$MPA_PATH/.venv"`** if missing). Full bootstrap and verification: **[SKILL.md](../skill/SKILL.md)** **Python dependencies**.
 
 ```bash
-pipx install eth-account
-pipx inject eth-account PyNaCl
+"$MPA_PATH/.venv/bin/pip" install eth-account PyNaCl
 ```
 
 - **`eth_account`** brings **`eth_abi`** / **`eth_utils`** for ABI encoding and optional EIP-191 signing.
@@ -87,13 +86,13 @@ Each **compose action** object:
 
 ```bash
 # From file
-python3 "$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py" --file compose.json --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py" --file compose.json --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
 
 # Stdin
-cat compose.json | python3 "$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py" --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
+cat compose.json | "$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py" --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
 
 # Override key gen id without editing JSON
-python3 "$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py" --file compose.json \
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py" --file compose.json \
   --key-gen-id KeyGen20260111003720999cf104d0f \
   --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
 ```
@@ -165,7 +164,7 @@ The script matches **`continuumdao-node-app`** **`handleComposeOK`** behavior:
 
 ## Checklist for the agent
 
-- [ ] Install deps in pipx: **`pipx install eth-account`** then **`pipx inject eth-account PyNaCl`**.
+- [ ] Install deps in **`$MPA_PATH/.venv`**: **`"$MPA_PATH/.venv/bin/pip" install eth-account PyNaCl`** (see **[SKILL.md](../skill/SKILL.md)** **Python dependencies**).
 - [ ] Compose JSON includes **`keyGenId`**, **`destinationChainId`**, and at least one **`composeActions`** entry with valid **`signature`**, **`destinationContract`**, and **`inputs`**.
 - [ ] Either set **`rpcGateway`** in JSON or ensure the chain exists on the node with an RPC in **Configure blockchains** (for **`getChainDetails`**).
 - [ ] Run the script with **`--mpc-auth-url`** pointing at **ManagementAPIsPort**.

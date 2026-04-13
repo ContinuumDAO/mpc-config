@@ -8,9 +8,9 @@ Supports common formats:
   - OpenSSH (ssh-keygen): -----BEGIN OPENSSH PRIVATE KEY-----
   - PEM PKCS#8: openssl genpkey -algorithm ED25519
 
-Requires: pip install cryptography
+Requires: cryptography (e.g. install in ``$MPA_PATH/.venv`` with ``pip install cryptography``; see ``docs/skill/SKILL.md`` **Python dependencies**).
 
-  python3 tools/ed25519_private_to_pubkey_hex.py ~/.ssh/mpc_auth_ed25519
+  $MPA_PATH/.venv/bin/python tools/ed25519_private_to_pubkey_hex.py ~/.ssh/mpc_auth_ed25519
   python3 tools/ed25519_private_to_pubkey_hex.py key.pem --passphrase secret
 """
 
@@ -30,7 +30,11 @@ try:
         load_ssh_private_key,
     )
 except ImportError:
-    print("error: install cryptography: pip install cryptography", file=sys.stderr)
+    print(
+        "error: install cryptography: $MPA_PATH/.venv/bin/pip install cryptography "
+        "(see docs/skill/SKILL.md Python dependencies)",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 

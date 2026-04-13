@@ -1,7 +1,7 @@
 ---
 name: mpa-wallet
 description: Operate and automate threshold multisignature workflows for MPC/MPA wallets on an isolated, dedicated host that contains no unrelated sensitive data or private keys.
-version: 1.0.8
+version: 1.0.9
 metadata:
   openclaw:
     requires:
@@ -18,7 +18,7 @@ metadata:
         - forge
         - cast
         - python3
-        - pipx
+        - pip3
       config:
         - "$AUTH_KEY_PATH/mpc_auth_ed25519"
         - "$MPC_CONFIG_PATH"
@@ -145,13 +145,30 @@ Base URL for a co-located node: **`$MPC_AUTH_URL:$MANAGEMENT_PORT`** (see `confi
 
 ### Python dependencies
 
-Use **[pipx](https://github.com/pypa/pipx)** for installing these packages (not **`pip`** / **`pip3`** on the system interpreter). Install **`pipx`** once per host if needed (see the pipx docs). PyPI names use hyphens where applicable (**`eth-account`** installs the **`eth_account`** import).
+Use a **dedicated virtual environment** under **`$MPA_PATH/.venv`** (with the default **`MPA_PATH`**, that is **`~/.mpa/.venv`**). Install packages **into that venv** with **`pip`** from the venv (e.g. **`$MPA_PATH/.venv/bin/pip install …`**) or after **`source $MPA_PATH/.venv/bin/activate`** — **not** with bare **`pip3`** on the system interpreter. PyPI names use hyphens where applicable (**`eth-account`** installs the **`eth_account`** import).
 
-1. **Base (all signing scripts in `$MPA_PATH/scripts`):** `pipx install eth-account` — pulls **`rlp`**, **`eth_utils`**, **`hexbytes`**, etc., needed by **`generateSignRequestWithFoundryScript.py`**, **`generateMultiSignRequestFromCompose.py`**, **`multiSignJoin.py`**, and **`executeSignResult.py`**.
-2. **Compose + recipes:** `pipx inject eth-account PyNaCl` — only **`generateMultiSignRequestFromCompose.py`** and **`recipes/*.py`** need **`PyNaCl`** (optional Ed25519 fields on payloads). Skip this inject if you use **only** the Forge helper, **`multiSignJoin`**, or **`executeSignResult`**.
-3. **KeyGen inbox poll + event listener:** `pipx inject eth-account cryptography` — satisfies **`keygen_messaging_agent_poll.py`** and **`mpc_event_listener.py`** (same minimum as **`$MPA_PATH/scripts/requirements-keygen-agent.txt`**). Alternatively, if your **`pipx`** supports it: `pipx inject eth-account -r $MPA_PATH/scripts/requirements-keygen-agent.txt`.
+**Bootstrap once** (if **`$MPA_PATH/.venv`** does not exist):
 
-**Run scripts** with the Python interpreter from the pipx venv for **`eth-account`** (paths vary by OS; **`pipx list`** shows each app’s venv). Example on many Linux installs: **`~/.local/pipx/venvs/eth-account/bin/python $MPA_PATH/scripts/generateSignRequestWithFoundryScript.py ...`**. Plain **`python3 ...`** only works if that environment is the one on your **`PATH`**.
+```bash
+python3 -m venv "$MPA_PATH/.venv"
+```
+
+Then install into the venv:
+
+1. **Base (all signing scripts in `$MPA_PATH/scripts`):** **`$MPA_PATH/.venv/bin/pip install eth-account`** — pulls **`rlp`**, **`eth_utils`**, **`hexbytes`**, etc., needed by **`generateSignRequestWithFoundryScript.py`**, **`generateMultiSignRequestFromCompose.py`**, **`multiSignJoin.py`**, and **`executeSignResult.py`**.
+2. **Compose + recipes:** **`$MPA_PATH/.venv/bin/pip install PyNaCl`** — only **`generateMultiSignRequestFromCompose.py`** and **`recipes/*.py`** need **`PyNaCl`** (optional Ed25519 fields on payloads). Skip if you use **only** the Forge helper, **`multiSignJoin`**, or **`executeSignResult`**.
+3. **KeyGen inbox poll + event listener:** **`$MPA_PATH/.venv/bin/pip install cryptography`** — satisfies **`keygen_messaging_agent_poll.py`** and **`mpc_event_listener.py`** (same minimum as **`$MPA_PATH/scripts/requirements-keygen-agent.txt`**). Alternatively: **`$MPA_PATH/.venv/bin/pip install -r $MPA_PATH/scripts/requirements-keygen-agent.txt`**.
+
+**Verify packages** before running helpers (agents should check the venv, not the system **`python3`**):
+
+```bash
+"$MPA_PATH/.venv/bin/pip" show eth-account PyNaCl cryptography 2>/dev/null | grep -E '^Name:|^Version:'
+"$MPA_PATH/.venv/bin/python" -c "import eth_account; import nacl; import cryptography"
+```
+
+(Adjust the **`import`** line if optional packages were skipped — e.g. omit **`nacl`** / **`cryptography`** when not installed.)
+
+**Run scripts** with **`$MPA_PATH/.venv/bin/python`** — for example **`$MPA_PATH/.venv/bin/python $MPA_PATH/scripts/generateSignRequestWithFoundryScript.py ...`**. Plain **`python3 ...`** only works if your shell’s **`PATH`** puts that venv first (prefer the explicit venv **`python`** path in automation).
 
 ### KeyGen inbox poll (`@agent`)
 
@@ -159,8 +176,8 @@ To **notice unread channel messages directed at the agent** without manual **`GE
 
 **Ask the operator once** whether they want scheduled polling (and where: e.g. Open Claw cron) **before** you add or change a timer. **If they want a schedule, ask which period** from the fixed set: **every 1, 5, 10, 30, 60 minutes** or **every 2, 4, 6, 8, 10, 12, 24 hours**. Use **`$MPA_PATH/scripts/mpc_cron_schedules.py`** (**`--interactive`** on a TTY, or plain output for the table) to map the choice to Open Claw **`--every`** and crontab. Do **not** assume background polling: some setups only use ad-hoc **`GET /listMessages`** / **`getMessageThread`**, and the script **marks matched messages read**. If they already declined, a cron entry already exists, or they explicitly asked you to wire the poll, skip re-asking.
 
-1. **Once:** install **`cryptography`** into the pipx **`eth-account`** environment (**`pipx inject eth-account cryptography`** — see **[Python dependencies](#python-dependencies)**).
-2. **Run:** the venv **`python`** for **`eth-account`** with **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** (and **`KEYGEN_ID`** set; **`AUTH_KEY_PATH`** / **`MPC_AUTH_URL`** if not defaults). **`--dry-run`** lists matching unread messages without calling **`multiMarkMessagesRead`**.
+1. **Once:** install **`cryptography`** into **`$MPA_PATH/.venv`** (see **[Python dependencies](#python-dependencies)**).
+2. **Run:** **`$MPA_PATH/.venv/bin/python`** with **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** (and **`KEYGEN_ID`** set; **`AUTH_KEY_PATH`** / **`MPC_AUTH_URL`** if not defaults). **`--dry-run`** lists matching unread messages without calling **`multiMarkMessagesRead`**.
 3. **Output:** one JSON line: **`matches`**, **`match_count`**, **`marked_ids`**. The script marks matched messages read so the next poll does not repeat them.
 4. **After a non-empty `matches`:** interpret the thread, decide what to do, and reply with **`POST /sendMessage`** (management-signed; **`$MPA_PATH/references/API_KEYGEN_MESSAGING.md`**). Humans can **`@agent`** in title or body to target the agent.
 
@@ -177,8 +194,8 @@ Use **`$MPA_PATH/scripts/mpc_event_listener.py`** when a **single** cron (or tim
 3. **Build tx intent**: for common flows, prefer **[recipes](#recipes-thin-cli-wrappers)** (**`linea_register.py`**, **`linea_fee_deposit.py`**, **`erc20_transfer.py`**, **`native_transfer.py`**, **`ctmerc20_transfer.py`**, **`ctmrwa1_transfer_whole.py`**, **`ctmrwa1_transfer_partial.py`**) which wrap **`generateMultiSignRequestFromCompose`** and use **`GET /getChainDetails`** when **`rpcGateway`** is omitted. Otherwise: run **`forge script … --sender <MPC address>`** → `broadcast/.../run-latest.json` and feed **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** to build JSON for **`POST /multiSignRequest`** (see **`$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md`**), **or** build **Compose-style** JSON (function signature + parameters) and run **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** (see **`$MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**). When you need **two** such payloads (e.g. ERC-20 transfer then a second call) as **one** proposal with **one** agree/trigger cycle, run **`$MPA_PATH/scripts/multiSignJoin.py`** with **`--a`**, **`--b`**, and **`--first-nonce`** set to the MPC wallet’s **EVM** nonce on that chain (**`cast nonce <MPC> --rpc-url $RPC`**)—see [multiSignJoin](#multisignjoin-merge-two-multisignrequest-json-files). Include a concise **`Purpose`** (≤256 chars).
 4. **Agree**: each node **`POST /signRequestAgree`** (accept/reject); optional **`Thoughts`** per node to guide the agent (e.g. to **`POST /shelveSignRequest`** and revise).
 5. **Approval gate (recommended default):** require explicit human approval in KeyGen messaging before `POST /triggerSignRequestById`.
-6. **Trigger & sign**: after approval, when **`/isSignRequestReadyById`** is true, **`POST /triggerSignRequestById`**; poll **`GET /getSignResultById`** until signatures exist.
-7. **Execute**: require explicit human approval before broadcast, then send tx(s) with sufficient gas/credit. Prefer **`$MPA_PATH/scripts/executeSignResult.py`**: it loads **`GET /getSignResultById`** (and **`GET /getSignRequestById`** for **`msgRaw` / `messageRawBatch`**), resolves RPC from **`--rpc-url`** or **`GET /getChainDetails`**, submits **`eth_sendRawTransaction`**, and by default sends each tx **sequentially** and waits for receipts; pass **`--fast`** to confirm batched txs **concurrently**. Then **`POST /updateSignResultStatusById`** with **`executed`** and **`transactionHash`** (or batch hashes).
+6. **Trigger & sign**: after approval, when the request is ready to trigger, **`POST /triggerSignRequestById`**; poll **`GET /getSignResultById`** until signatures exist. **Readiness:** prefer **`$MPA_PATH/scripts/checkSignRequestReady.py`** (stdlib-only; uses **`getSignRequestById`**, **`getKeyGenResultById`**, **`getSignResultById`**) instead of **`GET /isSignRequestReadyById`** until the node runs a fixed **mpc-auth** build. After upgrade, **`/isSignRequestReadyById`** may be used again.
+7. **Execute**: require explicit human approval before broadcast, then send tx(s) with sufficient gas/credit. Prefer **`$MPA_PATH/scripts/executeSignResult.py`**: it uses **`GET /getSignResultById`** for signatures; **unsigned transaction hex** may appear on that response as **`msgRaw`**, **`messageRaw`**, **`MessageRaw`**, or **`messageRawBatch`** (the script prefers those). If the sign result omits them or **`DestinationChainID`**, it calls **`GET /getSignRequestById`** for the missing fields. RPC comes from **`--rpc-url`** or **`GET /getChainDetails`**, then **`eth_sendRawTransaction`**; by default each tx is sent **sequentially** with receipt waits; pass **`--fast`** to confirm batched txs **concurrently**. Then **`POST /updateSignResultStatusById`** with **`executed`** and **`transactionHash`** (or batch hashes).
 8. **Report**: **`POST /sendMessage`** summarizing what was done and what to expect.
 9. **Context**: for future spends, use **messages** plus **`Purpose` / `Thoughts`** on sign results (**`GET /listSignResults`**, **`GET /getSignRequestById`** / **`getSignResultById`**).
 
@@ -322,13 +339,13 @@ Use **`$MPA_PATH/scripts/multiSignJoin.py`** when you already have **two** JSON 
 - **Gas / fees:** values are **preserved** from each input’s unsigned tx (whatever the recipe or Foundry helper embedded). **`multiSignJoin`** only adjusts nonces and recomputes signing hashes; it does **not** re-estimate gas or fees.
 - **Output:** a **batch-shaped** body (**`messageHashes`**, **`messageRawBatch`**, **`extraJSON.batchMeta`**) when the merged count is at least two (or when either input was already a batch). Add **`clientSig`** to the merged JSON, then **`POST /multiSignRequest`** as usual.
 
-**Example:** The commands below use **`python3`**; that only works if the **`eth-account`** pipx venv is the **`python3`** on your **`PATH`**. Otherwise use that venv’s **`python`** path (see **`pipx list`** and **[Python dependencies](#python-dependencies)**).
+**Example:** Prefer **`$MPA_PATH/.venv/bin/python`** so imports resolve to the venv (see **[Python dependencies](#python-dependencies)**). Plain **`python3`** only works if it is that interpreter.
 
 ```bash
-python3 "$RECIPES/erc20_transfer.py" ... > /tmp/a.json
-python3 "$RECIPES/ctmerc20_transfer.py" ... > /tmp/b.json
+"$MPA_PATH/.venv/bin/python" "$RECIPES/erc20_transfer.py" ... > /tmp/a.json
+"$MPA_PATH/.venv/bin/python" "$RECIPES/ctmerc20_transfer.py" ... > /tmp/b.json
 NONCE=$(cast nonce "$WALLET_ADDRESS" --rpc-url "$RPC")
-python3 "$MPA_PATH/scripts/multiSignJoin.py" --a /tmp/a.json --b /tmp/b.json --first-nonce "$NONCE"
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/multiSignJoin.py" --a /tmp/a.json --b /tmp/b.json --first-nonce "$NONCE"
 ```
 
 **Common mistakes**
@@ -343,14 +360,15 @@ python3 "$MPA_PATH/scripts/multiSignJoin.py" --a /tmp/a.json --b /tmp/b.json --f
 ## Scripts
 
 **Location:** These are python scripts for API automation that live in **`$MPA_PATH/scripts/`**.
-**Dependencies:** (**[Python dependencies](#python-dependencies)** — **`pipx install eth-account`** then **`pipx inject eth-account PyNaCl`**). **`eth_account`** is required for all scripts.
+**Dependencies:** (**[Python dependencies](#python-dependencies)** — **`$MPA_PATH/.venv/bin/pip install eth-account`**, then **`PyNaCl`** when using compose/recipes). **`eth_account`** is required for all scripts **except** **`checkSignRequestReady.py`** (stdlib only).
 
 | Location | Use |
 |----------|-----|
+| `checkSignRequestReady.py` | Client-side “ready to **`POST /triggerSignRequestById`**” for multi-agree (replaces **`/isSignRequestReadyById`** on older nodes). |
 | `generateSignRequestWithFoundryScript.py` | Forge broadcast JSON → **`multiSignRequest`** JSON helper. |
 | `generateMultiSignRequestFromCompose.py` | Compose-style JSON (function + args) → **`multiSignRequest`** body / **`messageToSign`**. Requires **`PyNaCl`**. |
 | `multiSignJoin.py` | Two recipe/helper JSON outputs → **one** batch **`multiSignRequest`**; **`--first-nonce`** = EVM **`cast nonce`**; same chain only; preserves gas/fees from inputs. See [multiSignJoin](#multisignjoin-merge-two-multisignrequest-json-files). |
-| `executeSignResult.py` | After **`getSignResultById`**: build signed raw txs and broadcast (sequential by default; **`--fast`** for parallel confirm). |
+| `executeSignResult.py` | After **`getSignResultById`**: build signed raw txs and broadcast; prefers **`msgRaw` / `messageRaw` / `MessageRaw` / `messageRawBatch`** on the sign result, else **`getSignRequestById`** (sequential by default; **`--fast`** for parallel confirm). |
 | `keygen_messaging_agent_poll.py` | Poll KeyGen messaging for unread items that mention the agent, then mark them read. |
 | `mpc_event_listener.py` | Optional composed handlers (KeyGen poll, sign-ready trigger+execute); schedule one script for multiple event types. |
 | `mpc_cron_schedules.py` | Maps selectable poll periods (1–60 min, 2–24 h) to Open Claw `--every` and crontab. |
@@ -358,7 +376,7 @@ python3 "$MPA_PATH/scripts/multiSignJoin.py" --a /tmp/a.json --b /tmp/b.json --f
 ## Recipes
 
 **Location:** These are thin CLI wrappers that live in **`$MPA_PATH/recipes/`**. They call **`generateMultiSignRequestFromCompose`** internally: **`GET /getKeyGenResultById`**, **`GET /getChainDetails`** (when **`rpcGateway`** is not overridden), then JSON-RPC for nonce / gas / fees.
-**Dependencies:** same as **`generateMultiSignRequestFromCompose.py`** (**[Python dependencies](#python-dependencies)** — **`pipx install eth-account`** then **`pipx inject eth-account PyNaCl`**).
+**Dependencies:** same as **`generateMultiSignRequestFromCompose.py`** (**[Python dependencies](#python-dependencies)** — **`eth-account`** and **`PyNaCl`** in **`$MPA_PATH/.venv`**).
 **Output:** JSON with **`bodyForSign`**, **`messageToSign`**; add **`clientSig`** and **`signedMessage`** (see **`messageToSign`, `signedMessage`, and the POST body** above) before **`POST /multiSignRequest`**; optional **`--ed25519-seed-hex`** / **`--eip191-private-key-hex`** to emit ready-to-POST **`postBody`**.
 
 | Script | Use |
@@ -371,16 +389,16 @@ python3 "$MPA_PATH/scripts/multiSignJoin.py" --a /tmp/a.json --b /tmp/b.json --f
 | **`ctmrwa1_transfer_whole.py`** | CTMRWA1 **`transferWholeTokenX`** (whole **`fromTokenId`**); **`--from`**, **`--to`**, **`--from-token-id`**, **`--id`**, **`--version`**, **`--fee-token-str`**, optional **`--to-chain-id`**. |
 | **`ctmrwa1_transfer_partial.py`** | CTMRWA1 **`transferPartialTokenX`** (partial fungible **`value`**); **`--from-token-id`**, **`--to`**, **`--value`** / **`--value-unit`**, **`--id`**, **`--version`**, **`--fee-token-str`**, optional **`--to-chain-id`**. |
 
-**Example:** Same **`python3`** note as in the [multiSignJoin](#multisignjoin-merge-two-multisignrequest-json-files) example: **`python3`** must resolve to the **`eth-account`** pipx environment (see **[Python dependencies](#python-dependencies)**). Otherwise use the venv **`python`** from **`pipx list`**.
+**Example:** Use **`$MPA_PATH/.venv/bin/python`** like the [multiSignJoin](#multisignjoin-merge-two-multisignrequest-json-files) example (see **[Python dependencies](#python-dependencies)**).
 
 ```bash
-python3 "$MPA_PATH/recipes/linea_register.py" --key-gen-id "$KEYGEN_ID" --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
-python3 "$MPA_PATH/recipes/linea_fee_deposit.py" --key-gen-id "$KEYGEN_ID" --amount-wei 1000000000000000000 --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
-python3 "$MPA_PATH/recipes/erc20_transfer.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --to 0x... --amount 1 --amount-unit Ether
-python3 "$MPA_PATH/recipes/native_transfer.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --to 0x... --amount 0.01 --amount-unit Ether
-python3 "$MPA_PATH/recipes/ctmerc20_transfer.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --to 0x... --amount 100 --amount-unit Wei --to-chain-id 1
-python3 "$MPA_PATH/recipes/ctmrwa1_transfer_whole.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --from 0x... --to 0x... --from-token-id 1 --id 42 --version 1 --fee-token-str 0x...
-python3 "$MPA_PATH/recipes/ctmrwa1_transfer_partial.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --from-token-id 1 --to 0x... --value 1 --value-unit Ether --id 42 --version 1 --fee-token-str 0x...
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/linea_register.py" --key-gen-id "$KEYGEN_ID" --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/linea_fee_deposit.py" --key-gen-id "$KEYGEN_ID" --amount-wei 1000000000000000000 --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/erc20_transfer.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --to 0x... --amount 1 --amount-unit Ether
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/native_transfer.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --to 0x... --amount 0.01 --amount-unit Ether
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/ctmerc20_transfer.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --to 0x... --amount 100 --amount-unit Wei --to-chain-id 1
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/ctmrwa1_transfer_whole.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --from 0x... --to 0x... --from-token-id 1 --id 42 --version 1 --fee-token-str 0x...
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/ctmrwa1_transfer_partial.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --from-token-id 1 --to 0x... --value 1 --value-unit Ether --id 42 --version 1 --fee-token-str 0x...
 ```
 
 ## References (bundled snapshots)

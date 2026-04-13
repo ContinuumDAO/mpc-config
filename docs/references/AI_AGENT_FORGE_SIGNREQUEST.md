@@ -75,9 +75,10 @@ Use when the node uses an Ethereum address as the management key (e.g. MetaMask)
 
 **Location:** `$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`.
 
-**Dependency:**
+**Dependency:** Install **`eth-account`** into **`$MPA_PATH/.venv`** and run the helper with **`$MPA_PATH/.venv/bin/python`** (bootstrap: **`python3 -m venv "$MPA_PATH/.venv"`** if the directory does not exist). Full package list and verification: **[SKILL.md](../skill/SKILL.md)** **Python dependencies**.
+
 ```bash
-pipx install eth-account
+"$MPA_PATH/.venv/bin/pip" install eth-account
 ```
 
 **Input:** Foundry broadcast JSON (see “Where does the JSON come from?” below).
@@ -87,19 +88,19 @@ pipx install eth-account
 **Read from stdin:**
 ```bash
 cat broadcast/MyScript.s.sol/11155111/run-latest.json | \
-  python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen20260111003720999cf104d0f
+  "$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen20260111003720999cf104d0f
 ```
 
 **Read from file:**
 ```bash
-python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" \
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" \
   --key-gen-id=KeyGen20260111003720999cf104d0f \
   --file=broadcast/MyScript.s.sol/11155111/run-latest.json
 ```
 
 **Common overrides (chain, purpose, API):**
 ```bash
-python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen... --file=... \
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen... --file=... \
   --destination-chain-id=11155111 \
   --purpose="Deploy and configure contract" \
   --mpc-auth-url="$MPC_AUTH_URL:$MANAGEMENT_PORT"
@@ -115,7 +116,7 @@ python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id
 Example: broadcast from another key, sign with the KeyGen address and current nonce `5`:
 
 ```bash
-python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen... \
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen... \
   --override-sender=0xYourKeyGenAddress --first-nonce=5 \
   < broadcast/.../run-latest.json
 ```
@@ -132,7 +133,7 @@ python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id
 Example: dry-run JSON with no fees, EIP-1559 and fresh sender/nonce:
 
 ```bash
-python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen... \
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen... \
   --is-eip1559 --base-fee-gwei=30 --priority-fee-gwei=2 \
   --first-nonce=0 --override-sender=0xYourKeyGen \
   < broadcast/.../run-latest.json
@@ -177,7 +178,7 @@ The script expects **Foundry broadcast JSON** with a `transactions` array. Typic
 2. **Forge script with JSON output**  
    If your Foundry version writes broadcast-style JSON to stdout when using `--json`, you can pipe it (still **without** `--broadcast`, **with** `--sender` and **`--rpc-url`** as needed):
    ```bash
-   forge script script/MyScript.s.sol --rpc-url https://... --sender 0x... --json 2>/dev/null | python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py"
+   forge script script/MyScript.s.sol --rpc-url https://... --sender 0x... --json 2>/dev/null | "$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py"
    ```
    (Adjust flags if your Foundry version uses a different way to emit JSON.)
 
@@ -222,7 +223,7 @@ Foundry writes **`broadcast/LineaFeeApproveDeposit.s.sol/59144/dry-run/run-lates
 **2. Build `multiSignRequest` JSON** (repo root; **`--key-gen-id`** and **`--mpc-auth-url`** as elsewhere in this doc):
 
 ```bash
-python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" \
+"$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" \
   --key-gen-id=KeyGen... \
   --mpc-auth-url="$MPC_AUTH_URL:$MANAGEMENT_PORT" \
   --file=forge/broadcast/LineaFeeApproveDeposit.s.sol/59144/dry-run/run-latest.json \

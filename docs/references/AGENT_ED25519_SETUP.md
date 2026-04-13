@@ -23,7 +23,7 @@ python3 "$MPA_PATH/tools/openssh_ed25519_to_hex.py" ~/.ssh/id_ed25519.pub
 # or: echo 'ssh-ed25519 AAAA…' | python3 "$MPA_PATH/tools/openssh_ed25519_to_hex.py"
 ```
 
-**`process_config.sh`** (same repo) can also prompt for or normalize **`PublicMgtKey`** from OpenSSH / base64 when you run it interactively or when the value is already in **`configs.yaml`**. For a **private** key file (PEM / OpenSSH), use **`$MPA_PATH/tools/ed25519_private_to_pubkey_hex.py`** (`pipx inject eth-account cryptography`).
+**`process_config.sh`** (same repo) can also prompt for or normalize **`PublicMgtKey`** from OpenSSH / base64 when you run it interactively or when the value is already in **`configs.yaml`**. For a **private** key file (PEM / OpenSSH), use **`$MPA_PATH/tools/ed25519_private_to_pubkey_hex.py`**: it needs **`cryptography`** in **`$MPA_PATH/.venv`** — e.g. **`$MPA_PATH/.venv/bin/pip install cryptography`**, then **`$MPA_PATH/.venv/bin/python "$MPA_PATH/tools/ed25519_private_to_pubkey_hex.py" …`** (see **[SKILL.md](../skill/SKILL.md)** **Python dependencies**).
 
 How you generate the bootstrap keypair is otherwise up to you. The important part is: **you end up with a 64-hex Ed25519 public key** for `PublicMgtKey`, and you keep the corresponding private key somewhere safe for signing (human helper or the agent).
 
@@ -228,7 +228,7 @@ To react when someone `@mentions` the agent in the KeyGen channel, use **Open Cl
 
 **Poll helper in this repo:** `$MPA_PATH/scripts/keygen_messaging_agent_poll.py`
 
-1. Install deps once: `pipx install eth-account && pipx inject eth-account cryptography` (or `pipx inject eth-account -r $MPA_PATH/scripts/requirements-keygen-agent.txt` when supported).
+1. Install deps once: create **`$MPA_PATH/.venv`** if needed (`python3 -m venv "$MPA_PATH/.venv"`), then `"$MPA_PATH/.venv/bin/pip" install eth-account cryptography` (or `"$MPA_PATH/.venv/bin/pip" install -r "$MPA_PATH/scripts/requirements-keygen-agent.txt"`). See **[SKILL.md](../skill/SKILL.md)** **Python dependencies**.
 2. Export at least **`KEYGEN_ID`**, **`MPC_AUTH_URL`** (host-only, e.g. `http://127.0.0.1`), and **`MANAGEMENT_PORT`** so the API base URL is always `$MPC_AUTH_URL:$MANAGEMENT_PORT`. The script loads the Ed25519 management key from **`AUTH_KEY_PATH`** (default `~/.ssh/mpc_auth_ed25519`) or optional **`MPC_MGT_ED25519_SEED_HEX`**.
 3. The script prints one JSON line: `matches` (unread messages whose title/body match `@agent` by default), then calls `POST /multiMarkMessagesRead` so the next poll skips handled items. Use `--dry-run` to inspect without marking read.
 
@@ -238,7 +238,7 @@ To react when someone `@mentions` the agent in the KeyGen channel, use **Open Cl
 
 ```bash
 openclaw cron add --name "keygen-agent-inbox" --every "5m" --session isolated \
-  --message "Run: python3 $MPA_PATH/scripts/keygen_messaging_agent_poll.py. Parse the one JSON line on stdout. If match_count > 0, reply via POST /sendMessage (Nonce, Sig, keyGenId, title or replyTo+body; see API_KEYGEN_MESSAGING.md). Body max 512 chars." \
+  --message "Run: $MPA_PATH/.venv/bin/python $MPA_PATH/scripts/keygen_messaging_agent_poll.py. Parse the one JSON line on stdout. If match_count > 0, reply via POST /sendMessage (Nonce, Sig, keyGenId, title or replyTo+body; see API_KEYGEN_MESSAGING.md). Body max 512 chars." \
   --tools "exec,read"
 ```
 

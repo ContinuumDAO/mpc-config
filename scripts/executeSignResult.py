@@ -5,8 +5,10 @@ executeSignResult
 Broadcast EVM transactions from a **successful** MPC sign result (after
 ``POST /triggerSignRequestById`` and ``GET /getSignResultById``).
 
-Loads ``messageRaw`` / ``messageRawBatch`` from ``GET /getSignRequestById`` (or a JSON file)
-and signatures from ``GET /getSignResultById`` (or a JSON file). Builds signed raw
+Loads unsigned transaction hex from ``GET /getSignResultById`` when present
+(``msgRaw`` / ``messageRaw`` / ``MessageRaw`` / ``messageRawBatch``), otherwise from
+``GET /getSignRequestById`` (or JSON files). Loads signatures from the sign result.
+Builds signed raw
 transactions with ``eth_account`` and submits ``eth_sendRawTransaction`` on ``--rpc-url``
 or the node's ``GET /getChainDetails`` RPC for ``DestinationChainID``.
 
@@ -17,20 +19,20 @@ or the node's ``GET /getChainDetails`` RPC for ``DestinationChainID``.
 - **``--fast``:** submit and wait for receipts **concurrently** (one thread per transaction).
   Works for batched txs with consecutive nonces because the mempool orders by nonce.
 
-Requires **eth_account** and **rlp** (``pip install eth_account``).
+Requires **eth_account** and **rlp** (install into ``$MPA_PATH/.venv``; see ``docs/skill/SKILL.md`` **Python dependencies**).
 
 Examples::
 
-  python3 scripts/executeSignResult.py \\
+  $MPA_PATH/.venv/bin/python scripts/executeSignResult.py \\
     --sign-request-id Sign20260111003720999cf104d0f \\
     --mpc-auth-url http://127.0.0.1 --management-port 8080
 
-  python3 scripts/executeSignResult.py \\
+  $MPA_PATH/.venv/bin/python scripts/executeSignResult.py \\
     --sign-result-file /tmp/result.json \\
     --sign-request-file /tmp/request.json \\
     --rpc-url https://linea-mainnet.g.alchemy.com/v2/SECRET
 
-  python3 scripts/executeSignResult.py --sign-request-id ... --mpc-auth-url ... --fast
+  $MPA_PATH/.venv/bin/python scripts/executeSignResult.py --sign-request-id ... --mpc-auth-url ... --fast
 """
 
 from __future__ import annotations
@@ -430,14 +432,33 @@ def load_json_file(path: str) -> dict[str, Any]:
     return data
 
 
-def extract_message_raws(sign_body: dict[str, Any]) -> list[str]:
-    batch = sign_body.get("messageRawBatch") or sign_body.get("message_raw_batch")
+def _message_raws_from_dict(d: dict[str, Any]) -> list[str] | None:
+    """Return unsigned tx hex list if *d* carries message fields; else None."""
+    batch = d.get("messageRawBatch") or d.get("message_raw_batch")
     if isinstance(batch, list) and len(batch) > 0:
         return [str(x) for x in batch]
-    single = sign_body.get("msgRaw") or sign_body.get("messageRaw") or sign_body.get("msg_raw")
+    single = pick_str(d, "msgRaw", "messageRaw", "msg_raw", "MessageRaw")
     if single is not None and str(single).strip():
         return [str(single).strip()]
-    raise ValueError("sign request has no msgRaw/messageRaw nor messageRawBatch")
+    return None
+
+
+def extract_message_raws(
+    sign_body: dict[str, Any] | None,
+    sign_result: dict[str, Any] | None = None,
+) -> list[str]:
+    """Prefer the sign result (API often echoes unsigned tx hex there), then the sign request."""
+    if sign_result is not None:
+        got = _message_raws_from_dict(sign_result)
+        if got is not None:
+            return got
+    if sign_body is not None:
+        got = _message_raws_from_dict(sign_body)
+        if got is not None:
+            return got
+    raise ValueError(
+        "No msgRaw/messageRaw/MessageRaw nor messageRawBatch on sign result or sign request."
+    )
 
 
 def extract_signatures(sign_data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -485,7 +506,8 @@ def main() -> None:
     ap.add_argument(
         "--sign-request-file",
         metavar="PATH",
-        help="JSON from getSignRequestById (or wrapper with body/bodyForSign); skips HTTP for the request",
+        help="JSON from getSignRequestById (or wrapper with body/bodyForSign); optional when the "
+        "sign result already includes msgRaw/messageRaw/MessageRaw/messageRawBatch and DestinationChainID",
     )
     ap.add_argument(
         "--rpc-url",
@@ -519,27 +541,36 @@ def main() -> None:
             raise SystemExit("error: --sign-request-id is required when not using --sign-result-file")
         sign_data = fetch_sign_result(mpc, request_id)
 
-    if not request_id and not args.sign_request_file:
-        raise SystemExit(
-            "error: cannot fetch sign request without --sign-request-id or requestid in --sign-result-file; "
-            "pass --sign-request-file or --sign-request-id"
-        )
-
     if not isinstance(sign_data, dict):
         raise SystemExit("sign result must be a JSON object")
 
     check_key_type(sign_data)
 
+    msg_on_result = _message_raws_from_dict(sign_data) is not None
+    dest_on_result = pick_str(sign_data, "DestinationChainID", "destinationChainID") is not None
+    can_skip_sign_request = msg_on_result and dest_on_result
+
+    if not request_id and not args.sign_request_file and not can_skip_sign_request:
+        raise SystemExit(
+            "error: need --sign-request-id (or requestid inside --sign-result-file) or --sign-request-file "
+            "when the sign result omits unsigned tx hex (msgRaw/messageRaw/MessageRaw/messageRawBatch) "
+            "or DestinationChainID."
+        )
+
+    sign_body: dict[str, Any] | None = None
     if args.sign_request_file:
         loaded = load_json_file(args.sign_request_file)
         raw_req = loaded.get("data") if isinstance(loaded.get("data"), dict) else loaded
         sign_body = unwrap_sign_body(raw_req if isinstance(raw_req, dict) else loaded)
-    else:
+    elif not can_skip_sign_request:
         if not request_id:
-            raise SystemExit("error: --sign-request-id is required when not using --sign-request-file")
+            raise SystemExit(
+                "error: --sign-request-id is required when the sign result lacks message raw or "
+                "destination chain and --sign-request-file is not set."
+            )
         sign_body = unwrap_sign_body(fetch_sign_request(mpc, request_id))
 
-    msg_raws = extract_message_raws(sign_body)
+    msg_raws = extract_message_raws(sign_body, sign_data)
     sigs = extract_signatures(sign_data)
     if len(msg_raws) != len(sigs):
         raise SystemExit(
@@ -549,7 +580,11 @@ def main() -> None:
 
     dest_chain = (
         pick_str(sign_data, "DestinationChainID", "destinationChainID")
-        or pick_str(sign_body, "destinationChainID", "destination_chain_id")
+        or (
+            pick_str(sign_body, "destinationChainID", "destination_chain_id")
+            if sign_body
+            else None
+        )
     )
     if dest_chain is None or str(dest_chain).strip() == "":
         raise SystemExit("Could not determine destination chain id from sign result or request.")
