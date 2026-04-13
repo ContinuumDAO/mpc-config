@@ -5,7 +5,7 @@ This document is for **AI agents** and **other programmatic automation** that tu
 ### Checklist (multiSignRequest)
 
 1. **Resolve** **`keyGenId`**, the MPC wallet **`from`** address, and the **management API base URL** for the node you call (e.g. **`GET /getKeyGenResultById`**, environment such as **`KEYGEN_ID`** / **`AUTH_KEY_PATH`**, port from **`configs.yaml`** or the operator).
-2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **this document** or **[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md](./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**.
+2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **this document** or **[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md](./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**.
 3. **Review** **`Purpose`** (≤256 characters) and transaction fields (chain id, calldata, gas, nonces) against group intent and messages.
 4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** requires for your deployment).
 5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → track peer responses → **`POST /triggerSignRequestById`** when ready → broadcast raw transactions → **`POST /updateSignResultStatusById`**. Narrative flow: **[instructions.md](./instructions.md)**.
@@ -73,11 +73,11 @@ Use when the node uses an Ethereum address as the management key (e.g. MetaMask)
 
 ## Python script
 
-**Location:** `scripts/generateSignRequestWithFoundryScript.py` in this repo.
+**Location:** `$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`.
 
-**Dependency:**  
+**Dependency:**
 ```bash
-pip install eth_account
+pipx install eth-account
 ```
 
 **Input:** Foundry broadcast JSON (see “Where does the JSON come from?” below).
@@ -87,19 +87,19 @@ pip install eth_account
 **Read from stdin:**
 ```bash
 cat broadcast/MyScript.s.sol/11155111/run-latest.json | \
-  python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen20260111003720999cf104d0f
+  python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen20260111003720999cf104d0f
 ```
 
 **Read from file:**
 ```bash
-python3 scripts/generateSignRequestWithFoundryScript.py \
+python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" \
   --key-gen-id=KeyGen20260111003720999cf104d0f \
   --file=broadcast/MyScript.s.sol/11155111/run-latest.json
 ```
 
 **Common overrides (chain, purpose, API):**
 ```bash
-python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... --file=... \
+python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen... --file=... \
   --destination-chain-id=11155111 \
   --purpose="Deploy and configure contract" \
   --mpc-auth-url=http://localhost:8080   # replace 8080 with ManagementAPIsPort from configs.yaml
@@ -115,7 +115,7 @@ python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... -
 Example: broadcast from another key, sign with the KeyGen address and current nonce `5`:
 
 ```bash
-python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... \
+python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen... \
   --override-sender=0xYourKeyGenAddress --first-nonce=5 \
   < broadcast/.../run-latest.json
 ```
@@ -132,7 +132,7 @@ python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... \
 Example: dry-run JSON with no fees, EIP-1559 and fresh sender/nonce:
 
 ```bash
-python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... \
+python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen... \
   --is-eip1559 --base-fee-gwei=30 --priority-fee-gwei=2 \
   --first-nonce=0 --override-sender=0xYourKeyGen \
   < broadcast/.../run-latest.json
@@ -177,7 +177,7 @@ The script expects **Foundry broadcast JSON** with a `transactions` array. Typic
 2. **Forge script with JSON output**  
    If your Foundry version writes broadcast-style JSON to stdout when using `--json`, you can pipe it (still **without** `--broadcast`, **with** `--sender` and **`--rpc-url`** as needed):
    ```bash
-   forge script script/MyScript.s.sol --rpc-url https://... --sender 0x... --json 2>/dev/null | python3 scripts/generateSignRequestWithFoundryScript.py
+   forge script script/MyScript.s.sol --rpc-url https://... --sender 0x... --json 2>/dev/null | python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py"
    ```
    (Adjust flags if your Foundry version uses a different way to emit JSON.)
 
@@ -222,7 +222,7 @@ Foundry writes **`broadcast/LineaFeeApproveDeposit.s.sol/59144/dry-run/run-lates
 **2. Build `multiSignRequest` JSON** (repo root; **`--key-gen-id`** and **`--mpc-auth-url`** as elsewhere in this doc):
 
 ```bash
-python3 scripts/generateSignRequestWithFoundryScript.py \
+python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" \
   --key-gen-id=KeyGen... \
   --mpc-auth-url=http://localhost:8080 \
   --file=forge/broadcast/LineaFeeApproveDeposit.s.sol/59144/dry-run/run-latest.json \
@@ -279,4 +279,4 @@ Use **`--override-sender`** / **`--first-nonce`** when the broadcast **`from`** 
 ## References
 
 - **API:** [API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md) in this folder (§ POST /multiSignRequest, GET /getSignResultById). **signRequest** is documented there for tx-check / relayer flows only.
-- **Batch design (supplement):** [MULTI_SIGNREQUEST_DESIGN.md](../internal/MULTI_SIGNREQUEST_DESIGN.md) — how batch **`messageHashes`** / **`messageRawBatch`** fits the protocol.
+- **Batch behavior:** See **Single vs batch** in this document and **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** (`POST /multiSignRequest`).

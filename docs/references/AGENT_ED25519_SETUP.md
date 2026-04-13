@@ -16,14 +16,14 @@ This doc describes how a **node owner** can set up their node so that an **AI ag
 
 The node needs **at least one** allowed Ed25519 management key to start with (the “bootstrap key”). This is provided via config as **`PublicMgtKey`**: the raw **32-byte Ed25519 public key** written as **64 lowercase hex characters** (no `0x` prefix). After that, you can add more keys (e.g. an agent key) via **`POST /addManagementKey`** without editing config again.
 
-**OpenSSH `.pub` format is not what mpc-auth stores**—if you only have a line like `ssh-ed25519 AAAA… comment` (or the **base64 middle field** alone), convert it first. In the **mpc-config** repo, **`tools/openssh_ed25519_to_hex.py`** (stdlib only) accepts the full line or the base64 blob and prints **64 hex** on stdout. Example (adjust path if you keep a symlink or copy of **`tools/`** next to the agent, e.g. under the agent’s home directory):
+**OpenSSH `.pub` format is not what mpc-auth stores**—if you only have a line like `ssh-ed25519 AAAA… comment` (or the **base64 middle field** alone), convert it first. In this bundle, **`$MPA_PATH/tools/openssh_ed25519_to_hex.py`** (stdlib only) accepts the full line or the base64 blob and prints **64 hex** on stdout.
 
 ```bash
-python3 /path/to/mpc-config/tools/openssh_ed25519_to_hex.py ~/.ssh/id_ed25519.pub
-# or: echo 'ssh-ed25519 AAAA…' | python3 …/openssh_ed25519_to_hex.py
+python3 "$MPA_PATH/tools/openssh_ed25519_to_hex.py" ~/.ssh/id_ed25519.pub
+# or: echo 'ssh-ed25519 AAAA…' | python3 "$MPA_PATH/tools/openssh_ed25519_to_hex.py"
 ```
 
-**`process_config.sh`** (same repo) can also prompt for or normalize **`PublicMgtKey`** from OpenSSH / base64 when you run it interactively or when the value is already in **`configs.yaml`**. For a **private** key file (PEM / OpenSSH), use **`tools/ed25519_private_to_pubkey_hex.py`** (`pip install cryptography`).
+**`process_config.sh`** (same repo) can also prompt for or normalize **`PublicMgtKey`** from OpenSSH / base64 when you run it interactively or when the value is already in **`configs.yaml`**. For a **private** key file (PEM / OpenSSH), use **`$MPA_PATH/tools/ed25519_private_to_pubkey_hex.py`** (`pipx inject eth-account cryptography`).
 
 How you generate the bootstrap keypair is otherwise up to you. The important part is: **you end up with a 64-hex Ed25519 public key** for `PublicMgtKey`, and you keep the corresponding private key somewhere safe for signing (human helper or the agent).
 
@@ -161,7 +161,7 @@ If the AI agent (or a signing helper) runs **on the same machine as the node**, 
 
 - **Path:** Use only **`~/.ssh/mpc_auth_ed25519`** for the private key (on your PC or the agent's machine). Configure the agent (or your helper) to read that path and sign the exact message string the backend expects.
 - **Key format:** The file at `~/.ssh/mpc_auth_ed25519` can be OpenSSH or PEM format. Sign the **exact** JSON message string (no EIP-191 wrapper) and output the signature as **128 hex characters**. The public key for `PublicMgtKey` is the same key, expressed as 64 hex.
-- **Human users (no copy-paste of key):** Use the **sign-clipboard** helper in `tools/sign-clipboard`: copy the message from the app, run the binary, then paste the 128-hex signature back into the app. See `tools/sign-clipboard/README.md`.
+- **Human users (no copy-paste of key):** Use the **sign-clipboard** helper in `$MPA_PATH/tools/sign-clipboard`: copy the message from the app, run the binary, then paste the 128-hex signature back into the app. See `$MPA_PATH/tools/sign-clipboard/README.md`.
 
 ## 8. Deploying the agent on the node VPS (e.g. Open Claw)
 
@@ -226,17 +226,17 @@ So the agent (e.g. Open Claw) should be configured with **node URL = `http://loc
 
 To react when someone `@mentions` the agent in the KeyGen channel, use **Open Claw’s Gateway cron** ([Scheduled Tasks / Cron](https://docs.openclaw.ai/cron)) with an **isolated** job whose prompt tells the agent to **run a small script** on the host, then **reply** with `POST /sendMessage` (management-signed) per [API_KEYGEN_MESSAGING.md](./API_KEYGEN_MESSAGING.md).
 
-**Poll helper in this repo:** `scripts/keygen_messaging_agent_poll.py`
+**Poll helper in this repo:** `$MPA_PATH/scripts/keygen_messaging_agent_poll.py`
 
-1. Install deps once: `pip install -r scripts/requirements-keygen-agent.txt`
-2. Export at least **`KEYGEN_ID`** (same as [SKILL.md](../skill/SKILL.md) / Open Claw skill) and, if needed, **`MPC_AUTH_URL`** for the management API (default `http://127.0.0.1:8080`). The script loads the Ed25519 management key from **`AUTH_KEY_PATH`** (default `~/.ssh/mpc_auth_ed25519`) or optional **`MPC_MGT_ED25519_SEED_HEX`**.
+1. Install deps once: `pipx install eth-account && pipx inject eth-account cryptography` (or `pipx inject eth-account -r $MPA_PATH/scripts/requirements-keygen-agent.txt` when supported).
+2. Export at least **`KEYGEN_ID`** and, if needed, **`MPC_AUTH_URL`** for the management API (default `http://127.0.0.1:8080`). The script loads the Ed25519 management key from **`AUTH_KEY_PATH`** (default `~/.ssh/mpc_auth_ed25519`) or optional **`MPC_MGT_ED25519_SEED_HEX`**.
 3. The script prints one JSON line: `matches` (unread messages whose title/body match `@agent` by default), then calls `POST /multiMarkMessagesRead` so the next poll skips handled items. Use `--dry-run` to inspect without marking read.
 
 **Example cron** (adjust paths and schedule; ensure the job may run `exec`). Keep `--message` on one line so the shell parses it reliably:
 
 ```bash
 openclaw cron add --name "keygen-agent-inbox" --every "3m" --session isolated \
-  --message "Run: python3 /home/ai-agent/mpc-config/scripts/keygen_messaging_agent_poll.py. Parse the one JSON line on stdout. If match_count > 0, reply via POST /sendMessage (Nonce, Sig, keyGenId, title or replyTo+body; see API_KEYGEN_MESSAGING.md). Body max 512 chars." \
+  --message "Run: python3 $MPA_PATH/scripts/keygen_messaging_agent_poll.py. Parse the one JSON line on stdout. If match_count > 0, reply via POST /sendMessage (Nonce, Sig, keyGenId, title or replyTo+body; see API_KEYGEN_MESSAGING.md). Body max 512 chars." \
   --tools "exec,read"
 ```
 

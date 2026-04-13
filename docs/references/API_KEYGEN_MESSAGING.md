@@ -3,6 +3,50 @@
 KeyGen messaging lets nodes in a keyGen (participants in that key’s `KeyList`) send and read short messages in a per-keyGen channel. 
 **Response format and general API conventions** (base URL, logging, `APIResponse` shape) follow the main [API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md).
 
+## Overview
+
+A simple messaging system between all nodes that participated in a given **keyGen** (identified by `keyGenId`, i.e. the KeyGen result’s `requestId`). Only nodes whose public key is in that keyGen’s `KeyList` can send and receive messages in that keyGen’s channel.
+
+---
+
+## Scope
+
+- **Scope**: Messages are scoped by **keyGen**, not by GroupId. Each keyGen has its own message channel; participants are the nodes in that keyGen’s `KeyList`.
+- **Participants**: Only nodes that are in the keyGen’s `KeyList` can list, send, read, and mark messages as read for that keyGen.
+
+---
+
+## Message Model
+
+### Message identity
+
+- **`id`**: Unique message identifier. **Recommended**: `SHA256(hex(node_public_key) || "." || canonical_timestamp)` encoded as hex, so that (sender + time) is collision-resistant and verifiable. Alternatively, a UUID if you prefer randomness over determinism.
+
+### Top-level vs reply
+
+- **Top-level message**: Has a **`title`** field (required). No `replyTo`.
+- **Reply**: Has **`replyTo`** set to the `id` of the message being replied to. No `title` (or `title` omitted/empty).
+
+### Content and metadata
+
+- **`body`** (or `content`): Plain text, **max 512 characters** (UTF-8).
+- **`senderNodeKey`**: Node public key (hex) of the sender. Must be in the keyGen’s `KeyList`.
+- **`keyGenId`**: KeyGen request/result id (same as KeyGen result’s `requestId`) this message belongs to.
+- **`createdAt`**: Timestamp when the message was created; **always UTC** (e.g. ISO8601 with Z or Unix ms).
+
+### Read receipts
+
+- **`read`**: Array of **read receipts**. Each receipt is:
+  - **`nodeKey`**: Node public key (hex) that read the message.
+  - **`signature`**: Signature over a canonical string (e.g. `messageId` or `messageId || keyGenId`) using that node’s **node client key**, so other nodes can verify that this node acknowledged reading.
+- When a node reads a message, it adds its receipt and **broadcasts the updated message (or just the new receipt)** to the other nodes in the keyGen so they can update their copy.
+
+### Deletion
+
+- **Only the message originator** (the node whose public key equals `senderNodeKey`) may delete a message. No other node can delete it.
+- When the originator deletes a message, **that message and all its replies** are deleted (the whole sub-tree: the message and every reply that has `replyTo` pointing to it or to any reply in that tree). Other messages in the keyGen are unchanged.
+- Deletion can be hard (remove from store) or soft (mark as deleted and omit from list/get). Either way, list and getMessageThread must not return deleted messages.
+
 ---
 
 ## Authorization
@@ -190,4 +234,4 @@ Soft-deletes **multiple** messages (and their reply trees). Only the **message o
 - **Message:** `id`, `keyGenId`, `senderNodeKey`, `title` (top-level only), `replyTo` (replies only), `body`, `createdAt` (UTC), `read` (array of read receipts). Deleted messages are omitted from list/get/thread.
 - **Read receipt:** `nodeKey`, `signature`, `signedAt` (UTC). Stored when a node marks a message read; optional client `signature` in the request.
 
-For full semantics (ids, threading depth, broadcast, etc.) see [KEYGEN_MESSAGING_SYSTEM.md](./KEYGEN_MESSAGING_SYSTEM.md).
+For full semantics (ids, threading depth, propagation, and auth conventions), see [API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md) and [AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md).
