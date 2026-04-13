@@ -58,6 +58,7 @@ from pathlib import Path
 from typing import Any, Union
 
 import rlp
+from rlp.exceptions import DecodingError
 
 from eth_account._utils.legacy_transactions import (
     encode_transaction,
@@ -658,15 +659,21 @@ def message_raw_hex_to_unsigned_dict(msg_raw: str) -> dict[str, Any]:
     raw = hex_to_bytes(s)
     if len(raw) == 0:
         raise ValueError("empty messageRaw")
-    if raw[0] == 0x02:
-        return _decode_type2_unsigned(raw)
-    if raw[0] == 0x01:
-        raise ValueError("executeSignResult: EIP-2930 type-1 transactions are not supported yet")
-    if raw[0] == 0x03:
-        raise ValueError("executeSignResult: blob (type-3) transactions are not supported yet")
-    if raw[0] == 0x04:
-        raise ValueError("executeSignResult: set-code (type-4) transactions are not supported yet")
-    return _decode_legacy_unsigned(raw)
+    try:
+        if raw[0] == 0x02:
+            return _decode_type2_unsigned(raw)
+        if raw[0] == 0x01:
+            raise ValueError("executeSignResult: EIP-2930 type-1 transactions are not supported yet")
+        if raw[0] == 0x03:
+            raise ValueError("executeSignResult: blob (type-3) transactions are not supported yet")
+        if raw[0] == 0x04:
+            raise ValueError("executeSignResult: set-code (type-4) transactions are not supported yet")
+        return _decode_legacy_unsigned(raw)
+    except DecodingError as e:
+        raise ValueError(
+            "messageRaw is not valid unsigned transaction RLP (calldata-only hex, truncated tx, "
+            f"or malformed RLP): {e}"
+        ) from e
 
 
 def _pick_sig_field(d: dict[str, Any], *names: str) -> Any:
