@@ -7,13 +7,15 @@ The Distributed Auth Management API provides a RESTful interface for managing MP
 ## Architecture
 
 ### Base URL
-- Default port: `8080` (configurable via `ManagementAPIsPort` in `configs.yaml`)
+- Management port: `ManagementAPIsPort` in `configs.yaml` (export as `MANAGEMENT_PORT`)
 - Base path: `/`
 - Swagger UI: `/swagger/index.html` (if docs are enabled)
+- Environment form for automation: `"$MPC_AUTH_URL:$MANAGEMENT_PORT"` where `MPC_AUTH_URL` is host-only (for example `http://127.0.0.1` or `http://<IP>`) and `MANAGEMENT_PORT` is numeric.
+- Many curl examples below use `$MPC_AUTH_URL:$MANAGEMENT_PORT` as a placeholder; replace with `"$MPC_AUTH_URL:$MANAGEMENT_PORT"` in real deployments.
 
 <a id="public-discovery-http"></a>
 ### Public discovery HTTP
-If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /health`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`8080`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
+If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /health`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`$MANAGEMENT_PORT`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
 
 **`GET /getPublicMgtKey`** returns the same Ed25519 public keys as the allow-list for management auth (config **`PublicMgtKey`** plus keys from **`POST /addManagementKey`**), as a JSON array of 64-hex strings (no labels). Issuers and apps can learn the public keys without reading `configs.yaml` or static Railway env maps.
 
@@ -263,10 +265,10 @@ Returns machine information (CPU, memory, disk, etc.). By default, returns cache
 **Examples:**
 ```bash
 # Get cached machine info from MongoDB (default)
-curl "http://localhost:8080/getMachineInfo"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getMachineInfo"
 
 # Refresh and fetch fresh machine info
-curl "http://localhost:8080/getMachineInfo?refresh=true"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getMachineInfo?refresh=true"
 ```
 
 **Notes:**
@@ -295,7 +297,7 @@ Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is sp
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getNodeKey"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeKey"
 curl "http://localhost:18080/getNodeKey"   # when PublicDiscoveryPort is split (e.g. 18080)
 ```
 
@@ -329,7 +331,7 @@ Returns node uptime statistics including first start date, last restart date, to
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getNodeUptime"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeUptime"
 ```
 
 **Notes:**
@@ -349,7 +351,7 @@ curl "http://localhost:8080/getNodeUptime"
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getNodeMgtKey"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKey"
 ```
 
 <a id="get-getnodemgtkeynonce"></a>
@@ -367,7 +369,7 @@ Returns the current nonce for the node management key. This nonce must be used (
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getNodeMgtKeyNonce"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKeyNonce"
 ```
 
 **Note:** After using a nonce, it will be incremented. Always fetch the current nonce before creating a signature.
@@ -407,7 +409,7 @@ or when a value is set but invalid:
 
 **Example:**
 ```bash
-curl "http://localhost:8080/hasPublicMgtKey"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/hasPublicMgtKey"
 ```
 
 <a id="get-getalloweded25519mgtkeys"></a>
@@ -428,7 +430,7 @@ Returns the list of Ed25519 public keys allowed for management API auth (config 
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getAllowedEd25519MgtKeys"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getAllowedEd25519MgtKeys"
 curl "http://localhost:18080/getAllowedEd25519MgtKeys"   # when PublicDiscoveryPort is split (e.g. 18080)
 ```
 
@@ -451,7 +453,7 @@ When no Ed25519 key is configured, `data` is `[]`.
 
 **Examples:**
 ```bash
-curl "http://localhost:8080/getPublicMgtKey"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPublicMgtKey"
 curl "http://localhost:18080/getPublicMgtKey"
 ```
 
@@ -473,8 +475,8 @@ Returns the current nonce for an Ed25519 management key. Optional query param `p
 
 **Examples:**
 ```bash
-curl "http://localhost:8080/getPublicMgtKeyNonce"
-curl "http://localhost:8080/getPublicMgtKeyNonce?publicKey=YOUR_64_HEX_KEY"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPublicMgtKeyNonce"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPublicMgtKeyNonce?publicKey=YOUR_64_HEX_KEY"
 ```
 
 <a id="post-verifymgtkey"></a>
@@ -535,7 +537,7 @@ Send the request body (without the `sig` field) that you want to sign. For examp
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8080/getMessageToSign \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/getMessageToSign \
   -H "Content-Type: application/json" \
   -d '{
     "nonce": 1,
@@ -570,13 +572,13 @@ You only need one. If both are configured, either signature type is accepted.
 
 1. **Get the NodeMgtKey and current nonce:**
    ```bash
-   curl http://localhost:8080/getNodeMgtKey
-   curl http://localhost:8080/getNodeMgtKeyNonce
+   curl $MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKey
+   curl $MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKeyNonce
    ```
 
 2. **Get the message to sign** (optional, but helpful):
    ```bash
-   curl -X POST http://localhost:8080/getMessageToSign \
+   curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/getMessageToSign \
      -H "Content-Type: application/json" \
      -d '{...your request body without "sig"...}'
    ```
@@ -599,7 +601,7 @@ You only need one. If both are configured, either signature type is accepted.
 
 4. **Include the signature in your API request:**
    ```bash
-   curl -X POST http://localhost:8080/keyGenRequest \
+   curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/keyGenRequest \
      -H "Content-Type: application/json" \
      -d '{
        "nonce": 1,
@@ -632,8 +634,8 @@ When the node has `PublicMgtKey` configured (check with `GET /hasPublicMgtKey`),
 
 1. **Check that the node accepts Ed25519 and get nonce:**
    ```bash
-   curl http://localhost:8080/hasPublicMgtKey    # must be true
-   curl http://localhost:8080/getPublicMgtKeyNonce
+   curl $MPC_AUTH_URL:$MANAGEMENT_PORT/hasPublicMgtKey    # must be true
+   curl $MPC_AUTH_URL:$MANAGEMENT_PORT/getPublicMgtKeyNonce
    ```
 
 2. **Build the request body** (include `nonce`, omit `sig`), then produce the **exact** JSON string (byte-for-byte, e.g. no extra spaces). Sign that string with Ed25519.
@@ -649,7 +651,7 @@ When the node has `PublicMgtKey` configured (check with `GET /hasPublicMgtKey`),
 
 4. **Example (curl):**
    ```bash
-   curl -X POST http://localhost:8080/keyGenRequest \
+   curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/keyGenRequest \
      -H "Content-Type: application/json" \
      -d '{"nonce":1,"sig":"<128-hex-char-ed25519-sig>","clientPk":"...",...}'
    ```
@@ -675,7 +677,7 @@ Returns list of allowed key types supported by the node.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getAllowedKeyTypes"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getAllowedKeyTypes"
 ```
 
 **Key Types:**
@@ -697,7 +699,7 @@ Returns list of allowed message check types for key generation and signing opera
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getAllowedMsgCheckTypes"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getAllowedMsgCheckTypes"
 ```
 
 **Message Check Types:**
@@ -754,7 +756,7 @@ Returns node success rate statistics for keygen and signing operations. Counts t
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getSuccessRate"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSuccessRate"
 ```
 
 **Notes:**
@@ -765,7 +767,7 @@ curl "http://localhost:8080/getSuccessRate"
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getSuccessRate"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSuccessRate"
 ```
 
 <a id="get-getpresigningverificationstatus"></a>
@@ -787,7 +789,7 @@ Returns the status and configuration of pre-signing verification.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getPreSigningVerificationStatus"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPreSigningVerificationStatus"
 ```
 
 <a id="get-getclientsigstatus"></a>
@@ -807,7 +809,7 @@ Returns whether client signature verification is ignored (`IgnoreClientSigCheck`
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getClientSigStatus"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getClientSigStatus"
 ```
 
 <a id="get-getsubscriptions"></a>
@@ -880,7 +882,7 @@ Returns comprehensive health status including MQTT connection, subscriptions, an
 **Example Usage:**
 ```bash
 # Check node health
-curl http://localhost:8080/health
+curl $MPC_AUTH_URL:$MANAGEMENT_PORT/health
 
 # Response when healthy
 {
@@ -971,16 +973,16 @@ Pings all nodes in a group (or all groups if groupId not provided) and reports c
 **Example Usage:**
 ```bash
 # Check connectivity for all groups
-curl http://localhost:8080/connectivityHealth
+curl $MPC_AUTH_URL:$MANAGEMENT_PORT/connectivityHealth
 
 # Check specific group
-curl "http://localhost:8080/connectivityHealth?groupId=566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/connectivityHealth?groupId=566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9"
 
 # Check with custom timeout (10 seconds)
-curl "http://localhost:8080/connectivityHealth?timeout=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/connectivityHealth?timeout=10"
 
 # Check specific group with custom timeout
-curl "http://localhost:8080/connectivityHealth?groupId=566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9&timeout=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/connectivityHealth?groupId=566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9&timeout=10"
 ```
 
 **Response Fields:**
@@ -1193,10 +1195,10 @@ Stores or updates chain config for one chain on this node. Requires management k
 **Example (MetaMask flow):**
 ```bash
 # 1. Get nonce
-curl -s "http://localhost:8080/getNodeMgtKeyNonce" | jq .data
+curl -s "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKeyNonce" | jq .data
 
 # 2. Build message (same as signedMessage), sign with MetaMask personal_sign, then:
-curl -X POST http://localhost:8080/postChainDetails \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/postChainDetails \
   -H "Content-Type: application/json" \
   -d '{
     "nonce": 1,
@@ -1300,10 +1302,10 @@ Returns chain config details stored on this node. Optional query parameter selec
 **Examples:**
 ```bash
 # Get all chain configs
-curl "http://localhost:8080/getChainDetails"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getChainDetails"
 
 # Get config for a specific chain
-curl "http://localhost:8080/getChainDetails?chain_id=1"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getChainDetails?chain_id=1"
 ```
 
 <a id="post-removechaindetails"></a>
@@ -1340,10 +1342,10 @@ Removes the stored chain config for one chain on this node. Requires management 
 **Example:**
 ```bash
 # 1. Get nonce
-curl -s "http://localhost:8080/getNodeMgtKeyNonce" | jq .data
+curl -s "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKeyNonce" | jq .data
 
 # 2. Build message, sign with MetaMask personal_sign (or Ed25519), then:
-curl -X POST http://localhost:8080/removeChainDetails \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/removeChainDetails \
   -H "Content-Type: application/json" \
   -d '{
     "nonce": 2,
@@ -1575,7 +1577,7 @@ Returns node public keys for all configured node addresses in `configs.yaml`. Qu
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getConfiguredNodeKeys"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getConfiguredNodeKeys"
 # Browser HTTPS (JWT required on GET):
 curl -H "Authorization: Bearer <JWT>" "https://localhost:8443/getConfiguredNodeKeys"
 ```
@@ -1610,7 +1612,7 @@ Sends a ping request to specified nodes to test connectivity and measure latency
 
 **Example:**
 ```bash
-curl "http://localhost:8080/pingNodesRequest?nodekey=1711c3077fc974b538fe6a786aae141f35f07e0ae7a91e89ebd1aed67f16846fea83a3d3b51a0c30d1d908dbf3f5ddfe71e0c03a0a0afa200a1e4cacfe223c3e&nodekey=167b2b7a21bd62d87ad9237f0f103f131469bb9849b238f003e508570f89aa122b64262248c94da97e7f5ddf2a26b3f8a66b810b7d1a81d708d0ed803cee295a"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/pingNodesRequest?nodekey=1711c3077fc974b538fe6a786aae141f35f07e0ae7a91e89ebd1aed67f16846fea83a3d3b51a0c30d1d908dbf3f5ddfe71e0c03a0a0afa200a1e4cacfe223c3e&nodekey=167b2b7a21bd62d87ad9237f0f103f131469bb9849b238f003e508570f89aa122b64262248c94da97e7f5ddf2a26b3f8a66b810b7d1a81d708d0ed803cee295a"
 ```
 
 <a id="get-getpingnodesresultbyid"></a>
@@ -1646,7 +1648,7 @@ Retrieves ping results by request ID. Shows which nodes responded and their late
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getPingNodesResultById?id=Ping20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPingNodesResultById?id=Ping20260111003720999cf104d0f"
 ```
 
 <a id="get-listpingresults"></a>
@@ -1675,7 +1677,7 @@ Lists all ping results with filtering and pagination.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/listPingResults?filter=all&pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listPingResults?filter=all&pagenum=0&pagesize=10"
 ```
 
 <a id="get-getinactivenodes"></a>
@@ -1703,8 +1705,8 @@ Gets a list of inactive nodes (nodes that haven't responded to pings recently).
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getInactiveNodes"
-curl "http://localhost:8080/getInactiveNodes?groupId=566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getInactiveNodes"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getInactiveNodes?groupId=566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9"
 ```
 
 ### 5. Group Management
@@ -1892,12 +1894,12 @@ Gets a specific group result by ID (requestId) or by group_id (after group is su
 
 Query by requestId:
 ```bash
-curl "http://localhost:8080/getNewGroupResultById?id=NewGroup20241228123456789abc123"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNewGroupResultById?id=NewGroup20241228123456789abc123"
 ```
 
 Query by group_id:
 ```bash
-curl "http://localhost:8080/getNewGroupResultById?group_id=566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNewGroupResultById?group_id=566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9"
 ```
 
 **Note:** Groups can also be pre-configured in `configs.yaml` and will be automatically created on node startup. API-based creation is recommended for new groups to avoid the chicken-and-egg problem.
@@ -1957,7 +1959,7 @@ Creates a new key generation request. **Requires management key authentication.*
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8080/keyGenRequest \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/keyGenRequest \
   -H "Content-Type: application/json" \
   -d '{
     "nonce": 1,
@@ -2021,8 +2023,8 @@ Lists all key generation requests with filtering and pagination.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/listKeyGenRequests?filter=success"
-curl "http://localhost:8080/listKeyGenRequests?filter=all&pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listKeyGenRequests?filter=success"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listKeyGenRequests?filter=all&pagenum=0&pagesize=10"
 ```
 
 <a id="get-getkeygenrequestbyid"></a>
@@ -2036,7 +2038,7 @@ Gets a specific key generation request by ID.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getKeyGenRequestById?id=KeyGen20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getKeyGenRequestById?id=KeyGen20260111003720999cf104d0f"
 ```
 
 <a id="post-keygenrequestagree"></a>
@@ -2098,7 +2100,7 @@ A result is returned (Code 0) only when this node completed the TSS and has the 
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getKeyGenResultById?id=KeyGen20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getKeyGenResultById?id=KeyGen20260111003720999cf104d0f"
 ```
 
 <a id="get-getglobalnoncebykeygenid"></a>
@@ -2123,7 +2125,7 @@ For keyGen results that are not secp256k1 (e.g. ed25519), the endpoint returns `
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getGlobalNonceByKeyGenId?id=KeyGen20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getGlobalNonceByKeyGenId?id=KeyGen20260111003720999cf104d0f"
 ```
 
 <a id="get-getkeygengroupid"></a>
@@ -2147,7 +2149,7 @@ Gets the GroupId for a given keyGen request ID.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getKeyGenGroupId?id=KeyGen20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getKeyGenGroupId?id=KeyGen20260111003720999cf104d0f"
 ```
 
 **Use Cases:**
@@ -2214,7 +2216,7 @@ Gets all configured GroupIds and their associated keyGen results.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getAllGroupIds"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getAllGroupIds"
 ```
 
 **Use Cases:**
@@ -2258,7 +2260,7 @@ Creates a new pre-signing request. **Requires management key authentication.**
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8080/presignRequest \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/presignRequest \
   -H "Content-Type: application/json" \
   -d '{
     "nonce": 1,
@@ -2280,7 +2282,7 @@ Lists all pre-signing requests with filtering and pagination.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/listPresignRequests?filter=all&pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listPresignRequests?filter=all&pagenum=0&pagesize=10"
 ```
 
 <a id="get-getpresignrequestbyid"></a>
@@ -2292,7 +2294,7 @@ Gets a specific pre-signing request by ID.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getPresignRequestById?id=Presign20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPresignRequestById?id=Presign20260111003720999cf104d0f"
 ```
 
 <a id="post-presignrequestagree"></a>
@@ -2328,7 +2330,7 @@ Lists all pre-signing results with pagination.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/listPresignResults?pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listPresignResults?pagenum=0&pagesize=10"
 ```
 
 <a id="get-getpresignresultbyid"></a>
@@ -2340,7 +2342,7 @@ Gets a specific pre-signing result by ID.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getPresignResultById?id=Presign20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPresignResultById?id=Presign20260111003720999cf104d0f"
 ```
 
 <a id="get-getpresigningstatus"></a>
@@ -2370,7 +2372,7 @@ Returns presigning status including configuration and cache levels for all key g
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getPresigningStatus"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPresigningStatus"
 ```
 
 ### 8. Signing
@@ -2452,7 +2454,7 @@ Management-key endpoints (keyGenRequest, presignRequest, newGroupRequest, etc.) 
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8080/signRequest \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/signRequest \
   -H "Content-Type: application/json" \
   -d '{
     "clientSig": "0x...",
@@ -2537,7 +2539,7 @@ Creates a new signing request for **multi-agree keys only**. No relayer authenti
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8080/multiSignRequest \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest \
   -H "Content-Type: application/json" \
   -d '{
     "clientSig": "0x...",
@@ -2638,13 +2640,13 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
 
 **Example:**
 ```bash
-curl "http://localhost:8080/listSignRequests?filter=all&pagenum=0&pagesize=10"
-curl "http://localhost:8080/listSignRequests?filter=live&pagenum=0&pagesize=10"
-curl "http://localhost:8080/listSignRequests?filter=pending&pagenum=0&pagesize=10"
-curl "http://localhost:8080/listSignRequests?filter=success&pagenum=0&pagesize=10"
-curl "http://localhost:8080/listSignRequests?filter=blocked&pagenum=0&pagesize=10"
-curl "http://localhost:8080/listSignRequests?filter=shelved&pagenum=0&pagesize=10"
-curl "http://localhost:8080/listSignRequests?filter=all&pagenum=0&pagesize=10&fromTime=1704067200&toTime=1704153600"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequests?filter=all&pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequests?filter=live&pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequests?filter=pending&pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequests?filter=success&pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequests?filter=blocked&pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequests?filter=shelved&pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequests?filter=all&pagenum=0&pagesize=10&fromTime=1704067200&toTime=1704153600"
 ```
 
 <a id="get-getsignrequestbyid"></a>
@@ -2659,12 +2661,12 @@ Gets a specific signing request by ID. Returns the same structure as each item i
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getSignRequestById?id=Sign20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSignRequestById?id=Sign20260111003720999cf104d0f"
 ```
 
 **Example (TxParams only):**
 ```bash
-curl "http://localhost:8080/getSignRequestById?id=Sign20260111003720999cf104d0f&tx_params=1"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSignRequestById?id=Sign20260111003720999cf104d0f&tx_params=1"
 ```
 
 <a id="post-signrequestagree"></a>
@@ -2759,10 +2761,10 @@ Results are sorted by **timepoint** descending. Field meanings are the same as i
 
 **Example:**
 ```bash
-curl "http://localhost:8080/listSignResults?filter=active&pagenum=0&pagesize=10"
-curl "http://localhost:8080/listSignResults?filter=originator&pagesize=0"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignResults?filter=active&pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignResults?filter=originator&pagesize=0"
 # Date filter: only results between two Unix timestamps (e.g. 1704931200 = 2024-01-11 00:00:00 UTC and 1705017600 = 2024-01-12 00:00:00 UTC)
-curl "http://localhost:8080/listSignResults?filter=all&fromTime=1704931200&toTime=1705017600&pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignResults?filter=all&fromTime=1704931200&toTime=1705017600&pagenum=0&pagesize=10"
 ```
 
 <a id="get-getsignresultbyid"></a>
@@ -2838,7 +2840,7 @@ Use `data.batchSignatures[i]` to get the signature for the i-th message (index 0
 
 **Example:**
 ```bash
-curl "http://localhost:8080/getSignResultById?id=Sign20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSignResultById?id=Sign20260111003720999cf104d0f"
 ```
 
 <a id="get-issignrequestreadybyid"></a>
@@ -2862,7 +2864,7 @@ Returns whether a sign request is **ready to trigger** (multi-agree only). Ready
 
 **Example:**
 ```bash
-curl "http://localhost:8080/isSignRequestReadyById?id=Sign20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/isSignRequestReadyById?id=Sign20260111003720999cf104d0f"
 ```
 
 <a id="get-listsignrequestsready"></a>
@@ -2879,7 +2881,7 @@ Lists **multi-agree** sign requests that are **ready to trigger**: this node is 
 
 **Example:**
 ```bash
-curl "http://localhost:8080/listSignRequestsReady?pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequestsReady?pagenum=0&pagesize=10"
 ```
 
 <a id="post-triggersignrequestbyid"></a>
@@ -2922,7 +2924,7 @@ curl "http://localhost:8080/listSignRequestsReady?pagenum=0&pagesize=10"
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8080/triggerSignRequestById \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/triggerSignRequestById \
   -H "Content-Type: application/json" \
   -d '{
     "requestId": "Sign20260111003720999cf104d0f",
@@ -3019,7 +3021,7 @@ For shelved:
 
 **Examples:**
 ```bash
-curl -X POST http://localhost:8080/updateSignResultStatusById \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/updateSignResultStatusById \
   -H "Content-Type: application/json" \
   -d '{"requestId":"...","status":"executed","transactionHash":"0x...","nonce":1,"sig":"0x..."}'
 ```
@@ -3045,7 +3047,7 @@ curl -X POST http://localhost:8080/updateSignResultStatusById \
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8080/shelveSignRequest \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/shelveSignRequest \
   -H "Content-Type: application/json" \
   -d '{
     "requestId": "Sign20260111003720999cf104d0f",
@@ -3099,7 +3101,7 @@ Registers a new relayer in the whitelist. **Can only be called once per node** -
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8080/admin/registerRelayer \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/admin/registerRelayer \
   -H "Content-Type: application/json" \
   -d '{
     "relayerPublicKey": "ed8639ee02b0e0cb8caade8ea24c71b1c60c55fa241032767e67c4da6e691f5fd08a36b005a2c1fd68c9b5a04137c406d458ba73b562aa269f52ceb6a285e41a",
@@ -3140,7 +3142,7 @@ Lists all whitelisted relayers.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/admin/listRelayers"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/admin/listRelayers"
 ```
 
 <a id="get-admin-getrelayer"></a>
@@ -3174,7 +3176,7 @@ Gets a specific relayer by public key.
 
 **Example:**
 ```bash
-curl "http://localhost:8080/admin/getRelayer?publicKey=ed8639ee02b0e0cb8caade8ea24c71b1c60c55fa241032767e67c4da6e691f5fd08a36b005a2c1fd68c9b5a04137c406d458ba73b562aa269f52ceb6a285e41a"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/admin/getRelayer?publicKey=ed8639ee02b0e0cb8caade8ea24c71b1c60c55fa241032767e67c4da6e691f5fd08a36b005a2c1fd68c9b5a04137c406d458ba73b562aa269f52ceb6a285e41a"
 ```
 
 **Note:** The `publicKey` parameter is case-sensitive and must match exactly what's stored in the database (MongoDB field is `publicKeys` with camelCase).
@@ -3203,7 +3205,7 @@ Updates relayer public keys. **Self-managed by relayers** - requires signature f
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8080/updateRelayer \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/updateRelayer \
   -H "Content-Type: application/json" \
   -d '{
     "relayerPublicKey": "ed8639ee02b0e0cb8caade8ea24c71b1c60c55fa241032767e67c4da6e691f5fd08a36b005a2c1fd68c9b5a04137c406d458ba73b562aa269f52ceb6a285e41a",
@@ -3318,7 +3320,7 @@ DisableDocs: false
 ## Swagger Documentation
 
 Interactive API documentation is available at:
-- **URL:** `http://localhost:8080/swagger/index.html`
+- **URL:** `$MPC_AUTH_URL:$MANAGEMENT_PORT/swagger/index.html`
 - **Format:** OpenAPI 3.0 (Swagger)
 - **Files:**
   - `docs/swagger.yaml` - YAML format
@@ -3383,10 +3385,10 @@ Potential improvements to the API:
 
 ```bash
 # Step 1: Get node keys
-curl "http://localhost:8080/getConfiguredNodeKeys"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getConfiguredNodeKeys"
 
 # Step 2: Create group
-curl -X POST http://localhost:8080/newGroupRequest \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/newGroupRequest \
   -H "Content-Type: application/json" \
   -d '{
     "keyList": ["node1_key", "node2_key", "node3_key"],
@@ -3396,7 +3398,7 @@ curl -X POST http://localhost:8080/newGroupRequest \
   }'
 
 # Step 3: Each node agrees
-curl -X POST http://localhost:8080/newGroupRequestAgree \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/newGroupRequestAgree \
   -H "Content-Type: application/json" \
   -d '{
     "requestId": "NewGroup20241228123456789abc123",
@@ -3406,7 +3408,7 @@ curl -X POST http://localhost:8080/newGroupRequestAgree \
 
 # Step 4: Request key generation
 # Note: clientPk should be generated by the client/dApp (not by the node)
-curl -X POST http://localhost:8080/keyGenRequest \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/keyGenRequest \
   -H "Content-Type: application/json" \
   -d '{
     "nonce": 2,
@@ -3419,7 +3421,7 @@ curl -X POST http://localhost:8080/keyGenRequest \
   }'
 
 # Step 5: Each node agrees to keygen
-curl -X POST http://localhost:8080/keyGenRequestAgree \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/keyGenRequestAgree \
   -H "Content-Type: application/json" \
   -d '{
     "requestId": "KeyGen20260111003720999cf104d0f",
@@ -3428,14 +3430,14 @@ curl -X POST http://localhost:8080/keyGenRequestAgree \
   }'
 
 # Step 6: Get key generation result
-curl "http://localhost:8080/getKeyGenResultById?id=KeyGen20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getKeyGenResultById?id=KeyGen20260111003720999cf104d0f"
 ```
 
 ### 2. Signing a Transaction
 
 ```bash
 # Step 1: Register relayer (one-time per node)
-curl -X POST http://localhost:8080/admin/registerRelayer \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/admin/registerRelayer \
   -H "Content-Type: application/json" \
   -d '{
     "relayerPublicKey": "ed8639ee02b0e0cb8caade8ea24c71b1c60c55fa241032767e67c4da6e691f5fd08a36b005a2c1fd68c9b5a04137c406d458ba73b562aa269f52ceb6a285e41a",
@@ -3445,7 +3447,7 @@ curl -X POST http://localhost:8080/admin/registerRelayer \
   }'
 
 # Step 2: Create sign request (from relayer)
-curl -X POST http://localhost:8080/signRequest \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/signRequest \
   -H "Content-Type: application/json" \
   -d '{
     "clientSig": "0x...",
@@ -3459,14 +3461,14 @@ curl -X POST http://localhost:8080/signRequest \
   }'
 
 # Step 3: Each node agrees
-curl -X POST http://localhost:8080/signRequestAgree \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/signRequestAgree \
   -H "Content-Type: application/json" \
   -d '{
     "requestId": "Sign20260111003720999cf104d0f"
   }'
 
 # Step 4: Get signature result
-curl "http://localhost:8080/getSignResultById?id=Sign20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSignResultById?id=Sign20260111003720999cf104d0f"
 ```
 
 ### 3. Multi-Agree Signing (Ready / Trigger Flow)
@@ -3477,7 +3479,7 @@ For **multi-agree** keys, nodes agree via `POST /signRequestAgree`. Once at leas
 
 ```bash
 # Step 1: Create multi-agree sign request (e.g. from dApp)
-curl -X POST http://localhost:8080/multiSignRequest \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest \
   -H "Content-Type: application/json" \
   -d '{
     "pubKey": "<mpc_public_key>",
@@ -3489,57 +3491,57 @@ curl -X POST http://localhost:8080/multiSignRequest \
 # Returns requestId, e.g. "Sign20260111003720999cf104d0f"
 
 # Step 2: Each node agrees (or rejects) via signRequestAgree
-curl -X POST http://localhost:8080/signRequestAgree \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/signRequestAgree \
   -H "Content-Type: application/json" \
   -d '{"requestId": "Sign20260111003720999cf104d0f", "clientSig": "0x...", "accept": true}'
 
 # Step 3: Check if ready, then trigger (any node)
-curl "http://localhost:8080/isSignRequestReadyById?id=Sign20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/isSignRequestReadyById?id=Sign20260111003720999cf104d0f"
 # When data.ready is true:
-curl -X POST http://localhost:8080/triggerSignRequestById \
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/triggerSignRequestById \
   -H "Content-Type: application/json" \
   -d '{"requestId": "Sign20260111003720999cf104d0f", "nonce": 1, "sig": "0x..."}'
 
 # Step 4: Get signature result (poll until available)
-curl "http://localhost:8080/getSignResultById?id=Sign20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSignResultById?id=Sign20260111003720999cf104d0f"
 
 # Optional: list all sign requests ready to trigger (for this node)
-curl "http://localhost:8080/listSignRequestsReady?pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequestsReady?pagenum=0&pagesize=10"
 ```
 
 ### 4. Checking System Health
 
 ```bash
 # Check overall health
-curl "http://localhost:8080/health"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/health"
 
 # Check connectivity
-curl "http://localhost:8080/connectivityHealth"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/connectivityHealth"
 
 # Check specific group connectivity
-curl "http://localhost:8080/connectivityHealth?groupId=566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/connectivityHealth?groupId=566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9"
 
 # Get logs
-curl "http://localhost:8080/getLogs?hours=24"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getLogs?hours=24"
 ```
 
 ### 5. Querying Key Generation Information
 
 ```bash
 # Get keyGen result (response includes status from the keygen request: pending, agree, or failed)
-curl "http://localhost:8080/getKeyGenResultById?id=KeyGen20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getKeyGenResultById?id=KeyGen20260111003720999cf104d0f"
 
 # Get keyGen request by id (includes status)
-curl "http://localhost:8080/getKeyGenRequestById?id=KeyGen20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getKeyGenRequestById?id=KeyGen20260111003720999cf104d0f"
 
 # List keyGen requests (each item includes status)
-curl "http://localhost:8080/listKeyGenRequests?filter=all&pagenum=0&pagesize=10"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listKeyGenRequests?filter=all&pagenum=0&pagesize=10"
 
 # Get GroupId for a keyGen
-curl "http://localhost:8080/getKeyGenGroupId?id=KeyGen20260111003720999cf104d0f"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getKeyGenGroupId?id=KeyGen20260111003720999cf104d0f"
 
 # Get all groups and their keyGens
-curl "http://localhost:8080/getAllGroupIds"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getAllGroupIds"
 ```
 
 ## See Also

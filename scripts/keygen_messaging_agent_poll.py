@@ -23,7 +23,8 @@ script-specific variables below.
 KEYGEN_ID                   KeyGen channel id (required).
 AUTH_KEY_PATH               Ed25519 management private key file (default
                             ``~/.ssh/mpc_auth_ed25519``). PEM or OpenSSH; see AGENT_ED25519_SETUP.md.
-MPC_AUTH_URL                Management API base URL (default ``http://127.0.0.1:8080``).
+MPC_AUTH_URL                Management API host URL (default ``http://127.0.0.1``).
+MANAGEMENT_PORT             Management API port (default ``8080``).
 MPC_MGT_ED25519_SEED_HEX    Optional 64-hex (32-byte) raw seed; overrides key file.
 MPC_KEYGEN_AGENT_TRIGGER    Trigger substring without leading @ (default ``agent``);
                             the script looks for ``@`` + this token with a word boundary.
@@ -59,6 +60,25 @@ except ImportError as e:  # pragma: no cover
 
 def _compact_json(obj: Any) -> str:
     return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+
+
+def _resolve_mpc_auth_base(mpc_auth_url: str, management_port: str | int | None) -> str:
+    base = (mpc_auth_url or "").strip()
+    if not base:
+        raise RuntimeError("MPC_AUTH_URL is required")
+    p = urllib.parse.urlparse(base)
+    if not p.scheme or not p.netloc:
+        raise RuntimeError("MPC_AUTH_URL must include scheme and host, e.g. http://127.0.0.1")
+    if p.port is not None:
+        return base.rstrip("/")
+    port = str(management_port or "").strip()
+    if not port:
+        raise RuntimeError("MANAGEMENT_PORT is required when MPC_AUTH_URL has no port")
+    try:
+        int(port, 10)
+    except ValueError as e:
+        raise RuntimeError("MANAGEMENT_PORT must be numeric") from e
+    return urllib.parse.urlunparse(p._replace(netloc=f"{p.netloc}:{port}")).rstrip("/")
 
 
 def _http_json(
@@ -267,7 +287,10 @@ def main() -> None:
     )
     args = p.parse_args()
 
-    base = (os.environ.get("MPC_AUTH_URL") or "http://127.0.0.1:8080").strip()
+    base = _resolve_mpc_auth_base(
+        os.environ.get("MPC_AUTH_URL") or "http://127.0.0.1",
+        os.environ.get("MANAGEMENT_PORT") or "8080",
+    )
     key_gen_id = os.environ.get("KEYGEN_ID", "").strip()
     if not key_gen_id:
         raise SystemExit("KEYGEN_ID is required")

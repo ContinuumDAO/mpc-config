@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -107,6 +108,7 @@ def build_linea_fee_deposit_compose(
 
 def linea_fee_deposit_multisign_payload(
     mpc_auth_url: str,
+    management_port: str | int,
     key_gen_id: str,
     amount_wei: str,
     purpose: str = "",
@@ -116,7 +118,7 @@ def linea_fee_deposit_multisign_payload(
     """
     Load MPC address from GET /getKeyGenResultById, then build_compose_multisign.
     """
-    base = mpc_auth_url.rstrip("/")
+    base = _compose.resolve_mpc_auth_base(mpc_auth_url, management_port)
     kg = _compose.fetch_keygen_bundle(base, key_gen_id)
     eth = kg.get("ethereumaddress") or kg.get("EthereumAddress")
     if not eth or not isinstance(eth, str):
@@ -142,8 +144,13 @@ def main() -> None:
     )
     ap.add_argument(
         "--mpc-auth-url",
-        default=_compose.DEFAULT_MPC_AUTH_URL,
-        help="Management API base URL (default: %(default)s)",
+        default=(os.environ.get("MPC_AUTH_URL") or _compose.DEFAULT_MPC_AUTH_URL),
+        help="Management API host URL (env MPC_AUTH_URL, default: %(default)s)",
+    )
+    ap.add_argument(
+        "--management-port",
+        default=(os.environ.get("MANAGEMENT_PORT") or _compose.DEFAULT_MANAGEMENT_PORT),
+        help="Management API port (env MANAGEMENT_PORT, default: %(default)s)",
     )
     ap.add_argument(
         "--key-gen-id",
@@ -190,6 +197,7 @@ def main() -> None:
     try:
         out = linea_fee_deposit_multisign_payload(
             mpc_auth_url=args.mpc_auth_url,
+            management_port=args.management_port,
             key_gen_id=args.key_gen_id,
             amount_wei=args.amount_wei,
             purpose=args.purpose,

@@ -22,6 +22,7 @@ metadata:
       config:
         - "$AUTH_KEY_PATH/mpc_auth_ed25519"
         - "$MPC_CONFIG_PATH"
+        - "$MPA_PATH/.env"
     primaryEnv: MPC_AUTH_URL
     os:
       - linux
@@ -125,6 +126,8 @@ Do **not** confuse **management signatures** (per-node API auth) with **MPC sign
 
 ## Environment (agent)
 
+Default env file: **`$MPA_PATH/.env`**. Load this file first (if present) before prompting for missing variables.
+
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | **`KEYGEN_ID`** | If set, prefer this KeyGen for signing when unambiguous. If unset or ambiguous, ask the user via the configured channel (e.g. gateway **port 18789**). | Unset |
@@ -132,9 +135,9 @@ Do **not** confuse **management signatures** (per-node API auth) with **MPC sign
 | **`MPA_PATH`** | If set, points to the directory containing references, scripts, recipes, and tools. | `~/.mpa` |
 | **`MPC_CONFIG_PATH`** | Absolute path to the node `configs.yaml` for this deployment (operator-defined, no hardcoded user/home assumption). | `/path/to/mpc-config/configs.yaml` |
 | **`MPC_AUTH_URL`** | Points to the base URL of the management API. | `http://127.0.0.1` |
-| **`MANAGEMENT_PORT`** | The port of the management API. | `8080` |
+| **`MANAGEMENT_PORT`** | The port of the management API. | `<management_api_port>` |
 
-Base URL for a co-located node: **`$MPC_AUTH_URL:$MANAGEMENT_PORT`** (see `configs.yaml`, often **8080**).
+Base URL for a co-located node: **`$MPC_AUTH_URL:$MANAGEMENT_PORT`** (see `configs.yaml` for `ManagementAPIsPort`).
 
 `MPA_PATH` is a filesystem location, not a credential. `primaryEnv` is set to `MPC_AUTH_URL` because the management API endpoint is the primary operational target for this skill.
 
@@ -189,7 +192,7 @@ ContinuumDAO’s **fee / registration** contract on **Linea** is deployed at a f
 
 **On-chain `register()` from the MPC wallet (multiSignRequest):** use the **[`linea_register.py`](#recipes-thin-cli-wrappers)** recipe (Linea **`59144`**, **`register()`**, RPC from **`getChainDetails`**). **Fee-token top-up (`deposit`)** from the MPC wallet: **[`linea_fee_deposit.py`](#recipes-thin-cli-wrappers)** with **`--amount-wei`** (smallest fee-token units); the MPC must **approve** the fee contract for the ERC20 fee token before **`deposit`** succeeds. For **approve + deposit** in a **single** batch **multiSignRequest**, use **`forge/script/LineaFeeApproveDeposit.s.sol`** → **`generateSignRequestWithFoundryScript.py`** (see **`$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md`** § Linea fee). For read-only **`cast`** checks below, any RPC URL from the node’s chain config is fine.
 
-**Variables:** Set **`KEYGEN_ID`** to your KeyGen result id (see **Environment**). Set **`WALLET_ADDRESS`** to the MPC wallet **Ethereum address** for that KeyGen (from **`GET /getKeyGenResultById`** / **`ethereumaddress`**). Use your co-located management API base URL ($MPC_AUTH_URL) instead of `localhost` if needed.
+**Variables:** Set **`KEYGEN_ID`** to your KeyGen result id (see **Environment**). Set **`WALLET_ADDRESS`** to the MPC wallet **Ethereum address** for that KeyGen (from **`GET /getKeyGenResultById`** / **`ethereumaddress`**). Use your management API base URL as **`$MPC_AUTH_URL:$MANAGEMENT_PORT`**.
 
 **RPC URL from the node** (Linea `chain_id` **59144**):
 
@@ -266,7 +269,7 @@ sign-clipboard --inline-file /path/to/body.json
 
 ```bash
 SIG=$(sign-clipboard --inline "$(jq -c . < body.json)" )
-curl -sS -X POST "$MPC_AUTH_URL/multiSignRequest" \
+curl -sS -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest" \
   -H 'Content-Type: application/json' \
   -d "$(jq --arg s "$SIG" '. + {clientSig: $s}' body.json)"
 ```
@@ -276,7 +279,7 @@ curl -sS -X POST "$MPC_AUTH_URL/multiSignRequest" \
 ```bash
 jq -c . body.json > body.compact.json   # optional: one canonical line
 SIG=$(sign-clipboard --inline-file body.compact.json)
-curl -sS -X POST "$MPC_AUTH_URL/multiSignRequest" \
+curl -sS -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest" \
   -H 'Content-Type: application/json' \
   -d "$(jq --arg s "$SIG" '. + {clientSig: $s}' body.compact.json)"
 ```
@@ -353,8 +356,8 @@ python3 "$MPA_PATH/scripts/multiSignJoin.py" --a /tmp/a.json --b /tmp/b.json --f
 **Example:** Same **`python3`** note as in the [multiSignJoin](#multisignjoin-merge-two-multisignrequest-json-files) example: **`python3`** must resolve to the **`eth-account`** pipx environment (see **[Python dependencies](#python-dependencies)**). Otherwise use the venv **`python`** from **`pipx list`**.
 
 ```bash
-python3 "$MPA_PATH/recipes/linea_register.py" --key-gen-id "$KEYGEN_ID" --mpc-auth-url "$MPC_AUTH_URL"
-python3 "$MPA_PATH/recipes/linea_fee_deposit.py" --key-gen-id "$KEYGEN_ID" --amount-wei 1000000000000000000 --mpc-auth-url "$MPC_AUTH_URL"
+python3 "$MPA_PATH/recipes/linea_register.py" --key-gen-id "$KEYGEN_ID" --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
+python3 "$MPA_PATH/recipes/linea_fee_deposit.py" --key-gen-id "$KEYGEN_ID" --amount-wei 1000000000000000000 --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
 python3 "$MPA_PATH/recipes/erc20_transfer.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --to 0x... --amount 1 --amount-unit Ether
 python3 "$MPA_PATH/recipes/native_transfer.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --to 0x... --amount 0.01 --amount-unit Ether
 python3 "$MPA_PATH/recipes/ctmerc20_transfer.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --to 0x... --amount 100 --amount-unit Wei --to-chain-id 1

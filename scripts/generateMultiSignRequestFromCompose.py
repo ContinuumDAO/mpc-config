@@ -78,7 +78,7 @@ Usage::
   python3 scripts/generateMultiSignRequestFromCompose.py --file compose.json
   python3 scripts/generateMultiSignRequestFromCompose.py < compose.json
   python3 scripts/generateMultiSignRequestFromCompose.py --file compose.json \\
-      --mpc-auth-url http://localhost:8080
+      --mpc-auth-url http://127.0.0.1 --management-port 8080
 """
 
 from __future__ import annotations
@@ -87,6 +87,7 @@ import argparse
 import importlib.util
 import json
 import math
+import os
 import sys
 import urllib.error
 import urllib.parse
@@ -104,7 +105,8 @@ except ImportError as e:
 
 getcontext().prec = 78
 
-DEFAULT_MPC_AUTH_URL = "http://localhost:8080"
+DEFAULT_MPC_AUTH_URL = "http://127.0.0.1"
+DEFAULT_MANAGEMENT_PORT = "8080"
 
 # Public JSON-RPC gateways often return 403 if User-Agent is empty / Python-urllib default.
 _HTTP_UA = "generateMultiSignRequestFromCompose/1.0 (Python-urllib)"
@@ -135,6 +137,27 @@ def _load_json(path: str | None, stdin: str | None) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("Top-level JSON must be an object")
     return data
+
+
+def resolve_mpc_auth_base(mpc_auth_url: str, management_port: str | int | None) -> str:
+    """Resolve base URL from host-style MPC_AUTH_URL plus MANAGEMENT_PORT."""
+    base = (mpc_auth_url or "").strip()
+    if not base:
+        raise ValueError("mpc_auth_url cannot be empty")
+    p = urllib.parse.urlparse(base)
+    if not p.scheme or not p.netloc:
+        raise ValueError("mpc_auth_url must include scheme and host, e.g. http://127.0.0.1")
+    if p.port is not None:
+        return base.rstrip("/")
+    port = str(management_port or "").strip()
+    if not port:
+        raise ValueError("management_port is required when mpc_auth_url has no port")
+    try:
+        int(port, 10)
+    except ValueError as e:
+        raise ValueError("management_port must be numeric") from e
+    netloc = f"{p.netloc}:{port}"
+    return urllib.parse.urlunparse(p._replace(netloc=netloc)).rstrip("/")
 
 
 def _rpc(url: str, method: str, params: list[Any]) -> Any:
@@ -828,8 +851,13 @@ def main() -> None:
     )
     ap.add_argument(
         "--mpc-auth-url",
-        default=DEFAULT_MPC_AUTH_URL,
-        help="Management API base URL (default: %(default)s)",
+        default=(os.environ.get("MPC_AUTH_URL") or DEFAULT_MPC_AUTH_URL),
+        help="Management API host URL (env MPC_AUTH_URL, default: %(default)s)",
+    )
+    ap.add_argument(
+        "--management-port",
+        default=(os.environ.get("MANAGEMENT_PORT") or DEFAULT_MANAGEMENT_PORT),
+        help="Management API port (env MANAGEMENT_PORT, default: %(default)s)",
     )
     ap.add_argument(
         "--ed25519-seed-hex",
@@ -852,7 +880,8 @@ def main() -> None:
         compose = {**compose, "keyGenId": args.key_gen_id.strip()}
 
     try:
-        out = build_compose_multisign(compose, args.mpc_auth_url.rstrip("/"))
+        mpc_base = resolve_mpc_auth_base(args.mpc_auth_url, args.management_port)
+        out = build_compose_multisign(compose, mpc_base)
     except (ValueError, RuntimeError) as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)

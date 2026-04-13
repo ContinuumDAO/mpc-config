@@ -24,7 +24,7 @@ A **multiSignRequest** is a **formal proposal** stored on every node in the KeyG
 4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** requires for your deployment).
 5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → track peer responses → **`POST /triggerSignRequestById`** when ready → broadcast raw transactions → **`POST /updateSignResultStatusById`**.
 
-**Further detail (this repo):** Payload shapes, CLI flags, and signing conventions—**[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md](./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**, **[AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md)**, **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)**. The management API URL and port depend on deployment; when automation runs **on the same host** as the node, **`http://127.0.0.1:<port>`** or **`http://localhost:<port>`** with **`ManagementAPIsPort`** from **`configs.yaml`** is typical. Install Python dependencies as described in those guides.
+**Further detail (this repo):** Payload shapes, CLI flags, and signing conventions—**[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md](./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**, **[AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md)**, **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)**. The management API URL and port depend on deployment; use **`$MPC_AUTH_URL:$MANAGEMENT_PORT`** where `MPC_AUTH_URL` is host-only and `MANAGEMENT_PORT` matches `ManagementAPIsPort` in `configs.yaml`. Install Python dependencies as described in those guides.
 
 This is a typical sequence of actions that the nodes go through —
 

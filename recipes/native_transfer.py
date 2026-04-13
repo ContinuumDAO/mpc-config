@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -99,6 +100,7 @@ def build_native_transfer_compose(
 
 def native_transfer_multisign_payload(
     mpc_auth_url: str,
+    management_port: str | int,
     key_gen_id: str,
     destination_chain_id: str,
     to_address: str,
@@ -118,7 +120,8 @@ def native_transfer_multisign_payload(
         no_custom_gas_params=no_custom_gas_params,
         rpc_gateway=rpc_gateway,
     )
-    return _compose.build_compose_multisign(compose, mpc_auth_url.rstrip("/"))
+    base = _compose.resolve_mpc_auth_base(mpc_auth_url, management_port)
+    return _compose.build_compose_multisign(compose, base)
 
 
 def main() -> None:
@@ -130,8 +133,13 @@ def main() -> None:
     )
     ap.add_argument(
         "--mpc-auth-url",
-        default=_compose.DEFAULT_MPC_AUTH_URL,
-        help="Management API base URL (default: %(default)s)",
+        default=(os.environ.get("MPC_AUTH_URL") or _compose.DEFAULT_MPC_AUTH_URL),
+        help="Management API host URL (env MPC_AUTH_URL, default: %(default)s)",
+    )
+    ap.add_argument(
+        "--management-port",
+        default=(os.environ.get("MANAGEMENT_PORT") or _compose.DEFAULT_MANAGEMENT_PORT),
+        help="Management API port (env MANAGEMENT_PORT, default: %(default)s)",
     )
     ap.add_argument(
         "--key-gen-id",
@@ -195,6 +203,7 @@ def main() -> None:
     try:
         out = native_transfer_multisign_payload(
             mpc_auth_url=args.mpc_auth_url,
+            management_port=args.management_port,
             key_gen_id=args.key_gen_id,
             destination_chain_id=args.chain_id,
             to_address=args.to,

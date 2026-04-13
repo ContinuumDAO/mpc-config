@@ -16,12 +16,12 @@ Read from **`configs.yaml`** where noted:
 | Browser HTTPS | **`BrowserHTTPS.Port`** or **8443** | Public browser API (TLS). |
 | Public discovery | **`PublicDiscoveryPort`** (often **18080**) | Discovery HTTP. |
 | Scanner / relayer | **`ScannerRelayerPort`** (e.g. **18081**) when non-zero | Prefer **scoped** rules (see below). |
-| Management API | **`ManagementAPIsPort`** (often **8080**) | **Not** opened in **`ufw`** unless **`UFW_OPEN_MANAGEMENT_PORT=1`** — see next section. |
+| Management API | **`ManagementAPIsPort`** (export as **`MANAGEMENT_PORT`**) | **Not** opened in **`ufw`** unless **`UFW_OPEN_MANAGEMENT_PORT=1`** — see next section. |
 | MQTT TLS (relay only) | **8883/tcp** | When the node is the **relay** (`docker-compose` MQTT). |
 
 ## Management API port
 
-By default, **`process_config.sh`** does **not** add **`ufw allow`** for **`ManagementAPIsPort`**. Use **`127.0.0.1:8080:8080`** in **`docker-compose`**, **SSH tunnel**, **VPN**, or **cloud security groups** for access.
+By default, **`process_config.sh`** does **not** add **`ufw allow`** for **`ManagementAPIsPort`**. Use **`127.0.0.1:$MANAGEMENT_PORT:$MANAGEMENT_PORT`** in **`docker-compose`**, **SSH tunnel**, **VPN**, or **cloud security groups** for access.
 
 To add a host **`ufw`** rule for the management port (e.g. co-located tooling or a chosen network path):
 

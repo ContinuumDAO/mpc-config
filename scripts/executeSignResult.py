@@ -23,7 +23,7 @@ Examples::
 
   python3 scripts/executeSignResult.py \\
     --sign-request-id Sign20260111003720999cf104d0f \\
-    --mpc-auth-url http://localhost:8080
+    --mpc-auth-url http://127.0.0.1 --management-port 8080
 
   python3 scripts/executeSignResult.py \\
     --sign-result-file /tmp/result.json \\
@@ -39,6 +39,7 @@ import argparse
 import concurrent.futures
 import importlib.util
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -72,7 +73,28 @@ hex_to_bytes = _forge.hex_to_bytes
 parse_chain_id = _forge.parse_chain_id
 
 _HTTP_UA = "executeSignResult/1.0 (Python-urllib)"
-DEFAULT_MPC_AUTH_URL = "http://localhost:8080"
+DEFAULT_MPC_AUTH_URL = "http://127.0.0.1"
+DEFAULT_MANAGEMENT_PORT = "8080"
+
+
+def resolve_mpc_auth_base(mpc_auth_url: str, management_port: str | int | None) -> str:
+    base = (mpc_auth_url or "").strip()
+    if not base:
+        raise ValueError("mpc_auth_url cannot be empty")
+    p = urllib.parse.urlparse(base)
+    if not p.scheme or not p.netloc:
+        raise ValueError("mpc_auth_url must include scheme and host, e.g. http://127.0.0.1")
+    if p.port is not None:
+        return base.rstrip("/")
+    port = str(management_port or "").strip()
+    if not port:
+        raise ValueError("management_port is required when mpc_auth_url has no port")
+    try:
+        int(port, 10)
+    except ValueError as e:
+        raise ValueError("management_port must be numeric") from e
+    netloc = f"{p.netloc}:{port}"
+    return urllib.parse.urlunparse(p._replace(netloc=netloc)).rstrip("/")
 
 
 def http_get_json(url: str) -> dict[str, Any]:
@@ -447,8 +469,13 @@ def main() -> None:
     )
     ap.add_argument(
         "--mpc-auth-url",
-        default=DEFAULT_MPC_AUTH_URL,
-        help=f"Management API base URL (default: {DEFAULT_MPC_AUTH_URL})",
+        default=(os.environ.get("MPC_AUTH_URL") or DEFAULT_MPC_AUTH_URL),
+        help=f"Management API host URL (env MPC_AUTH_URL, default: {DEFAULT_MPC_AUTH_URL})",
+    )
+    ap.add_argument(
+        "--management-port",
+        default=(os.environ.get("MANAGEMENT_PORT") or DEFAULT_MANAGEMENT_PORT),
+        help=f"Management API port (env MANAGEMENT_PORT, default: {DEFAULT_MANAGEMENT_PORT})",
     )
     ap.add_argument(
         "--sign-result-file",
@@ -476,7 +503,7 @@ def main() -> None:
         help="Seconds to wait for each transaction receipt (default: 180)",
     )
     args = ap.parse_args()
-    mpc = args.mpc_auth_url.rstrip("/")
+    mpc = resolve_mpc_auth_base(args.mpc_auth_url, args.management_port)
 
     request_id = (args.sign_request_id or "").strip()
 

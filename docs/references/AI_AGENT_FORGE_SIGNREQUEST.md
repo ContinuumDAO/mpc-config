@@ -12,7 +12,7 @@ This document is for **AI agents** and **other programmatic automation** that tu
 
 ### Management API URL
 
-Point **`--mpc-auth-url`** at the node’s **management HTTP API** (scheme, host, and port your deployment uses). When the process calling the API runs **on the same host** as the node, **`http://127.0.0.1:<port>`** or **`http://localhost:<port>`** is typical, with **`<port>`** = **`ManagementAPIsPort`** in **`configs.yaml`** (often `8080` in sample configs). See **[AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md)** §8.2. If you changed the port in config, pass that port to the script (e.g. `--mpc-auth-url=http://localhost:9000`).
+Point **`--mpc-auth-url`** at the node’s **management HTTP API** as **`$MPC_AUTH_URL:$MANAGEMENT_PORT`**. `MPC_AUTH_URL` should be host-only (for example `http://127.0.0.1` or `http://<IP>`), and `MANAGEMENT_PORT` should be numeric (`ManagementAPIsPort` in `configs.yaml`). See **[AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md)** §8.2.
 
 ---
 
@@ -82,7 +82,7 @@ pipx install eth-account
 
 **Input:** Foundry broadcast JSON (see “Where does the JSON come from?” below).
 
-**Required:** `--key-gen-id=<KeyGenRequestId>`. The script calls `GET {mpc-auth-url}/getKeyGenResultById?id=...`. Set **`--mpc-auth-url`** to `http://localhost:<ManagementAPIsPort>` from the node’s **`configs.yaml`**.
+**Required:** `--key-gen-id=<KeyGenRequestId>`. The script calls `GET {mpc-auth-url}/getKeyGenResultById?id=...`. Set **`--mpc-auth-url`** to **`$MPC_AUTH_URL:$MANAGEMENT_PORT`** from your environment / node config.
 
 **Read from stdin:**
 ```bash
@@ -102,7 +102,7 @@ python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" \
 python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" --key-gen-id=KeyGen... --file=... \
   --destination-chain-id=11155111 \
   --purpose="Deploy and configure contract" \
-  --mpc-auth-url=http://localhost:8080   # replace 8080 with ManagementAPIsPort from configs.yaml
+  --mpc-auth-url="$MPC_AUTH_URL:$MANAGEMENT_PORT"
 ```
 
 **Destination and display (optional):** `--destination-address` (single tx), `--destination-addresses` (batch: JSON array), `--signature-text`, `--signature-texts` (batch: JSON array), `--extra-json` (merged with batch `batchMeta` when batching).
@@ -224,7 +224,7 @@ Foundry writes **`broadcast/LineaFeeApproveDeposit.s.sol/59144/dry-run/run-lates
 ```bash
 python3 "$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py" \
   --key-gen-id=KeyGen... \
-  --mpc-auth-url=http://localhost:8080 \
+  --mpc-auth-url="$MPC_AUTH_URL:$MANAGEMENT_PORT" \
   --file=forge/broadcast/LineaFeeApproveDeposit.s.sol/59144/dry-run/run-latest.json \
   --destination-chain-id=59144 \
   --purpose="Linea fee token approve and deposit" \

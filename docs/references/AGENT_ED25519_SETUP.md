@@ -183,18 +183,18 @@ The node continues to run as its own user (e.g. the user that runs Docker or the
 
 ### 8.2 Node API URL and port
 
-The node exposes its management API on **port 8080** by default (configurable via `ManagementAPIsPort` in `~mpcnode/mpc-config/configs.yaml`). When the agent runs on the same VPS:
+The node exposes its management API on `ManagementAPIsPort` in `configs.yaml`. Build the API base URL as **`$MPC_AUTH_URL:$MANAGEMENT_PORT`** where `MPC_AUTH_URL` is host-only (`http://127.0.0.1` or `http://<IP>`) and `MANAGEMENT_PORT` is numeric.
 
-- **Base URL:** `http://localhost:8080` or `http://127.0.0.1:8080`
-- If you changed the port in config, use that port instead.
+- **Base URL:** `"$MPC_AUTH_URL:$MANAGEMENT_PORT"`
+- Typical co-located setting: `MPC_AUTH_URL=http://127.0.0.1`, `MANAGEMENT_PORT=<management_api_port>`.
 
 Examples:
 
-- Health: `GET http://localhost:8080/health`
-- Check Ed25519: `GET http://localhost:8080/hasPublicMgtKey`
-- Nonce: `GET http://localhost:8080/getPublicMgtKeyNonce`
+- Health: `GET $MPC_AUTH_URL:$MANAGEMENT_PORT/health`
+- Check Ed25519: `GET $MPC_AUTH_URL:$MANAGEMENT_PORT/hasPublicMgtKey`
+- Nonce: `GET $MPC_AUTH_URL:$MANAGEMENT_PORT/getPublicMgtKeyNonce`
 
-So the agent (e.g. Open Claw) should be configured with **node URL = `http://localhost:8080`** when it runs on the node VPS.
+So the agent (e.g. Open Claw) should be configured with **node URL = `$MPC_AUTH_URL:$MANAGEMENT_PORT`** when it runs on the node VPS.
 
 ### 8.3 Install and run the agent as `ai-agent`
 
@@ -212,14 +212,14 @@ So the agent (e.g. Open Claw) should be configured with **node URL = `http://loc
    ```
 
 3. **Configure the agent** to use:
-   - **Node URL:** `http://localhost:8080` (or `http://127.0.0.1:8080`)
+   - **Node URL:** `$MPC_AUTH_URL:$MANAGEMENT_PORT`
    - **Private key path:** `~/.ssh/mpc_auth_ed25519` (i.e. `/home/ai-agent/.ssh/mpc_auth_ed25519`)
 
 4. Run the agent as `ai-agent`. It will read the key from disk and call the node API over the loopback port.
 
 ### 8.4 Security (optional)
 
-- **Restrict who can reach the node API:** If only the agent on the same host should talk to the node, bind the management API to `127.0.0.1` (if supported by the node config) or use a firewall so that port 8080 is only reachable from localhost.
+- **Restrict who can reach the node API:** If only the agent on the same host should talk to the node, bind the management API to `127.0.0.1` (if supported by the node config) or use a firewall so that `MANAGEMENT_PORT` is only reachable from loopback.
 - **Key permissions:** Ensure only `ai-agent` can read `~/.ssh/mpc_auth_ed25519` (e.g. `chmod 600` and correct ownership).
 
 ### 8.5 Open Claw: isolated cron + KeyGen message poll
@@ -229,7 +229,7 @@ To react when someone `@mentions` the agent in the KeyGen channel, use **Open Cl
 **Poll helper in this repo:** `$MPA_PATH/scripts/keygen_messaging_agent_poll.py`
 
 1. Install deps once: `pipx install eth-account && pipx inject eth-account cryptography` (or `pipx inject eth-account -r $MPA_PATH/scripts/requirements-keygen-agent.txt` when supported).
-2. Export at least **`KEYGEN_ID`** and, if needed, **`MPC_AUTH_URL`** for the management API (default `http://127.0.0.1:8080`). The script loads the Ed25519 management key from **`AUTH_KEY_PATH`** (default `~/.ssh/mpc_auth_ed25519`) or optional **`MPC_MGT_ED25519_SEED_HEX`**.
+2. Export at least **`KEYGEN_ID`**, **`MPC_AUTH_URL`** (host-only, e.g. `http://127.0.0.1`), and **`MANAGEMENT_PORT`** so the API base URL is always `$MPC_AUTH_URL:$MANAGEMENT_PORT`. The script loads the Ed25519 management key from **`AUTH_KEY_PATH`** (default `~/.ssh/mpc_auth_ed25519`) or optional **`MPC_MGT_ED25519_SEED_HEX`**.
 3. The script prints one JSON line: `matches` (unread messages whose title/body match `@agent` by default), then calls `POST /multiMarkMessagesRead` so the next poll skips handled items. Use `--dry-run` to inspect without marking read.
 
 **Example cron** (adjust paths and schedule; ensure the job may run `exec`). Keep `--message` on one line so the shell parses it reliably:

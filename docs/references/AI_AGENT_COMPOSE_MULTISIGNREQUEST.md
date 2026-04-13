@@ -18,7 +18,7 @@ This document is for **AI agents** that build **POST /multiSignRequest** payload
 
 ## Management API URL
 
-Point **`--mpc-auth-url`** at the node’s **management HTTP API** (scheme, host, and port your deployment uses). When the process calling the API runs **on the same host** as the node, **`http://127.0.0.1:<port>`** or **`http://localhost:<port>`** is typical, with **`<port>`** = **`ManagementAPIsPort`** in **`configs.yaml`** (often `8080`). See **[AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md)** §8.2 if you use a non-default port or remote access.
+Point **`--mpc-auth-url`** at the node’s **management HTTP API** as **`$MPC_AUTH_URL:$MANAGEMENT_PORT`**. `MPC_AUTH_URL` should be host-only (for example `http://127.0.0.1` or `http://<IP>`), and `MANAGEMENT_PORT` should be the numeric `ManagementAPIsPort` in `configs.yaml`. See **[AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md)** §8.2 if you use a non-default port or remote access.
 
 The script calls:
 
@@ -87,15 +87,15 @@ Each **compose action** object:
 
 ```bash
 # From file
-python3 "$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py" --file compose.json --mpc-auth-url http://localhost:8080
+python3 "$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py" --file compose.json --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
 
 # Stdin
-cat compose.json | python3 "$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py" --mpc-auth-url http://localhost:8080
+cat compose.json | python3 "$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py" --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
 
 # Override key gen id without editing JSON
 python3 "$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py" --file compose.json \
   --key-gen-id KeyGen20260111003720999cf104d0f \
-  --mpc-auth-url http://localhost:8080
+  --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
 ```
 
 **Optional signing (writes `postBody` into stdout JSON):**

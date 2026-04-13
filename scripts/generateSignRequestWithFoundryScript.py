@@ -77,7 +77,7 @@ Usage
 -----
   # Use the same port as ManagementAPIsPort in configs.yaml (default below is 8080 if unchanged).
   python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... < broadcast/My.s.sol/1/run-latest.json
-  python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... --mpc-auth-url=http://localhost:9000 < ...   # if port is 9000
+  python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... --mpc-auth-url=http://127.0.0.1 --management-port=9000 < ...
 
   # Or from file path
   python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... --file=broadcast/My.s.sol/1/run-latest.json
@@ -122,6 +122,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 import urllib.error
 import urllib.parse
@@ -133,9 +134,30 @@ ANVIL_SIMULATION_CHAIN_ID = "364865"
 
 # Fallback only if configs.yaml still has the sample port. User should set
 # --mpc-auth-url from ManagementAPIsPort in configs.yaml (see AGENT_ED25519_SETUP.md).
-DEFAULT_MPC_AUTH_URL = "http://localhost:8080"
+DEFAULT_MPC_AUTH_URL = "http://127.0.0.1"
+DEFAULT_MANAGEMENT_PORT = "8080"
 
 _HTTP_UA = "generateSignRequestWithFoundryScript/1.0 (Python-urllib)"
+
+
+def resolve_mpc_auth_base(mpc_auth_url: str, management_port: str | int | None) -> str:
+    base = (mpc_auth_url or "").strip()
+    if not base:
+        raise ValueError("mpc_auth_url cannot be empty")
+    p = urllib.parse.urlparse(base)
+    if not p.scheme or not p.netloc:
+        raise ValueError("mpc_auth_url must include scheme and host, e.g. http://127.0.0.1")
+    if p.port is not None:
+        return base.rstrip("/")
+    port = str(management_port or "").strip()
+    if not port:
+        raise ValueError("management_port is required when mpc_auth_url has no port")
+    try:
+        int(port, 10)
+    except ValueError as e:
+        raise ValueError("management_port must be numeric") from e
+    netloc = f"{p.netloc}:{port}"
+    return urllib.parse.urlunparse(p._replace(netloc=netloc)).rstrip("/")
 
 
 def hex_to_int(s: str | None) -> int:
@@ -634,13 +656,17 @@ def main() -> None:
     )
     ap.add_argument(
         "--mpc-auth-url",
-        default=DEFAULT_MPC_AUTH_URL,
+        default=(os.environ.get("MPC_AUTH_URL") or DEFAULT_MPC_AUTH_URL),
         metavar="URL",
         help=(
-            "Management API base URL. Use http://localhost:<port> where <port> is "
-            "ManagementAPIsPort in the node's configs.yaml (default here is 8080). "
-            "See docs/references/AGENT_ED25519_SETUP.md §8.2."
+            "Management API host URL (env MPC_AUTH_URL), e.g. http://127.0.0.1 or http://<IP>."
         ),
+    )
+    ap.add_argument(
+        "--management-port",
+        default=(os.environ.get("MANAGEMENT_PORT") or DEFAULT_MANAGEMENT_PORT),
+        metavar="PORT",
+        help="Management API port (env MANAGEMENT_PORT, default: %(default)s)",
     )
     ap.add_argument("--purpose", help="Purpose text")
     # Nonce refresh and sender override
@@ -792,8 +818,9 @@ def main() -> None:
         options["purpose"] = args.purpose
 
     try:
+        mpc_base = resolve_mpc_auth_base(args.mpc_auth_url, args.management_port)
         key_list, pub_key = fetch_key_list_and_pubkey_from_keygen(
-            args.mpc_auth_url, args.key_gen_id
+            mpc_base, args.key_gen_id
         )
         options["key_list"] = key_list
         options["pub_key"] = pub_key
