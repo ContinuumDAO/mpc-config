@@ -157,6 +157,8 @@ Use **[pipx](https://github.com/pypa/pipx)** for installing these packages (not 
 
 To **notice unread channel messages directed at the agent** without manual **`GET /listMessages`** each time, run **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** on a timer (recommended: **Open Claw Gateway isolated cron**; see **`$MPA_PATH/references/AGENT_ED25519_SETUP.md`** §8.5 and [Open Claw cron](https://docs.openclaw.ai/cron)).
 
+**Ask the operator once** whether they want scheduled polling (and where: e.g. Open Claw cron) **before** you add or change a timer. Do **not** assume background polling: some setups only use ad-hoc **`GET /listMessages`** / **`getMessageThread`**, and the script **marks matched messages read**. If they already declined, a cron entry already exists, or they explicitly asked you to wire the poll, skip re-asking.
+
 1. **Once:** install **`cryptography`** into the pipx **`eth-account`** environment (**`pipx inject eth-account cryptography`** — see **[Python dependencies](#python-dependencies)**).
 2. **Run:** the venv **`python`** for **`eth-account`** with **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** (and **`KEYGEN_ID`** set; **`AUTH_KEY_PATH`** / **`MPC_AUTH_URL`** if not defaults). **`--dry-run`** lists matching unread messages without calling **`multiMarkMessagesRead`**.
 3. **Output:** one JSON line: **`matches`**, **`match_count`**, **`marked_ids`**. The script marks matched messages read so the next poll does not repeat them.
