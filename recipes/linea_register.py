@@ -40,7 +40,13 @@ def build_linea_register_compose(
     purpose: str = "",
     no_custom_gas_params: bool = False,
 ) -> dict[str, Any]:
-    """Compose JSON for a single register() call; RPC comes from getChainDetails."""
+    """Compose JSON for a single register() call; RPC comes from getChainDetails.
+
+    When ``noCustomGasParams`` is **false** (default), ``generateMultiSignRequestFromCompose``
+    uses **GET /getChainDetails** gas fields **when set**; if **gasLimit** is empty, it uses
+    ``eth_estimateGas``. When ``noCustomGasParams`` is **true**, chain gas fields are ignored
+    and limits/fees come from the RPC only (see compose script).
+    """
     pid = (key_gen_id or "").strip()
     if not pid:
         raise ValueError("keyGenId is required")
@@ -111,7 +117,10 @@ def main() -> None:
     ap.add_argument(
         "--no-custom-gas-params",
         action="store_true",
-        help="Ignore ChainDetails gas fields; estimate gas limit and fees only from the RPC",
+        help=(
+            "Set noCustomGasParams on compose JSON: ignore ChainDetails gas fields and use RPC-only "
+            "estimates. Default (flag omitted): use chain gas when configured, otherwise eth_estimateGas."
+        ),
     )
     ap.add_argument(
         "--ed25519-seed-hex",

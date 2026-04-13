@@ -62,7 +62,10 @@ are **required**. Install into ``$MPA_PATH/.venv`` (see ``docs/skill/SKILL.md`` 
 ``paramUnits`` keys are input indices as strings; values are ``Wei`` | ``Ether`` |
 ``Gwei`` | ``USD`` (same as ``EVMUnit`` in the app). Per-action ``estimatedGas``
 and fee fields mirror values stored after **Simulate**; omit them to estimate on
-the fly via RPC.
+the fly via RPC. **``noCustomGasParams``:** when **false** or omitted, gas uses
+**GET /getChainDetails** fields when set (see ``build_compose_multisign``); when **true**,
+chain gas hints are ignored. **Recipe CLIs** under ``recipes/`` (e.g. ``linea_register.py``)
+document ``--no-custom-gas-params`` the same way.
 
 **Native currency transfer** (ETH / chain gas token to an address, no contract
 calldata): set ``"nativeTransfer": true``, ``destinationContract`` = recipient
@@ -673,14 +676,16 @@ def build_compose_multisign(
 
         est = _maybe_int(raw_act.get("estimatedGas") or raw_act.get("estimated_gas"))
         gas_limit: int
+        rpc_est = eth_estimate_gas(
+            rpc_url, executor, to_addr, data_hex, value_wei if is_native else None
+        )
         if est is not None and est > 0:
             gas_limit = est
         elif not no_custom_gas_params and gas_limit_config is not None and gas_limit_config > 0:
-            gas_limit = gas_limit_config
+            # Chain default gasLimit is often 21000 (transfer); contract calls need at least intrinsic gas.
+            gas_limit = max(gas_limit_config, rpc_est)
         else:
-            gas_limit = eth_estimate_gas(
-                rpc_url, executor, to_addr, data_hex, value_wei if is_native else None
-            )
+            gas_limit = rpc_est
 
         current_nonce = nonce0 + i
 

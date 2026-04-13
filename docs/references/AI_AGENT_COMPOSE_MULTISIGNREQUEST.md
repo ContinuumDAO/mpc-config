@@ -12,7 +12,7 @@ This document is for **AI agents** that build **POST /multiSignRequest** payload
 2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **[AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md)** or **this document**.
 3. **Review** **`Purpose`** (≤256 characters) and transaction fields (chain id, calldata, gas, nonces) against group intent and messages.
 4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** requires for your deployment).
-5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → track peer responses → **`POST /triggerSignRequestById`** when ready → broadcast raw transactions → **`POST /updateSignResultStatusById`**. Narrative flow: **[instructions.md](./instructions.md)**.
+5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → track peer responses → **`POST /triggerSignRequestById`** when ready → broadcast raw transactions → **`POST /updateSignResultStatusById`**. **EVM:** **`POST /triggerSignRequestById`** must include **`txParams`** and **`messageHash`** so the node stores them (see **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** § **`POST /triggerSignRequestById`**). Narrative flow: **[instructions.md](./instructions.md)**.
 
 ---
 
@@ -74,7 +74,7 @@ Each **compose action** object:
 | **`destinationContract`** | Yes | Called contract address (`destination_contract`). |
 | **`inputs`** | Yes | Array of **`{ "name", "type", "value" }`** in parameter order. Types follow Solidity ABI strings (`address`, `uint256`, `uint256[]`, etc.). |
 | **`paramUnits`** | No | Map **index as string** → **`Wei`** \| **`Ether`** \| **`Gwei`** \| **`USD`**. Applies only to **`uint256`** and **`uint256[]`**, same as the app (`param_units`). |
-| **`estimatedGas`** | No | If set and &gt; 0, used as gas limit; else chain-config **gasLimit** (when **`noCustomGasParams`** is false and configured) or **`eth_estimateGas`** (`estimated_gas`). |
+| **`estimatedGas`** | No | If set and &gt; 0, used as gas limit. Otherwise, when **`noCustomGasParams`** is false and chain **gasLimit** is set, the limit is **`max(chain gasLimit, eth_estimateGas)`** so a low chain default (e.g. 21000) cannot underfund a contract call. When chain **gasLimit** is empty, **`eth_estimateGas`** is used. |
 | **`gasPriceWei`** | No | Legacy: if set, used as gas price (wei); else RPC (`gas_price_wei`). |
 | **`maxFeePerGas`** / **`maxPriorityFeePerGas`** | No | EIP-1559: if **both** set and &gt; 0, used; else computed from RPC + chain multipliers (`max_fee_per_gas`, `max_priority_fee_per_gas`). |
 
@@ -170,7 +170,7 @@ The script matches **`continuumdao-node-app`** **`handleComposeOK`** behavior:
 - [ ] Run the script with **`--mpc-auth-url`** pointing at **ManagementAPIsPort**.
 - [ ] Parse stdout JSON; use **`messageToSign`** to produce **`clientSig`** (or use **`postBody`** if you passed a signing flag).
 - [ ] **POST** the final JSON body to **`POST /multiSignRequest`** (not **`/signRequest`** for multi-agree keys).
-- [ ] Use the returned request id for **`/signRequestAgree`**, **`/triggerSignRequestById`**, **`/getSignResultById`** as in the forge guide.
+- [ ] Use the returned request id for **`/signRequestAgree`**, **`/triggerSignRequestById`** (EVM: include **`txParams`** + **`messageHash`** on trigger—see API doc), **`/getSignResultById`** as in the forge guide.
 
 ---
 

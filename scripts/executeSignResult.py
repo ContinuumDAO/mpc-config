@@ -385,6 +385,7 @@ def build_unsigned_single_tx_dict_app_style(
     except (RuntimeError, OSError):
         estimated = 21_000
 
+    # Gas limit: RPC estimate as baseline; chain config overrides when set; TxParams (sign snapshot) wins last.
     gas_limit = estimated
     if chain_gas_limit_cfg and chain_gas_limit_cfg > 0:
         gas_limit = int(chain_gas_limit_cfg)

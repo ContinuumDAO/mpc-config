@@ -8,7 +8,7 @@ This document is for **AI agents** and **other programmatic automation** that tu
 2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **this document** or **[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md](./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**.
 3. **Review** **`Purpose`** (≤256 characters) and transaction fields (chain id, calldata, gas, nonces) against group intent and messages.
 4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** requires for your deployment).
-5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → track peer responses → **`POST /triggerSignRequestById`** when ready → broadcast raw transactions → **`POST /updateSignResultStatusById`**. Narrative flow: **[instructions.md](./instructions.md)**.
+5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → track peer responses → **`POST /triggerSignRequestById`** when ready → broadcast raw transactions → **`POST /updateSignResultStatusById`**. **EVM:** **`POST /triggerSignRequestById`** must include **`txParams`** and **`messageHash`** so the node stores them (see **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** § **`POST /triggerSignRequestById`**). Narrative flow: **[instructions.md](./instructions.md)**.
 
 ### Management API URL
 
@@ -250,7 +250,7 @@ Use **`--override-sender`** / **`--first-nonce`** when the broadcast **`from`** 
 4. **POST** the final body to **POST /multiSignRequest** only (not **/signRequest**—that path is for tx-check / relayer keys).
 5. **Use** the returned `requestId` for:
    - **signRequestAgree** (multi-agree),
-   - **triggerSignRequestById** (after enough agreements),
+   - **triggerSignRequestById** (after enough agreements; **EVM:** POST body must include **`txParams`** and **`messageHash`** so they are stored—see **API_IMPLEMENTATION.md**),
    - **getSignResultById** to get signature(s). For batch, use `data.batchSignatures[i]` for the i-th transaction.
 
 ---
@@ -273,7 +273,7 @@ Use **`--override-sender`** / **`--first-nonce`** when the broadcast **`from`** 
 - [ ] Parse the JSON output; use `body` for **POST /multiSignRequest**.
 - [ ] Add `clientSig` to `body` (`keyList`/`pubKey` already filled if using the Python script with `--key-gen-id`).
 - [ ] POST the complete body to **POST /multiSignRequest** (not `/signRequest` for multi-agree keys).
-- [ ] Use the returned `requestId` for agree/trigger and then get sign result(s).
+- [ ] Use the returned `requestId` for agree/trigger and then get sign result(s). **EVM:** on **`POST /triggerSignRequestById`**, send **`txParams`** and **`messageHash`** (see **API_IMPLEMENTATION.md** § **`POST /triggerSignRequestById`**).
 
 ---
 

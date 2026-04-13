@@ -2651,13 +2651,13 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequests?filter=all&pagenum=0&pages
 
 <a id="get-getsignrequestbyid"></a>
 #### `GET /getSignRequestById`
-Gets a specific signing request by ID. Returns the same structure as each item in `listSignRequests` (including `KeyGenRequestId`, `DestinationChainID`, `Purpose`, `TxParams` when set, etc.). Optional fields only appear if this node is running a build that includes them (see note under `listSignRequests`).
+Gets a specific signing request by ID. Returns the same structure as each item in `listSignRequests` (including `KeyGenRequestId`, `DestinationChainID`, `Purpose`, **`TxParams` when they were stored** at `POST /triggerSignRequestById`, etc.). Optional fields only appear if this node is running a build that includes them (see note under `listSignRequests`).
 
 **Query Parameters:**
 - `id` (required): Sign request ID
 - `tx_params` (optional): If `1`, response `data` is **only** the TxParams object (same shape as below), not the full sign request. Use this when the client already has the sign request and only needs TxParams for Execute.
 
-**TxParams** (when present) is stored only on the node that received `triggerSignRequestById`; it contains `nonce`, `gasLimit`, `txType`, and either EIP-1559 or legacy gas fields so the app can rebuild the same EVM transaction at Execute.
+**TxParams** are stored only on the node that received `POST /triggerSignRequestById` when the trigger body included **`txParams`** (see [triggerSignRequestById](#post-triggersignrequestbyid)). For **EVM** multi-agree requests, the originator **must** send **`txParams`** on trigger so they are persisted; otherwise **`GET /getSignRequestById?tx_params=1`** returns **`Data: null`** and Execute (and automation that relies on TxParams) cannot rebuild the same unsigned transaction (nonce, gas, fees) that was signed. The object contains `nonce`, `gasLimit`, `txType`, and either EIP-1559 or legacy gas fields.
 
 **Example:**
 ```bash
@@ -2888,6 +2888,8 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequestsReady?pagenum=0&pagesize=10
 #### `POST /triggerSignRequestById`
 **Multi-agree only.** When at least **threshold+1** nodes have accepted (and rejections are excluded), triggers signature generation: sends **SIGNREQUESTCONFIRMSUCCESS** and starts the sign worker(s). For **single** requests, one signature is produced; for **batch** requests, one trigger produces one SignResult with N signatures (retrieved via `GET /getSignResultById` as the `batchSignatures` array). **Only the originator may call this:** the request’s **Purpose** map must have this node’s key as the (originator) key; otherwise the server returns an error. **If the sign request status is `"shelved"`** (set via `POST /shelveSignRequest`), the server returns an error and does not trigger. **Idempotent:** if the request was already triggered, returns success with data `"Already triggered"`. Does not affect tx-check flow. Requires management key signature (MetaMask or Ed25519).
 
+**EVM (required for automation and Execute):** For **EVM** signing requests, the originator **must** include **`txParams`** and **`messageHash`** in the trigger body so the node **stores** them locally (same behavior as the web app **Get Sig** flow). **`txParams`** must be persisted so **`GET /getSignRequestById?tx_params=1`** returns the nonce/gas/fee snapshot for Execute and CLI tools. **`messageHash`** must be the **transaction signing hash** (hash of the serialized unsigned tx matching those params) so the MPC signs the same preimage the client will use to build the raw signed transaction. Omitting **`txParams`** leaves nothing to return for `tx_params=1` (**`Data: null`**), which breaks signature recovery checks and reliable broadcast. AI agents and scripts must not call trigger with only `requestId` + management signature for EVM requests.
+
 **Request Body:**
 ```json
 {
@@ -2897,10 +2899,12 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequestsReady?pagenum=0&pagesize=10
 }
 ```
 
+Minimal body above is structurally valid; **for EVM multi-agree, add `txParams` and `messageHash` as below.**
+
 - `requestId` (required): Sign request ID.
 - `nonce`, `sig`: Management key signature over the JSON body with `sig` set to empty (same as other mgt-key endpoints).
-- `txParams` (optional, **EVM**): Object with `nonce` (number), `gasLimit` (string), `txType` (`"eip1559"` or `"legacy"`), and for EIP-1559: `maxFeePerGas`, `maxPriorityFeePerGas` (strings); for legacy: `gasPrice` (string). Stored on **this node only** (not propagated). Returned in `getSignRequestById` so the app can rebuild the same tx at Execute.
-- `messageHash` (optional, **EVM**): The **transaction signing hash** to sign. If provided, the backend updates the sign request's MessageHash on **this node only** before starting the sign worker; the MPC signs this hash. Not propagated to other nodes.
+- `txParams` (**required**, **EVM** multi-agree): Object with `nonce` (number), `gasLimit` (string), `txType` (`"eip1559"` or `"legacy"`), and for EIP-1559: `maxFeePerGas`, `maxPriorityFeePerGas` (strings); for legacy: `gasPrice` (string). **Must be sent** on trigger so the node **stores** it on **this node only** (not propagated). Returned in `getSignRequestById` (`tx_params=1`) so the app can rebuild the same tx at Execute. If omitted, nothing is stored and `getSignRequestById?tx_params=1` returns **`Data: null`**.
+- `messageHash` (**required**, **EVM** multi-agree): The **transaction signing hash** (hex, typically 64 hex chars without `0x`) for the unsigned tx that matches **`txParams`**. The backend updates the sign request's MessageHash on **this node only** before starting the sign worker; the MPC signs this hash. Not propagated to other nodes. Omitting it risks signing a different preimage than Execute builds.
 
 **Response (triggered):**
 ```json
@@ -2922,7 +2926,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequestsReady?pagenum=0&pagesize=10
 
 **Errors:** If the node posting is not the originator (this node’s key is not the key in the Purpose map), the server returns `500` with error message like: `only the originator (node key in Purpose) can trigger this sign request`. If the sign request status is `"shelved"`, the server returns `500` with error: `sign request ... is shelved; cannot trigger signature generation`.
 
-**Example:**
+**Example (management fields only — not sufficient for EVM Execute; add `txParams` and `messageHash` for EVM):**
 ```bash
 curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/triggerSignRequestById \
   -H "Content-Type: application/json" \
@@ -2932,6 +2936,8 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/triggerSignRequestById \
     "sig": "0x..."
   }'
 ```
+
+**Example (EVM):** include **`txParams`** and **`messageHash`** in the JSON body (values must match the unsigned tx you intend to broadcast). Shape matches **`continuumdao-node-app`** Get Sig / **`docs/SIGN_REQUEST_TX_PARAMS.md`** in the node-app repo.
 
 <a id="post-updatesignresultstatusbyid"></a>
 #### `POST /updateSignResultStatusById`

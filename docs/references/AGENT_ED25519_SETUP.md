@@ -107,7 +107,7 @@ Once PublicMgtKey is set on the node, the backend will accept Ed25519 signatures
 |---------------------|-----------------------------|-------|
 | Create sign request | `POST /multiSignRequest`     | Build body (keyList, pubKey, msgHash, msgRaw, destinationChainID, etc.); sign with Ed25519; send as clientSig (128 hex) + signedMessage. Agent can initiate new multi-sign requests with their key. |
 | Agree/Reject        | `POST /signRequestAgree`     | Message = JSON body (requestId, clientSig: "", accept, thoughts?, nonce). Sign with Ed25519; send as clientSig (128 hex) + signedMessage. |
-| Trigger sign        | `POST /triggerSignRequestById` | Same pattern: get nonce, build body, sign, send clientSig + signedMessage. |
+| Trigger sign        | `POST /triggerSignRequestById` | Same pattern: get nonce, build body, sign, send **`Sig`** (management). **EVM multi-agree:** the body **must** also include **`txParams`** and **`messageHash`** so the node stores them—see **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** § **`POST /triggerSignRequestById`**. |
 | Update result status| `POST /updateSignResultStatusById` | Same pattern. |
 | Shelve request      | `POST /shelveSignRequest`    | Body shape: Nonce, RequestId, Sig. Sign the JSON string; send Sig (Ed25519 128 hex). |
 | KeyGen create/join  | `POST /keyGenRequest`, `POST /keyGenRequestAgree` | Use clientPk = 64-hex Ed25519 public key; sign payload with Ed25519. |

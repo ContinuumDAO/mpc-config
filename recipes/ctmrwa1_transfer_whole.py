@@ -7,7 +7,7 @@ Matches **CTMRWA1** defaults in ``docs/references/TOKEN_STORAGE_SCHEMA.md`` / **
 - **transferWholeSig:** ``transferWholeTokenX(string,string,string,uint256,uint256,uint256,string)``
 - **transferWholeNames:** ``fromAddrStr``, ``toAddressStr``, ``toChainIdStr``, ``fromTokenId``, ``ID``, ``version``, ``feeTokenStr``
 
-The MPC transaction is sent on **--chain-id** (contract chain). **--to-chain-id** sets ``toChainIdStr`` (default: same as ``--chain-id``).
+The MPC transaction is sent on **--chain-id** (contract chain). **--to-chain-id** sets ``toChainIdStr`` (default: same as ``--chain-id``). Gas defaults match ``linea_register`` (chain fields when set, else **eth_estimateGas**; **--no-custom-gas-params** for RPC-only).
 
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
@@ -86,6 +86,13 @@ def build_ctmrwa1_whole_compose(
     no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
 ) -> dict[str, Any]:
+    """Compose JSON for CTMRWA1 ``transferWholeTokenX``; RPC from getChainDetails unless rpc_gateway set.
+
+    When ``noCustomGasParams`` is **false** (default), ``generateMultiSignRequestFromCompose``
+    uses **GET /getChainDetails** gas fields **when set**; if **gasLimit** is empty, it uses
+    ``eth_estimateGas``. When ``noCustomGasParams`` is **true**, chain gas fields are ignored
+    and limits/fees come from the RPC only (see compose script).
+    """
     pid = (key_gen_id or "").strip()
     if not pid:
         raise ValueError("keyGenId is required")
@@ -210,7 +217,10 @@ def main() -> None:
     ap.add_argument(
         "--no-custom-gas-params",
         action="store_true",
-        help="Ignore ChainDetails gas fields; estimate gas limit and fees only from the RPC",
+        help=(
+            "Set noCustomGasParams on compose JSON: ignore ChainDetails gas fields and use RPC-only "
+            "estimates. Default (flag omitted): use chain gas when configured, otherwise eth_estimateGas."
+        ),
     )
     ap.add_argument("--rpc-gateway", default="", metavar="URL")
     ap.add_argument("--ed25519-seed-hex", metavar="HEX", default="")
