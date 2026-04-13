@@ -143,11 +143,22 @@ def rpc_call(url: str, method: str, params: list[Any]) -> Any:
     return out.get("result")
 
 
+def _api_code(resp: dict[str, Any]) -> Any:
+    """Management API may use ``code`` / ``Code`` (JSON from tools or older clients)."""
+    c = resp.get("code")
+    return c if c is not None else resp.get("Code")
+
+
+def _api_data(resp: dict[str, Any]) -> Any:
+    return resp.get("data") if resp.get("data") is not None else resp.get("Data")
+
+
 def unwrap_api_response(resp: dict[str, Any], what: str) -> Any:
-    if resp.get("code") != 0:
-        err = resp.get("error") or str(resp)
-        raise ValueError(f"{what} failed (code={resp.get('code')}): {err}")
-    return resp.get("data")
+    c = _api_code(resp)
+    if c is not None and c != 0:
+        err = resp.get("error") or resp.get("Error") or str(resp)
+        raise ValueError(f"{what} failed (code={c}): {err}")
+    return _api_data(resp)
 
 
 def fetch_sign_result(mpc_base: str, request_id: str) -> dict[str, Any]:
@@ -175,9 +186,10 @@ def fetch_sign_request_tx_params(mpc_base: str, request_id: str) -> dict[str, An
         resp = http_get_json(f"{mpc_base.rstrip('/')}/getSignRequestById?{q}")
     except (ValueError, OSError, json.JSONDecodeError):
         return None
-    if resp.get("code") != 0 or resp.get("data") is None:
+    c = _api_code(resp)
+    data = _api_data(resp)
+    if (c is not None and c != 0) or data is None:
         return None
-    data = resp.get("data")
     if not isinstance(data, dict):
         return None
     tx_type = data.get("txType")
@@ -492,10 +504,11 @@ def signed_raw_single_like_app(
 def fetch_chain_detail_for_id(mpc_base: str, chain_id_num: int) -> dict[str, Any]:
     base = mpc_base.rstrip("/")
     resp = http_get_json(f"{base}/getChainDetails?chain_id={chain_id_num}")
-    if resp.get("code") != 0:
-        err = resp.get("error") or str(resp)
-        raise ValueError(f"getChainDetails failed (code={resp.get('code')}): {err}")
-    data = resp.get("data")
+    ac = _api_code(resp)
+    if ac is not None and ac != 0:
+        err = resp.get("error") or resp.get("Error") or str(resp)
+        raise ValueError(f"getChainDetails failed (code={ac}): {err}")
+    data = _api_data(resp)
     rows: list[dict[str, Any]]
     if isinstance(data, list):
         rows = [x for x in data if isinstance(x, dict)]
@@ -547,9 +560,29 @@ def unwrap_sign_body(obj: dict[str, Any]) -> dict[str, Any]:
         return obj["bodyForSign"]
     if "body" in obj and isinstance(obj["body"], dict):
         return obj["body"]
-    if "msgHash" in obj or "messageHashes" in obj or "destinationChainID" in obj:
+    if (
+        "msgHash" in obj
+        or "MessageHash" in obj
+        or "messageHashes" in obj
+        or "MessageHashes" in obj
+        or "destinationChainID" in obj
+        or "DestinationChainID" in obj
+    ):
         return obj
     raise ValueError("sign request JSON must contain bodyForSign, body, or a raw sign-request body")
+
+
+def coerce_wrapped_json_object(loaded: dict[str, Any]) -> dict[str, Any]:
+    """
+    Accept a saved API envelope ``{code, data}`` / ``{Code, Data}`` or a raw sign request/result
+    object (same shapes as ``GET /getSignResultById`` / ``getSignRequestById``).
+    """
+    inner = loaded.get("data")
+    if inner is None:
+        inner = loaded.get("Data")
+    if isinstance(inner, dict):
+        return inner
+    return loaded
 
 
 def _decode_type2_unsigned(raw: bytes) -> dict[str, Any]:
@@ -859,13 +892,13 @@ def main() -> None:
     ap.add_argument(
         "--sign-result-file",
         metavar="PATH",
-        help="JSON from getSignResultById (or raw data object); skips HTTP for the result",
+        help="JSON from getSignResultById, raw sign-result object, or envelope {data}/{Data}; skips HTTP",
     )
     ap.add_argument(
         "--sign-request-file",
         metavar="PATH",
-        help="JSON from getSignRequestById (or wrapper with body/bodyForSign); optional when the "
-        "sign result already includes msgRaw/messageRaw/MessageRaw/messageRawBatch and DestinationChainID",
+        help="JSON from getSignRequestById, raw body, or envelope {data}/{Data}; optional when the "
+        "sign result already includes message raw and DestinationChainID",
     )
     ap.add_argument(
         "--rpc-url",
@@ -889,7 +922,7 @@ def main() -> None:
 
     if args.sign_result_file:
         loaded = load_json_file(args.sign_result_file)
-        sign_data = loaded.get("data") if isinstance(loaded.get("data"), dict) else loaded
+        sign_data = coerce_wrapped_json_object(loaded)
         if not request_id and isinstance(sign_data, dict):
             rid = pick_str(sign_data, "requestid", "requestId", "RequestId")
             if rid:
@@ -918,7 +951,7 @@ def main() -> None:
     sign_body: dict[str, Any] | None = None
     if args.sign_request_file:
         loaded = load_json_file(args.sign_request_file)
-        raw_req = loaded.get("data") if isinstance(loaded.get("data"), dict) else loaded
+        raw_req = coerce_wrapped_json_object(loaded)
         sign_body = unwrap_sign_body(raw_req if isinstance(raw_req, dict) else loaded)
     elif not can_skip_sign_request:
         if not request_id:
@@ -942,7 +975,7 @@ def main() -> None:
     dest_chain = (
         pick_str(sign_data, "DestinationChainID", "destinationChainID")
         or (
-            pick_str(sign_body, "destinationChainID", "destination_chain_id")
+            pick_str(sign_body, "DestinationChainID", "destinationChainID", "destination_chain_id")
             if sign_body
             else None
         )
