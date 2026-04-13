@@ -1,7 +1,7 @@
 ---
 name: mpa-wallet
 description: Operate and automate threshold multisignature workflows for MPC/MPA wallets on an isolated, dedicated host that contains no unrelated sensitive data or private keys.
-version: 1.0.7
+version: 1.0.8
 metadata:
   openclaw:
     requires:
@@ -141,7 +141,7 @@ Base URL for a co-located node: **`$MPC_AUTH_URL:$MANAGEMENT_PORT`** (see `confi
 
 `MPA_PATH` is a filesystem location, not a credential. `primaryEnv` is set to `MPC_AUTH_URL` because the management API endpoint is the primary operational target for this skill.
 
-**`scripts/keygen_messaging_agent_poll.py`** uses **`KEYGEN_ID`**, **`AUTH_KEY_PATH`**, and **`MPC_AUTH_URL`**.
+**`scripts/keygen_messaging_agent_poll.py`** uses **`KEYGEN_ID`**, **`AUTH_KEY_PATH`**, and **`MPC_AUTH_URL`**. The umbrella **`scripts/mpc_event_listener.py`** uses the same when **`--keygen-messages`** is enabled; **`KEYGEN_ID`** is not required for **`--sign-ready`** alone (that path still needs **`AUTH_KEY_PATH`** / **`MPC_MGT_ED25519_SEED_HEX`** to **`POST /triggerSignRequestById`**).
 
 ### Python dependencies
 
@@ -149,7 +149,7 @@ Use **[pipx](https://github.com/pypa/pipx)** for installing these packages (not 
 
 1. **Base (all signing scripts in `$MPA_PATH/scripts`):** `pipx install eth-account` — pulls **`rlp`**, **`eth_utils`**, **`hexbytes`**, etc., needed by **`generateSignRequestWithFoundryScript.py`**, **`generateMultiSignRequestFromCompose.py`**, **`multiSignJoin.py`**, and **`executeSignResult.py`**.
 2. **Compose + recipes:** `pipx inject eth-account PyNaCl` — only **`generateMultiSignRequestFromCompose.py`** and **`recipes/*.py`** need **`PyNaCl`** (optional Ed25519 fields on payloads). Skip this inject if you use **only** the Forge helper, **`multiSignJoin`**, or **`executeSignResult`**.
-3. **KeyGen inbox poll:** `pipx inject eth-account cryptography` — satisfies **`keygen_messaging_agent_poll.py`** (same minimum as **`$MPA_PATH/scripts/requirements-keygen-agent.txt`**). Alternatively, if your **`pipx`** supports it: `pipx inject eth-account -r $MPA_PATH/scripts/requirements-keygen-agent.txt`.
+3. **KeyGen inbox poll + event listener:** `pipx inject eth-account cryptography` — satisfies **`keygen_messaging_agent_poll.py`** and **`mpc_event_listener.py`** (same minimum as **`$MPA_PATH/scripts/requirements-keygen-agent.txt`**). Alternatively, if your **`pipx`** supports it: `pipx inject eth-account -r $MPA_PATH/scripts/requirements-keygen-agent.txt`.
 
 **Run scripts** with the Python interpreter from the pipx venv for **`eth-account`** (paths vary by OS; **`pipx list`** shows each app’s venv). Example on many Linux installs: **`~/.local/pipx/venvs/eth-account/bin/python $MPA_PATH/scripts/generateSignRequestWithFoundryScript.py ...`**. Plain **`python3 ...`** only works if that environment is the one on your **`PATH`**.
 
@@ -157,12 +157,16 @@ Use **[pipx](https://github.com/pypa/pipx)** for installing these packages (not 
 
 To **notice unread channel messages directed at the agent** without manual **`GET /listMessages`** each time, run **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** on a timer (recommended: **Open Claw Gateway isolated cron**; see **`$MPA_PATH/references/AGENT_ED25519_SETUP.md`** §8.5 and [Open Claw cron](https://docs.openclaw.ai/cron)).
 
-**Ask the operator once** whether they want scheduled polling (and where: e.g. Open Claw cron) **before** you add or change a timer. Do **not** assume background polling: some setups only use ad-hoc **`GET /listMessages`** / **`getMessageThread`**, and the script **marks matched messages read**. If they already declined, a cron entry already exists, or they explicitly asked you to wire the poll, skip re-asking.
+**Ask the operator once** whether they want scheduled polling (and where: e.g. Open Claw cron) **before** you add or change a timer. **If they want a schedule, ask which period** from the fixed set: **every 1, 5, 10, 30, 60 minutes** or **every 2, 4, 6, 8, 10, 12, 24 hours**. Use **`$MPA_PATH/scripts/mpc_cron_schedules.py`** (**`--interactive`** on a TTY, or plain output for the table) to map the choice to Open Claw **`--every`** and crontab. Do **not** assume background polling: some setups only use ad-hoc **`GET /listMessages`** / **`getMessageThread`**, and the script **marks matched messages read**. If they already declined, a cron entry already exists, or they explicitly asked you to wire the poll, skip re-asking.
 
 1. **Once:** install **`cryptography`** into the pipx **`eth-account`** environment (**`pipx inject eth-account cryptography`** — see **[Python dependencies](#python-dependencies)**).
 2. **Run:** the venv **`python`** for **`eth-account`** with **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** (and **`KEYGEN_ID`** set; **`AUTH_KEY_PATH`** / **`MPC_AUTH_URL`** if not defaults). **`--dry-run`** lists matching unread messages without calling **`multiMarkMessagesRead`**.
 3. **Output:** one JSON line: **`matches`**, **`match_count`**, **`marked_ids`**. The script marks matched messages read so the next poll does not repeat them.
 4. **After a non-empty `matches`:** interpret the thread, decide what to do, and reply with **`POST /sendMessage`** (management-signed; **`$MPA_PATH/references/API_KEYGEN_MESSAGING.md`**). Humans can **`@agent`** in title or body to target the agent.
+
+### Event listener (`mpc_event_listener.py`)
+
+Use **`$MPA_PATH/scripts/mpc_event_listener.py`** when a **single** cron (or timer) should run **optional** handlers in one process: today **`keygen_messages`** (same as the KeyGen inbox poll above) and **`sign_ready`** (**`GET /listSignRequestsReady`** → **`POST /triggerSignRequestById`** per id, in order → poll **`GET /getSignResultById`** → **`executeSignResult.py`**, with optional **`--fast`**). **Ask the operator** which handlers to turn on: use **`--interactive`** (TTY) or explicit **`--keygen-messages`** / **`--sign-ready`**. For **`sign_ready`**, **`--execute-fast`** selects the **`executeSignResult --fast`** path (parallel receipt confirmation for batch txs); omit it for sequential execution. **`--sign-ready-dry-run`** only lists ready request ids; **`--no-execute`** triggers and waits for MPC signatures but skips broadcast. **Schedule** the job with a period from **`mpc_cron_schedules.py`** (same fixed minute/hour choices as the KeyGen poll). More handlers can be added to the same script over time.
 
 ---
 
@@ -348,6 +352,8 @@ python3 "$MPA_PATH/scripts/multiSignJoin.py" --a /tmp/a.json --b /tmp/b.json --f
 | `multiSignJoin.py` | Two recipe/helper JSON outputs → **one** batch **`multiSignRequest`**; **`--first-nonce`** = EVM **`cast nonce`**; same chain only; preserves gas/fees from inputs. See [multiSignJoin](#multisignjoin-merge-two-multisignrequest-json-files). |
 | `executeSignResult.py` | After **`getSignResultById`**: build signed raw txs and broadcast (sequential by default; **`--fast`** for parallel confirm). |
 | `keygen_messaging_agent_poll.py` | Poll KeyGen messaging for unread items that mention the agent, then mark them read. |
+| `mpc_event_listener.py` | Optional composed handlers (KeyGen poll, sign-ready trigger+execute); schedule one script for multiple event types. |
+| `mpc_cron_schedules.py` | Maps selectable poll periods (1–60 min, 2–24 h) to Open Claw `--every` and crontab. |
 
 ## Recipes
 

@@ -232,10 +232,12 @@ To react when someone `@mentions` the agent in the KeyGen channel, use **Open Cl
 2. Export at least **`KEYGEN_ID`**, **`MPC_AUTH_URL`** (host-only, e.g. `http://127.0.0.1`), and **`MANAGEMENT_PORT`** so the API base URL is always `$MPC_AUTH_URL:$MANAGEMENT_PORT`. The script loads the Ed25519 management key from **`AUTH_KEY_PATH`** (default `~/.ssh/mpc_auth_ed25519`) or optional **`MPC_MGT_ED25519_SEED_HEX`**.
 3. The script prints one JSON line: `matches` (unread messages whose title/body match `@agent` by default), then calls `POST /multiMarkMessagesRead` so the next poll skips handled items. Use `--dry-run` to inspect without marking read.
 
-**Example cron** (adjust paths and schedule; ensure the job may run `exec`). Keep `--message` on one line so the shell parses it reliably:
+**Poll period (select one):** Run **`$MPA_PATH/scripts/mpc_cron_schedules.py`** to print the allowed intervals, or **`--interactive`** to pick by number. The fixed choices are **every 1, 5, 10, 30, 60 minutes** and **every 2, 4, 6, 8, 10, 12, 24 hours**. Each row gives an Open Claw **`--every`** string (e.g. **`1m`**, **`5m`**, **`1h`**, **`2h`**) and a standard **crontab** five-field line for non–Open Claw timers.
+
+**Example cron** (adjust paths; pick **`--every`** from **`mpc_cron_schedules.py`**). Ensure the job may run `exec`. Keep `--message` on one line so the shell parses it reliably:
 
 ```bash
-openclaw cron add --name "keygen-agent-inbox" --every "3m" --session isolated \
+openclaw cron add --name "keygen-agent-inbox" --every "5m" --session isolated \
   --message "Run: python3 $MPA_PATH/scripts/keygen_messaging_agent_poll.py. Parse the one JSON line on stdout. If match_count > 0, reply via POST /sendMessage (Nonce, Sig, keyGenId, title or replyTo+body; see API_KEYGEN_MESSAGING.md). Body max 512 chars." \
   --tools "exec,read"
 ```

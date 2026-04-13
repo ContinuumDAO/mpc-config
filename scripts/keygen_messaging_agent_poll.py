@@ -31,6 +31,8 @@ MPC_KEYGEN_AGENT_TRIGGER    Trigger substring without leading @ (default ``agent
 MPC_KEYGEN_POLL_PAGESIZE    Page size for listMessages (default 50, max 100).
 
 Dependencies: pip install -r scripts/requirements-keygen-agent.txt
+
+See also: ``mpc_event_listener.py`` for optional composition with other periodic handlers.
 """
 
 from __future__ import annotations
@@ -40,135 +42,17 @@ import json
 import os
 import re
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
-from pathlib import Path
 from typing import Any
 
-try:
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-except ImportError as e:  # pragma: no cover
-    print(
-        "Missing dependency: install with\n"
-        "  pip install -r scripts/requirements-keygen-agent.txt",
-        file=sys.stderr,
-    )
-    raise SystemExit(2) from e
-
-
-def _compact_json(obj: Any) -> str:
-    return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
-
-
-def _resolve_mpc_auth_base(mpc_auth_url: str, management_port: str | int | None) -> str:
-    base = (mpc_auth_url or "").strip()
-    if not base:
-        raise RuntimeError("MPC_AUTH_URL is required")
-    p = urllib.parse.urlparse(base)
-    if not p.scheme or not p.netloc:
-        raise RuntimeError("MPC_AUTH_URL must include scheme and host, e.g. http://127.0.0.1")
-    if p.port is not None:
-        return base.rstrip("/")
-    port = str(management_port or "").strip()
-    if not port:
-        raise RuntimeError("MANAGEMENT_PORT is required when MPC_AUTH_URL has no port")
-    try:
-        int(port, 10)
-    except ValueError as e:
-        raise RuntimeError("MANAGEMENT_PORT must be numeric") from e
-    return urllib.parse.urlunparse(p._replace(netloc=f"{p.netloc}:{port}")).rstrip("/")
-
-
-def _http_json(
-    method: str,
-    base: str,
-    path: str,
-    *,
-    query: dict[str, str] | None = None,
-    body: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    url = base.rstrip("/") + path
-    if query:
-        q = urllib.parse.urlencode(query)
-        url = f"{url}?{q}"
-    data = None
-    headers = {"Accept": "application/json"}
-    if body is not None:
-        raw = _compact_json(body).encode("utf-8")
-        data = raw
-        headers["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, data=data, method=method, headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            payload = resp.read().decode("utf-8")
-    except urllib.error.HTTPError as e:
-        err_body = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"HTTP {e.code} {path}: {err_body}") from e
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"Request failed {path}: {e}") from e
-    try:
-        parsed = json.loads(payload)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"Invalid JSON from {path}: {payload[:500]}") from e
-    if parsed.get("code") != 0:
-        raise RuntimeError(f"API error {path}: {parsed.get('error', '')!r} data={parsed.get('data')}")
-    return parsed
-
-
-def _load_ed25519_private_key() -> Ed25519PrivateKey:
-    seed_hex = os.environ.get("MPC_MGT_ED25519_SEED_HEX", "").strip()
-    if seed_hex:
-        if seed_hex.startswith("0x"):
-            seed_hex = seed_hex[2:]
-        raw = bytes.fromhex(seed_hex)
-        if len(raw) != 32:
-            raise SystemExit("MPC_MGT_ED25519_SEED_HEX must be 64 hex chars (32 bytes)")
-        return Ed25519PrivateKey.from_private_bytes(raw)
-
-    path_s = os.environ.get("AUTH_KEY_PATH", "").strip()
-    key_path = (
-        Path(path_s).expanduser()
-        if path_s
-        else Path.home() / ".ssh" / "mpc_auth_ed25519"
-    )
-    if not key_path.is_file():
-        raise SystemExit(
-            f"Ed25519 private key not found at {key_path}. "
-            "Set AUTH_KEY_PATH or MPC_MGT_ED25519_SEED_HEX."
-        )
-    blob = key_path.read_bytes()
-    key = None
-    try:
-        k = serialization.load_pem_private_key(blob, password=None)
-        if isinstance(k, Ed25519PrivateKey):
-            key = k
-    except ValueError:
-        pass
-    if key is None:
-        try:
-            k = serialization.load_ssh_private_key(blob, password=None)
-            if isinstance(k, Ed25519PrivateKey):
-                key = k
-        except ValueError:
-            pass
-    if key is None:
-        raise SystemExit(f"Key file {key_path} is not an Ed25519 private key (PEM or OpenSSH)")
-    return key
-
-
-def _public_key_64_hex(priv: Ed25519PrivateKey) -> str:
-    return priv.public_key().public_bytes_raw().hex()
-
-
-def _sign_messaging_body(priv: Ed25519PrivateKey, body: dict[str, Any]) -> str:
-    """Sign exact JSON of body with Sig set to \"\" (KeyGen messaging endpoints)."""
-    sign_me = dict(body)
-    sign_me["Sig"] = ""
-    message = _compact_json(sign_me).encode("utf-8")
-    sig = priv.sign(message)
-    return sig.hex()
+from mpc_mgt_helpers import (
+    compact_json,
+    get_ed25519_nonce,
+    http_json,
+    load_ed25519_private_key,
+    public_key_64_hex,
+    resolve_mpc_auth_base,
+    sign_compact_json_empty_field,
+)
 
 
 def _matches_trigger(title: str | None, body: str | None, pattern: re.Pattern[str]) -> bool:
@@ -179,7 +63,7 @@ def _matches_trigger(title: str | None, body: str | None, pattern: re.Pattern[st
 def _list_unread_page(
     base: str, key_gen_id: str, pagenum: int, pagesize: int
 ) -> tuple[list[dict[str, Any]], int]:
-    parsed = _http_json(
+    parsed = http_json(
         "GET",
         base,
         "/listMessages",
@@ -246,23 +130,9 @@ def run_poll(
     if not matches or dry_run:
         return result
 
-    priv = _load_ed25519_private_key()
-    pub = _public_key_64_hex(priv)
-    nonce_resp = _http_json(
-        "GET",
-        base,
-        "/getPublicMgtKeyNonce",
-        query={"publicKey": pub},
-    )
-    data = nonce_resp.get("data")
-    if isinstance(data, dict) and "nonce" in data:
-        nonce = data["nonce"]
-    elif isinstance(data, int):
-        nonce = data
-    else:
-        raise RuntimeError(f"Unexpected getPublicMgtKeyNonce payload: {nonce_resp!r}")
-    if not isinstance(nonce, int):
-        raise RuntimeError(f"Nonce is not an integer: {nonce!r}")
+    priv = load_ed25519_private_key()
+    pub = public_key_64_hex(priv)
+    nonce = get_ed25519_nonce(base, pub)
 
     ids = [str(m["id"]) for m in matches if m.get("id")]
     body = {
@@ -271,9 +141,9 @@ def run_poll(
         "keyGenId": key_gen_id,
         "messageIds": ids,
     }
-    body["Sig"] = _sign_messaging_body(priv, body)
+    body["Sig"] = sign_compact_json_empty_field(priv, body, "Sig")
 
-    _http_json("POST", base, "/multiMarkMessagesRead", body=body)
+    http_json("POST", base, "/multiMarkMessagesRead", body=body)
     result["marked_ids"] = ids
     return result
 
@@ -287,7 +157,7 @@ def main() -> None:
     )
     args = p.parse_args()
 
-    base = _resolve_mpc_auth_base(
+    base = resolve_mpc_auth_base(
         os.environ.get("MPC_AUTH_URL") or "http://127.0.0.1",
         os.environ.get("MANAGEMENT_PORT") or "8080",
     )
@@ -310,7 +180,7 @@ def main() -> None:
         trigger_token=trigger_token,
         dry_run=args.dry_run,
     )
-    sys.stdout.write(_compact_json(out) + "\n")
+    sys.stdout.write(compact_json(out) + "\n")
 
 
 if __name__ == "__main__":
