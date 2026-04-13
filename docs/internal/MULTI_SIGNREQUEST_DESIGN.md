@@ -242,3 +242,9 @@ So: **feasible** to take a Forge script and create a list of transactions from i
 - **Nonce staleness:** Consider **always** checking and allowing nonce refresh at trigger for both batch and **single-transaction** flow, so stale nonces are avoided consistently.
 - **Forge script → transaction list** is feasible (dry-run, JSON, wrapper); an **AI agent that pushes script to GitHub and creates one batch SignRequest** for other nodes to Agree/Reject is feasible with a clear schema and security boundaries.
 - Main design choices: batch = one request/one result, all-or-nothing agree, no execution-order enforcement by backend, nonce discipline and optional refresh. No code in this doc; next step is to refine schema and trigger/API behaviour, then implement.
+
+---
+
+## See also (operational tooling)
+
+For **current** multi-agree **`multiSignRequest`** batching, Forge → JSON helpers, and agent Python setup (**`$MPA_PATH/.venv`**), see **[`docs/skill/SKILL.md`](../skill/SKILL.md)**, **[`AI_AGENT_FORGE_SIGNREQUEST.md`](../references/AI_AGENT_FORGE_SIGNREQUEST.md)**, and **[`AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`](../references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**.

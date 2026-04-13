@@ -38,6 +38,8 @@ When **`ScannerRelayerPort`** is set and distinct from other listeners, the scri
 
 For each resolved source it runs **`ufw allow from <ip-or-cidr> to any port <ScannerRelayerPort>`**. If **no** sources resolve (or **`python3`** is missing for resolution), the script may open the scanner/relayer port **to the world** and print a **warning**—fix **`RelayerAPIURL`** / **`ScannerAPIURLs`** or tighten rules manually.
 
+That **`python3`** is whatever is on the **host PATH** for **`process_config.sh`**’s helper logic—not **`$MPA_PATH/.venv/bin/python`** (the MPA signing/agent venv; see **[`docs/skill/SKILL.md`](../skill/SKILL.md)** **Python dependencies**).
+
 ## Dual stack
 
 Ubuntu often has **IPv6 enabled** in **`/etc/default/ufw`**, so a plain **`ufw allow <port>/tcp`** may add **IPv4 and IPv6** rules. Adjust manually if you need IPv4-only listeners.

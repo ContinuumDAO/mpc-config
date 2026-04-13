@@ -13,6 +13,8 @@ This describes what **`process_config.sh`** does for **Browser HTTPS** (TLS in f
 - **`python3`** must be available for the merge step. If it is missing, the script only warns: you must edit **`BrowserHTTPS`** in **`configs.yaml`** yourself (JWKS URL, issuer, cert paths, origins, audience).
 - **`ruamel.yaml`** is required for YAML round-trip with comments (e.g. **`sudo apt install python3-ruamel.yaml`** on Debian/Ubuntu). The script’s **`--help`** text lists this explicitly.
 
+This is **system** Python + **ruamel** for **`configs.yaml`** editing only. It is **not** the **`$MPA_PATH/.venv`** environment used for MPA wallet scripts (**`generateSignRequestWithFoundryScript.py`**, **`executeSignResult.py`**, recipes, …); for those, see **[`docs/skill/SKILL.md`](../skill/SKILL.md)** **Python dependencies**.
+
 ## JWKS and issuer defaults (“Pattern B”)
 
 The merge step applies **defaults aligned with the public DAO app** when fields are empty:

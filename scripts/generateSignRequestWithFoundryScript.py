@@ -114,7 +114,7 @@ The script prints a single JSON object to stdout with:
 
 Use this output as the basis for the POST body; add **clientSig** only, then POST to /multiSignRequest.
 
-Requires: eth_account (pip install eth_account)
+Requires: eth_account (install into ``$MPA_PATH/.venv``; see ``docs/skill/SKILL.md`` **Python dependencies**)
 """
 
 from __future__ import annotations
@@ -378,7 +378,8 @@ def tx_to_signing_hash_and_raw(tx: dict) -> tuple[str, str]:
             )
         except ImportError:
             raise SystemExit(
-                "eth_account is required. Install with: pip install eth_account"
+                "eth_account is required. Install with: $MPA_PATH/.venv/bin/pip install eth_account "
+                "(see docs/skill/SKILL.md Python dependencies)"
             ) from None
 
     chain_id = parse_chain_id(tx.get("chainId"))

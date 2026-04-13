@@ -30,7 +30,7 @@ MPC_KEYGEN_AGENT_TRIGGER    Trigger substring without leading @ (default ``agent
                             the script looks for ``@`` + this token with a word boundary.
 MPC_KEYGEN_POLL_PAGESIZE    Page size for listMessages (default 50, max 100).
 
-Dependencies: pip install -r scripts/requirements-keygen-agent.txt
+Dependencies: install into ``$MPA_PATH/.venv`` — e.g. ``$MPA_PATH/.venv/bin/pip install -r scripts/requirements-keygen-agent.txt`` (see ``docs/skill/SKILL.md`` **Python dependencies**).
 
 See also: ``mpc_event_listener.py`` for optional composition with other periodic handlers.
 """

@@ -19,7 +19,8 @@ try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 except ImportError as e:  # pragma: no cover
     raise ImportError(
-        "Missing dependency: install with pip install -r scripts/requirements-keygen-agent.txt"
+        "Missing dependency: install with $MPA_PATH/.venv/bin/pip install -r scripts/requirements-keygen-agent.txt "
+        "(see docs/skill/SKILL.md Python dependencies)"
     ) from e
 
 

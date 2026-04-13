@@ -26,7 +26,11 @@ module so ``msgHash`` / ``messageHashes`` match EIP-1559 / legacy encoding.
   ``messageRawBatch`` + first-item compatibility fields).
 
 **Dependencies:** ``eth_account`` (pulls ``eth_abi`` / ``eth_utils``) and ``PyNaCl``
-are **required**. Install with ``pip install eth_account PyNaCl``.
+are **required**. Install into ``$MPA_PATH/.venv`` (see ``docs/skill/SKILL.md`` **Python dependencies**).
+
+.. code-block:: bash
+
+   $MPA_PATH/.venv/bin/pip install eth_account PyNaCl
 
 **Compose JSON schema (minimal):**
 
@@ -100,7 +104,8 @@ try:
     from nacl.signing import SigningKey
 except ImportError as e:
     raise SystemExit(
-        "PyNaCl is required. Install with: pip install PyNaCl"
+        "PyNaCl is required. Install with: $MPA_PATH/.venv/bin/pip install PyNaCl "
+        "(see docs/skill/SKILL.md Python dependencies)"
     ) from e
 
 getcontext().prec = 78
@@ -415,7 +420,8 @@ def encode_action_calldata(signature: str, inputs: list[dict[str, Any]], param_u
         from eth_utils.crypto import keccak
     except ImportError as e:
         raise SystemExit(
-            "eth_abi / eth_utils required (install: pip install eth_account)"
+            "eth_abi / eth_utils required (install: $MPA_PATH/.venv/bin/pip install eth_account; "
+            "see docs/skill/SKILL.md Python dependencies)"
         ) from e
 
     name, types = parse_function_signature(signature)

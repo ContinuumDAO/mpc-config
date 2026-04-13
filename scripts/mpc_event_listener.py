@@ -17,7 +17,7 @@ and/or ``--sign-ready``.
 Environment matches ``docs/skill/SKILL.md``: ``MPC_AUTH_URL``, ``MANAGEMENT_PORT``,
 ``AUTH_KEY_PATH`` (or ``MPC_MGT_ED25519_SEED_HEX``), ``KEYGEN_ID`` (required for keygen
 handler only). Same Python deps as ``keygen_messaging_agent_poll.py`` plus the
-``eth-account`` venv for ``executeSignResult`` when sign_ready runs execute.
+``$MPA_PATH/.venv`` (``eth_account`` / ``executeSignResult`` deps) when sign_ready runs execute.
 
 Additional handlers can be registered in ``HANDLERS`` below.
 
