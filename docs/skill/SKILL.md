@@ -1,7 +1,7 @@
 ---
 name: mpa-wallet
 description: Operate and automate threshold multisignature workflows for MPC/MPA wallets on an isolated, dedicated host that contains no unrelated sensitive data or private keys.
-version: 1.0.9
+version: 1.0.10
 metadata:
   openclaw:
     requires:
