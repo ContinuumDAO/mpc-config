@@ -284,7 +284,7 @@ curl -sS -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest" \
   -d "$(jq --arg s "$SIG" '. + {clientSig: $s}' body.compact.json)"
 ```
 
-(Adjust **`jq`** usage so the signed string equals the server’s canonical JSON; many flows sign **`messageToSign`** from script output, then merge **`clientSig`** into **`postBody`**.)
+(Adjust **`jq`** so you add **`clientSig`** (and **`signedMessage`** if required) **to** the unsigned object: the bytes you sign are **`messageToSign`**, not the merged POST body.)
 
 ---
 
@@ -292,9 +292,18 @@ curl -sS -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest" \
 
 Skim-level recipe for agents (e.g. Open Claw). **Foundry path:** **[AI_AGENT_FORGE_SIGNREQUEST.md]($MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md)**. **Compose-style JSON (no Foundry broadcast):** **[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md]($MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**. **Shortcut:** see **[Recipes](#recipes-thin-cli-wrappers)** (**`linea_register`**, **`linea_fee_deposit`**, **`erc20_transfer`**, **`native_transfer`**, **`ctmerc20_transfer`**, **`ctmrwa1_transfer_whole`**, **`ctmrwa1_transfer_partial`**, …) before hand-writing compose JSON.
 
+### `messageToSign`, `signedMessage`, and the POST body
+
+Recipe and helper stdout includes **`bodyForSign`** and **`messageToSign`**. This is the rule agents often get wrong:
+
+- **`messageToSign`** is the **only** string you sign with the **management** key (UTF-8, compact JSON). It is produced like **`json.dumps(bodyForSign, separators=(",", ":"), ensure_ascii=False)`** in **`generateMultiSignRequestFromCompose.py`** — same bytes the app uses before **`clientSig`** exists.
+- The **HTTP POST** body is **`bodyForSign`** plus **`clientSig`** plus **`signedMessage`**. You **do not** sign that merged object for **`multiSignRequest`** (the signature is over **`messageToSign`**, not over the final JSON that includes **`clientSig`**).
+- **`signedMessage`** is **verification metadata**, not a second copy of the whole POST body. For **Ed25519** management keys on **`multiSignRequest`**, set **`signedMessage`** to **`""`**. For **EIP-191 / MetaMask** keys, **`signedMessage`** must be the **exact** string that was signed — reuse **`messageToSign`** verbatim. It must **not** be JSON that includes **`clientSig`**, and **not** any re-stringified variant of the merged POST body.
+- **Prefer** **`postBody`** in stdout when you pass **`--ed25519-seed-hex`** or **`--eip191-private-key-hex`** to a recipe or **`generateMultiSignRequestFromCompose.py`**: it is already **`{...bodyForSign, "clientSig": "...", "signedMessage": "..."}`** ready to **`POST`**. No **`jq`** merge puzzle unless you are signing out-of-band.
+
 1. **Simulate with Foundry** — Run **`forge script`** with **`--rpc-url`** and **`--sender <MPC address>`**. **Do not** use **`--broadcast`** (the MPC key is not on disk). Consume the artifact **`broadcast/<Script>.s.sol/<chain_id>/run-latest.json`**.
 2. **Build the request JSON** — Run **`cast nonce <MPC address> --rpc-url $RPC`** and pass that value as **`--first-nonce`** to **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** (see **Scripts** below), together with **`--key-gen-id`**, **`--file`** pointing at **`run-latest.json`**, **`--purpose`**, and **`--mpc-auth-url`**. The helper needs **`eth_account`** (see **[Python dependencies](#python-dependencies)** and **`$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md`**).
-3. **Sign and submit** — Clear **`clientSig`** / **`signedMessage`**, build **canonical JSON**, sign with the **management** key, set **`clientSig`**, then **`POST /multiSignRequest`**.
+3. **Sign and submit** — Sign **`messageToSign`**. **POST** **`bodyForSign`** with **`clientSig`** set to that signature and **`signedMessage`** set as in the subsection above (or **`POST`** **`postBody`** if the helper produced it). Do not re-derive or re-stringify the unsigned body unless you are following the Foundry guide’s “empty **`clientSig`** first” variant.
 4. **Notify the group** — **`POST /sendMessage`** on the KeyGen channel with a short title/body and the **request id** returned from **`multiSignRequest`** so peers can review.
 
 ### multiSignJoin: merge two multiSignRequest JSON files
@@ -320,6 +329,7 @@ python3 "$MPA_PATH/scripts/multiSignJoin.py" --a /tmp/a.json --b /tmp/b.json --f
 
 - Using **`forge script … --broadcast`** — wrong; simulation only until MPC signing completes.
 - Confusing **`globalnonce`** (KeyGen MPC counter from **`getGlobalNonceByKeyGenId`**) with **`cast nonce`** — for **`--first-nonce`**, use **EVM** **`cast nonce`** on the MPC address for **that chain**.
+- Treating **`signedMessage`** as the full POST body, or as JSON that already includes **`clientSig`** — for **`multiSignRequest`**, **`signedMessage`** is **`""`** (Ed25519) or equals **`messageToSign`** (EIP-191); see **`messageToSign`, `signedMessage`, and the POST body** above.
 - Forgetting **`sendMessage`** after submit — coordination and audit depend on it.
 
 ---
@@ -341,7 +351,7 @@ python3 "$MPA_PATH/scripts/multiSignJoin.py" --a /tmp/a.json --b /tmp/b.json --f
 
 **Location:** These are thin CLI wrappers that live in **`$MPA_PATH/recipes/`**. They call **`generateMultiSignRequestFromCompose`** internally: **`GET /getKeyGenResultById`**, **`GET /getChainDetails`** (when **`rpcGateway`** is not overridden), then JSON-RPC for nonce / gas / fees.
 **Dependencies:** same as **`generateMultiSignRequestFromCompose.py`** (**[Python dependencies](#python-dependencies)** — **`pipx install eth-account`** then **`pipx inject eth-account PyNaCl`**).
-**Output:** JSON with **`bodyForSign`**, **`messageToSign`**; add **`clientSig`** (management key) before **`POST /multiSignRequest`**; optional **`--ed25519-seed-hex`** / **`--eip191-private-key-hex`** to embed **`postBody`**.
+**Output:** JSON with **`bodyForSign`**, **`messageToSign`**; add **`clientSig`** and **`signedMessage`** (see **`messageToSign`, `signedMessage`, and the POST body** above) before **`POST /multiSignRequest`**; optional **`--ed25519-seed-hex`** / **`--eip191-private-key-hex`** to emit ready-to-POST **`postBody`**.
 
 | Script | Use |
 |--------|-----|

@@ -120,6 +120,13 @@ Use **one** of these if the agent holds the management private material; otherwi
 | **`count`** | Number of compose actions (1 = single, ≥2 = batch). |
 | **`postBody`** | Present only if **`--ed25519-seed-hex`** or **`--eip191-private-key-hex`** was passed: ready-to-POST body including **`clientSig`** (and **`signedMessage`** for EIP-191). |
 
+### `signedMessage` vs what you sign (avoid confusion)
+
+- You **always** sign the **`messageToSign`** string (UTF-8). That string is the compact JSON form of **`bodyForSign`** only — **before** **`clientSig`** exists.
+- The **HTTP** body is **`bodyForSign`** **plus** **`clientSig`** **plus** **`signedMessage`**. You **do not** compute a signature over that merged JSON for this endpoint.
+- **`signedMessage`** is not “the entire POST body as a string”. For **Ed25519**, send **`signedMessage`: `""`**. For **EIP-191**, **`signedMessage`** must be the **exact** string you signed — use the **`messageToSign`** value from stdout verbatim — not a serialization of the request including the signature.
+- If **`postBody`** is present (signing flags), **`POST`** it as-is; no **`jq`** step is required to “re-canonicalize” what was signed.
+
 ---
 
 ## Management `clientSig` (not the MPC key)
