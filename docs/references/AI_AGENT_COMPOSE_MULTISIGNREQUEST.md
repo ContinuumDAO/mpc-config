@@ -136,7 +136,7 @@ Same rules as **[AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md)
 - **Ed25519:** Sign the **`messageToSign`** string with the management secret key; **`clientSig`** = **128 hex**; **`signedMessage`** may be empty (backend can canonicalize).
 - **MetaMask / NodeMgtKey:** EIP-191 sign **`messageToSign`**; **`clientSig`** = **`0x` + signature**; **`signedMessage`** must equal the **exact** string that was signed.
 
-**Management API nonces** (`GET /getPublicMgtKeyNonce`, etc.) apply to **other** management POSTs where documented; **`multiSignRequest`** in the standard flow is signed via **`messageToSign`** as above.
+**Management API nonces:** Endpoints such as **`sendMessage`**, **`triggerSignRequestById`**, and **`addManagementKey`** require a **`nonce`** that matches the node’s counter for the **management** key you sign with. Use **`GET /getPublicMgtKeyNonce`** (optional **`?publicKey=`** for added Ed25519 keys) for Ed25519; use **`GET /getNodeMgtKeyNonce`** only for Ethereum **`NodeMgtKey`** (MetaMask). Both return **`Data`: `{ "key": "…", "nonce": <int> }`**. **`multiSignRequest`** in the standard flow does not use those GETs for nonce; it is signed via **`messageToSign`** as above.
 
 ---
 

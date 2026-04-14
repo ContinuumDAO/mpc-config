@@ -47,7 +47,7 @@ If the keygen is not ready yet, the API returns `code: 1` ("not ready"); wait fo
 
 #### Option 1: Ed25519 management key (recommended for agents)
 
-Use when the node has an Ed25519 management key configured (`GET /hasPublicMgtKey` returns `true`). No nonce is required for multiSignRequest.
+Use when the node has an Ed25519 management key configured (`GET /hasPublicMgtKey` returns `true`). No separate **management nonce** is required for **`multiSignRequest`** (signing uses **`messageToSign`** only). For **other** management endpoints that include **`nonce`** in the body (**`sendMessage`**, **`triggerSignRequestById`**, **`addManagementKey`**, …), use **`GET /getPublicMgtKeyNonce`** for Ed25519 — not **`GET /getNodeMgtKeyNonce`** (Ethereum **`NodeMgtKey`** only). See **[SKILL.md](../skill/SKILL.md)** § Management API nonce and **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)**.
 
 1. **Build the full request body** with all fields from the script output (e.g. `messageHashes`, `messageRawBatch`, `destinationChainID`, `keyList`, `pubKey`, `purpose`, etc.). Set **`clientSig`** and **`signedMessage`** to empty strings.
 2. **Canonical message to sign:** The backend expects the **canonical JSON** of that body (same field order as Go’s `json.Marshal`; `clientSig` and `signedMessage` must be empty). You can either:

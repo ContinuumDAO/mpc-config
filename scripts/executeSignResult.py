@@ -26,6 +26,8 @@ Builds signed raw transactions with ``eth_account`` and submits ``eth_sendRawTra
 - **``--fast``:** submit and wait for receipts **concurrently** (one thread per transaction).
   Works for batched txs with consecutive nonces because the mempool orders by nonce.
 
+On failure (gas, RPC, receipt timeout, build/broadcast errors, etc.), **stderr** prints **AI agent follow-up** instructions: call ``POST /shelveSignRequest``, then ``POST /sendMessage`` to the Group KeyGen thread with the error and that the request was shelved (see printed block).
+
 Requires **eth_account** and **rlp** (install into ``$MPA_PATH/.venv``; see ``docs/skill/SKILL.md`` **Python dependencies**).
 
 Examples::
@@ -880,6 +882,41 @@ def check_key_type(sign_data: dict[str, Any]) -> None:
         )
 
 
+def print_agent_remediation_after_execute_failure(
+    sign_request_id: str | None,
+    *,
+    reason: str | None = None,
+) -> None:
+    """
+    Stderr instructions for automation: shelve the sign request and notify the Group on failure.
+    """
+    lines = [
+        "",
+        "---",
+        "AI agent follow-up (executeSignResult failed):",
+        "1. POST /shelveSignRequest — management-signed JSON per API_IMPLEMENTATION.md so this sign request is shelved "
+        "(avoids leaving peers expecting a broadcast that will not happen).",
+        "2. POST /sendMessage — to the Group KeyGen thread: quote the error below, state that the sign request was shelved "
+        "(or will be shelved immediately after), and what to check next (gas, RPC, chain config, nonce, etc.).",
+    ]
+    rid = (sign_request_id or "").strip()
+    if rid:
+        lines.append(f"   Sign request id: {rid}")
+    else:
+        lines.append(
+            "   Sign request id: unknown here — use --sign-request-id or ensure requestid is in --sign-result-file "
+            "before calling shelve / sendMessage."
+        )
+    if reason:
+        lines.append(f"   Failure detail: {reason}")
+    lines.append(
+        "References: docs/references/API_IMPLEMENTATION.md (POST /shelveSignRequest), "
+        "docs/references/API_KEYGEN_MESSAGING.md (POST /sendMessage)."
+    )
+    lines.append("---")
+    print("\n".join(lines), file=sys.stderr)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Broadcast MPC sign results to an EVM chain.")
     ap.add_argument(
@@ -926,8 +963,27 @@ def main() -> None:
     args = ap.parse_args()
     mpc = resolve_mpc_auth_base(args.mpc_auth_url, args.management_port)
 
-    request_id = (args.sign_request_id or "").strip()
+    # Mutable so _execute_sign_result_main can refresh id from --sign-result-file for remediation text.
+    sign_request_id_box: list[str] = [(args.sign_request_id or "").strip()]
 
+    try:
+        _execute_sign_result_main(args, mpc, sign_request_id_box)
+    except (ValueError, RuntimeError, TimeoutError, OSError) as e:
+        sid = sign_request_id_box[0].strip() if sign_request_id_box else ""
+        print_agent_remediation_after_execute_failure(
+            sid if sid else None,
+            reason=str(e),
+        )
+        print(f"error: {e}", file=sys.stderr)
+        raise SystemExit(1) from e
+
+
+def _execute_sign_result_main(
+    args: argparse.Namespace,
+    mpc: str,
+    sign_request_id_box: list[str],
+) -> None:
+    request_id = sign_request_id_box[0]
     if args.sign_result_file:
         loaded = load_json_file(args.sign_result_file)
         sign_data = coerce_wrapped_json_object(loaded)
@@ -935,6 +991,7 @@ def main() -> None:
             rid = pick_str(sign_data, "requestid", "requestId", "RequestId")
             if rid:
                 request_id = str(rid).strip()
+                sign_request_id_box[0] = request_id
     else:
         if not request_id:
             raise SystemExit("error: --sign-request-id is required when not using --sign-result-file")
@@ -1043,8 +1100,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except (ValueError, RuntimeError, TimeoutError, OSError) as e:
-        print(f"error: {e}", file=sys.stderr)
-        sys.exit(1)
+    main()

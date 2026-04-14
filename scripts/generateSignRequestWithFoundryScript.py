@@ -140,6 +140,25 @@ DEFAULT_MANAGEMENT_PORT = "8080"
 _HTTP_UA = "generateSignRequestWithFoundryScript/1.0 (Python-urllib)"
 
 
+def _api_code(resp: dict[str, Any]) -> Any:
+    """Management API may use ``code`` / ``Code`` (JSON from tools or older clients)."""
+    c = resp.get("code")
+    return c if c is not None else resp.get("Code")
+
+
+def _api_data(resp: dict[str, Any]) -> Any:
+    return resp.get("data") if resp.get("data") is not None else resp.get("Data")
+
+
+def _unwrap_management_api(resp: dict[str, Any], what: str) -> Any:
+    """Require success (code 0 or omitted) and return ``data`` / ``Data`` (same as executeSignResult)."""
+    c = _api_code(resp)
+    if c is not None and c != 0:
+        err = resp.get("error") or resp.get("Error") or str(resp)
+        raise ValueError(f"{what} failed (code={c}): {err}")
+    return _api_data(resp)
+
+
 def resolve_mpc_auth_base(mpc_auth_url: str, management_port: str | int | None) -> str:
     base = (mpc_auth_url or "").strip()
     if not base:
@@ -593,17 +612,14 @@ def fetch_key_list_and_pubkey_from_keygen(mpc_auth_base_url: str, key_gen_id: st
         api = json.loads(raw)
     except json.JSONDecodeError as e:
         raise ValueError(f"getKeyGenResultById: invalid JSON: {e}") from e
-    if api.get("code") != 0:
-        err = api.get("error") or str(api)
-        raise ValueError(f"getKeyGenResultById failed (code={api.get('code')}): {err}")
-    data = api.get("data")
+    data = _unwrap_management_api(api, "getKeyGenResultById")
     if not isinstance(data, dict):
         raise ValueError("getKeyGenResultById: missing data object")
-    key_list = data.get("keylist")
+    key_list = data.get("keylist") or data.get("KeyList")
     if not isinstance(key_list, list) or not key_list:
         raise ValueError("getKeyGenResultById: data.keylist missing or empty")
     key_list = [str(x) for x in key_list]
-    pub_key = data.get("pubkeyhex")
+    pub_key = data.get("pubkeyhex") or data.get("PubKeyHex") or data.get("PubKey")
     if not pub_key or not isinstance(pub_key, str):
         raise ValueError("getKeyGenResultById: data.pubkeyhex missing or invalid")
     pub_key = pub_key.strip()

@@ -76,6 +76,12 @@ empty (``msgRaw`` is ``""`` for a single action).
 **Output:** JSON with ``endpoint``, ``bodyForSign``, ``messageToSign``, and
 optional ``postBody`` if signing flags were passed. Add ``clientSig`` (and for
 MetaMask flows ``signedMessage`` = ``messageToSign``) before POSTing.
+Also ``triggerTxParams`` and ``triggerMessageHash``: the shape required for
+``POST /triggerSignRequestById`` so ``GET /getSignRequestById?tx_params=1`` can
+return stored TxParams (see API docs). **multiSignRequest** uses ``txNonce`` /
+``txGasLimit`` / ``txGasPrice`` (or EIP-1559 equivalents); the trigger endpoint
+expects ``nonce`` / ``gasLimit`` / ``txType`` / fee fields — use ``triggerTxParams``
+when building the trigger body.
 Management API **nonces** apply to other endpoints (e.g. trigger); this script does
 not add a management ``nonce`` to ``multiSignRequest`` unless you extend the
 payload to match a custom backend.
@@ -262,6 +268,20 @@ def eth_gas_price(rpc_url: str) -> int:
     return int(res, 16) if isinstance(res, str) else int(res)
 
 
+def latest_base_fee_per_gas_wei(rpc_url: str) -> int | None:
+    """Base fee per gas from ``eth_getBlockByNumber(latest)``, or None if not EIP-1559."""
+    try:
+        block = _rpc(rpc_url, "eth_getBlockByNumber", ["latest", False])
+        if not isinstance(block, dict):
+            return None
+        bf = block.get("baseFeePerGas")
+        if bf is None:
+            return None
+        return int(bf, 16) if isinstance(bf, str) else int(bf)
+    except Exception:
+        return None
+
+
 def http_get_json(url: str) -> dict[str, Any]:
     req = urllib.request.Request(
         url,
@@ -282,14 +302,30 @@ def http_get_json(url: str) -> dict[str, Any]:
         raise ValueError(f"Invalid JSON: {e}") from e
 
 
+def _api_code(resp: dict[str, Any]) -> Any:
+    """Management API may use ``code`` / ``Code`` (JSON from tools or older clients)."""
+    c = resp.get("code")
+    return c if c is not None else resp.get("Code")
+
+
+def _api_data(resp: dict[str, Any]) -> Any:
+    return resp.get("data") if resp.get("data") is not None else resp.get("Data")
+
+
+def _unwrap_management_api(resp: dict[str, Any], what: str) -> Any:
+    """Require success (code 0 or omitted) and return ``data`` / ``Data`` (same as executeSignResult)."""
+    c = _api_code(resp)
+    if c is not None and c != 0:
+        err = resp.get("error") or resp.get("Error") or str(resp)
+        raise ValueError(f"{what} failed (code={c}): {err}")
+    return _api_data(resp)
+
+
 def fetch_keygen_bundle(mpc_base: str, key_gen_id: str) -> dict[str, Any]:
     base = mpc_base.rstrip("/")
     q = urllib.parse.urlencode({"id": key_gen_id})
     api = http_get_json(f"{base}/getKeyGenResultById?{q}")
-    if api.get("code") != 0:
-        err = api.get("error") or str(api)
-        raise ValueError(f"getKeyGenResultById failed (code={api.get('code')}): {err}")
-    data = api.get("data")
+    data = _unwrap_management_api(api, "getKeyGenResultById")
     if not isinstance(data, dict):
         raise ValueError("getKeyGenResultById: missing data object")
     return data
@@ -298,10 +334,7 @@ def fetch_keygen_bundle(mpc_base: str, key_gen_id: str) -> dict[str, Any]:
 def fetch_chain_detail_for_id(mpc_base: str, chain_id_num: int) -> dict[str, Any]:
     base = mpc_base.rstrip("/")
     api = http_get_json(f"{base}/getChainDetails?chain_id={chain_id_num}")
-    if api.get("code") != 0:
-        err = api.get("error") or str(api)
-        raise ValueError(f"getChainDetails failed (code={api.get('code')}): {err}")
-    data = api.get("data")
+    data = _unwrap_management_api(api, "getChainDetails")
     rows: list[dict[str, Any]]
     if isinstance(data, list):
         rows = [x for x in data if isinstance(x, dict)]
@@ -489,6 +522,31 @@ def _first_client_id(client_keys: Any) -> str | None:
 def dumps_js(obj: Any) -> str:
     """Compact JSON like JavaScript JSON.stringify (no spaces)."""
     return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+
+
+def trigger_tx_params_from_compose_body(body: dict[str, Any]) -> dict[str, Any]:
+    """
+    Map ``bodyForSign`` fields to ``txParams`` for ``POST /triggerSignRequestById``
+    (same shape as ``GET /getSignRequestById?tx_params=1``).
+    """
+    raw_nonce = body.get("txNonce")
+    nonce = int(raw_nonce) if not isinstance(raw_nonce, int) else raw_nonce
+    gl = body.get("txGasLimit")
+    gas_limit = str(gl).strip() if gl is not None else ""
+    if body.get("txMaxFeePerGas") is not None or body.get("txMaxPriorityFeePerGas") is not None:
+        return {
+            "nonce": nonce,
+            "gasLimit": gas_limit,
+            "txType": "eip1559",
+            "maxFeePerGas": str(body.get("txMaxFeePerGas") or ""),
+            "maxPriorityFeePerGas": str(body.get("txMaxPriorityFeePerGas") or ""),
+        }
+    return {
+        "nonce": nonce,
+        "gasLimit": gas_limit,
+        "txType": "legacy",
+        "gasPrice": str(body.get("txGasPrice") or ""),
+    }
 
 
 def parse_no_custom_gas_params(compose: dict[str, Any]) -> bool:
@@ -687,6 +745,13 @@ def build_compose_multisign(
         else:
             gas_limit = rpc_est
 
+        if gas_limit < rpc_est:
+            raise ValueError(
+                f"composeActions[{i}]: gas limit ({gas_limit}) is below eth_estimateGas ({rpc_est}). "
+                "Increase composeActions[].estimatedGas, raise chain gasLimit in GET /getChainDetails, "
+                "or omit estimatedGas so the limit uses max(chain gasLimit, estimate) or RPC-only gas (--no-custom-gas-params)."
+            )
+
         current_nonce = nonce0 + i
 
         if legacy:
@@ -698,6 +763,14 @@ def build_compose_multisign(
                 configured = _gwei_to_wei_ceil(chain_gas_price_gwei)
                 if configured > gas_price_wei:
                     gas_price_wei = configured
+            if gp_item is not None and gp_item > 0:
+                network_gp = eth_gas_price(rpc_url)
+                if gas_price_wei < network_gp:
+                    raise ValueError(
+                        f"composeActions[{i}]: effective gas price ({gas_price_wei} wei) is below eth_gasPrice ({network_gp} wei). "
+                        "Increase composeActions[].gasPriceWei or adjust chain gasPrice / gasMultiplier in GET /getChainDetails, "
+                        "or use --no-custom-gas-params for RPC-only fees."
+                    )
             if i == 0:
                 first_tx_fee = {
                     "txNonce": nonce0,
@@ -725,6 +798,18 @@ def build_compose_multisign(
             else:
                 max_fee = mfee
                 max_prio = mprio
+            if mfee is not None and mprio is not None and mfee > 0 and mprio > 0:
+                if max_prio > max_fee:
+                    raise ValueError(
+                        f"composeActions[{i}]: maxPriorityFeePerGas ({max_prio} wei) exceeds maxFeePerGas ({max_fee} wei). "
+                        "Increase maxFeePerGas so it is at least as large as maxPriorityFeePerGas."
+                    )
+                bf_w = latest_base_fee_per_gas_wei(rpc_url)
+                if bf_w is not None and max_fee < bf_w:
+                    raise ValueError(
+                        f"composeActions[{i}]: maxFeePerGas ({max_fee} wei) is below the current block base fee per gas ({bf_w} wei). "
+                        "Raise maxFeePerGas (and typically maxPriorityFeePerGas) so the EIP-1559 transaction is valid."
+                    )
             if i == 0:
                 first_tx_fee = {
                     "txNonce": nonce0,
@@ -821,6 +906,8 @@ def build_compose_multisign(
         "messageToSign": message_to_sign,
         "chainId": dest_chain,
         "count": len(actions),
+        "triggerTxParams": trigger_tx_params_from_compose_body(body),
+        "triggerMessageHash": body.get("msgHash"),
     }
 
 

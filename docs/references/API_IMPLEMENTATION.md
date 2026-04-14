@@ -47,7 +47,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getMachineInfo`](#get-getmachineinfo) - Get machine information (CPU, memory, disk)
 - [`GET /getNodeKey`](#get-getnodekey) - Get node public key (node ID)
 - [`GET /getNodeMgtKey`](#get-getnodemgtkey) - Get node management key
-- [`GET /getNodeMgtKeyNonce`](#get-getnodemgtkeynonce) - Get current management key nonce
+- [`GET /getNodeMgtKeyNonce`](#get-getnodemgtkeynonce) - Next nonce for Ethereum **NodeMgtKey** only (`Data`: `{key, nonce}`)
 - [`GET /hasPublicMgtKey`](#get-haspublicmgtkey) - Returns true if any Ed25519 management key is allowed (config or added via addManagementKey)
 - [`GET /getAllowedEd25519MgtKeys`](#get-getalloweded25519mgtkeys) - List allowed Ed25519 management keys with labels (bootstrap + added) so the app can show "Which key?" **Also on `PublicDiscoveryPort`** (see [Public discovery HTTP](#public-discovery-http)).
 - [`GET /getPublicMgtKey`](#get-getpublicmgtkey) - List allowed Ed25519 public keys (plain `[]string`, 64 hex); same allow-list as above. **Also served on `PublicDiscoveryPort`** (see [Public discovery HTTP](#public-discovery-http)) alongside `GET /getNodeMgtKey`.
@@ -356,23 +356,34 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKey"
 
 <a id="get-getnodemgtkeynonce"></a>
 #### `GET /getNodeMgtKeyNonce`
-Returns the current nonce for the node management key. This nonce must be used (and incremented) for each management key signature.
+Returns the **next nonce to use** for the **Ethereum NodeMgtKey** from config (the same address as [`GET /getNodeMgtKey`](#get-getnodemgtkey)). The server stores one monotonic nonce sequence **per signer key** in `NodeMgtKeyHistory`; this endpoint only reports the sequence for the configured `NodeMgtKey` address, not for Ed25519 keys.
 
-**Response:**
+**Response (success):**
 ```json
 {
   "code": 0,
   "error": "",
-  "data": 1
+  "data": {
+    "key": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb5",
+    "nonce": 0
+  }
 }
 ```
+
+(Live JSON may use capitalized `Code`, `Error`, `Data`; `data` is always an object with `key` and `nonce`.)
+
+**Field descriptions (`data`):**
+- `key`: The node’s **NodeMgtKey** (Ethereum address, `0x`-prefixed). Same value as `GET /getNodeMgtKey`. Confirms which key this nonce applies to.
+- `nonce`: The **expected next nonce** for that Ethereum key in signed management requests. If there is **no** history yet for this address in the DB, this is **`0`** (first signature uses nonce `0`). After each successful authenticated request, the next call returns the previous value plus one.
+
+**Ed25519 vs MetaMask:** If you authenticate with an **Ed25519** management key (config `PublicMgtKey` or keys from `addManagementKey`), nonce consumption is tracked under that **64-hex public key**, not under the Ethereum `NodeMgtKey`. In that case **`GET /getNodeMgtKeyNonce` can stay at `0`** even after many Ed25519-signed operations. Use [`GET /getPublicMgtKeyNonce`](#get-getpublicmgtkeynonce) (and `?publicKey=<64_hex>` for added keys) for the nonce that matches your signing key.
 
 **Example:**
 ```bash
 curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKeyNonce"
 ```
 
-**Note:** After using a nonce, it will be incremented. Always fetch the current nonce before creating a signature.
+**Note:** Always fetch the latest nonce immediately before building the payload to sign; do not manually increment—use the value returned by this endpoint (Ethereum) or by `getPublicMgtKeyNonce` (Ed25519).
 
 <a id="get-haspublicmgtkey"></a>
 #### `GET /hasPublicMgtKey`
