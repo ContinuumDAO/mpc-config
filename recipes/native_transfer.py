@@ -11,6 +11,14 @@ RPC comes from GET /getChainDetails when --rpc-gateway is omitted. Gas defaults 
 
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
+**Expectations for an AI agent (amount handling)**
+
+This recipe sends the chain **native** currency (ETH, LINEA, etc.), not an ERC-20. **GET /getTokens**
+**decimals** do **not** apply here. ``--amount-unit`` selects compose scaling: **Wei** = smallest
+units (pass an integer string); **Ether** = 18 decimal places on standard EVM native transfers;
+**Gwei** / **USD** follow the compose script’s fixed scales. Do **not** confuse with a token’s
+stored ``decimals`` from the asset list—there is no automatic lookup for native transfers.
+
 Example::
 
   python3 recipes/native_transfer.py \\
@@ -134,7 +142,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
             "Build multiSignRequest JSON for a native currency transfer (gas token) "
-            "to --to. Uses GET /getChainDetails?chain_id=<n> unless --rpc-gateway is set."
+            "to --to. Uses GET /getChainDetails?chain_id=<n> unless --rpc-gateway is set. "
+            "AI agents: native transfers do not use GET /getTokens decimals; set --amount-unit "
+            "explicitly (Wei for raw wei, Ether for 18-decimal human amounts on typical EVM chains)."
         )
     )
     ap.add_argument(
@@ -168,13 +178,18 @@ def main() -> None:
     ap.add_argument(
         "--amount",
         required=True,
-        help='Amount to send (with --amount-unit; e.g. "0.05" with Ether)',
+        help=(
+            "Native value to send: interpret with --amount-unit (not token decimals from getTokens)."
+        ),
     )
     ap.add_argument(
         "--amount-unit",
         default="Wei",
         choices=sorted(_VALID_UNITS),
-        help="Unit for uint256 value (default: Wei). Matches compose paramUnits.",
+        help=(
+            "Wei | Ether | Gwei | USD for the tx value (default: Wei). Compose scales only; "
+            "unrelated to ERC-20 decimals in GET /getTokens."
+        ),
     )
     ap.add_argument(
         "--purpose",

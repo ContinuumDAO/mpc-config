@@ -10,6 +10,23 @@ empty, **eth_estimateGas** applies. Pass **--no-custom-gas-params** to set
 
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
+**Expectations for an AI agent (amount handling)**
+
+- **Preferred when the user gives a human token amount** (e.g. "send 10 USDC"): omit
+  ``--amount-unit``, set ``--amount`` to that number in **token units** (not wei), and ensure
+  the node’s **GET /getTokens** entry for this ``--chain-id`` and ``--token`` includes
+  **decimals**. The script scales by those decimals. If decimals are missing, the run fails:
+  either **call POST /addToken** (or the project’s token-update flow) so the ERC-20 contract
+  row includes **decimals**, or **pass ``--amount-unit``** and express ``--amount`` in that
+  unit (Wei = smallest units; Ether/Gwei/USD follow the compose fixed scales).
+
+- **When the user gives a raw on-chain amount** or you already have wei: pass
+  ``--amount-unit Wei`` and ``--amount`` as the integer string (no decimals in the string
+  unless you intend fractional wei, which is unusual).
+
+- **Do not assume** a default of Ether for the token amount; fixed units Ether/Gwei/USD refer
+  to the compose layer’s scales (e.g. 18 / 9 / 6), not necessarily the token’s ``decimals``.
+
 Example::
 
   python3 recipes/erc20_transfer.py \\
@@ -18,6 +35,9 @@ Example::
     --token 0x... \\
     --to 0x... \\
     --amount 1.5 --amount-unit Ether
+
+  # Omit --amount-unit only if GET /getTokens lists this ERC-20 with decimals; amount is then
+  # in token units (e.g. 1.5 USDC with decimals 6). Otherwise pass --amount-unit or add decimals.
 
   python3 recipes/erc20_transfer.py \\
     --key-gen-id KeyGen2026... --chain-id 1 \\
@@ -40,6 +60,7 @@ if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
 import generateMultiSignRequestFromCompose as _compose
+import recipe_token_metadata as _tokmeta
 
 _VALID_UNITS = frozenset({"Wei", "Ether", "Gwei", "USD"})
 
@@ -146,7 +167,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
             "Build multiSignRequest JSON for ERC-20 transfer(address,uint256). "
-            "Loads RPC from GET /getChainDetails?chain_id=<n> unless --rpc-gateway is set."
+            "Loads RPC from GET /getChainDetails?chain_id=<n> unless --rpc-gateway is set. "
+            "For AI agents: if the user gives a human token amount, omit --amount-unit and pass "
+            "the amount in token units only when GET /getTokens has decimals for this token on "
+            "this chain; otherwise set --amount-unit (e.g. Wei for raw smallest units) or add "
+            "decimals to the token via POST /addToken. Raw wei amounts require --amount-unit Wei."
         )
     )
     ap.add_argument(
@@ -186,13 +211,24 @@ def main() -> None:
     ap.add_argument(
         "--amount",
         required=True,
-        help='Token amount (with --amount-unit; e.g. "1.5" with Ether, or raw "1000000" with Wei)',
+        help=(
+            "Token amount. If --amount-unit is set: value is in that unit (Wei = smallest units, "
+            "Ether/Gwei/USD use compose fixed scales). If --amount-unit is omitted: value must be "
+            "in token decimal units (e.g. 10.5 for ten and a half tokens) and GET /getTokens must "
+            "list decimals for this --token on this --chain-id; the script converts to raw Wei for "
+            "the calldata. Agents: use Wei + integer string for raw on-chain amounts."
+        ),
     )
     ap.add_argument(
         "--amount-unit",
-        default="Wei",
-        choices=sorted(_VALID_UNITS),
-        help="Unit for uint256 amount (default: Wei). Matches compose paramUnits.",
+        default=None,
+        metavar="UNIT",
+        help=(
+            "Wei | Ether | Gwei | USD (compose paramUnits). Omit only when the node's GET /getTokens "
+            "has a decimals field for this ERC-20 on this chain—then --amount is in token units. "
+            "If decimals are missing, an AI agent must either pass this flag (recommended: Wei for "
+            "raw amounts) or update the token record (POST /addToken) so decimals is stored."
+        ),
     )
     ap.add_argument(
         "--purpose",
@@ -228,6 +264,37 @@ def main() -> None:
     rpc = args.rpc_gateway.strip() or None
 
     try:
+        amount = args.amount.strip()
+        amount_unit = args.amount_unit
+        if amount_unit is not None:
+            u = amount_unit.strip()
+            if u not in _VALID_UNITS:
+                raise ValueError(
+                    f"amount-unit must be one of: {', '.join(sorted(_VALID_UNITS))}"
+                )
+            amount_unit = u
+        else:
+            base = _compose.resolve_mpc_auth_base(args.mpc_auth_url, args.management_port)
+            chain_id_num = _compose.parse_chain_id(args.chain_id)
+            dec = _tokmeta.fetch_decimals_from_get_tokens(
+                base,
+                chain_id_num,
+                args.token,
+                category="ERC20",
+                http_get_json=_compose.http_get_json,
+                unwrap_management_api=_compose._unwrap_management_api,
+            )
+            if dec is None:
+                raise ValueError(
+                    "Cannot infer amount scaling: --amount-unit was not set and GET /getTokens has "
+                    "no decimals for this ERC-20 on this chain (or the token is not listed). "
+                    "As an AI agent: pass --amount-unit (use Wei with the raw uint256 string if you "
+                    "already have smallest units), or ensure the token is registered with decimals "
+                    "(e.g. POST /addToken) so omitting --amount-unit is valid."
+                )
+            amount = _tokmeta.human_amount_to_raw_uint256(amount, dec)
+            amount_unit = "Wei"
+
         out = erc20_transfer_multisign_payload(
             mpc_auth_url=args.mpc_auth_url,
             management_port=args.management_port,
@@ -235,8 +302,8 @@ def main() -> None:
             destination_chain_id=args.chain_id,
             token_contract=args.token,
             to_address=args.to,
-            amount=args.amount,
-            amount_unit=args.amount_unit,
+            amount=amount,
+            amount_unit=amount_unit,
             purpose=args.purpose,
             no_custom_gas_params=args.no_custom_gas_params,
             rpc_gateway=rpc,

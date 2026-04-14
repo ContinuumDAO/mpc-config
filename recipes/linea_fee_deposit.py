@@ -21,6 +21,14 @@ fields from **getChainDetails** when set, otherwise **eth_estimateGas**; use
 
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
+**Expectations for an AI agent (amount handling)**
+
+``--amount-wei`` must be the **fee token** amount in **smallest on-chain units** (integer
+decimal string). This script does **not** read **GET /getTokens** or scale by **decimals** for
+you. If the user states a human amount (e.g. "10" tokens), look up the fee token’s
+**decimals** (from node token metadata, chain docs, or the token contract) and compute
+``amount = floor(human * 10**decimals)`` before passing ``--amount-wei``.
+
 Example::
 
   python3 recipes/linea_fee_deposit.py \\
@@ -147,7 +155,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
             "Build multiSignRequest JSON for fee contract deposit(address,uint256) on Linea "
-            "(59144). amount-wei is the fee token amount in smallest units (wei-like)."
+            "(59144). amount-wei is the fee token amount in smallest on-chain units (integer). "
+            "AI agents: convert human token amounts to smallest units using the fee token’s "
+            "decimals before calling; this CLI does not fetch decimals from GET /getTokens."
         )
     )
     ap.add_argument(
@@ -170,7 +180,10 @@ def main() -> None:
         "--amount-wei",
         required=True,
         metavar="N",
-        help="Fee token amount to deposit (positive integer, smallest token units)",
+        help=(
+            "Fee token amount: positive decimal integer string in smallest token units (not scaled "
+            "by this script). Use token decimals to convert from human amounts."
+        ),
     )
     ap.add_argument(
         "--purpose",

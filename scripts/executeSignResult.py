@@ -8,7 +8,9 @@ Broadcast EVM transactions from a **successful** MPC sign result (after
 **Single-tx (matches continuumdao-node-app “Execute”):** rebuilds the unsigned EIP-1559/legacy
 transaction using ``GET /getSignRequestById?tx_params=1`` (gas/nonce snapshot at Get Sig), chain
 config from ``GET /getChainDetails``, and RPC ``estimateGas`` / fee discovery — then applies
-``r,s,v`` / ``ethereumSignature``. The old “decode ``MessageRaw`` RLP only” approach often failed
+``r,s,v`` / ``ethereumSignature``. Fee and gas-limit math when TxParams omit EIP-1559 caps matches
+``generateMultiSignRequestFromCompose.build_compose_multisign`` (same RPC fee snapshot, ``baseFeeMultiplier``,
+``gasMultiplier`` / ``gasPrice`` handling, and ``max(chain gasLimit, eth_estimateGas)``). The old “decode ``MessageRaw`` RLP only” approach often failed
 because MPC signs the hash of that **reconstructed** payload, not an arbitrary or stale RLP blob.
 
 **Batch:** still pairs ``batchsignatures[i]`` with ``MessageRawBatch[i]`` unsigned RLP (same as the
@@ -26,7 +28,7 @@ Builds signed raw transactions with ``eth_account`` and submits ``eth_sendRawTra
 - **``--fast``:** submit and wait for receipts **concurrently** (one thread per transaction).
   Works for batched txs with consecutive nonces because the mempool orders by nonce.
 
-On failure (gas, RPC, receipt timeout, build/broadcast errors, etc.), **stderr** prints **AI agent follow-up** instructions: call ``POST /shelveSignRequest``, then ``POST /sendMessage`` to the Group KeyGen thread with the error and that the request was shelved (see printed block).
+On failure (gas, RPC, receipt timeout, build/broadcast errors, etc.), **stderr** prints **AI agent follow-up** instructions: call ``POST /updateSignResultStatusById`` with ``status: 'failed'`` (management-signed), then optionally ``POST /shelveSignRequest``, then ``POST /sendMessage`` to the Group KeyGen thread with the error (see printed block).
 Before broadcast, the script checks that the rebuilt unsigned tx matches **MessageHash** when stored **txParams** are present (detects mixed recipe runs or mismatched trigger fields).
 
 Requires **eth_account** and **rlp** (install into ``$MPA_PATH/.venv``; see ``docs/skill/SKILL.md`` **Python dependencies**).
@@ -81,6 +83,8 @@ if _spec is None or _spec.loader is None:
     raise RuntimeError("Could not load generateSignRequestWithFoundryScript.py")
 _forge = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_forge)
+
+import generateMultiSignRequestFromCompose as _compose
 
 hex_to_bytes = _forge.hex_to_bytes
 parse_chain_id = _forge.parse_chain_id
@@ -285,30 +289,6 @@ def fetch_ethereum_address_for_sign(mpc_base: str, merged: dict[str, Any]) -> st
     return a
 
 
-def fetch_chain_fee_params(rpc_url: str) -> dict[str, Any]:
-    """RPC discovery like app/utils/chainFees.ts fetchChainFeeParams."""
-    try:
-        block = rpc_call(rpc_url, "eth_getBlockByNumber", ["latest", False])
-    except (RuntimeError, OSError):
-        gp = rpc_quantity_to_int(rpc_call(rpc_url, "eth_gasPrice", []))
-        return {"is_eip1559": False, "gas_price_wei": gp}
-    if not isinstance(block, dict):
-        gp = rpc_quantity_to_int(rpc_call(rpc_url, "eth_gasPrice", []))
-        return {"is_eip1559": False, "gas_price_wei": gp}
-    base_fee = block.get("baseFeePerGas")
-    if base_fee is None:
-        gp = rpc_quantity_to_int(rpc_call(rpc_url, "eth_gasPrice", []))
-        return {"is_eip1559": False, "gas_price_wei": gp}
-    bf = rpc_quantity_to_int(base_fee)
-    prio: int | None = None
-    try:
-        prio = rpc_quantity_to_int(rpc_call(rpc_url, "eth_maxPriorityFeePerGas", []))
-    except (RuntimeError, KeyError, TypeError, ValueError):
-        pass
-    gp = rpc_quantity_to_int(rpc_call(rpc_url, "eth_gasPrice", []))
-    return {"is_eip1559": True, "base_fee_wei": bf, "priority_fee_wei": prio, "gas_price_wei": gp}
-
-
 def build_unsigned_single_tx_dict_app_style(
     merged: dict[str, Any],
     msg_raw: str,
@@ -355,16 +335,54 @@ def build_unsigned_single_tx_dict_app_style(
     else:
         value_int = int(str(val_raw).strip(), 0) if isinstance(val_raw, str) and val_raw.startswith("0x") else int(val_raw)
 
-    fee_params = fetch_chain_fee_params(rpc_url)
-    legacy = bool(tx_params.get("txType") == "legacy") if tx_params else bool(
-        chain_detail.get("legacy") or chain_detail.get("Legacy")
-    )
-    gas_mult = float(chain_detail.get("gasMultiplier") or chain_detail.get("GasMultiplier") or 0) or None
-    base_fee_mult = float(chain_detail.get("baseFeeMultiplier") or chain_detail.get("BaseFeeMultiplier") or 100)
-    base_fee_mult = max(100.0, base_fee_mult)
-    chain_gas_limit_cfg = chain_detail.get("gasLimit")
-    if chain_gas_limit_cfg not in (None, ""):
-        chain_gas_limit_cfg = int(float(chain_gas_limit_cfg))
+    fee_params = _compose.fetch_chain_fee_params(rpc_url, chain_id_num)
+
+    gas_limit_cfg = pick_str(chain_detail, "gasLimit", "GasLimit")
+    chain_gas_limit_cfg: int | None = None
+    if gas_limit_cfg not in (None, ""):
+        try:
+            gl = int(gas_limit_cfg)  # type: ignore[arg-type]
+            if gl > 0:
+                chain_gas_limit_cfg = gl
+        except (TypeError, ValueError):
+            pass
+
+    gas_mult_raw = pick_str(chain_detail, "gasMultiplier", "GasMultiplier")
+    gas_fee_multiplier: int | None = None
+    if gas_mult_raw not in (None, ""):
+        try:
+            gas_fee_multiplier = int(gas_mult_raw)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            pass
+
+    chain_gas_price = pick_str(chain_detail, "gasPrice", "GasPrice")
+    chain_gas_price_gwei: float | None = None
+    if chain_gas_price not in (None, ""):
+        try:
+            chain_gas_price_gwei = float(chain_gas_price)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            pass
+
+    base_fee_mult_raw = pick_str(chain_detail, "baseFeeMultiplier", "BaseFeeMultiplier")
+    base_fee_multiplier_pct = 100
+    if base_fee_mult_raw not in (None, ""):
+        try:
+            base_fee_multiplier_pct = max(100, int(base_fee_mult_raw))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            pass
+
+    legacy_flag = pick_str(chain_detail, "legacy", "Legacy")
+    legacy_from_chain = legacy_flag is True or str(legacy_flag).lower() == "true"
+    if tx_params is not None and tx_params.get("txType") == "legacy":
+        legacy = True
+    elif tx_params is not None and str(tx_params.get("txType") or "").strip().lower() in (
+        "0x2",
+        "eip1559",
+        "2",
+    ):
+        legacy = False
+    else:
+        legacy = legacy_from_chain or not bool(fee_params.get("isEip1559"))
 
     # Nonce: TxParams first, then sign result fields, then chain pending
     nonce: int | None = None
@@ -393,12 +411,17 @@ def build_unsigned_single_tx_dict_app_style(
     except (RuntimeError, OSError):
         estimated = 21_000
 
-    # Gas limit: RPC estimate as baseline; chain config overrides when set; TxParams (sign snapshot) wins last.
+    # Gas limit: match generateMultiSignRequestFromCompose.build_compose_multisign.
     gas_limit = estimated
-    if chain_gas_limit_cfg and chain_gas_limit_cfg > 0:
-        gas_limit = int(chain_gas_limit_cfg)
+    if chain_gas_limit_cfg is not None and chain_gas_limit_cfg > 0:
+        gas_limit = max(chain_gas_limit_cfg, estimated)
     if tx_params is not None and tx_params.get("gasLimit") not in (None, ""):
         gas_limit = int(str(tx_params["gasLimit"]).strip())
+    if gas_limit < estimated:
+        raise ValueError(
+            f"effective gas limit ({gas_limit}) is below eth_estimateGas ({estimated}). "
+            "Increase chain gasLimit in GET /getChainDetails, or ensure trigger txParams gasLimit matches."
+        )
 
     if legacy:
         gp_raw = None
@@ -408,16 +431,18 @@ def build_unsigned_single_tx_dict_app_style(
             gp_raw = merged.get("txGasPrice")
         fees_from_tx_params_legacy = gp_raw not in (None, "")
         if fees_from_tx_params_legacy:
-            gas_price = int(str(gp_raw).strip()) if isinstance(gp_raw, int) else int(str(gp_raw).strip(), 0)
+            gas_price_wei = int(str(gp_raw).strip()) if isinstance(gp_raw, int) else int(str(gp_raw).strip(), 0)
         else:
-            gas_price = fee_params.get("gas_price_wei") or rpc_quantity_to_int(
-                rpc_call(rpc_url, "eth_gasPrice", [])
-            )
-        if gas_mult and gas_mult > 0 and not fees_from_tx_params_legacy:
-            gas_price = gas_price * (100 + int(gas_mult)) // 100
+            gas_price_wei = _compose.eth_gas_price(rpc_url)
+            if gas_fee_multiplier is not None and gas_fee_multiplier > 0:
+                gas_price_wei = (gas_price_wei * (100 + gas_fee_multiplier)) // 100
+            if chain_gas_price_gwei is not None and chain_gas_price_gwei > 0:
+                configured = _compose._gwei_to_wei_ceil(chain_gas_price_gwei)
+                if configured > gas_price_wei:
+                    gas_price_wei = configured
         out: dict[str, Any] = {
             "nonce": nonce,
-            "gasPrice": gas_price,
+            "gasPrice": gas_price_wei,
             "gas": gas_limit,
             "value": value_int,
             "data": data_b,
@@ -427,7 +452,7 @@ def build_unsigned_single_tx_dict_app_style(
             out["to"] = to_addr if to_addr.startswith("0x") else "0x" + to_addr
         return out
 
-    # EIP-1559 (continuumdao-node-app Execute fallback when TxParams omit fees)
+    # EIP-1559: match generateMultiSignRequestFromCompose (gasMultiplier is legacy-only there).
     max_prio: int
     max_fee: int
     tx_mp = tx_params.get("maxPriorityFeePerGas") if tx_params else None
@@ -440,24 +465,16 @@ def build_unsigned_single_tx_dict_app_style(
     if fees_from_tx_params_eip1559:
         max_prio = int(str(tx_mp).strip())
         max_fee = int(str(tx_mf).strip())
-    elif fee_params.get("is_eip1559"):
-        base_wei = int(fee_params.get("base_fee_wei") or 0)
-        prio_wei = int(fee_params.get("priority_fee_wei") or 0)
-        base_component_wei = int(base_wei * base_fee_mult // 100)
-        max_prio = prio_wei if prio_wei > 0 else 10**9
-        max_fee_wei = base_component_wei + (prio_wei if prio_wei > 0 else 0)
-        max_fee = max_fee_wei if base_wei > 0 else max_prio * 2
+    elif fee_params.get("isEip1559"):
+        base = float(fee_params.get("baseFeeGwei") or 0)
+        prio = float(fee_params.get("priorityFeeGwei") or 0)
+        base_component = base * base_fee_multiplier_pct / 100.0
+        max_prio = _compose._gwei_to_wei_ceil(prio) if prio > 0 else _compose._gwei_to_wei_ceil(1.0)
+        max_fee = _compose._gwei_to_wei_ceil(base_component + prio)
     else:
-        gp = int(fee_params.get("gas_price_wei") or 0) or rpc_quantity_to_int(
-            rpc_call(rpc_url, "eth_gasPrice", [])
-        )
+        gp = _compose.eth_gas_price(rpc_url)
         max_prio = max(gp // 10, 10**9)
         max_fee = max(gp * 2, max_prio * 2)
-    # Do not apply chain gasMultiplier again when fees came from stored txParams (already final at sign time).
-    if gas_mult and gas_mult > 0 and not fees_from_tx_params_eip1559:
-        gm = int(gas_mult)
-        max_prio = max_prio * (100 + gm) // 100
-        max_fee = max_fee * (100 + gm) // 100
 
     out2: dict[str, Any] = {
         "type": 2,
@@ -909,16 +926,19 @@ def print_agent_remediation_after_execute_failure(
     reason: str | None = None,
 ) -> None:
     """
-    Stderr instructions for automation: shelve the sign request and notify the Group on failure.
+    Stderr instructions for automation: mark the sign result failed, optionally shelve the request, notify the Group.
     """
     lines = [
         "",
         "---",
-        "AI agent follow-up (executeSignResult failed):",
-        "1. POST /shelveSignRequest — management-signed JSON per API_IMPLEMENTATION.md so this sign request is shelved "
-        "(avoids leaving peers expecting a broadcast that will not happen).",
-        "2. POST /sendMessage — to the Group KeyGen thread: quote the error below, state that the sign request was shelved "
-        "(or will be shelved immediately after), and what to check next (gas, RPC, chain config, nonce, etc.).",
+        "AI agent follow-up (executeSignResult failed — irrecoverable broadcast/build error):",
+        "1. POST /updateSignResultStatusById — management-signed JSON per API_IMPLEMENTATION.md: Nonce, Sig, requestId, "
+        "status: 'failed' (same pattern as continuumdao-node-app). Marks the sign result as failed so peers are not "
+        "left waiting for a successful on-chain execution.",
+        "2. POST /shelveSignRequest — optional: management-signed so the sign request is shelved and drops from "
+        "pending/ready lists (same requestId as step 1).",
+        "3. POST /sendMessage — to the Group KeyGen thread: quote the error below, state that the sign result was "
+        "marked failed (or will be), and what to check next (gas, RPC, chain config, nonce, MessageHash mismatch, etc.).",
     ]
     rid = (sign_request_id or "").strip()
     if rid:
@@ -926,12 +946,12 @@ def print_agent_remediation_after_execute_failure(
     else:
         lines.append(
             "   Sign request id: unknown here — use --sign-request-id or ensure requestid is in --sign-result-file "
-            "before calling shelve / sendMessage."
+            "before calling updateSignResultStatusById / shelve / sendMessage."
         )
     if reason:
         lines.append(f"   Failure detail: {reason}")
     lines.append(
-        "References: docs/references/API_IMPLEMENTATION.md (POST /shelveSignRequest), "
+        "References: docs/references/API_IMPLEMENTATION.md (POST /updateSignResultStatusById, POST /shelveSignRequest), "
         "docs/references/API_KEYGEN_MESSAGING.md (POST /sendMessage)."
     )
     lines.append("---")
@@ -989,7 +1009,9 @@ def main() -> None:
 
     try:
         _execute_sign_result_main(args, mpc, sign_request_id_box)
-    except (ValueError, RuntimeError, TimeoutError, OSError) as e:
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:
         sid = sign_request_id_box[0].strip() if sign_request_id_box else ""
         print_agent_remediation_after_execute_failure(
             sid if sid else None,

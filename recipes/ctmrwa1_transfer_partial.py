@@ -11,6 +11,15 @@ The **value** field uses **--value-unit** (default **Wei**) like other compose u
 Gas defaults match ``linea_register`` (chain fields when set, else **eth_estimateGas**;
 **--no-custom-gas-params** for RPC-only).
 
+**Expectations for an AI agent (value / decimals)**
+
+``--value`` with ``--value-unit`` uses **compose** units (**Wei** = raw smallest units; **Ether** =
+18 decimal places in the compose conversion layer). That is **not** automatically the same as an
+ERC-20 **decimals** field from **GET /getTokens** for some other asset. For a **raw on-chain**
+partial balance from simulation or the contract, use **Wei** and an integer string. If the
+protocol documents that ``value`` is 18-decimal–style, **Ether** may apply; do **not** assume
+without checking project docs or on-chain behavior.
+
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
 Example::
@@ -193,7 +202,9 @@ def ctmrwa1_partial_multisign_payload(
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
-            "CTMRWA1 partial transfer: transferPartialTokenX (TOKEN_STORAGE_SCHEMA.md)."
+            "CTMRWA1 partial transfer: transferPartialTokenX (TOKEN_STORAGE_SCHEMA.md). "
+            "AI agents: --value-unit selects compose scaling (Wei/Ether/Gwei/USD); it is not "
+            "automatically the token’s decimals from GET /getTokens—use Wei for raw uint256 amounts."
         )
     )
     ap.add_argument(
@@ -216,12 +227,21 @@ def main() -> None:
     ap.add_argument("--token", required=True, metavar="ADDR", help="CTMRWA1 contract address")
     ap.add_argument("--from-token-id", required=True, help="uint256 fromTokenId")
     ap.add_argument("--to", required=True, metavar="ADDR", help="toAddressStr (recipient)")
-    ap.add_argument("--value", required=True, help="uint256 value (amount moved)")
+    ap.add_argument(
+        "--value",
+        required=True,
+        help=(
+            "uint256 partial value: combine with --value-unit (compose units; use Wei for raw amounts)."
+        ),
+    )
     ap.add_argument(
         "--value-unit",
         default="Wei",
         choices=sorted(_VALID_UNITS),
-        help="Unit for the value field (default: Wei)",
+        help=(
+            "Wei | Ether | Gwei | USD for the value field (default: Wei). Compose layer scales; "
+            "do not assume this equals an arbitrary ERC-20 decimals from GET /getTokens."
+        ),
     )
     ap.add_argument("--id", required=True, dest="rwa_id", help="uint256 RWA token ID")
     ap.add_argument("--version", required=True, help="uint256 contract version")

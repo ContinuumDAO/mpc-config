@@ -338,13 +338,14 @@ def augment_broadcast_with_fees(
         max_fee_per_gas_wei = None
         max_priority_fee_per_gas_wei = None
     else:
-        base = fee_params.get("baseFeeGwei") or 0
-        prio = max(0, fee_params.get("priorityFeeGwei") or 0)
-        priority_gwei = prio if prio > 0 else 1
-        base_component = (base * base_pct) // 100
-        max_fee_gwei = base_component + priority_gwei
-        max_fee_per_gas_wei = int(math.ceil(max_fee_gwei * 1e9))
-        max_priority_fee_per_gas_wei = int(math.ceil(priority_gwei * 1e9))
+        # Same EIP-1559 wei math as generateMultiSignRequestFromCompose.build_compose_multisign
+        # (float gwei for base + priority, then ceil to wei).
+        base = float(fee_params.get("baseFeeGwei") or 0)
+        prio = float(fee_params.get("priorityFeeGwei") or 0)
+        base_component = base * base_pct / 100.0
+        max_prio = int(math.ceil(prio * 1e9)) if prio > 0 else int(math.ceil(1.0 * 1e9))
+        max_fee_per_gas_wei = int(math.ceil((base_component + prio) * 1e9))
+        max_priority_fee_per_gas_wei = max_prio
         gas_price_wei = None
 
     default_gas_hex = "0x5208"  # 21000

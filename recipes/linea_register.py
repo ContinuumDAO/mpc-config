@@ -6,6 +6,9 @@ contract, using the node's stored RPC and gas hints from GET /getChainDetails
 
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
+**Expectations for an AI agent:** No amount or **decimals** parameters—this is a zero-argument
+``register()`` call. Fee-token approval or deposit flows use other recipes (e.g. ``linea_fee_deposit``).
+
 Example::
 
   python3 recipes/linea_register.py --key-gen-id KeyGen2026... --mpc-auth-url http://localhost:8080
@@ -90,7 +93,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
             "Build multiSignRequest JSON for register() on Linea (chainId 59144) "
-            "using RPC from GET /getChainDetails?chain_id=59144 on --mpc-auth-url."
+            "using RPC from GET /getChainDetails?chain_id=59144 on --mpc-auth-url. "
+            "No token amounts or GET /getTokens decimals involved."
         )
     )
     ap.add_argument(

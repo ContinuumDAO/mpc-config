@@ -9,6 +9,13 @@ Matches **CTMRWA1** defaults in ``docs/references/TOKEN_STORAGE_SCHEMA.md`` / **
 
 The MPC transaction is sent on **--chain-id** (contract chain). **--to-chain-id** sets ``toChainIdStr`` (default: same as ``--chain-id``). Gas defaults match ``linea_register`` (chain fields when set, else **eth_estimateGas**; **--no-custom-gas-params** for RPC-only).
 
+**Expectations for an AI agent (amounts / decimals)**
+
+This flow moves **whole** positions: ``fromTokenId``, ``ID``, ``version`` are **uint256** IDs passed
+as integer strings with compose **Wei** paramUnits (integer semantics). There is **no** separate
+human “token amount” field and **GET /getTokens** **decimals** do **not** apply to these ID
+fields. Do not scale ``from-token-id``, ``--id``, or ``--version`` by ERC-20 decimals.
+
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
 Example::
@@ -182,7 +189,9 @@ def ctmrwa1_whole_multisign_payload(
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
-            "CTMRWA1 whole-token transfer: transferWholeTokenX (TOKEN_STORAGE_SCHEMA.md)."
+            "CTMRWA1 whole-token transfer: transferWholeTokenX (TOKEN_STORAGE_SCHEMA.md). "
+            "IDs are uint256 strings (Wei paramUnits); not ERC-20-style amounts—ignore token "
+            "decimals from GET /getTokens for from-token-id / id / version."
         )
     )
     ap.add_argument(
