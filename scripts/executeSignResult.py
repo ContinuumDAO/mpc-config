@@ -29,6 +29,8 @@ Builds signed raw transactions with ``eth_account`` and submits ``eth_sendRawTra
   Works for batched txs with consecutive nonces because the mempool orders by nonce.
 
 On failure (gas, RPC, receipt timeout, build/broadcast errors, etc.), **stderr** prints **AI agent follow-up** instructions: call ``POST /updateSignResultStatusById`` with ``status: 'failed'`` (management-signed), then optionally ``POST /shelveSignRequest``, then ``POST /sendMessage`` to the Group KeyGen thread with the error (see printed block).
+
+After **successful** broadcast (receipt received for each tx), **stderr** prints instructions to call ``POST /updateSignResultStatusById`` with ``status: 'executed'`` and the transaction hash (or ``batchTransactionHashes``), and to report the hash(es) to the user (see printed block). **stdout** remains a single JSON object with ``results`` including ``transactionHash`` per item.
 Before broadcast, the script checks that the rebuilt unsigned tx matches **MessageHash** when stored **txParams** are present (detects mixed recipe runs or mismatched trigger fields).
 
 Requires **eth_account** and **rlp** (install into ``$MPA_PATH/.venv``; see ``docs/skill/SKILL.md`` **Python dependencies**).
@@ -958,6 +960,65 @@ def print_agent_remediation_after_execute_failure(
     print("\n".join(lines), file=sys.stderr)
 
 
+def print_agent_completion_after_execute_success(
+    sign_request_id: str | None,
+    results: list[dict[str, Any]],
+) -> None:
+    """
+    Stderr instructions after all txs broadcast and receipts received: mark sign result executed
+    and surface hashes for the end user.
+    """
+    hashes: list[str] = []
+    for r in results:
+        h = r.get("transactionHash")
+        if h is not None and str(h).strip():
+            hashes.append(str(h).strip())
+    rid = (sign_request_id or "").strip()
+    lines = [
+        "",
+        "---",
+        "AI agent follow-up (executeSignResult succeeded — all transactions broadcast; receipts returned):",
+        "1. POST /updateSignResultStatusById — management-signed JSON per API_IMPLEMENTATION.md § POST /updateSignResultStatusById:",
+        "   - requestId: the sign request id (same id you used for getSignResult / executeSignResult).",
+        "   - status: 'executed'",
+    ]
+    if len(hashes) <= 1:
+        lines.append(
+            "   - transactionHash: the hash below (single-tx sign result). Omit batchTransactionHashes."
+        )
+    else:
+        lines.append(
+            "   - batchTransactionHashes: array of tx hashes in batch order (length must match batch size). "
+            "Omit transactionHash when all hashes are listed here."
+        )
+    lines.append(
+        "   - nonce, sig: management API signing pattern (sig over body with sig empty), same as other management POSTs."
+    )
+    lines.append(
+        "2. Tell the end user the transaction hash(es) below (they can look up the tx on a block explorer for this chain)."
+    )
+    if rid:
+        lines.append(f"   Sign request id (requestId): {rid}")
+    else:
+        lines.append(
+            "   Sign request id: use signRequestId from the JSON printed on stdout, or --sign-request-id / "
+            "requestid in --sign-result-file."
+        )
+    if hashes:
+        if len(hashes) == 1:
+            lines.append(f"   Transaction hash: {hashes[0]}")
+        else:
+            lines.append("   Transaction hashes (batch index order):")
+            for i, h in enumerate(hashes):
+                lines.append(f"      [{i}] {h}")
+    lines.append(
+        "Reference: docs/references/API_IMPLEMENTATION.md (POST /updateSignResultStatusById — executed, "
+        "transactionHash / batchTransactionHashes)."
+    )
+    lines.append("---")
+    print("\n".join(lines), file=sys.stderr)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Broadcast MPC sign results to an EVM chain.")
     ap.add_argument(
@@ -1140,6 +1201,7 @@ def _execute_sign_result_main(
         "results": results,
     }
     print(json.dumps(out, indent=2))
+    print_agent_completion_after_execute_success(request_id or None, results)
 
 
 if __name__ == "__main__":
