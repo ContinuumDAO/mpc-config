@@ -864,6 +864,15 @@ def _compose_action_tx_dict(
             base_component = base * base_fee_multiplier_pct / 100.0
             max_prio = _gwei_to_wei_ceil(prio) if prio > 0 else _gwei_to_wei_ceil(1.0)
             max_fee = _gwei_to_wei_ceil(base_component + prio)
+            # RPC-derived fee fields are in gwei; converting back to wei can yield tiny max_fee
+            # (even 0) while max_prio is at least 1 gwei — invalid EIP-1559 and can appear as
+            # nonsense like maxFeePerGas "7" with maxPriorityFeePerGas "1000000000".
+            # The explicit per-action fee checks below only run when both mfee/mprio are set,
+            # so clamp computed caps here.
+            max_fee = max(max_fee, max_prio)
+            bf_w_computed = latest_base_fee_per_gas_wei(rpc_url)
+            if bf_w_computed is not None:
+                max_fee = max(max_fee, bf_w_computed)
         else:
             max_fee = mfee
             max_prio = mprio

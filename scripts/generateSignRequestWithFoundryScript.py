@@ -360,6 +360,24 @@ def augment_broadcast_with_fees(
         max_prio = int(math.ceil(prio * 1e9)) if prio > 0 else int(math.ceil(1.0 * 1e9))
         max_fee_per_gas_wei = int(math.ceil((base_component + prio) * 1e9))
         max_priority_fee_per_gas_wei = max_prio
+        # Match generateMultiSignRequestFromCompose: tiny (base+prio) in gwei must not yield
+        # maxFeePerGas < maxPriorityFeePerGas in wei.
+        max_fee_per_gas_wei = max(max_fee_per_gas_wei, max_priority_fee_per_gas_wei)
+        rpc_for_base: str | None = None
+        for item in broadcast.get("transactions") or []:
+            r = item.get("rpc")
+            if isinstance(r, str) and r.strip():
+                rpc_for_base = r.strip()
+                break
+        if rpc_for_base:
+            try:
+                from generateMultiSignRequestFromCompose import latest_base_fee_per_gas_wei
+
+                bf_w = latest_base_fee_per_gas_wei(rpc_for_base)
+                if bf_w is not None:
+                    max_fee_per_gas_wei = max(max_fee_per_gas_wei, bf_w)
+            except Exception:
+                pass
         gas_price_wei = None
 
     default_gas_hex = "0x5208"  # 21000
