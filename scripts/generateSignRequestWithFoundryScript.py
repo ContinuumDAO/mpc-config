@@ -66,6 +66,13 @@ If any of these gas/fee options are given, the script augments the broadcast
 before building the sign request. Omitted fee params default to safe values
 (priority 1 gwei, etc.).
 
+**Gas balance check (default on):** before building the sign request, the script
+estimates required native currency (50% margin on gas units, same idea as compose
+recipes) and compares to ``eth_getBalance`` for the signing address (``--override-sender``
+or each tx's ``from``). RPC is taken from ``transactions[].rpc``, **GET /getChainDetails**
+when ``--destination-chain-id`` (or inferred chain id) is known, or ``--rpc-url``.
+Use ``--skip-gas-check`` to disable.
+
 Example: dry-run broadcast with no fees; set EIP-1559 and current fees:
 
   python3 scripts/generateSignRequestWithFoundryScript.py --key-gen-id=KeyGen... \\
@@ -263,6 +270,13 @@ def _to_hex_wei(value: int) -> str:
     return "0x" + hex(value)[2:]
 
 
+def _normalize_0x_address(addr: str) -> str:
+    s = (addr or "").strip()
+    if not s.startswith("0x"):
+        s = "0x" + s
+    return s
+
+
 def broadcast_with_override_sender(
     broadcast: dict,
     first_nonce: int,
@@ -381,6 +395,144 @@ def augment_broadcast_with_fees(
         else:
             new_txs.append({**item, "transaction": tx})
     return {**broadcast, "transactions": new_txs}
+
+
+def infer_chain_id_for_rpc_broadcast(
+    broadcast: dict,
+    destination_chain_id_override: str | None,
+) -> str:
+    """Chain id string for GET /getChainDetails (decimal); mirrors generate_sign_request heuristics."""
+    if destination_chain_id_override and str(destination_chain_id_override).strip():
+        return str(destination_chain_id_override).strip()
+    chain_id_str = ""
+    txs = broadcast.get("transactions") or []
+    for item in txs:
+        tx = normalize_tx(item)
+        if not tx:
+            continue
+        c = tx.get("chainId") or broadcast.get("chain")
+        if c is not None:
+            chain_id_str = str(parse_chain_id(c))
+            break
+    if not chain_id_str:
+        chain_id_str = "0"
+    if chain_id_str.strip() == ANVIL_SIMULATION_CHAIN_ID:
+        return "0"
+    return chain_id_str
+
+
+def infer_executor_from_broadcast(
+    broadcast: dict,
+    override_sender: str | None,
+) -> str:
+    """Address whose balance is checked (override or first tx ``from``)."""
+    if override_sender:
+        s = override_sender.strip()
+        return _normalize_0x_address(s if s.startswith("0x") else "0x" + s)
+    txs = broadcast.get("transactions") or []
+    for item in txs:
+        tx = normalize_tx(item)
+        if not tx:
+            continue
+        f = tx.get("from")
+        if f is not None and str(f).strip():
+            s = str(f).strip()
+            return _normalize_0x_address(s if s.startswith("0x") else "0x" + s)
+    raise ValueError(
+        "Gas check needs the signing wallet address: pass --override-sender or use a broadcast "
+        "where transactions include from (e.g. forge script with --sender)."
+    )
+
+
+def tx_native_cost_upper_bound_wei(tx: dict, gas_margin_pct: float) -> int:
+    """
+    Upper bound: ceil(gas * (1 + margin/100)) * price_per_gas + value (wei).
+    ``price_per_gas`` is maxFeePerGas (EIP-1559) or gasPrice (legacy), matching tx_to_signing_hash_and_raw.
+    """
+    gl = hex_to_int(tx.get("gas"))
+    if gl <= 0:
+        gl = 21000
+    gas_adj = int(math.ceil(gl * (1.0 + gas_margin_pct / 100.0)))
+    type_hex = tx.get("type")
+    is_eip1559 = (
+        type_hex in ("0x2", "0x02")
+        or tx.get("maxFeePerGas") is not None
+        or tx.get("maxPriorityFeePerGas") is not None
+    )
+    if is_eip1559:
+        price = hex_to_int(tx.get("maxFeePerGas"))
+        if price <= 0:
+            raise ValueError(
+                "Gas check: EIP-1559 transaction has no positive maxFeePerGas; set fees in the broadcast "
+                "or use --is-eip1559 / --legacy with fee augmentation flags."
+            )
+    else:
+        price = hex_to_int(tx.get("gasPrice"))
+        if price <= 0:
+            raise ValueError(
+                "Gas check: legacy transaction has no positive gasPrice; set fees in the broadcast "
+                "or use fee augmentation flags."
+            )
+    val = hex_to_int(tx.get("value") or "0")
+    return gas_adj * price + val
+
+
+def estimate_foundry_broadcast_native_requirement_wei(
+    broadcast: dict,
+    *,
+    gas_margin_pct: float = 50.0,
+) -> int:
+    """Sum of per-tx upper bounds for the final broadcast (same formula as compose recipes)."""
+    total = 0
+    n_tx = 0
+    txs = broadcast.get("transactions") or []
+    for item in txs:
+        tx = normalize_tx(item)
+        if not tx:
+            continue
+        total += tx_native_cost_upper_bound_wei(tx, gas_margin_pct)
+        n_tx += 1
+    if n_tx == 0:
+        raise ValueError("Gas check: no encodable transactions in broadcast JSON")
+    return total
+
+
+def resolve_rpc_url_for_broadcast(
+    broadcast: dict,
+    mpc_base: str,
+    *,
+    destination_chain_id_override: str | None = None,
+    rpc_url_override: str | None = None,
+) -> str:
+    """
+    RPC for ``eth_getBalance``: explicit override, then Foundry ``transactions[].rpc``,
+    else **GET /getChainDetails** for the inferred chain id.
+    """
+    # Import here: generateMultiSignRequestFromCompose loads this module at import time.
+    from generateMultiSignRequestFromCompose import fetch_chain_detail_for_id, pick_str
+
+    if rpc_url_override and str(rpc_url_override).strip():
+        return str(rpc_url_override).strip()
+    txs = broadcast.get("transactions") or []
+    for item in txs:
+        r = item.get("rpc")
+        if isinstance(r, str) and r.strip():
+            return r.strip()
+    dest = infer_chain_id_for_rpc_broadcast(broadcast, destination_chain_id_override)
+    cid = parse_chain_id(dest)
+    if cid == 0:
+        raise ValueError(
+            "Gas check needs an RPC URL: pass --rpc-url, or --destination-chain-id so the node can "
+            "return rpcGateway from GET /getChainDetails, or use a Foundry broadcast that includes "
+            "an rpc field on each transaction item."
+        )
+    cd = fetch_chain_detail_for_id(mpc_base, cid)
+    url = str(pick_str(cd, "rpcGateway", "RpcGateway", "rpc_gateway") or "").strip()
+    if not url:
+        raise ValueError(
+            f"getChainDetails for chain_id={cid} has no rpcGateway; set --rpc-url for the gas check."
+        )
+    return url
 
 
 def tx_to_signing_hash_and_raw(tx: dict) -> tuple[str, str]:
@@ -753,6 +905,24 @@ def main() -> None:
         metavar="N",
         help="Legacy: extra percentage on gas price, e.g. 20 = +20%% when augmenting.",
     )
+    ap.add_argument(
+        "--skip-gas-check",
+        action="store_true",
+        help=(
+            "Skip balance vs estimated gas check (not recommended). By default the script "
+            "verifies the signing address has enough native gas for estimated fees with a 50%% "
+            "margin on gas units (eth_getBalance on RPC from broadcast or GET /getChainDetails)."
+        ),
+    )
+    ap.add_argument(
+        "--rpc-url",
+        default="",
+        metavar="URL",
+        help=(
+            "RPC URL for the gas balance check when the broadcast omits per-tx rpc and the chain "
+            "must still be reached (optional if each transaction has rpc or the node has rpcGateway)."
+        ),
+    )
     args = ap.parse_args()
 
     if args.file:
@@ -845,6 +1015,23 @@ def main() -> None:
     except ValueError as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)
+
+    if not args.skip_gas_check:
+        import recipe_gas_precheck as _gas
+
+        try:
+            executor = infer_executor_from_broadcast(broadcast, args.override_sender)
+            rpc_opt = args.rpc_url.strip() or None
+            _gas.require_native_gas_for_foundry_broadcast(
+                broadcast,
+                mpc_base,
+                executor=executor,
+                destination_chain_id=args.destination_chain_id,
+                rpc_url=rpc_opt,
+            )
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
 
     try:
         payload = generate_sign_request(broadcast, options)

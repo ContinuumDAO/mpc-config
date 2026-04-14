@@ -55,6 +55,7 @@ if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
 import generateMultiSignRequestFromCompose as _compose
+import recipe_gas_precheck as _gas
 import recipe_token_metadata as _tokmeta
 
 # From TOKEN_STORAGE_SCHEMA.md — CTMERC20 defaults (GET /getTokens → ethereum[].CTMERC20).
@@ -154,6 +155,7 @@ def ctmerc20_transfer_multisign_payload(
     purpose: str = "",
     no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
+    skip_gas_check: bool = False,
 ) -> dict[str, Any]:
     compose = build_ctmerc20_c3transfer_compose(
         key_gen_id=key_gen_id,
@@ -168,6 +170,8 @@ def ctmerc20_transfer_multisign_payload(
         rpc_gateway=rpc_gateway,
     )
     base = _compose.resolve_mpc_auth_base(mpc_auth_url, management_port)
+    if not skip_gas_check:
+        _gas.require_native_gas_for_compose(compose, base)
     return _compose.build_compose_multisign(compose, base)
 
 
@@ -255,6 +259,14 @@ def main() -> None:
         ),
     )
     ap.add_argument(
+        "--skip-gas-check",
+        action="store_true",
+        help=(
+            "Skip verifying the MPC wallet native balance against estimated gas (not recommended). "
+            "By default the script requires balance ≥ estimated fees with 50% extra on gas units."
+        ),
+    )
+    ap.add_argument(
         "--rpc-gateway",
         default="",
         metavar="URL",
@@ -319,6 +331,7 @@ def main() -> None:
             purpose=args.purpose,
             no_custom_gas_params=args.no_custom_gas_params,
             rpc_gateway=rpc,
+            skip_gas_check=args.skip_gas_check,
         )
     except (ValueError, RuntimeError) as e:
         print(str(e), file=sys.stderr)

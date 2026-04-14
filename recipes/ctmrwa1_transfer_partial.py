@@ -46,6 +46,7 @@ if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
 import generateMultiSignRequestFromCompose as _compose
+import recipe_gas_precheck as _gas
 
 PARTIAL_SIG = "transferPartialTokenX(uint256,string,string,uint256,uint256,uint256,string)"
 PARTIAL_NAMES = (
@@ -178,6 +179,7 @@ def ctmrwa1_partial_multisign_payload(
     purpose: str = "",
     no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
+    skip_gas_check: bool = False,
 ) -> dict[str, Any]:
     compose = build_ctmrwa1_partial_compose(
         key_gen_id=key_gen_id,
@@ -196,6 +198,8 @@ def ctmrwa1_partial_multisign_payload(
         rpc_gateway=rpc_gateway,
     )
     base = _compose.resolve_mpc_auth_base(mpc_auth_url, management_port)
+    if not skip_gas_check:
+        _gas.require_native_gas_for_compose(compose, base)
     return _compose.build_compose_multisign(compose, base)
 
 
@@ -259,6 +263,14 @@ def main() -> None:
             "estimates. Default (flag omitted): use chain gas when configured, otherwise eth_estimateGas."
         ),
     )
+    ap.add_argument(
+        "--skip-gas-check",
+        action="store_true",
+        help=(
+            "Skip verifying the MPC wallet native balance against estimated gas (not recommended). "
+            "By default the script requires balance ≥ estimated fees with 50% extra on gas units."
+        ),
+    )
     ap.add_argument("--rpc-gateway", default="", metavar="URL")
     ap.add_argument("--ed25519-seed-hex", metavar="HEX", default="")
     ap.add_argument("--eip191-private-key-hex", metavar="HEX", default="")
@@ -285,6 +297,7 @@ def main() -> None:
             purpose=args.purpose,
             no_custom_gas_params=args.no_custom_gas_params,
             rpc_gateway=rpc,
+            skip_gas_check=args.skip_gas_check,
         )
     except (ValueError, RuntimeError) as e:
         print(str(e), file=sys.stderr)

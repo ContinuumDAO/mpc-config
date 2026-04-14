@@ -52,6 +52,7 @@ if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
 import generateMultiSignRequestFromCompose as _compose
+import recipe_gas_precheck as _gas
 
 LINEA_MAINNET_CHAIN_ID = 59144
 LINEA_FEE_CONTRACT = "0x55aD6Df6d8f8824486C3fd3373f1CF29eCecF0A3"
@@ -130,6 +131,7 @@ def linea_fee_deposit_multisign_payload(
     purpose: str = "",
     no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
+    skip_gas_check: bool = False,
 ) -> dict[str, Any]:
     """
     Load MPC address from GET /getKeyGenResultById, then build_compose_multisign.
@@ -148,6 +150,8 @@ def linea_fee_deposit_multisign_payload(
         no_custom_gas_params=no_custom_gas_params,
         rpc_gateway=rpc_gateway,
     )
+    if not skip_gas_check:
+        _gas.require_native_gas_for_compose(compose, base)
     return _compose.build_compose_multisign(compose, base)
 
 
@@ -199,6 +203,14 @@ def main() -> None:
         ),
     )
     ap.add_argument(
+        "--skip-gas-check",
+        action="store_true",
+        help=(
+            "Skip verifying the MPC wallet native balance against estimated gas (not recommended). "
+            "By default the script requires balance ≥ estimated fees with 50% extra on gas units."
+        ),
+    )
+    ap.add_argument(
         "--rpc-gateway",
         default="",
         metavar="URL",
@@ -227,6 +239,7 @@ def main() -> None:
             purpose=args.purpose,
             no_custom_gas_params=args.no_custom_gas_params,
             rpc_gateway=rpc,
+            skip_gas_check=args.skip_gas_check,
         )
     except (ValueError, RuntimeError) as e:
         print(str(e), file=sys.stderr)
