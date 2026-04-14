@@ -82,6 +82,9 @@ return stored TxParams (see API docs). **multiSignRequest** uses ``txNonce`` /
 ``txGasLimit`` / ``txGasPrice`` (or EIP-1559 equivalents); the trigger endpoint
 expects ``nonce`` / ``gasLimit`` / ``txType`` / fee fields — use ``triggerTxParams``
 when building the trigger body.
+**Use one recipe run per sign request:** ``msgHash`` is tied to exact gas/fees/nonce/calldata.
+Re-running the recipe with different RPC fees produces a different ``msgHash``; do not mix outputs
+from two runs (same for ``triggerMessageHash`` / ``triggerTxParams`` vs stored ``MessageHash``).
 Management API **nonces** apply to other endpoints (e.g. trigger); this script does
 not add a management ``nonce`` to ``multiSignRequest`` unless you extend the
 payload to match a custom backend.

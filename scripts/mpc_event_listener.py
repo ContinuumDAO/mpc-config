@@ -42,6 +42,8 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+from mpc_evm_signing_hash import assert_sign_request_fields_match_message_hash
+
 from mpc_mgt_helpers import (
     compact_json,
     get_ed25519_nonce,
@@ -280,6 +282,7 @@ def post_trigger_sign_request(base: str, priv, request_id: str) -> dict[str, Any
     }
     sr = _get_sign_request_dict(base, request_id)
     if _is_evm_sign_request(sr):
+        assert_sign_request_fields_match_message_hash(sr)
         tx_params, msg_hash = _evm_trigger_tx_params_and_message_hash(sr)
         body["txParams"] = tx_params
         body["messageHash"] = msg_hash

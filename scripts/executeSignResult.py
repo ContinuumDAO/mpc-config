@@ -27,6 +27,7 @@ Builds signed raw transactions with ``eth_account`` and submits ``eth_sendRawTra
   Works for batched txs with consecutive nonces because the mempool orders by nonce.
 
 On failure (gas, RPC, receipt timeout, build/broadcast errors, etc.), **stderr** prints **AI agent follow-up** instructions: call ``POST /shelveSignRequest``, then ``POST /sendMessage`` to the Group KeyGen thread with the error and that the request was shelved (see printed block).
+Before broadcast, the script checks that the rebuilt unsigned tx matches **MessageHash** when stored **txParams** are present (detects mixed recipe runs or mismatched trigger fields).
 
 Requires **eth_account** and **rlp** (install into ``$MPA_PATH/.venv``; see ``docs/skill/SKILL.md`` **Python dependencies**).
 
@@ -83,6 +84,11 @@ _spec.loader.exec_module(_forge)
 
 hex_to_bytes = _forge.hex_to_bytes
 parse_chain_id = _forge.parse_chain_id
+
+from mpc_evm_signing_hash import (
+    compute_message_hash_from_execute_unsigned_dict,
+    normalize_message_hash_hex,
+)
 
 _HTTP_UA = "executeSignResult/1.0 (Python-urllib)"
 DEFAULT_MPC_AUTH_URL = "http://127.0.0.1"
@@ -400,13 +406,14 @@ def build_unsigned_single_tx_dict_app_style(
             gp_raw = tx_params.get("gasPrice")
         if gp_raw in (None, ""):
             gp_raw = merged.get("txGasPrice")
-        if gp_raw not in (None, ""):
+        fees_from_tx_params_legacy = gp_raw not in (None, "")
+        if fees_from_tx_params_legacy:
             gas_price = int(str(gp_raw).strip()) if isinstance(gp_raw, int) else int(str(gp_raw).strip(), 0)
         else:
             gas_price = fee_params.get("gas_price_wei") or rpc_quantity_to_int(
                 rpc_call(rpc_url, "eth_gasPrice", [])
             )
-        if gas_mult and gas_mult > 0:
+        if gas_mult and gas_mult > 0 and not fees_from_tx_params_legacy:
             gas_price = gas_price * (100 + int(gas_mult)) // 100
         out: dict[str, Any] = {
             "nonce": nonce,
@@ -425,11 +432,12 @@ def build_unsigned_single_tx_dict_app_style(
     max_fee: int
     tx_mp = tx_params.get("maxPriorityFeePerGas") if tx_params else None
     tx_mf = tx_params.get("maxFeePerGas") if tx_params else None
-    if (
-        tx_params is not None
-        and tx_mp not in (None, "")
-        and tx_mf not in (None, "")
-    ):
+    if tx_mp in (None, "") and merged:
+        tx_mp = merged.get("txMaxPriorityFeePerGas") or merged.get("TxMaxPriorityFeePerGas")
+    if tx_mf in (None, "") and merged:
+        tx_mf = merged.get("txMaxFeePerGas") or merged.get("TxMaxFeePerGas")
+    fees_from_tx_params_eip1559 = tx_mp not in (None, "") and tx_mf not in (None, "")
+    if fees_from_tx_params_eip1559:
         max_prio = int(str(tx_mp).strip())
         max_fee = int(str(tx_mf).strip())
     elif fee_params.get("is_eip1559"):
@@ -445,7 +453,8 @@ def build_unsigned_single_tx_dict_app_style(
         )
         max_prio = max(gp // 10, 10**9)
         max_fee = max(gp * 2, max_prio * 2)
-    if gas_mult and gas_mult > 0:
+    # Do not apply chain gasMultiplier again when fees came from stored txParams (already final at sign time).
+    if gas_mult and gas_mult > 0 and not fees_from_tx_params_eip1559:
         gm = int(gas_mult)
         max_prio = max_prio * (100 + gm) // 100
         max_fee = max_fee * (100 + gm) // 100
@@ -485,6 +494,18 @@ def signed_raw_single_like_app(
     tx_dict = build_unsigned_single_tx_dict_app_style(
         merged, msg_raw, tx_params, chain_detail, rpc_url, executor, chain_id_num
     )
+    stored_mh = pick_str(merged, "MessageHash", "msgHash")
+    if stored_mh and tx_params is not None and tx_params.get("gasLimit") not in (None, ""):
+        built = compute_message_hash_from_execute_unsigned_dict(tx_dict)
+        if normalize_message_hash_hex(built) != normalize_message_hash_hex(stored_mh):
+            raise ValueError(
+                "Rebuilt unsigned transaction does not match MessageHash on the sign request (the MPC signature "
+                "is over a different preimage). Common causes: multiSignRequest or trigger used mismatched "
+                "txParams vs messageHash, or the recipe was run twice with different gas/fees and outputs were "
+                "mixed. Use one recipe run: POST that bodyForSign only, agree, then trigger with the same "
+                "triggerMessageHash and triggerTxParams from that JSON. "
+                f"computed_hash={built} stored_MessageHash={normalize_message_hash_hex(stored_mh)}"
+            )
     utx = serializable_unsigned_transaction_from_dict(tx_dict)
     r, s, v_byte = parse_signature_components(sig)
     legacy_cid = None
