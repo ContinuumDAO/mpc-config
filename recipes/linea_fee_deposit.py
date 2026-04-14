@@ -15,7 +15,9 @@ use the Foundry script ``forge/script/LineaFeeApproveDeposit.s.sol`` (see
 
 Uses **GET /getKeyGenResultById** for ``keyList`` / ``pubKey`` and the MPC
 **ethereumaddress** as the ``keyGenAddress`` argument. RPC from **GET /getChainDetails**
-for chain **59144** when ``rpcGateway`` is omitted.
+for chain **59144** when ``rpcGateway`` is omitted. Gas: by default compose uses chain
+fields from **getChainDetails** when set, otherwise **eth_estimateGas**; use
+**--no-custom-gas-params** for RPC-only estimates (see ``build_linea_fee_deposit_compose``).
 
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
@@ -73,7 +75,13 @@ def build_linea_fee_deposit_compose(
     no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
 ) -> dict[str, Any]:
-    """Compose JSON for deposit(address,uint256) on the Linea fee contract."""
+    """Compose JSON for deposit(address,uint256) on the Linea fee contract.
+
+    When ``noCustomGasParams`` is **false** (default), ``generateMultiSignRequestFromCompose``
+    uses **GET /getChainDetails** gas fields **when set**; if **gasLimit** is empty, it uses
+    ``eth_estimateGas``. When ``noCustomGasParams`` is **true**, chain gas fields are ignored
+    and limits/fees come from the RPC only (see compose script).
+    """
     pid = (key_gen_id or "").strip()
     if not pid:
         raise ValueError("keyGenId is required")
@@ -172,7 +180,10 @@ def main() -> None:
     ap.add_argument(
         "--no-custom-gas-params",
         action="store_true",
-        help="Ignore ChainDetails gas fields; estimate gas limit and fees only from the RPC",
+        help=(
+            "Set noCustomGasParams on compose JSON: ignore ChainDetails gas fields and use RPC-only "
+            "estimates. Default (flag omitted): use chain gas when configured, otherwise eth_estimateGas."
+        ),
     )
     ap.add_argument(
         "--rpc-gateway",

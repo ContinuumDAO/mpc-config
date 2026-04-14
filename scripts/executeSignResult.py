@@ -26,6 +26,8 @@ Builds signed raw transactions with ``eth_account`` and submits ``eth_sendRawTra
 - **``--fast``:** submit and wait for receipts **concurrently** (one thread per transaction).
   Works for batched txs with consecutive nonces because the mempool orders by nonce.
 
+On failure (gas, RPC, receipt timeout, build/broadcast errors, etc.), **stderr** prints **AI agent follow-up** instructions: call ``POST /shelveSignRequest``, then ``POST /sendMessage`` to the Group KeyGen thread with the error and that the request was shelved (see printed block).
+
 Requires **eth_account** and **rlp** (install into ``$MPA_PATH/.venv``; see ``docs/skill/SKILL.md`` **Python dependencies**).
 
 Examples::
@@ -58,6 +60,7 @@ from pathlib import Path
 from typing import Any, Union
 
 import rlp
+from rlp.exceptions import DecodingError
 
 from eth_account._utils.legacy_transactions import (
     encode_transaction,
@@ -143,11 +146,22 @@ def rpc_call(url: str, method: str, params: list[Any]) -> Any:
     return out.get("result")
 
 
+def _api_code(resp: dict[str, Any]) -> Any:
+    """Management API may use ``code`` / ``Code`` (JSON from tools or older clients)."""
+    c = resp.get("code")
+    return c if c is not None else resp.get("Code")
+
+
+def _api_data(resp: dict[str, Any]) -> Any:
+    return resp.get("data") if resp.get("data") is not None else resp.get("Data")
+
+
 def unwrap_api_response(resp: dict[str, Any], what: str) -> Any:
-    if resp.get("code") != 0:
-        err = resp.get("error") or str(resp)
-        raise ValueError(f"{what} failed (code={resp.get('code')}): {err}")
-    return resp.get("data")
+    c = _api_code(resp)
+    if c is not None and c != 0:
+        err = resp.get("error") or resp.get("Error") or str(resp)
+        raise ValueError(f"{what} failed (code={c}): {err}")
+    return _api_data(resp)
 
 
 def fetch_sign_result(mpc_base: str, request_id: str) -> dict[str, Any]:
@@ -175,9 +189,10 @@ def fetch_sign_request_tx_params(mpc_base: str, request_id: str) -> dict[str, An
         resp = http_get_json(f"{mpc_base.rstrip('/')}/getSignRequestById?{q}")
     except (ValueError, OSError, json.JSONDecodeError):
         return None
-    if resp.get("code") != 0 or resp.get("data") is None:
+    c = _api_code(resp)
+    data = _api_data(resp)
+    if (c is not None and c != 0) or data is None:
         return None
-    data = resp.get("data")
     if not isinstance(data, dict):
         return None
     tx_type = data.get("txType")
@@ -372,6 +387,7 @@ def build_unsigned_single_tx_dict_app_style(
     except (RuntimeError, OSError):
         estimated = 21_000
 
+    # Gas limit: RPC estimate as baseline; chain config overrides when set; TxParams (sign snapshot) wins last.
     gas_limit = estimated
     if chain_gas_limit_cfg and chain_gas_limit_cfg > 0:
         gas_limit = int(chain_gas_limit_cfg)
@@ -492,10 +508,11 @@ def signed_raw_single_like_app(
 def fetch_chain_detail_for_id(mpc_base: str, chain_id_num: int) -> dict[str, Any]:
     base = mpc_base.rstrip("/")
     resp = http_get_json(f"{base}/getChainDetails?chain_id={chain_id_num}")
-    if resp.get("code") != 0:
-        err = resp.get("error") or str(resp)
-        raise ValueError(f"getChainDetails failed (code={resp.get('code')}): {err}")
-    data = resp.get("data")
+    ac = _api_code(resp)
+    if ac is not None and ac != 0:
+        err = resp.get("error") or resp.get("Error") or str(resp)
+        raise ValueError(f"getChainDetails failed (code={ac}): {err}")
+    data = _api_data(resp)
     rows: list[dict[str, Any]]
     if isinstance(data, list):
         rows = [x for x in data if isinstance(x, dict)]
@@ -547,9 +564,29 @@ def unwrap_sign_body(obj: dict[str, Any]) -> dict[str, Any]:
         return obj["bodyForSign"]
     if "body" in obj and isinstance(obj["body"], dict):
         return obj["body"]
-    if "msgHash" in obj or "messageHashes" in obj or "destinationChainID" in obj:
+    if (
+        "msgHash" in obj
+        or "MessageHash" in obj
+        or "messageHashes" in obj
+        or "MessageHashes" in obj
+        or "destinationChainID" in obj
+        or "DestinationChainID" in obj
+    ):
         return obj
     raise ValueError("sign request JSON must contain bodyForSign, body, or a raw sign-request body")
+
+
+def coerce_wrapped_json_object(loaded: dict[str, Any]) -> dict[str, Any]:
+    """
+    Accept a saved API envelope ``{code, data}`` / ``{Code, Data}`` or a raw sign request/result
+    object (same shapes as ``GET /getSignResultById`` / ``getSignRequestById``).
+    """
+    inner = loaded.get("data")
+    if inner is None:
+        inner = loaded.get("Data")
+    if isinstance(inner, dict):
+        return inner
+    return loaded
 
 
 def _decode_type2_unsigned(raw: bytes) -> dict[str, Any]:
@@ -625,15 +662,21 @@ def message_raw_hex_to_unsigned_dict(msg_raw: str) -> dict[str, Any]:
     raw = hex_to_bytes(s)
     if len(raw) == 0:
         raise ValueError("empty messageRaw")
-    if raw[0] == 0x02:
-        return _decode_type2_unsigned(raw)
-    if raw[0] == 0x01:
-        raise ValueError("executeSignResult: EIP-2930 type-1 transactions are not supported yet")
-    if raw[0] == 0x03:
-        raise ValueError("executeSignResult: blob (type-3) transactions are not supported yet")
-    if raw[0] == 0x04:
-        raise ValueError("executeSignResult: set-code (type-4) transactions are not supported yet")
-    return _decode_legacy_unsigned(raw)
+    try:
+        if raw[0] == 0x02:
+            return _decode_type2_unsigned(raw)
+        if raw[0] == 0x01:
+            raise ValueError("executeSignResult: EIP-2930 type-1 transactions are not supported yet")
+        if raw[0] == 0x03:
+            raise ValueError("executeSignResult: blob (type-3) transactions are not supported yet")
+        if raw[0] == 0x04:
+            raise ValueError("executeSignResult: set-code (type-4) transactions are not supported yet")
+        return _decode_legacy_unsigned(raw)
+    except DecodingError as e:
+        raise ValueError(
+            "messageRaw is not valid unsigned transaction RLP (calldata-only hex, truncated tx, "
+            f"or malformed RLP): {e}"
+        ) from e
 
 
 def _pick_sig_field(d: dict[str, Any], *names: str) -> Any:
@@ -839,6 +882,41 @@ def check_key_type(sign_data: dict[str, Any]) -> None:
         )
 
 
+def print_agent_remediation_after_execute_failure(
+    sign_request_id: str | None,
+    *,
+    reason: str | None = None,
+) -> None:
+    """
+    Stderr instructions for automation: shelve the sign request and notify the Group on failure.
+    """
+    lines = [
+        "",
+        "---",
+        "AI agent follow-up (executeSignResult failed):",
+        "1. POST /shelveSignRequest — management-signed JSON per API_IMPLEMENTATION.md so this sign request is shelved "
+        "(avoids leaving peers expecting a broadcast that will not happen).",
+        "2. POST /sendMessage — to the Group KeyGen thread: quote the error below, state that the sign request was shelved "
+        "(or will be shelved immediately after), and what to check next (gas, RPC, chain config, nonce, etc.).",
+    ]
+    rid = (sign_request_id or "").strip()
+    if rid:
+        lines.append(f"   Sign request id: {rid}")
+    else:
+        lines.append(
+            "   Sign request id: unknown here — use --sign-request-id or ensure requestid is in --sign-result-file "
+            "before calling shelve / sendMessage."
+        )
+    if reason:
+        lines.append(f"   Failure detail: {reason}")
+    lines.append(
+        "References: docs/references/API_IMPLEMENTATION.md (POST /shelveSignRequest), "
+        "docs/references/API_KEYGEN_MESSAGING.md (POST /sendMessage)."
+    )
+    lines.append("---")
+    print("\n".join(lines), file=sys.stderr)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Broadcast MPC sign results to an EVM chain.")
     ap.add_argument(
@@ -859,13 +937,13 @@ def main() -> None:
     ap.add_argument(
         "--sign-result-file",
         metavar="PATH",
-        help="JSON from getSignResultById (or raw data object); skips HTTP for the result",
+        help="JSON from getSignResultById, raw sign-result object, or envelope {data}/{Data}; skips HTTP",
     )
     ap.add_argument(
         "--sign-request-file",
         metavar="PATH",
-        help="JSON from getSignRequestById (or wrapper with body/bodyForSign); optional when the "
-        "sign result already includes msgRaw/messageRaw/MessageRaw/messageRawBatch and DestinationChainID",
+        help="JSON from getSignRequestById, raw body, or envelope {data}/{Data}; optional when the "
+        "sign result already includes message raw and DestinationChainID",
     )
     ap.add_argument(
         "--rpc-url",
@@ -885,15 +963,35 @@ def main() -> None:
     args = ap.parse_args()
     mpc = resolve_mpc_auth_base(args.mpc_auth_url, args.management_port)
 
-    request_id = (args.sign_request_id or "").strip()
+    # Mutable so _execute_sign_result_main can refresh id from --sign-result-file for remediation text.
+    sign_request_id_box: list[str] = [(args.sign_request_id or "").strip()]
 
+    try:
+        _execute_sign_result_main(args, mpc, sign_request_id_box)
+    except (ValueError, RuntimeError, TimeoutError, OSError) as e:
+        sid = sign_request_id_box[0].strip() if sign_request_id_box else ""
+        print_agent_remediation_after_execute_failure(
+            sid if sid else None,
+            reason=str(e),
+        )
+        print(f"error: {e}", file=sys.stderr)
+        raise SystemExit(1) from e
+
+
+def _execute_sign_result_main(
+    args: argparse.Namespace,
+    mpc: str,
+    sign_request_id_box: list[str],
+) -> None:
+    request_id = sign_request_id_box[0]
     if args.sign_result_file:
         loaded = load_json_file(args.sign_result_file)
-        sign_data = loaded.get("data") if isinstance(loaded.get("data"), dict) else loaded
+        sign_data = coerce_wrapped_json_object(loaded)
         if not request_id and isinstance(sign_data, dict):
             rid = pick_str(sign_data, "requestid", "requestId", "RequestId")
             if rid:
                 request_id = str(rid).strip()
+                sign_request_id_box[0] = request_id
     else:
         if not request_id:
             raise SystemExit("error: --sign-request-id is required when not using --sign-result-file")
@@ -918,7 +1016,7 @@ def main() -> None:
     sign_body: dict[str, Any] | None = None
     if args.sign_request_file:
         loaded = load_json_file(args.sign_request_file)
-        raw_req = loaded.get("data") if isinstance(loaded.get("data"), dict) else loaded
+        raw_req = coerce_wrapped_json_object(loaded)
         sign_body = unwrap_sign_body(raw_req if isinstance(raw_req, dict) else loaded)
     elif not can_skip_sign_request:
         if not request_id:
@@ -942,7 +1040,7 @@ def main() -> None:
     dest_chain = (
         pick_str(sign_data, "DestinationChainID", "destinationChainID")
         or (
-            pick_str(sign_body, "destinationChainID", "destination_chain_id")
+            pick_str(sign_body, "DestinationChainID", "destinationChainID", "destination_chain_id")
             if sign_body
             else None
         )
@@ -1002,8 +1100,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except (ValueError, RuntimeError, TimeoutError, OSError) as e:
-        print(f"error: {e}", file=sys.stderr)
-        sys.exit(1)
+    main()

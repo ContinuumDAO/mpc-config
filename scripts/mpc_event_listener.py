@@ -7,8 +7,12 @@ Composes optional handlers. Current handlers:
 - **keygen_messages** — same behavior as ``keygen_messaging_agent_poll.py`` (``@agent``
   unread poll + ``multiMarkMessagesRead``).
 - **sign_ready** — ``GET /listSignRequestsReady``, then for each id (sequential):
-  ``POST /triggerSignRequestById`` (Ed25519 management key), poll ``GET /getSignResultById``
-  until signatures exist, then run ``executeSignResult.py`` (optional ``--fast``).
+  ``GET /getSignRequestById`` → ``POST /triggerSignRequestById`` (Ed25519 management key).
+  For **EVM** requests (``DestinationChainID`` + message hash), the trigger body includes
+  ``txParams`` and ``messageHash`` like **continuumdao-node-app** Get Sig, so the node
+  persists TxParams for ``GET /getSignRequestById?tx_params=1``. Then poll
+  ``GET /getSignResultById`` until signatures exist, then run ``executeSignResult.py``
+  (optional ``--fast``).
 
 Interactive mode (``--interactive``) prompts which handlers to enable and, for sign_ready,
 whether to use ``executeSignResult --fast``. Non-interactive use: pass ``--keygen-messages``
@@ -117,6 +121,127 @@ def sign_result_has_signatures(data: Any) -> bool:
     return bool(data.get("signaturehex") or data.get("sigr"))
 
 
+def _api_code(resp: dict[str, Any]) -> Any:
+    c = resp.get("code")
+    return c if c is not None else resp.get("Code")
+
+
+def _get_sign_request_dict(base: str, request_id: str) -> dict[str, Any]:
+    r = http_json_any_code(
+        "GET",
+        base,
+        "/getSignRequestById",
+        query={"id": request_id},
+    )
+    c = _api_code(r)
+    if c is not None and c != 0:
+        raise RuntimeError(f"getSignRequestById failed (code={c}): {r!r}")
+    data = r.get("data") if r.get("data") is not None else r.get("Data")
+    if not isinstance(data, dict):
+        raise RuntimeError(f"getSignRequestById: expected data object, got {data!r}")
+    return data
+
+
+def _pick_first_str(d: dict[str, Any], *keys: str) -> str | None:
+    for k in keys:
+        v = d.get(k)
+        if v is not None and str(v).strip() != "":
+            return str(v).strip()
+    return None
+
+
+def _body_like_tx_fields(sr: dict[str, Any]) -> dict[str, Any]:
+    """Map getSignRequestById fields to compose-style keys used for txParams."""
+    pairs: list[tuple[str, tuple[str, ...]]] = [
+        ("txNonce", ("txNonce", "TxNonce")),
+        ("txGasLimit", ("txGasLimit", "TxGasLimit")),
+        ("txGasPrice", ("txGasPrice", "TxGasPrice")),
+        ("txMaxFeePerGas", ("txMaxFeePerGas", "TxMaxFeePerGas")),
+        ("txMaxPriorityFeePerGas", ("txMaxPriorityFeePerGas", "TxMaxPriorityFeePerGas")),
+    ]
+    out: dict[str, Any] = {}
+    for canonical, variants in pairs:
+        for v in variants:
+            if v in sr and sr[v] is not None:
+                out[canonical] = sr[v]
+                break
+    return out
+
+
+def _tx_params_from_body_like(body: dict[str, Any]) -> dict[str, Any]:
+    """Same mapping as ``generateMultiSignRequestFromCompose.trigger_tx_params_from_compose_body``."""
+    raw_nonce = body.get("txNonce")
+    if raw_nonce is None:
+        raise ValueError("txNonce missing")
+    nonce = int(raw_nonce) if not isinstance(raw_nonce, int) else raw_nonce
+    gl = body.get("txGasLimit")
+    gas_limit = str(gl).strip() if gl is not None else ""
+    if body.get("txMaxFeePerGas") is not None or body.get("txMaxPriorityFeePerGas") is not None:
+        return {
+            "nonce": nonce,
+            "gasLimit": gas_limit,
+            "txType": "eip1559",
+            "maxFeePerGas": str(body.get("txMaxFeePerGas") or ""),
+            "maxPriorityFeePerGas": str(body.get("txMaxPriorityFeePerGas") or ""),
+        }
+    return {
+        "nonce": nonce,
+        "gasLimit": gas_limit,
+        "txType": "legacy",
+        "gasPrice": str(body.get("txGasPrice") or ""),
+    }
+
+
+def _validate_trigger_tx_params(tp: dict[str, Any]) -> None:
+    if not str(tp.get("gasLimit") or "").strip():
+        raise ValueError("txParams.gasLimit is empty")
+    tt = tp.get("txType")
+    if tt == "legacy":
+        if not str(tp.get("gasPrice") or "").strip():
+            raise ValueError("txParams.gasPrice is empty for legacy transaction")
+    elif tt == "eip1559":
+        if not str(tp.get("maxFeePerGas") or "").strip() or not str(
+            tp.get("maxPriorityFeePerGas") or ""
+        ).strip():
+            raise ValueError("txParams maxFeePerGas / maxPriorityFeePerGas missing for EIP-1559")
+
+
+def _normalize_message_hash_hex(mh: str) -> str:
+    s = mh.strip()
+    if s.startswith("0x") or s.startswith("0X"):
+        s = s[2:]
+    return s
+
+
+def _is_evm_sign_request(sr: dict[str, Any]) -> bool:
+    if not _pick_first_str(sr, "DestinationChainID", "destinationChainID", "destination_chain_id"):
+        return False
+    if _pick_first_str(sr, "MessageHash", "msgHash"):
+        return True
+    mhs = sr.get("MessageHashes") or sr.get("messageHashes")
+    return isinstance(mhs, list) and len(mhs) > 0
+
+
+def _evm_trigger_tx_params_and_message_hash(sr: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    mh = _pick_first_str(sr, "MessageHash", "msgHash")
+    if not mh:
+        mhs = sr.get("MessageHashes") or sr.get("messageHashes")
+        if isinstance(mhs, list) and mhs:
+            mh = str(mhs[0]).strip()
+    if not mh:
+        raise RuntimeError("MessageHash / MessageHashes missing on sign request")
+
+    body_like = _body_like_tx_fields(sr)
+    if "txNonce" not in body_like or "txGasLimit" not in body_like:
+        raise RuntimeError(
+            "Sign request has DestinationChainID but missing txNonce or txGasLimit "
+            "(expected from POST /multiSignRequest). Cannot build txParams for trigger."
+        )
+    tp = _tx_params_from_body_like(body_like)
+    _validate_trigger_tx_params(tp)
+    return tp, _normalize_message_hash_hex(mh)
+
+
 def poll_sign_result_ready(
     base: str,
     request_id: str,
@@ -153,6 +278,11 @@ def post_trigger_sign_request(base: str, priv, request_id: str) -> dict[str, Any
         "nonce": nonce,
         "sig": "",
     }
+    sr = _get_sign_request_dict(base, request_id)
+    if _is_evm_sign_request(sr):
+        tx_params, msg_hash = _evm_trigger_tx_params_and_message_hash(sr)
+        body["txParams"] = tx_params
+        body["messageHash"] = msg_hash
     body["sig"] = sign_compact_json_empty_field(priv, body, "sig")
     return http_json("POST", base, "/triggerSignRequestById", body=body)
 

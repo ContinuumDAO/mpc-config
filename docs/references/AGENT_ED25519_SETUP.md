@@ -58,7 +58,7 @@ Once the node is bootstrapped with `PublicMgtKey`, add the agent’s public key 
 
 **Request body (canonical message to sign):**
 
-- Fetch nonce for the signer key:
+- Fetch nonce for the signer key (response is `{ "Code":0, "Data": { "key":"<64 hex or 0x…>", "nonce":<int> } }` — use **`Data.nonce`**):
 
 ```bash
 curl "http://<node-host>:<port>/getPublicMgtKeyNonce"
@@ -107,7 +107,7 @@ Once PublicMgtKey is set on the node, the backend will accept Ed25519 signatures
 |---------------------|-----------------------------|-------|
 | Create sign request | `POST /multiSignRequest`     | Build body (keyList, pubKey, msgHash, msgRaw, destinationChainID, etc.); sign with Ed25519; send as clientSig (128 hex) + signedMessage. Agent can initiate new multi-sign requests with their key. |
 | Agree/Reject        | `POST /signRequestAgree`     | Message = JSON body (requestId, clientSig: "", accept, thoughts?, nonce). Sign with Ed25519; send as clientSig (128 hex) + signedMessage. |
-| Trigger sign        | `POST /triggerSignRequestById` | Same pattern: get nonce, build body, sign, send clientSig + signedMessage. |
+| Trigger sign        | `POST /triggerSignRequestById` | Same pattern: get nonce, build body, sign, send **`Sig`** (management). **EVM multi-agree:** the body **must** also include **`txParams`** and **`messageHash`** so the node stores them—see **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** § **`POST /triggerSignRequestById`**. |
 | Update result status| `POST /updateSignResultStatusById` | Same pattern. |
 | Shelve request      | `POST /shelveSignRequest`    | Body shape: Nonce, RequestId, Sig. Sign the JSON string; send Sig (Ed25519 128 hex). |
 | KeyGen create/join  | `POST /keyGenRequest`, `POST /keyGenRequestAgree` | Use clientPk = 64-hex Ed25519 public key; sign payload with Ed25519. |
@@ -127,7 +127,7 @@ The agent should communicate its actions and intentions using the message channe
 
 The agent needs to:
 
-1. Call `GET /getNodeMgtKeyNonce` (or equivalent) where a nonce is required.
+1. **Fetch the next nonce for the Ed25519 key you sign with:** `GET /getPublicMgtKeyNonce` (uses config `PublicMgtKey` when the query param is omitted) or `GET /getPublicMgtKeyNonce?publicKey=<64-hex>` when signing with an **added** key. **Do not** use `GET /getNodeMgtKeyNonce` for Ed25519—that endpoint returns the nonce sequence for the Ethereum **`NodeMgtKey`** only (`Data.key` is a `0x…` address). If you only ever sign with Ed25519, `getNodeMgtKeyNonce` can stay at `nonce: 0` while `getPublicMgtKeyNonce` increases—see **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** (`GET /getNodeMgtKeyNonce`, `GET /getPublicMgtKeyNonce`). Both nonce endpoints return `Data` as `{ "key": "…", "nonce": <int> }`.
 2. Build the exact JSON body expected by the endpoint (with `clientSig` or `Sig` empty).
 3. Sign that JSON string with the Ed25519 **private** key; produce 128 hex characters.
 4. POST the body with `clientSig` (or `Sig`) set to that signature and `signedMessage` set to the same JSON string when the API requires it.
