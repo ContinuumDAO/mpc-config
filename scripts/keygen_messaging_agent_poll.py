@@ -2,10 +2,18 @@
 """
 Poll KeyGen messaging for unread items that mention the agent, then mark them read.
 
-Designed for an **Open Claw** (or similar) **isolated cron** job: the cron ``--message``
-instructs the agent to run this script (``exec``), parse the JSON on stdout, and if
-``matches`` is non-empty, decide what to do and reply with ``POST /sendMessage``
-(management-signed; see docs/references/API_KEYGEN_MESSAGING.md).
+Designed for an **Open Claw** (or similar) **isolated cron** job.
+
+**What this script does not do:** it does not parse intent, plan, or send replies. It only
+filters unread messages, prints JSON, and marks them read so they are not redelivered.
+
+**What the AI agent must do after ``exec``:** read stdout (one JSON line). If
+``match_count`` > 0, for each item in ``matches`` use **title**, **body**, and thread
+context (``GET /getMessageThread`` / ``getMessageById`` as needed) to infer what the
+human asked for, then **act**—call management APIs, run tools (e.g. Foundry/compose
+scripts), and/or **``POST /sendMessage``** with an appropriate reply (management-signed;
+see ``docs/references/API_KEYGEN_MESSAGING.md``). Put that obligation in the **cron job’s
+``--message``** and/or **``docs/skill/SKILL.md``**, not inside this file’s code path.
 
 Flow
 ----
@@ -21,8 +29,11 @@ Names align with ``docs/skill/SKILL.md`` (``KEYGEN_ID``, ``AUTH_KEY_PATH``) plus
 script-specific variables below.
 
 KEYGEN_ID                   KeyGen channel id (required).
-AUTH_KEY_PATH               Ed25519 management private key file (default
-                            ``~/.ssh/mpc_auth_ed25519``). PEM or OpenSSH; see AGENT_ED25519_SETUP.md.
+AUTH_KEY_PATH               Directory containing the Ed25519 management private key file
+                            (see ``AUTH_KEY_FILENAME``). If unset, the key file is
+                            ``~/.ssh/mpc_auth_ed25519``. Must not be a path to the key file itself.
+AUTH_KEY_FILENAME           Basename of the key file inside ``AUTH_KEY_PATH`` (default
+                            ``mpc_auth_ed25519``). PEM or OpenSSH; see AGENT_ED25519_SETUP.md.
 MPC_AUTH_URL                Management API host URL (default ``http://127.0.0.1``).
 MANAGEMENT_PORT             Management API port (default ``8080``).
 MPC_MGT_ED25519_SEED_HEX    Optional 64-hex (32-byte) raw seed; overrides key file.
@@ -45,6 +56,7 @@ import sys
 from typing import Any
 
 from mpc_mgt_helpers import (
+    api_data,
     compact_json,
     get_ed25519_nonce,
     http_json,
@@ -74,7 +86,7 @@ def _list_unread_page(
             "pagesize": str(pagesize),
         },
     )
-    data = parsed.get("data") or {}
+    data = api_data(parsed) or {}
     lst = data.get("list") or []
     total = int(data.get("total") or 0)
     if not isinstance(lst, list):

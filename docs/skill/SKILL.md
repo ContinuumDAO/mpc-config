@@ -132,7 +132,8 @@ Default env file: **`$MPA_PATH/.env`**. Load this file first (if present) before
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | **`KEYGEN_ID`** | If set, prefer this KeyGen for signing when unambiguous. If unset or ambiguous, ask the user via the configured channel (e.g. gateway **port 18789**). | Unset |
-| **`AUTH_KEY_PATH`** | Ed25519 **management** private key used to sign API bodies. | `~/.ssh/mpc_auth_ed25519` |
+| **`AUTH_KEY_PATH`** | Directory containing the Ed25519 **management** private key (see **`AUTH_KEY_FILENAME`**). If **unset**, scripts resolve the file **`~/.ssh/mpc_auth_ed25519`** (equivalent to directory `~/.ssh` + default name). | Unset (→ `~/.ssh/mpc_auth_ed25519`) |
+| **`AUTH_KEY_FILENAME`** | Basename of the key file inside **`AUTH_KEY_PATH`** (when set). | `mpc_auth_ed25519` |
 | **`MPA_PATH`** | If set, points to the directory containing references, scripts, recipes, and tools. | `~/.mpa` |
 | **`MPC_CONFIG_PATH`** | Absolute path to the node `configs.yaml` for this deployment (operator-defined, no hardcoded user/home assumption). | `/path/to/mpc-config/configs.yaml` |
 | **`MPC_AUTH_URL`** | Points to the base URL of the management API. | `http://127.0.0.1` |
@@ -180,7 +181,7 @@ To **notice unread channel messages directed at the agent** without manual **`GE
 1. **Once:** install **`cryptography`** into **`$MPA_PATH/.venv`** (see **[Python dependencies](#python-dependencies)**).
 2. **Run:** **`$MPA_PATH/.venv/bin/python`** with **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** (and **`KEYGEN_ID`** set; **`AUTH_KEY_PATH`** / **`MPC_AUTH_URL`** if not defaults). **`--dry-run`** lists matching unread messages without calling **`multiMarkMessagesRead`**.
 3. **Output:** one JSON line: **`matches`**, **`match_count`**, **`marked_ids`**. The script marks matched messages read so the next poll does not repeat them.
-4. **After a non-empty `matches`:** interpret the thread, decide what to do, and reply with **`POST /sendMessage`** (management-signed; **`$MPA_PATH/references/API_KEYGEN_MESSAGING.md`**). Humans can **`@agent`** in title or body to target the agent.
+4. **After a non-empty `matches`:** the poll script only marks messages read; **you** must **read each match’s `title` and `body`** (and pull thread context with **`GET /getMessageThread`** / related APIs if needed), **infer intent**, then **act**—invoke tools, management **`POST`** routes (e.g. **`/multiSignRequest`**, **`/sendMessage`**), or both. Reply in-channel with **`POST /sendMessage`** when a text response is appropriate (management-signed; **`$MPA_PATH/references/API_KEYGEN_MESSAGING.md`**). Encode the same “parse → act” expectation in any **Open Claw cron `--message`** that runs this script. Humans can **`@agent`** in title or body to target the agent.
 
 ### Event listener (`mpc_event_listener.py`)
 

@@ -6,6 +6,9 @@ contract, using the node's stored RPC and gas hints from GET /getChainDetails
 
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
+**Expectations for an AI agent:** No amount or **decimals** parameters—this is a zero-argument
+``register()`` call. Fee-token approval or deposit flows use other recipes (e.g. ``linea_fee_deposit``).
+
 Example::
 
   python3 recipes/linea_register.py --key-gen-id KeyGen2026... --mpc-auth-url http://localhost:8080
@@ -27,6 +30,7 @@ if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
 import generateMultiSignRequestFromCompose as _compose
+import recipe_gas_precheck as _gas
 
 # Linea mainnet — must match chain row on the node (Configure blockchains).
 LINEA_MAINNET_CHAIN_ID = 59144
@@ -75,6 +79,7 @@ def linea_register_multisign_payload(
     key_gen_id: str,
     purpose: str = "",
     no_custom_gas_params: bool = False,
+    skip_gas_check: bool = False,
 ) -> dict[str, Any]:
     """Call GET /getKeyGenResultById and GET /getChainDetails via build_compose_multisign."""
     compose = build_linea_register_compose(
@@ -83,6 +88,8 @@ def linea_register_multisign_payload(
         no_custom_gas_params=no_custom_gas_params,
     )
     base = _compose.resolve_mpc_auth_base(mpc_auth_url, management_port)
+    if not skip_gas_check:
+        _gas.require_native_gas_for_compose(compose, base)
     return _compose.build_compose_multisign(compose, base)
 
 
@@ -90,7 +97,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
             "Build multiSignRequest JSON for register() on Linea (chainId 59144) "
-            "using RPC from GET /getChainDetails?chain_id=59144 on --mpc-auth-url."
+            "using RPC from GET /getChainDetails?chain_id=59144 on --mpc-auth-url. "
+            "No token amounts or GET /getTokens decimals involved."
         )
     )
     ap.add_argument(
@@ -123,6 +131,14 @@ def main() -> None:
         ),
     )
     ap.add_argument(
+        "--skip-gas-check",
+        action="store_true",
+        help=(
+            "Skip verifying the MPC wallet native balance against estimated gas (not recommended). "
+            "By default the script requires balance ≥ estimated fees with 50% extra on gas units."
+        ),
+    )
+    ap.add_argument(
         "--ed25519-seed-hex",
         metavar="HEX",
         help="If set, sign messageToSign with Ed25519 and add postBody.clientSig",
@@ -141,6 +157,7 @@ def main() -> None:
             key_gen_id=args.key_gen_id,
             purpose=args.purpose,
             no_custom_gas_params=args.no_custom_gas_params,
+            skip_gas_check=args.skip_gas_check,
         )
     except (ValueError, RuntimeError) as e:
         print(str(e), file=sys.stderr)

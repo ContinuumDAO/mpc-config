@@ -229,20 +229,23 @@ To react when someone `@mentions` the agent in the KeyGen channel, use **Open Cl
 **Poll helper in this repo:** `$MPA_PATH/scripts/keygen_messaging_agent_poll.py`
 
 1. Install deps once: create **`$MPA_PATH/.venv`** if needed (`python3 -m venv "$MPA_PATH/.venv"`), then `"$MPA_PATH/.venv/bin/pip" install eth-account cryptography` (or `"$MPA_PATH/.venv/bin/pip" install -r "$MPA_PATH/scripts/requirements-keygen-agent.txt"`). See **[SKILL.md](../skill/SKILL.md)** **Python dependencies**.
-2. Export at least **`KEYGEN_ID`**, **`MPC_AUTH_URL`** (host-only, e.g. `http://127.0.0.1`), and **`MANAGEMENT_PORT`** so the API base URL is always `$MPC_AUTH_URL:$MANAGEMENT_PORT`. The script loads the Ed25519 management key from **`AUTH_KEY_PATH`** (default `~/.ssh/mpc_auth_ed25519`) or optional **`MPC_MGT_ED25519_SEED_HEX`**.
-3. The script prints one JSON line: `matches` (unread messages whose title/body match `@agent` by default), then calls `POST /multiMarkMessagesRead` so the next poll skips handled items. Use `--dry-run` to inspect without marking read.
+2. Export at least **`KEYGEN_ID`**, **`MPC_AUTH_URL`** (host-only, e.g. `http://127.0.0.1`), and **`MANAGEMENT_PORT`** so the API base URL is always `$MPC_AUTH_URL:$MANAGEMENT_PORT`. The script loads the Ed25519 management key from **`AUTH_KEY_PATH` / `AUTH_KEY_FILENAME`** (default filename **`mpc_auth_ed25519`**; if **`AUTH_KEY_PATH`** is unset, the file **`~/.ssh/mpc_auth_ed25519`** is used). **`AUTH_KEY_PATH`** must be a **directory**, not the key file path. Alternatively use optional **`MPC_MGT_ED25519_SEED_HEX`**.
+3. The script prints one JSON line: `matches` (unread messages whose title/body match `@agent` by default), then calls `POST /multiMarkMessagesRead` so the next poll skips handled items. Use `--dry-run` to inspect without marking read. **Interpreting** those messages (read `title`/`body`, infer intent, call tools or other management endpoints) is **always the agent’s job**, not this script—document that in **SKILL.md** and in the cron **`--message`** below.
 
 **Poll period (select one):** Run **`$MPA_PATH/scripts/mpc_cron_schedules.py`** to print the allowed intervals, or **`--interactive`** to pick by number. The fixed choices are **every 1, 5, 10, 30, 60 minutes** and **every 2, 4, 6, 8, 10, 12, 24 hours**. Each row gives an Open Claw **`--every`** string (e.g. **`1m`**, **`5m`**, **`1h`**, **`2h`**) and a standard **crontab** five-field line for non–Open Claw timers.
 
-**Example cron** (adjust paths; pick **`--every`** from **`mpc_cron_schedules.py`**). Ensure the job may run `exec`. Keep `--message` on one line so the shell parses it reliably:
+**Example cron** (adjust paths). The schedule is **not** fixed: run **`$MPA_PATH/.venv/bin/python $MPA_PATH/scripts/mpc_cron_schedules.py`** (or **`--interactive`**) and copy the **Open Claw `--every`** value you want (see **Poll period** above). Set shell variable **`EVERY`** to that string, then:
 
 ```bash
-openclaw cron add --name "keygen-agent-inbox" --every "5m" --session isolated \
-  --message "Run: $MPA_PATH/.venv/bin/python $MPA_PATH/scripts/keygen_messaging_agent_poll.py. Parse the one JSON line on stdout. If match_count > 0, reply via POST /sendMessage (Nonce, Sig, keyGenId, title or replyTo+body; see API_KEYGEN_MESSAGING.md). Body max 512 chars." \
+EVERY="5m"  # replace with your choice from mpc_cron_schedules.py (e.g. 1m, 30m, 1h, 12h, 24h)
+openclaw cron add --name "keygen-agent-inbox" --every "$EVERY" --session isolated \
+  --message "Run: $MPA_PATH/.venv/bin/python $MPA_PATH/scripts/keygen_messaging_agent_poll.py. Parse the JSON on stdout. If match_count > 0: for each match read title and body (and getMessageThread if needed), figure out what the user wants, then do it—tools, management POSTs as appropriate, and/or reply via POST /sendMessage (Nonce, Sig, keyGenId, title or replyTo+body; see API_KEYGEN_MESSAGING.md). Body max 512 chars." \
   --tools "exec,read"
 ```
 
-The isolated job should inherit the same env as the agent service (**`KEYGEN_ID`**, **`AUTH_KEY_PATH`**, **`MPC_AUTH_URL`**, etc.). **Sending** messages remains an explicit agent step (sign with the same Ed25519 management key as other mgt endpoints); the poll script only **lists, filters, and marks read**.
+Ensure the job may run `exec`. Keep `--message` on one line so the shell parses it reliably.
+
+The isolated job should inherit the same env as the agent service (**`KEYGEN_ID`**, **`AUTH_KEY_PATH`**, **`MPC_AUTH_URL`**, etc.). The poll script only **lists, filters, and marks read**. **Acting on message content** (reasoning, **`POST /sendMessage`**, other APIs) is always done by the agent per **`--message`** / **SKILL.md**—not by the Python script.
 
 ## 7. Security notes
 

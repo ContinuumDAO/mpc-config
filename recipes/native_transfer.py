@@ -11,6 +11,14 @@ RPC comes from GET /getChainDetails when --rpc-gateway is omitted. Gas defaults 
 
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
+**Expectations for an AI agent (amount handling)**
+
+This recipe sends the chain **native** currency (ETH, LINEA, etc.), not an ERC-20. **GET /getTokens**
+**decimals** do **not** apply here. ``--amount-unit`` selects compose scaling: **Wei** = smallest
+units (pass an integer string); **Ether** = 18 decimal places on standard EVM native transfers;
+**Gwei** / **USD** follow the compose script’s fixed scales. Do **not** confuse with a token’s
+stored ``decimals`` from the asset list—there is no automatic lookup for native transfers.
+
 Example::
 
   python3 recipes/native_transfer.py \\
@@ -35,6 +43,7 @@ if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
 import generateMultiSignRequestFromCompose as _compose
+import recipe_gas_precheck as _gas
 
 _VALID_UNITS = frozenset({"Wei", "Ether", "Gwei", "USD"})
 
@@ -115,6 +124,7 @@ def native_transfer_multisign_payload(
     purpose: str = "",
     no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
+    skip_gas_check: bool = False,
 ) -> dict[str, Any]:
     compose = build_native_transfer_compose(
         key_gen_id=key_gen_id,
@@ -127,6 +137,8 @@ def native_transfer_multisign_payload(
         rpc_gateway=rpc_gateway,
     )
     base = _compose.resolve_mpc_auth_base(mpc_auth_url, management_port)
+    if not skip_gas_check:
+        _gas.require_native_gas_for_compose(compose, base)
     return _compose.build_compose_multisign(compose, base)
 
 
@@ -134,7 +146,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
             "Build multiSignRequest JSON for a native currency transfer (gas token) "
-            "to --to. Uses GET /getChainDetails?chain_id=<n> unless --rpc-gateway is set."
+            "to --to. Uses GET /getChainDetails?chain_id=<n> unless --rpc-gateway is set. "
+            "AI agents: native transfers do not use GET /getTokens decimals; set --amount-unit "
+            "explicitly (Wei for raw wei, Ether for 18-decimal human amounts on typical EVM chains)."
         )
     )
     ap.add_argument(
@@ -168,13 +182,18 @@ def main() -> None:
     ap.add_argument(
         "--amount",
         required=True,
-        help='Amount to send (with --amount-unit; e.g. "0.05" with Ether)',
+        help=(
+            "Native value to send: interpret with --amount-unit (not token decimals from getTokens)."
+        ),
     )
     ap.add_argument(
         "--amount-unit",
         default="Wei",
         choices=sorted(_VALID_UNITS),
-        help="Unit for uint256 value (default: Wei). Matches compose paramUnits.",
+        help=(
+            "Wei | Ether | Gwei | USD for the tx value (default: Wei). Compose scales only; "
+            "unrelated to ERC-20 decimals in GET /getTokens."
+        ),
     )
     ap.add_argument(
         "--purpose",
@@ -187,6 +206,14 @@ def main() -> None:
         help=(
             "Set noCustomGasParams on compose JSON: ignore ChainDetails gas fields and use RPC-only "
             "estimates. Default (flag omitted): use chain gas when configured, otherwise eth_estimateGas."
+        ),
+    )
+    ap.add_argument(
+        "--skip-gas-check",
+        action="store_true",
+        help=(
+            "Skip verifying the MPC wallet native balance against estimated gas (not recommended). "
+            "By default the script requires balance ≥ estimated fees with 50% extra on gas units."
         ),
     )
     ap.add_argument(
@@ -221,6 +248,7 @@ def main() -> None:
             purpose=args.purpose,
             no_custom_gas_params=args.no_custom_gas_params,
             rpc_gateway=rpc,
+            skip_gas_check=args.skip_gas_check,
         )
     except (ValueError, RuntimeError) as e:
         print(str(e), file=sys.stderr)

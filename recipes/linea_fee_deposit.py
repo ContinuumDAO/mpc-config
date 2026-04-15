@@ -21,6 +21,14 @@ fields from **getChainDetails** when set, otherwise **eth_estimateGas**; use
 
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
+**Expectations for an AI agent (amount handling)**
+
+``--amount-wei`` must be the **fee token** amount in **smallest on-chain units** (integer
+decimal string). This script does **not** read **GET /getTokens** or scale by **decimals** for
+you. If the user states a human amount (e.g. "10" tokens), look up the fee token’s
+**decimals** (from node token metadata, chain docs, or the token contract) and compute
+``amount = floor(human * 10**decimals)`` before passing ``--amount-wei``.
+
 Example::
 
   python3 recipes/linea_fee_deposit.py \\
@@ -44,6 +52,7 @@ if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
 import generateMultiSignRequestFromCompose as _compose
+import recipe_gas_precheck as _gas
 
 LINEA_MAINNET_CHAIN_ID = 59144
 LINEA_FEE_CONTRACT = "0x55aD6Df6d8f8824486C3fd3373f1CF29eCecF0A3"
@@ -122,6 +131,7 @@ def linea_fee_deposit_multisign_payload(
     purpose: str = "",
     no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
+    skip_gas_check: bool = False,
 ) -> dict[str, Any]:
     """
     Load MPC address from GET /getKeyGenResultById, then build_compose_multisign.
@@ -140,6 +150,8 @@ def linea_fee_deposit_multisign_payload(
         no_custom_gas_params=no_custom_gas_params,
         rpc_gateway=rpc_gateway,
     )
+    if not skip_gas_check:
+        _gas.require_native_gas_for_compose(compose, base)
     return _compose.build_compose_multisign(compose, base)
 
 
@@ -147,7 +159,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
             "Build multiSignRequest JSON for fee contract deposit(address,uint256) on Linea "
-            "(59144). amount-wei is the fee token amount in smallest units (wei-like)."
+            "(59144). amount-wei is the fee token amount in smallest on-chain units (integer). "
+            "AI agents: convert human token amounts to smallest units using the fee token’s "
+            "decimals before calling; this CLI does not fetch decimals from GET /getTokens."
         )
     )
     ap.add_argument(
@@ -170,7 +184,10 @@ def main() -> None:
         "--amount-wei",
         required=True,
         metavar="N",
-        help="Fee token amount to deposit (positive integer, smallest token units)",
+        help=(
+            "Fee token amount: positive decimal integer string in smallest token units (not scaled "
+            "by this script). Use token decimals to convert from human amounts."
+        ),
     )
     ap.add_argument(
         "--purpose",
@@ -183,6 +200,14 @@ def main() -> None:
         help=(
             "Set noCustomGasParams on compose JSON: ignore ChainDetails gas fields and use RPC-only "
             "estimates. Default (flag omitted): use chain gas when configured, otherwise eth_estimateGas."
+        ),
+    )
+    ap.add_argument(
+        "--skip-gas-check",
+        action="store_true",
+        help=(
+            "Skip verifying the MPC wallet native balance against estimated gas (not recommended). "
+            "By default the script requires balance ≥ estimated fees with 50% extra on gas units."
         ),
     )
     ap.add_argument(
@@ -214,6 +239,7 @@ def main() -> None:
             purpose=args.purpose,
             no_custom_gas_params=args.no_custom_gas_params,
             rpc_gateway=rpc,
+            skip_gas_check=args.skip_gas_check,
         )
     except (ValueError, RuntimeError) as e:
         print(str(e), file=sys.stderr)

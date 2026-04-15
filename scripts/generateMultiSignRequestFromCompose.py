@@ -82,6 +82,9 @@ return stored TxParams (see API docs). **multiSignRequest** uses ``txNonce`` /
 ``txGasLimit`` / ``txGasPrice`` (or EIP-1559 equivalents); the trigger endpoint
 expects ``nonce`` / ``gasLimit`` / ``txType`` / fee fields — use ``triggerTxParams``
 when building the trigger body.
+**Use one recipe run per sign request:** ``msgHash`` is tied to exact gas/fees/nonce/calldata.
+Re-running the recipe with different RPC fees produces a different ``msgHash``; do not mix outputs
+from two runs (same for ``triggerMessageHash`` / ``triggerTxParams`` vs stored ``MessageHash``).
 Management API **nonces** apply to other endpoints (e.g. trigger); this script does
 not add a management ``nonce`` to ``multiSignRequest`` unless you extend the
 payload to match a custom backend.
@@ -106,6 +109,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from decimal import Decimal, InvalidOperation, getcontext
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -128,6 +132,8 @@ _HTTP_UA = "generateMultiSignRequestFromCompose/1.0 (Python-urllib)"
 _scripts_dir = Path(__file__).resolve().parent
 if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
+
+from mpc_mgt_helpers import api_code, api_data, api_error
 
 _spec = importlib.util.spec_from_file_location(
     "forge_sign",
@@ -268,6 +274,13 @@ def eth_gas_price(rpc_url: str) -> int:
     return int(res, 16) if isinstance(res, str) else int(res)
 
 
+def eth_get_balance_wei(rpc_url: str, address: str) -> int:
+    """Native balance (wei) via ``eth_getBalance`` at latest block."""
+    addr = _eth_address_param(address)
+    res = _rpc(rpc_url, "eth_getBalance", [addr, "latest"])
+    return int(res, 16) if isinstance(res, str) else int(res)
+
+
 def latest_base_fee_per_gas_wei(rpc_url: str) -> int | None:
     """Base fee per gas from ``eth_getBlockByNumber(latest)``, or None if not EIP-1559."""
     try:
@@ -302,23 +315,13 @@ def http_get_json(url: str) -> dict[str, Any]:
         raise ValueError(f"Invalid JSON: {e}") from e
 
 
-def _api_code(resp: dict[str, Any]) -> Any:
-    """Management API may use ``code`` / ``Code`` (JSON from tools or older clients)."""
-    c = resp.get("code")
-    return c if c is not None else resp.get("Code")
-
-
-def _api_data(resp: dict[str, Any]) -> Any:
-    return resp.get("data") if resp.get("data") is not None else resp.get("Data")
-
-
 def _unwrap_management_api(resp: dict[str, Any], what: str) -> Any:
     """Require success (code 0 or omitted) and return ``data`` / ``Data`` (same as executeSignResult)."""
-    c = _api_code(resp)
+    c = api_code(resp)
     if c is not None and c != 0:
-        err = resp.get("error") or resp.get("Error") or str(resp)
+        err = api_error(resp) or str(resp)
         raise ValueError(f"{what} failed (code={c}): {err}")
-    return _api_data(resp)
+    return api_data(resp)
 
 
 def fetch_keygen_bundle(mpc_base: str, key_gen_id: str) -> dict[str, Any]:
@@ -564,10 +567,38 @@ def parse_no_custom_gas_params(compose: dict[str, Any]) -> bool:
     return False
 
 
-def build_compose_multisign(
-    compose: dict[str, Any],
-    mpc_auth_url: str,
-) -> dict[str, Any]:
+def _tx_field_int(x: Any) -> int:
+    """Parse hex or decimal int from a tx dict field (e.g. ``gas``, ``gasPrice``)."""
+    if isinstance(x, int):
+        return x
+    s = str(x).strip()
+    if s.startswith("0x") or s.startswith("0X"):
+        return int(s, 16)
+    return int(s)
+
+
+@dataclass(frozen=True)
+class ComposeExecSetup:
+    dest_chain: str
+    dest_chain_num: int
+    rpc_url: str
+    chain_detail: dict[str, Any]
+    no_custom_gas_params: bool
+    purpose: str
+    gas_limit_config: int | None
+    gas_fee_multiplier: int | None
+    chain_gas_price_gwei: float | None
+    base_fee_multiplier_pct: int
+    fee_params: dict[str, Any]
+    legacy: bool
+    key_list: list[str]
+    pub_key: str
+    executor: str
+    client_id: str | None
+    actions: list[dict[str, Any]]
+
+
+def _compose_exec_setup(compose: dict[str, Any], mpc_auth_url: str) -> ComposeExecSetup:
     key_gen_id = (compose.get("keyGenId") or compose.get("key_gen_id") or "").strip()
     if not key_gen_id:
         raise ValueError("compose JSON: keyGenId is required")
@@ -673,6 +704,280 @@ def build_compose_multisign(
         ck = kg.get("ClientKeys") or kg.get("clientkeys")
         client_id = _first_client_id(ck)
 
+    return ComposeExecSetup(
+        dest_chain=dest_chain,
+        dest_chain_num=dest_chain_num,
+        rpc_url=rpc_url,
+        chain_detail=chain_detail,
+        no_custom_gas_params=no_custom_gas_params,
+        purpose=purpose,
+        gas_limit_config=gas_limit_config,
+        gas_fee_multiplier=gas_fee_multiplier,
+        chain_gas_price_gwei=chain_gas_price_gwei,
+        base_fee_multiplier_pct=base_fee_multiplier_pct,
+        fee_params=fee_params,
+        legacy=legacy,
+        key_list=key_list,
+        pub_key=pub_key,
+        executor=executor,
+        client_id=client_id,
+        actions=actions,
+    )
+
+
+def native_transfer_value_wei_from_compose_action(raw_act: dict[str, Any]) -> int:
+    """Parse nativeTransfer compose action amount in wei (same rules as ``_compose_action_tx_dict``)."""
+    inputs = raw_act.get("inputs") or []
+    if not isinstance(inputs, list):
+        raise ValueError("composeActions: nativeTransfer inputs must be an array")
+    if len(inputs) != 1:
+        raise ValueError(
+            "composeActions: nativeTransfer requires exactly one input (uint256 value)"
+        )
+    param_units = raw_act.get("paramUnits") or raw_act.get("param_units") or {}
+    if not isinstance(param_units, dict):
+        param_units = {}
+    param_units_norm = {str(k): str(v) for k, v in param_units.items()}
+    inp0 = inputs[0] or {}
+    typ0 = str(inp0.get("type") or "uint256").strip()
+    if not is_uint256_type(typ0):
+        raise ValueError(
+            f"composeActions: nativeTransfer input must be uint256 (got {typ0!r})"
+        )
+    unit_key = "0"
+    unit = param_units_norm.get(unit_key) or param_units_norm.get(unit_key.zfill(1)) or "Wei"
+    raw_v = inp0.get("value")
+    val = display_value_to_raw(str(raw_v if raw_v is not None else ""), unit)
+    try:
+        value_wei = int(val)
+    except ValueError as e:
+        raise ValueError(f"composeActions: nativeTransfer value: {e}") from e
+    if value_wei < 0:
+        raise ValueError("composeActions: nativeTransfer value must be >= 0")
+    return value_wei
+
+
+def _compose_action_tx_dict(
+    raw_act: dict[str, Any],
+    index: int,
+    *,
+    dest_chain_num: int,
+    rpc_url: str,
+    executor: str,
+    nonce0: int,
+    fee_params: dict[str, Any],
+    no_custom_gas_params: bool,
+    gas_limit_config: int | None,
+    gas_fee_multiplier: int | None,
+    chain_gas_price_gwei: float | None,
+    base_fee_multiplier_pct: int,
+    legacy: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Build one signing tx dict for a compose action. Second return value is the
+    ``bodyForSign`` fee snapshot for the first action only (empty dict otherwise).
+    """
+    if not isinstance(raw_act, dict):
+        raise ValueError(f"composeActions[{index}] must be an object")
+    is_native = bool(raw_act.get("nativeTransfer") or raw_act.get("native_transfer"))
+    sig = (raw_act.get("signature") or "").strip()
+    if is_native and not sig:
+        sig = "nativeTransfer"
+    dest = (raw_act.get("destinationContract") or raw_act.get("destination_contract") or "").strip()
+    if not sig or not dest:
+        raise ValueError(f"composeActions[{index}]: signature and destinationContract required")
+    inputs = raw_act.get("inputs") or []
+    if not isinstance(inputs, list):
+        raise ValueError(f"composeActions[{index}]: inputs must be an array")
+    param_units = raw_act.get("paramUnits") or raw_act.get("param_units") or {}
+    if not isinstance(param_units, dict):
+        param_units = {}
+    param_units_norm = {str(k): str(v) for k, v in param_units.items()}
+
+    value_wei: int | None = None
+    if is_native:
+        try:
+            value_wei = native_transfer_value_wei_from_compose_action(raw_act)
+        except ValueError as e:
+            raise ValueError(f"composeActions[{index}]: {e}") from e
+        calldata = "0x"
+        data_hex = "0x"
+    else:
+        calldata = encode_action_calldata(sig, inputs, param_units_norm)
+        data_hex = calldata if calldata.startswith("0x") else "0x" + calldata
+
+    to_addr = _eth_address_param(dest)
+
+    est = _maybe_int(raw_act.get("estimatedGas") or raw_act.get("estimated_gas"))
+    gas_limit: int
+    rpc_est = eth_estimate_gas(
+        rpc_url, executor, to_addr, data_hex, value_wei if is_native else None
+    )
+    if est is not None and est > 0:
+        gas_limit = est
+    elif not no_custom_gas_params and gas_limit_config is not None and gas_limit_config > 0:
+        # Chain default gasLimit is often 21000 (transfer); contract calls need at least intrinsic gas.
+        gas_limit = max(gas_limit_config, rpc_est)
+    else:
+        gas_limit = rpc_est
+
+    if gas_limit < rpc_est:
+        raise ValueError(
+            f"composeActions[{index}]: gas limit ({gas_limit}) is below eth_estimateGas ({rpc_est}). "
+            "Increase composeActions[].estimatedGas, raise chain gasLimit in GET /getChainDetails, "
+            "or omit estimatedGas so the limit uses max(chain gasLimit, estimate) or RPC-only gas (--no-custom-gas-params)."
+        )
+
+    current_nonce = nonce0 + index
+    first_tx_fee: dict[str, Any] = {}
+
+    if legacy:
+        gp_item = _maybe_int(raw_act.get("gasPriceWei") or raw_act.get("gas_price_wei"))
+        gas_price_wei = gp_item if gp_item is not None and gp_item > 0 else eth_gas_price(rpc_url)
+        if not no_custom_gas_params and gas_fee_multiplier is not None and gas_fee_multiplier > 0:
+            gas_price_wei = (gas_price_wei * (100 + gas_fee_multiplier)) // 100
+        if not no_custom_gas_params and chain_gas_price_gwei is not None and chain_gas_price_gwei > 0:
+            configured = _gwei_to_wei_ceil(chain_gas_price_gwei)
+            if configured > gas_price_wei:
+                gas_price_wei = configured
+        if gp_item is not None and gp_item > 0:
+            network_gp = eth_gas_price(rpc_url)
+            if gas_price_wei < network_gp:
+                raise ValueError(
+                    f"composeActions[{index}]: effective gas price ({gas_price_wei} wei) is below eth_gasPrice ({network_gp} wei). "
+                    "Increase composeActions[].gasPriceWei or adjust chain gasPrice / gasMultiplier in GET /getChainDetails, "
+                    "or use --no-custom-gas-params for RPC-only fees."
+                )
+        if index == 0:
+            first_tx_fee = {
+                "txNonce": nonce0,
+                "txGasLimit": str(gas_limit),
+                "txGasPrice": str(gas_price_wei),
+            }
+        tx = {
+            "nonce": str(current_nonce),
+            "gasPrice": _to_hex_wei(gas_price_wei),
+            "gas": _to_hex_wei(gas_limit),
+            "to": to_addr,
+            "value": _to_hex_wei(value_wei if is_native and value_wei is not None else 0),
+            "data": data_hex,
+            "chainId": str(dest_chain_num),
+        }
+    else:
+        mfee = _maybe_int(raw_act.get("maxFeePerGas") or raw_act.get("max_fee_per_gas"))
+        mprio = _maybe_int(raw_act.get("maxPriorityFeePerGas") or raw_act.get("max_priority_fee_per_gas"))
+        if mfee is None or mprio is None or mfee <= 0 or mprio <= 0:
+            base = float(fee_params.get("baseFeeGwei") or 0)
+            prio = float(fee_params.get("priorityFeeGwei") or 0)
+            base_component = base * base_fee_multiplier_pct / 100.0
+            max_prio = _gwei_to_wei_ceil(prio) if prio > 0 else _gwei_to_wei_ceil(1.0)
+            max_fee = _gwei_to_wei_ceil(base_component + prio)
+            # RPC-derived fee fields are in gwei; converting back to wei can yield tiny max_fee
+            # (even 0) while max_prio is at least 1 gwei — invalid EIP-1559 and can appear as
+            # nonsense like maxFeePerGas "7" with maxPriorityFeePerGas "1000000000".
+            # The explicit per-action fee checks below only run when both mfee/mprio are set,
+            # so clamp computed caps here.
+            max_fee = max(max_fee, max_prio)
+            bf_w_computed = latest_base_fee_per_gas_wei(rpc_url)
+            if bf_w_computed is not None:
+                max_fee = max(max_fee, bf_w_computed)
+        else:
+            max_fee = mfee
+            max_prio = mprio
+        if mfee is not None and mprio is not None and mfee > 0 and mprio > 0:
+            if max_prio > max_fee:
+                raise ValueError(
+                    f"composeActions[{index}]: maxPriorityFeePerGas ({max_prio} wei) exceeds maxFeePerGas ({max_fee} wei). "
+                    "Increase maxFeePerGas so it is at least as large as maxPriorityFeePerGas."
+                )
+            bf_w = latest_base_fee_per_gas_wei(rpc_url)
+            if bf_w is not None and max_fee < bf_w:
+                raise ValueError(
+                    f"composeActions[{index}]: maxFeePerGas ({max_fee} wei) is below the current block base fee per gas ({bf_w} wei). "
+                    "Raise maxFeePerGas (and typically maxPriorityFeePerGas) so the EIP-1559 transaction is valid."
+                )
+        if index == 0:
+            first_tx_fee = {
+                "txNonce": nonce0,
+                "txGasLimit": str(gas_limit),
+                "txMaxFeePerGas": str(max_fee),
+                "txMaxPriorityFeePerGas": str(max_prio),
+            }
+        tx = {
+            "type": "0x2",
+            "nonce": str(current_nonce),
+            "gas": _to_hex_wei(gas_limit),
+            "maxFeePerGas": _to_hex_wei(max_fee),
+            "maxPriorityFeePerGas": _to_hex_wei(max_prio),
+            "to": to_addr,
+            "value": _to_hex_wei(value_wei if is_native and value_wei is not None else 0),
+            "data": data_hex,
+            "chainId": str(dest_chain_num),
+        }
+
+    return tx, first_tx_fee
+
+
+def estimate_compose_native_requirement_wei(
+    compose: dict[str, Any],
+    mpc_auth_url: str,
+    *,
+    gas_margin_pct: float = 50.0,
+) -> tuple[int, str]:
+    """
+    Upper bound on native currency (wei) the MPC wallet must hold for this compose
+    flow: for each action, ``ceil(gas * (1 + margin/100)) * max_fee_per_gas`` (EIP-1559)
+    or ``* gas_price`` (legacy), plus any ``value`` sent in the tx (e.g. native transfer).
+
+    Uses the same gas limits and fee resolution as ``build_compose_multisign``;
+    nonce does not affect these totals.
+
+    Returns ``(required_wei, executor_address_0x, rpc_url)``.
+    """
+    s = _compose_exec_setup(compose, mpc_auth_url)
+    total = 0
+    nonce0 = 0
+    for i, raw_act in enumerate(s.actions):
+        tx, _ = _compose_action_tx_dict(
+            raw_act,
+            i,
+            dest_chain_num=s.dest_chain_num,
+            rpc_url=s.rpc_url,
+            executor=s.executor,
+            nonce0=nonce0,
+            fee_params=s.fee_params,
+            no_custom_gas_params=s.no_custom_gas_params,
+            gas_limit_config=s.gas_limit_config,
+            gas_fee_multiplier=s.gas_fee_multiplier,
+            chain_gas_price_gwei=s.chain_gas_price_gwei,
+            base_fee_multiplier_pct=s.base_fee_multiplier_pct,
+            legacy=s.legacy,
+        )
+        gl = _tx_field_int(tx["gas"])
+        gas_adj = int(math.ceil(gl * (1.0 + gas_margin_pct / 100.0)))
+        if "gasPrice" in tx:
+            total += gas_adj * _tx_field_int(tx["gasPrice"])
+        else:
+            total += gas_adj * _tx_field_int(tx["maxFeePerGas"])
+        total += _tx_field_int(tx.get("value", "0x0"))
+    return total, s.executor, s.rpc_url
+
+
+def build_compose_multisign(
+    compose: dict[str, Any],
+    mpc_auth_url: str,
+) -> dict[str, Any]:
+    s = _compose_exec_setup(compose, mpc_auth_url)
+    dest_chain = s.dest_chain
+    dest_chain_num = s.dest_chain_num
+    rpc_url = s.rpc_url
+    actions = s.actions
+    key_list = s.key_list
+    pub_key = s.pub_key
+    client_id = s.client_id
+    purpose = s.purpose
+
+    executor = s.executor
     nonce0 = eth_get_transaction_count(rpc_url, executor)
 
     message_hashes: list[str] = []
@@ -682,157 +987,52 @@ def build_compose_multisign(
     first_calldata: str | None = None
 
     for i, raw_act in enumerate(actions):
-        if not isinstance(raw_act, dict):
-            raise ValueError(f"composeActions[{i}] must be an object")
-        is_native = bool(raw_act.get("nativeTransfer") or raw_act.get("native_transfer"))
-        sig = (raw_act.get("signature") or "").strip()
-        if is_native and not sig:
-            sig = "nativeTransfer"
-        dest = (raw_act.get("destinationContract") or raw_act.get("destination_contract") or "").strip()
-        if not sig or not dest:
-            raise ValueError(f"composeActions[{i}]: signature and destinationContract required")
-        inputs = raw_act.get("inputs") or []
-        if not isinstance(inputs, list):
-            raise ValueError(f"composeActions[{i}]: inputs must be an array")
-        param_units = raw_act.get("paramUnits") or raw_act.get("param_units") or {}
-        if not isinstance(param_units, dict):
-            param_units = {}
-        param_units_norm = {str(k): str(v) for k, v in param_units.items()}
-
-        value_wei: int | None = None
-        if is_native:
-            if len(inputs) != 1:
-                raise ValueError(
-                    f"composeActions[{i}]: nativeTransfer requires exactly one input (uint256 value)"
-                )
-            inp0 = inputs[0] or {}
-            typ0 = str(inp0.get("type") or "uint256").strip()
-            if not is_uint256_type(typ0):
-                raise ValueError(
-                    f"composeActions[{i}]: nativeTransfer input must be uint256 (got {typ0!r})"
-                )
-            unit_key = "0"
-            unit = param_units_norm.get(unit_key) or param_units_norm.get(unit_key.zfill(1)) or "Wei"
-            raw_v = inp0.get("value")
-            val = display_value_to_raw(str(raw_v if raw_v is not None else ""), unit)
-            try:
-                value_wei = int(val)
-            except ValueError as e:
-                raise ValueError(f"composeActions[{i}]: nativeTransfer value: {e}") from e
-            if value_wei < 0:
-                raise ValueError(f"composeActions[{i}]: nativeTransfer value must be >= 0")
-            calldata = "0x"
-            data_hex = "0x"
-        else:
-            calldata = encode_action_calldata(sig, inputs, param_units_norm)
-            data_hex = calldata if calldata.startswith("0x") else "0x" + calldata
-
         if i == 0:
-            first_calldata = calldata if calldata.startswith("0x") else "0x" + calldata
-
-        to_addr = _eth_address_param(dest)
-
-        est = _maybe_int(raw_act.get("estimatedGas") or raw_act.get("estimated_gas"))
-        gas_limit: int
-        rpc_est = eth_estimate_gas(
-            rpc_url, executor, to_addr, data_hex, value_wei if is_native else None
-        )
-        if est is not None and est > 0:
-            gas_limit = est
-        elif not no_custom_gas_params and gas_limit_config is not None and gas_limit_config > 0:
-            # Chain default gasLimit is often 21000 (transfer); contract calls need at least intrinsic gas.
-            gas_limit = max(gas_limit_config, rpc_est)
-        else:
-            gas_limit = rpc_est
-
-        if gas_limit < rpc_est:
-            raise ValueError(
-                f"composeActions[{i}]: gas limit ({gas_limit}) is below eth_estimateGas ({rpc_est}). "
-                "Increase composeActions[].estimatedGas, raise chain gasLimit in GET /getChainDetails, "
-                "or omit estimatedGas so the limit uses max(chain gasLimit, estimate) or RPC-only gas (--no-custom-gas-params)."
+            is_native0 = bool(raw_act.get("nativeTransfer") or raw_act.get("native_transfer"))
+            sig0 = (raw_act.get("signature") or "").strip()
+            if is_native0 and not sig0:
+                sig0 = "nativeTransfer"
+            inputs0 = raw_act.get("inputs") or []
+            if not isinstance(inputs0, list):
+                inputs0 = []
+            param_units0 = raw_act.get("paramUnits") or raw_act.get("param_units") or {}
+            pu_map0 = {str(k): str(v) for k, v in param_units0.items()} if isinstance(param_units0, dict) else {}
+            calldata0 = (
+                encode_action_calldata(sig0, inputs0, pu_map0)
+                if not is_native0
+                else "0x"
             )
+            first_calldata = calldata0 if calldata0.startswith("0x") else "0x" + calldata0
 
-        current_nonce = nonce0 + i
-
-        if legacy:
-            gp_item = _maybe_int(raw_act.get("gasPriceWei") or raw_act.get("gas_price_wei"))
-            gas_price_wei = gp_item if gp_item is not None and gp_item > 0 else eth_gas_price(rpc_url)
-            if not no_custom_gas_params and gas_fee_multiplier is not None and gas_fee_multiplier > 0:
-                gas_price_wei = (gas_price_wei * (100 + gas_fee_multiplier)) // 100
-            if not no_custom_gas_params and chain_gas_price_gwei is not None and chain_gas_price_gwei > 0:
-                configured = _gwei_to_wei_ceil(chain_gas_price_gwei)
-                if configured > gas_price_wei:
-                    gas_price_wei = configured
-            if gp_item is not None and gp_item > 0:
-                network_gp = eth_gas_price(rpc_url)
-                if gas_price_wei < network_gp:
-                    raise ValueError(
-                        f"composeActions[{i}]: effective gas price ({gas_price_wei} wei) is below eth_gasPrice ({network_gp} wei). "
-                        "Increase composeActions[].gasPriceWei or adjust chain gasPrice / gasMultiplier in GET /getChainDetails, "
-                        "or use --no-custom-gas-params for RPC-only fees."
-                    )
-            if i == 0:
-                first_tx_fee = {
-                    "txNonce": nonce0,
-                    "txGasLimit": str(gas_limit),
-                    "txGasPrice": str(gas_price_wei),
-                }
-            tx = {
-                "nonce": str(current_nonce),
-                "gasPrice": _to_hex_wei(gas_price_wei),
-                "gas": _to_hex_wei(gas_limit),
-                "to": to_addr,
-                "value": _to_hex_wei(value_wei if is_native and value_wei is not None else 0),
-                "data": data_hex,
-                "chainId": str(dest_chain_num),
-            }
-        else:
-            mfee = _maybe_int(raw_act.get("maxFeePerGas") or raw_act.get("max_fee_per_gas"))
-            mprio = _maybe_int(raw_act.get("maxPriorityFeePerGas") or raw_act.get("max_priority_fee_per_gas"))
-            if mfee is None or mprio is None or mfee <= 0 or mprio <= 0:
-                base = float(fee_params.get("baseFeeGwei") or 0)
-                prio = float(fee_params.get("priorityFeeGwei") or 0)
-                base_component = base * base_fee_multiplier_pct / 100.0
-                max_prio = _gwei_to_wei_ceil(prio) if prio > 0 else _gwei_to_wei_ceil(1.0)
-                max_fee = _gwei_to_wei_ceil(base_component + prio)
-            else:
-                max_fee = mfee
-                max_prio = mprio
-            if mfee is not None and mprio is not None and mfee > 0 and mprio > 0:
-                if max_prio > max_fee:
-                    raise ValueError(
-                        f"composeActions[{i}]: maxPriorityFeePerGas ({max_prio} wei) exceeds maxFeePerGas ({max_fee} wei). "
-                        "Increase maxFeePerGas so it is at least as large as maxPriorityFeePerGas."
-                    )
-                bf_w = latest_base_fee_per_gas_wei(rpc_url)
-                if bf_w is not None and max_fee < bf_w:
-                    raise ValueError(
-                        f"composeActions[{i}]: maxFeePerGas ({max_fee} wei) is below the current block base fee per gas ({bf_w} wei). "
-                        "Raise maxFeePerGas (and typically maxPriorityFeePerGas) so the EIP-1559 transaction is valid."
-                    )
-            if i == 0:
-                first_tx_fee = {
-                    "txNonce": nonce0,
-                    "txGasLimit": str(gas_limit),
-                    "txMaxFeePerGas": str(max_fee),
-                    "txMaxPriorityFeePerGas": str(max_prio),
-                }
-            tx = {
-                "type": "0x2",
-                "nonce": str(current_nonce),
-                "gas": _to_hex_wei(gas_limit),
-                "maxFeePerGas": _to_hex_wei(max_fee),
-                "maxPriorityFeePerGas": _to_hex_wei(max_prio),
-                "to": to_addr,
-                "value": _to_hex_wei(value_wei if is_native and value_wei is not None else 0),
-                "data": data_hex,
-                "chainId": str(dest_chain_num),
-            }
+        tx, ft = _compose_action_tx_dict(
+            raw_act,
+            i,
+            dest_chain_num=dest_chain_num,
+            rpc_url=rpc_url,
+            executor=executor,
+            nonce0=nonce0,
+            fee_params=s.fee_params,
+            no_custom_gas_params=s.no_custom_gas_params,
+            gas_limit_config=s.gas_limit_config,
+            gas_fee_multiplier=s.gas_fee_multiplier,
+            chain_gas_price_gwei=s.chain_gas_price_gwei,
+            base_fee_multiplier_pct=s.base_fee_multiplier_pct,
+            legacy=s.legacy,
+        )
+        if ft:
+            first_tx_fee = ft
 
         msg_hash, msg_raw = tx_to_signing_hash_and_raw(tx)
         message_hashes.append(msg_hash)
         message_raw_batch.append(msg_raw)
 
+        sig = (raw_act.get("signature") or "").strip()
+        if bool(raw_act.get("nativeTransfer") or raw_act.get("native_transfer")) and not sig:
+            sig = "nativeTransfer"
+        dest = (raw_act.get("destinationContract") or raw_act.get("destination_contract") or "").strip()
+        inputs = raw_act.get("inputs") or []
+        if not isinstance(inputs, list):
+            inputs = []
         names = [str((inp or {}).get("name") or "").strip() for inp in inputs]
         batch_meta.append(
             {
@@ -859,6 +1059,7 @@ def build_compose_multisign(
         native0 = bool(actions[0].get("nativeTransfer") or actions[0].get("native_transfer"))
         if native0:
             msg_raw_calldata = ""
+            body["value"] = str(native_transfer_value_wei_from_compose_action(actions[0]))
         else:
             pu0 = actions[0].get("paramUnits") or actions[0].get("param_units") or {}
             pu_map = {str(k): str(v) for k, v in pu0.items()} if isinstance(pu0, dict) else {}

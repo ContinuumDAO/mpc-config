@@ -16,6 +16,15 @@ cross-chain). Gas defaults match ``linea_register`` (chain fields when set, else
 
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
+**Expectations for an AI agent (amount handling)**
+
+Same rules as ``erc20_transfer.py``: **Wei** / **Ether** / **Gwei** / **USD** are compose
+``paramUnits`` scales (Ether = 18 decimal places in the compose layer). **GET /getTokens**
+must list this **CTMERC20** contract under ``ethereum[]`` for ``--chain-id`` with a
+**decimals** field if you omit ``--amount-unit`` and pass a human token amount; otherwise
+pass ``--amount-unit`` (use **Wei** for raw uint256 strings) or register **decimals** via
+**POST /addToken**.
+
 Example::
 
   python3 recipes/ctmerc20_transfer.py \\
@@ -46,6 +55,8 @@ if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
 import generateMultiSignRequestFromCompose as _compose
+import recipe_gas_precheck as _gas
+import recipe_token_metadata as _tokmeta
 
 # From TOKEN_STORAGE_SCHEMA.md — CTMERC20 defaults (GET /getTokens → ethereum[].CTMERC20).
 CTMERC20_TRANSFER_SIG = "c3transfer(string,uint256,string)"
@@ -144,6 +155,7 @@ def ctmerc20_transfer_multisign_payload(
     purpose: str = "",
     no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
+    skip_gas_check: bool = False,
 ) -> dict[str, Any]:
     compose = build_ctmerc20_c3transfer_compose(
         key_gen_id=key_gen_id,
@@ -158,6 +170,8 @@ def ctmerc20_transfer_multisign_payload(
         rpc_gateway=rpc_gateway,
     )
     base = _compose.resolve_mpc_auth_base(mpc_auth_url, management_port)
+    if not skip_gas_check:
+        _gas.require_native_gas_for_compose(compose, base)
     return _compose.build_compose_multisign(compose, base)
 
 
@@ -166,7 +180,9 @@ def main() -> None:
         description=(
             "Build multiSignRequest JSON for CTMERC20 c3transfer(string,uint256,string) "
             "(see TOKEN_STORAGE_SCHEMA.md). Transaction chain is --chain-id; "
-            "calldata destination chain is --to-chain-id (default: same as --chain-id)."
+            "calldata destination chain is --to-chain-id (default: same as --chain-id). "
+            "For AI agents: omit --amount-unit only if GET /getTokens has decimals for this "
+            "CTMERC20 on this chain; otherwise set --amount-unit or add decimals via POST /addToken."
         )
     )
     ap.add_argument(
@@ -213,13 +229,21 @@ def main() -> None:
     ap.add_argument(
         "--amount",
         required=True,
-        help='Token amount (with --amount-unit; e.g. "1.5" with Ether)',
+        help=(
+            "uint256 amount for c3transfer: with explicit --amount-unit, value is in that unit. "
+            "If --amount-unit is omitted, value is in token units and GET /getTokens must list "
+            "decimals for this CTMERC20 on this chain. Agents: use Wei + integer string for raw amounts."
+        ),
     )
     ap.add_argument(
         "--amount-unit",
-        default="Wei",
-        choices=sorted(_VALID_UNITS),
-        help="Unit for uint256 amount (default: Wei). Matches compose paramUnits.",
+        default=None,
+        metavar="UNIT",
+        help=(
+            "Wei | Ether | Gwei | USD (compose paramUnits). Omit only when GET /getTokens has "
+            "decimals for this CTMERC20 contract on this chain. If missing, pass this flag or "
+            "update token metadata (POST /addToken)."
+        ),
     )
     ap.add_argument(
         "--purpose",
@@ -232,6 +256,14 @@ def main() -> None:
         help=(
             "Set noCustomGasParams on compose JSON: ignore ChainDetails gas fields and use RPC-only "
             "estimates. Default (flag omitted): use chain gas when configured, otherwise eth_estimateGas."
+        ),
+    )
+    ap.add_argument(
+        "--skip-gas-check",
+        action="store_true",
+        help=(
+            "Skip verifying the MPC wallet native balance against estimated gas (not recommended). "
+            "By default the script requires balance ≥ estimated fees with 50% extra on gas units."
         ),
     )
     ap.add_argument(
@@ -256,6 +288,36 @@ def main() -> None:
     to_chain = (args.to_chain_id or "").strip() or args.chain_id.strip()
 
     try:
+        amount = args.amount.strip()
+        amount_unit = args.amount_unit
+        if amount_unit is not None:
+            u = amount_unit.strip()
+            if u not in _VALID_UNITS:
+                raise ValueError(
+                    f"amount-unit must be one of: {', '.join(sorted(_VALID_UNITS))}"
+                )
+            amount_unit = u
+        else:
+            base = _compose.resolve_mpc_auth_base(args.mpc_auth_url, args.management_port)
+            chain_id_num = _compose.parse_chain_id(args.chain_id)
+            dec = _tokmeta.fetch_decimals_from_get_tokens(
+                base,
+                chain_id_num,
+                args.token,
+                category="CTMERC20",
+                http_get_json=_compose.http_get_json,
+                unwrap_management_api=_compose._unwrap_management_api,
+            )
+            if dec is None:
+                raise ValueError(
+                    "Cannot infer amount scaling: --amount-unit was not set and GET /getTokens has "
+                    "no decimals for this CTMERC20 on this chain (or the token is not listed). "
+                    "As an AI agent: pass --amount-unit (Wei with the raw uint256 string if needed), "
+                    "or register the token with decimals (e.g. POST /addToken)."
+                )
+            amount = _tokmeta.human_amount_to_raw_uint256(amount, dec)
+            amount_unit = "Wei"
+
         out = ctmerc20_transfer_multisign_payload(
             mpc_auth_url=args.mpc_auth_url,
             management_port=args.management_port,
@@ -263,12 +325,13 @@ def main() -> None:
             destination_chain_id=args.chain_id,
             token_contract=args.token,
             to_address=args.to,
-            amount=args.amount,
+            amount=amount,
             to_chain_id_str=to_chain,
-            amount_unit=args.amount_unit,
+            amount_unit=amount_unit,
             purpose=args.purpose,
             no_custom_gas_params=args.no_custom_gas_params,
             rpc_gateway=rpc,
+            skip_gas_check=args.skip_gas_check,
         )
     except (ValueError, RuntimeError) as e:
         print(str(e), file=sys.stderr)

@@ -9,6 +9,13 @@ Matches **CTMRWA1** defaults in ``docs/references/TOKEN_STORAGE_SCHEMA.md`` / **
 
 The MPC transaction is sent on **--chain-id** (contract chain). **--to-chain-id** sets ``toChainIdStr`` (default: same as ``--chain-id``). Gas defaults match ``linea_register`` (chain fields when set, else **eth_estimateGas**; **--no-custom-gas-params** for RPC-only).
 
+**Expectations for an AI agent (amounts / decimals)**
+
+This flow moves **whole** positions: ``fromTokenId``, ``ID``, ``version`` are **uint256** IDs passed
+as integer strings with compose **Wei** paramUnits (integer semantics). There is **no** separate
+human “token amount” field and **GET /getTokens** **decimals** do **not** apply to these ID
+fields. Do not scale ``from-token-id``, ``--id``, or ``--version`` by ERC-20 decimals.
+
 Requires: PyNaCl, eth_account (same as scripts/generateMultiSignRequestFromCompose.py).
 
 Example::
@@ -35,6 +42,7 @@ if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
 import generateMultiSignRequestFromCompose as _compose
+import recipe_gas_precheck as _gas
 
 WHOLE_SIG = "transferWholeTokenX(string,string,string,uint256,uint256,uint256,string)"
 WHOLE_NAMES = (
@@ -159,6 +167,7 @@ def ctmrwa1_whole_multisign_payload(
     purpose: str = "",
     no_custom_gas_params: bool = False,
     rpc_gateway: str | None = None,
+    skip_gas_check: bool = False,
 ) -> dict[str, Any]:
     compose = build_ctmrwa1_whole_compose(
         key_gen_id=key_gen_id,
@@ -176,13 +185,17 @@ def ctmrwa1_whole_multisign_payload(
         rpc_gateway=rpc_gateway,
     )
     base = _compose.resolve_mpc_auth_base(mpc_auth_url, management_port)
+    if not skip_gas_check:
+        _gas.require_native_gas_for_compose(compose, base)
     return _compose.build_compose_multisign(compose, base)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
-            "CTMRWA1 whole-token transfer: transferWholeTokenX (TOKEN_STORAGE_SCHEMA.md)."
+            "CTMRWA1 whole-token transfer: transferWholeTokenX (TOKEN_STORAGE_SCHEMA.md). "
+            "IDs are uint256 strings (Wei paramUnits); not ERC-20-style amounts—ignore token "
+            "decimals from GET /getTokens for from-token-id / id / version."
         )
     )
     ap.add_argument(
@@ -222,6 +235,14 @@ def main() -> None:
             "estimates. Default (flag omitted): use chain gas when configured, otherwise eth_estimateGas."
         ),
     )
+    ap.add_argument(
+        "--skip-gas-check",
+        action="store_true",
+        help=(
+            "Skip verifying the MPC wallet native balance against estimated gas (not recommended). "
+            "By default the script requires balance ≥ estimated fees with 50% extra on gas units."
+        ),
+    )
     ap.add_argument("--rpc-gateway", default="", metavar="URL")
     ap.add_argument("--ed25519-seed-hex", metavar="HEX", default="")
     ap.add_argument("--eip191-private-key-hex", metavar="HEX", default="")
@@ -247,6 +268,7 @@ def main() -> None:
             purpose=args.purpose,
             no_custom_gas_params=args.no_custom_gas_params,
             rpc_gateway=rpc,
+            skip_gas_check=args.skip_gas_check,
         )
     except (ValueError, RuntimeError) as e:
         print(str(e), file=sys.stderr)
