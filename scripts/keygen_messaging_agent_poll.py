@@ -2,10 +2,18 @@
 """
 Poll KeyGen messaging for unread items that mention the agent, then mark them read.
 
-Designed for an **Open Claw** (or similar) **isolated cron** job: the cron ``--message``
-instructs the agent to run this script (``exec``), parse the JSON on stdout, and if
-``matches`` is non-empty, decide what to do and reply with ``POST /sendMessage``
-(management-signed; see docs/references/API_KEYGEN_MESSAGING.md).
+Designed for an **Open Claw** (or similar) **isolated cron** job.
+
+**What this script does not do:** it does not parse intent, plan, or send replies. It only
+filters unread messages, prints JSON, and marks them read so they are not redelivered.
+
+**What the AI agent must do after ``exec``:** read stdout (one JSON line). If
+``match_count`` > 0, for each item in ``matches`` use **title**, **body**, and thread
+context (``GET /getMessageThread`` / ``getMessageById`` as needed) to infer what the
+human asked for, then **act**—call management APIs, run tools (e.g. Foundry/compose
+scripts), and/or **``POST /sendMessage``** with an appropriate reply (management-signed;
+see ``docs/references/API_KEYGEN_MESSAGING.md``). Put that obligation in the **cron job’s
+``--message``** and/or **``docs/skill/SKILL.md``**, not inside this file’s code path.
 
 Flow
 ----

@@ -179,7 +179,7 @@ To **notice unread channel messages directed at the agent** without manual **`GE
 1. **Once:** install **`cryptography`** into **`$MPA_PATH/.venv`** (see **[Python dependencies](#python-dependencies)**).
 2. **Run:** **`$MPA_PATH/.venv/bin/python`** with **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** (and **`KEYGEN_ID`** set; **`AUTH_KEY_PATH`** / **`MPC_AUTH_URL`** if not defaults). **`--dry-run`** lists matching unread messages without calling **`multiMarkMessagesRead`**.
 3. **Output:** one JSON line: **`matches`**, **`match_count`**, **`marked_ids`**. The script marks matched messages read so the next poll does not repeat them.
-4. **After a non-empty `matches`:** interpret the thread, decide what to do, and reply with **`POST /sendMessage`** (management-signed; **`$MPA_PATH/references/API_KEYGEN_MESSAGING.md`**). Humans can **`@agent`** in title or body to target the agent.
+4. **After a non-empty `matches`:** the poll script only marks messages read; **you** must **read each match’s `title` and `body`** (and pull thread context with **`GET /getMessageThread`** / related APIs if needed), **infer intent**, then **act**—invoke tools, management **`POST`** routes (e.g. **`/multiSignRequest`**, **`/sendMessage`**), or both. Reply in-channel with **`POST /sendMessage`** when a text response is appropriate (management-signed; **`$MPA_PATH/references/API_KEYGEN_MESSAGING.md`**). Encode the same “parse → act” expectation in any **Open Claw cron `--message`** that runs this script. Humans can **`@agent`** in title or body to target the agent.
 
 ### Event listener (`mpc_event_listener.py`)
 
