@@ -1,5 +1,1792 @@
+swagger: '2.0'
+info:
+  contact: {}
+  title: MPC Auth Management API
+  description: Distributed Auth / MPC node HTTP API. All responses use node.APIResponse (code, error, data).
+  version: '1.0'
+paths:
+  /version:
+    get:
+      description: get node version
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: get node version
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getNodeMgtKey:
+    get:
+      description: get node management key
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: get node management key
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getPublicMgtKey:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getPublicMgtKey).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: GET getPublicMgtKey
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getAllowedEd25519MgtKeys:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getAllowedEd25519MgtKeys).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: GET getAllowedEd25519MgtKeys
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /health:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /health).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: GET health
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getNodeKey:
+    get:
+      description: get node key (node id), which is unique for node
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: get node key (node id)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getMachineInfo:
+    get:
+      description: get node machine info
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: get node machine info
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getNodeMgtKeyNonce:
+    get:
+      description: get nonce of node management key
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: get nonce of node management key
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /hasPublicMgtKey:
+    get:
+      description: returns true if at least one Ed25519 management key is allowed (config PublicMgtKey or keys added via addManagementKey),
+        false otherwise
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: check if public management key is configured
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getPublicMgtKeyNonce:
+    get:
+      description: returns the current nonce for an Ed25519 management key. Optional query param publicKey (64 hex) selects
+        which key; if omitted, uses config PublicMgtKey.
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      parameters:
+      - in: query
+        name: publicKey
+        required: false
+        type: string
+        description: Ed25519 public key (64 hex). If omitted, uses config PublicMgtKey.
+      tags:
+      - Node Related Info
+      summary: get nonce for public management key (Ed25519)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+        '400':
+          description: No key specified or key not allowed
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /verifyMgtKey:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /verifyMgtKey).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: POST verifyMgtKey
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /addManagementKey:
+    post:
+      description: Adds a new Ed25519 public key to the allowed set for management API auth. Request must be signed by an
+        existing Ed25519 management key (config PublicMgtKey or a key previously added). Only a permitted machine can add
+        another key.
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+          - newPublicKey
+          - sig
+          properties:
+            newPublicKey:
+              type: string
+              description: 64 hex (32-byte Ed25519 public key) to add
+            nonce:
+              type: integer
+              description: Current nonce for the signer key (from getPublicMgtKeyNonce)
+            sig:
+              type: string
+              description: Ed25519 signature (128 hex) over canonical JSON of body with sig empty
+      tags:
+      - Node Related Info
+      summary: add an additional Ed25519 management public key
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+        '400':
+          description: Invalid body or no Ed25519 key configured
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+        '401':
+          description: Invalid or missing Ed25519 signature
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getNodeUptime:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getNodeUptime).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: GET getNodeUptime
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getMessageToSign:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /getMessageToSign).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: POST getMessageToSign
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /getAllowedKeyTypes:
+    get:
+      description: get allowed keytypes of node
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: get allowed keytypes of node
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getAllowedMsgCheckTypes:
+    get:
+      description: get allowed msgcheck types of node
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: get allowed msgcheck types of node
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getConfiguredNodeKeys:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getConfiguredNodeKeys).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: GET getConfiguredNodeKeys
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getSubscriptions:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getSubscriptions).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: GET getSubscriptions
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /connectivityHealth:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /connectivityHealth).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: GET connectivityHealth
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getSuccessRate:
+    get:
+      description: get node success rate, including keygen and sign
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: get node success rate
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getPreSigningVerificationStatus:
+    get:
+      description: get pre-signing verification configuration and status
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: get pre-signing verification status
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getClientSigStatus:
+    get:
+      description: returns whether client signature verification is ignored (IgnoreClientSigCheck). When true, client signatures
+        during MPC coordination are not verified; set false in production.
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: get client signature check status
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getLogs:
+    get:
+      description: get logs for a specified number of hours back
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Related Info
+      summary: get logs
+      parameters:
+      - type: number
+        description: hours
+        name: hours
+        in: query
+        required: false
+        default: 12
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /pingNodesRequest:
+    get:
+      description: 'send ping request to other nodes, note: can input nodekey arrary as parameters'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Ping Nodes
+      summary: send ping request to other nodes
+      parameters:
+      - type: string
+        description: nodekey
+        name: nodekey
+        in: query
+        required: true
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getPingNodesResultById:
+    get:
+      description: get pingnodes result by id
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Ping Nodes
+      summary: get pingnodes result by id
+      parameters:
+      - type: string
+        description: id
+        name: id
+        in: query
+        required: true
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /listPingResults:
+    get:
+      description: list pingnodes result list
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Ping Nodes
+      summary: list pingnodes result
+      parameters:
+      - type: number
+        description: pagenum
+        name: pagenum
+        in: query
+      - type: number
+        description: pagesize
+        name: pagesize
+        in: query
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getInactiveNodes:
+    get:
+      description: get inactive nodes from ping results over a specified time period, optionally filtered by public key
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Ping Nodes
+      summary: get inactive nodes
+      parameters:
+      - type: number
+        description: hours
+        name: hours
+        in: query
+        required: false
+        default: 24
+      - type: string
+        description: pubKey
+        name: pubKey
+        in: query
+        required: false
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /newGroupRequest:
+    post:
+      description: send newgroup request
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Nodes Group
+      summary: send newgroup request
+      parameters:
+      - description: request
+        name: request
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.NewGroupRequestPost'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /listNewGroupRequests:
+    get:
+      description: list newgroup requests
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Nodes Group
+      summary: list newgroup requests
+      parameters:
+      - type: string
+        description: filter
+        name: filter
+        in: query
+      - type: number
+        description: pagenum
+        name: pagenum
+        in: query
+      - type: number
+        description: pagesize
+        name: pagesize
+        in: query
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getNewGroupRequestById:
+    get:
+      description: get newgroup request by id
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Nodes Group
+      summary: get newgroup request by id
+      parameters:
+      - type: string
+        description: id
+        name: id
+        in: query
+        required: true
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /newGroupRequestAgree:
+    post:
+      description: agree newgroup request
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Nodes Group
+      summary: agree newgroup request
+      parameters:
+      - description: request
+        name: request
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.NewGroupRequestAgreePost'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getNewGroupResultById:
+    get:
+      description: get newgroup result by id
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Nodes Group
+      summary: get newgroup result by id
+      parameters:
+      - type: string
+        description: id
+        name: id
+        in: query
+        required: true
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /newSubGroupRequest:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /newSubGroupRequest).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Nodes Group
+      summary: POST newSubGroupRequest
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /listNewSubGroupRequests:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /listNewSubGroupRequests).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Nodes Group
+      summary: GET listNewSubGroupRequests
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /newSubGroupRequestAgree:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /newSubGroupRequestAgree).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Nodes Group
+      summary: POST newSubGroupRequestAgree
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /keyGenRequest:
+    post:
+      description: send keygen request
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: send keygen request
+      parameters:
+      - description: request
+        name: request
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.KeyGenRequestPost'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /listKeyGenRequests:
+    get:
+      description: list keygen requests
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: list keygen requests
+      parameters:
+      - type: string
+        description: filter
+        name: filter
+        in: query
+      - type: number
+        description: pagenum
+        name: pagenum
+        in: query
+      - type: number
+        description: pagesize
+        name: pagesize
+        in: query
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getKeyGenRequestById:
+    get:
+      description: get keygen request by id
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: get keygen request by id
+      parameters:
+      - type: string
+        description: id
+        name: id
+        in: query
+        required: true
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /keyGenRequestAgree:
+    post:
+      description: agree keygen request
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: agree keygen request
+      parameters:
+      - description: request
+        name: request
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.KeyGenRequestAgreePost'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getKeyGenResultById:
+    get:
+      description: get keygen result by id
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: get keygen result by id
+      parameters:
+      - type: string
+        description: id
+        name: id
+        in: query
+        required: true
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getGlobalNonceByKeyGenId:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getGlobalNonceByKeyGenId).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: GET getGlobalNonceByKeyGenId
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getKeyGenGroupId:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getKeyGenGroupId).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: GET getKeyGenGroupId
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getAllGroupIds:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getAllGroupIds).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: GET getAllGroupIds
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /presignRequest:
+    post:
+      description: send presign request
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Pre Sign
+      summary: send presign request
+      parameters:
+      - description: request
+        name: request
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.PresignRequestPost'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /listPresignRequests:
+    get:
+      description: list presign requests
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Pre Sign
+      summary: list presign requests
+      parameters:
+      - type: string
+        description: filter
+        name: filter
+        in: query
+      - type: number
+        description: pagenum
+        name: pagenum
+        in: query
+      - type: number
+        description: pagesize
+        name: pagesize
+        in: query
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getPresignRequestById:
+    get:
+      description: get presign request by id
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Pre Sign
+      summary: get presign request by id
+      parameters:
+      - type: string
+        description: id
+        name: id
+        in: query
+        required: true
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /presignRequestAgree:
+    post:
+      description: agree presign request
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Pre Sign
+      summary: agree presign request
+      parameters:
+      - description: request
+        name: request
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.PresinRequestAgreePost'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /listPresignResults:
+    get:
+      description: list newgroup results
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Pre Sign
+      summary: list newgroup results
+      parameters:
+      - type: string
+        description: afterID
+        name: afterID
+        in: query
+      - type: number
+        description: pagenum
+        name: pagenum
+        in: query
+      - type: number
+        description: pagesize
+        name: pagesize
+        in: query
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getPresignResultById:
+    get:
+      description: get presign result by id
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Pre Sign
+      summary: get presign result by id
+      parameters:
+      - type: string
+        description: id
+        name: id
+        in: query
+        required: true
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getPresigningStatus:
+    get:
+      description: get presigning status including configuration and cache levels for all key groups
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Pre Sign
+      summary: get presigning status
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /signRequest:
+    post:
+      description: send sign request
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Sign
+      summary: send sign request
+      parameters:
+      - description: request
+        name: request
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.SignRequestPost'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /multiSignRequest:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /multiSignRequest).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Sign
+      summary: POST multiSignRequest
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /listSignRequests:
+    get:
+      description: list sign requests
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Sign
+      summary: list sign requests
+      parameters:
+      - type: string
+        description: filter
+        name: filter
+        in: query
+      - type: number
+        description: pagenum
+        name: pagenum
+        in: query
+      - type: number
+        description: pagesize
+        name: pagesize
+        in: query
+      - type: integer
+        format: int64
+        description: optional; only requests with timepoint >= this (Unix seconds)
+        name: fromTime
+        in: query
+      - type: integer
+        format: int64
+        description: optional; only requests with timepoint <= this (Unix seconds)
+        name: toTime
+        in: query
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getSignRequestById:
+    get:
+      description: get sign request by id
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Sign
+      summary: get sign request by id
+      parameters:
+      - type: string
+        description: id
+        name: id
+        in: query
+        required: true
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /signRequestAgree:
+    post:
+      description: agree sign request
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Sign
+      summary: agree sign request
+      parameters:
+      - description: request
+        name: request
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.SignRequestAgreePost'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /isSignRequestReadyById:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /isSignRequestReadyById).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Sign
+      summary: GET isSignRequestReadyById
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: id
+        in: query
+        required: true
+        description: Resource id
+  /listSignRequestsReady:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /listSignRequestsReady).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Sign
+      summary: GET listSignRequestsReady
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /triggerSignRequestById:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /triggerSignRequestById).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Sign
+      summary: POST triggerSignRequestById
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /updateSignResultStatusById:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /updateSignResultStatusById).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Sign
+      summary: POST updateSignResultStatusById
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /shelveSignRequest:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /shelveSignRequest).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Sign
+      summary: POST shelveSignRequest
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /listSignResults:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /listSignResults).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Sign
+      summary: GET listSignResults
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getSignResultById:
+    get:
+      description: get sign result by id
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Sign
+      summary: get sign result by id
+      parameters:
+      - type: string
+        description: id
+        name: id
+        in: query
+        required: true
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /admin/registerRelayer:
+    post:
+      description: register a new relayer in the whitelist (can only be called once, accepts single public key)
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Relayer Management
+      summary: register relayer
+      parameters:
+      - description: request
+        name: request
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.RelayerRegisterRequest'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /admin/listRelayers:
+    get:
+      description: list all whitelisted relayers
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Relayer Management
+      summary: list relayers
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /admin/getRelayer:
+    get:
+      description: get relayer by public key
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Relayer Management
+      summary: get relayer
+      parameters:
+      - type: string
+        description: publicKey
+        name: publicKey
+        in: query
+        required: true
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /updateRelayer:
+    post:
+      description: update public keys for the relayer (self-managed, requires signature from existing key)
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Relayer Management
+      summary: update relayer public keys
+      parameters:
+      - description: request
+        name: request
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.RelayerUpdateRequest'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /nodeRegister:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /nodeRegister).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Registration
+      summary: POST nodeRegister
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /fetchNodeData:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /fetchNodeData).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Node Registration
+      summary: GET fetchNodeData
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /postChainDetails:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /postChainDetails).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Local Chain Config
+      summary: POST postChainDetails
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /getChainDetails:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getChainDetails).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Local Chain Config
+      summary: GET getChainDetails
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: chain_id
+        in: query
+        required: false
+        description: Optional chain id filter
+  /removeChainDetails:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /removeChainDetails).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Local Chain Config
+      summary: POST removeChainDetails
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /addToken:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /addToken).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Local Token Config
+      summary: POST addToken
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /removeToken:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /removeToken).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Local Token Config
+      summary: POST removeToken
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /getTokens:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getTokens).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Local Token Config
+      summary: GET getTokens
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: chainType
+        in: query
+        required: false
+      - type: string
+        name: chain_id
+        in: query
+        required: false
+  /addKnownAddress:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /addKnownAddress).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Known Addresses
+      summary: POST addKnownAddress
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /removeKnownAddress:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /removeKnownAddress).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Known Addresses
+      summary: POST removeKnownAddress
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /getKnownAddresses:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getKnownAddresses).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Known Addresses
+      summary: GET getKnownAddresses
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: chain_type
+        in: query
+        required: false
+      - type: string
+        name: chain_id
+        in: query
+        required: false
+      - type: integer
+        name: is_contract
+        in: query
+        required: false
+        description: 0 or 1
+  /sendMessage:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /sendMessage).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - KeyGen Messaging
+      summary: POST sendMessage
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /listMessages:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /listMessages).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - KeyGen Messaging
+      summary: GET listMessages
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: keyGenId
+        in: query
+        required: true
+      - type: integer
+        name: pagenum
+        in: query
+        required: false
+      - type: integer
+        name: pagesize
+        in: query
+        required: false
+      - type: string
+        name: unread
+        in: query
+        required: false
+        description: true or 1 to filter unread
+      - type: string
+        name: top_level
+        in: query
+        required: false
+      - type: string
+        name: fromTime
+        in: query
+        required: false
+      - type: string
+        name: toTime
+        in: query
+        required: false
+  /getMessageById:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getMessageById).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - KeyGen Messaging
+      summary: GET getMessageById
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: keyGenId
+        in: query
+        required: true
+      - type: string
+        name: messageId
+        in: query
+        required: true
+  /getMessageThread:
+    get:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getMessageThread).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - KeyGen Messaging
+      summary: GET getMessageThread
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: keyGenId
+        in: query
+        required: true
+      - type: string
+        name: messageId
+        in: query
+        required: true
+  /markMessageRead:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /markMessageRead).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - KeyGen Messaging
+      summary: POST markMessageRead
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /multiMarkMessagesRead:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /multiMarkMessagesRead).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - KeyGen Messaging
+      summary: POST multiMarkMessagesRead
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /deleteMessage:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /deleteMessage).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - KeyGen Messaging
+      summary: POST deleteMessage
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /multiDeleteMessages:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /multiDeleteMessages).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - KeyGen Messaging
+      summary: POST multiDeleteMessages
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
 definitions:
   node.APIResponse:
+    type: object
     properties:
       code:
         description: 0 succes, 1 error
@@ -7,8 +1794,8 @@ definitions:
       data: {}
       error:
         type: string
-    type: object
   node.KeyGenRequestAgreePost:
+    type: object
     properties:
       clientPk:
         type: string
@@ -18,8 +1805,8 @@ definitions:
         type: string
       sig:
         type: string
-    type: object
   node.KeyGenRequestPost:
+    type: object
     properties:
       clientPk:
         type: string
@@ -35,8 +1822,8 @@ definitions:
         type: string
       threshold:
         type: integer
-    type: object
   node.NewGroupRequestAgreePost:
+    type: object
     properties:
       nonce:
         type: integer
@@ -44,28 +1831,28 @@ definitions:
         type: string
       sig:
         type: string
-    type: object
   node.NewGroupRequestPost:
+    type: object
     properties:
       BrokerArray:
+        type: array
         items:
           type: string
-        type: array
       keyList:
+        type: array
         items:
           type: string
-        type: array
       nonce:
         type: integer
       sig:
         type: string
-    type: object
   node.PresignRequestPost:
+    type: object
     properties:
       keyList:
+        type: array
         items:
           type: string
-        type: array
       nonce:
         type: integer
       presignAmt:
@@ -74,8 +1861,8 @@ definitions:
         type: string
       sig:
         type: string
-    type: object
   node.PresinRequestAgreePost:
+    type: object
     properties:
       nonce:
         type: integer
@@ -83,18 +1870,21 @@ definitions:
         type: string
       sig:
         type: string
-    type: object
   node.RelayerRegisterRequest:
+    type: object
+    required:
+    - relayerName
+    - relayerPublicKey
     properties:
       allowedChains:
         description: Empty means all chains allowed
+        type: array
         items:
           type: string
-        type: array
       metadata:
+        type: object
         additionalProperties:
           type: string
-        type: object
       registeredBy:
         type: string
       relayerName:
@@ -102,152 +1892,33 @@ definitions:
       relayerPublicKey:
         description: Single public key for initial registration
         type: string
-    required:
-    - relayerName
-    - relayerPublicKey
-    type: object
   node.RelayerUpdateRequest:
+    type: object
+    required:
+    - publicKeys
+    - relayerPublicKey
+    - relayerSignature
     properties:
       publicKeys:
         description: New array of public keys (must include at least one)
+        type: array
         items:
           type: string
-        type: array
       relayerPublicKey:
         description: Public key used to sign this request
         type: string
       relayerSignature:
         description: Signature of this request
         type: string
-    required:
-    - publicKeys
-    - relayerPublicKey
-    - relayerSignature
-    type: object
-  node.NodeRegisterRequest:
-    properties:
-      nodeName:
-        description: Node name (required, at least 6 characters)
-        type: string
-        minLength: 6
-      forumHandle:
-        description: Telegram or X handle
-        type: string
-      forumType:
-        description: "Telegram or X"
-        type: string
-      email:
-        description: Email address
-        type: string
-      vpsProvider:
-        description: VPS provider or "self-hosted"
-        type: string
-      ramGB:
-        description: RAM in GB
-        type: number
-      cpuCores:
-        description: CPU core count
-        type: integer
-      didType:
-        description: Optional DID type
-        type: string
-      did:
-        description: Optional DID identifier
-        type: string
-      nodeMgtKeySig:
-        description: Signature from NodeMgtKey private key
-        type: string
-      nonce:
-        description: Nonce for signature
-        type: integer
-    required:
-    - nodeName
-    - forumHandle
-    - forumType
-    - email
-    - vpsProvider
-    - ramGB
-    - cpuCores
-    - nodeMgtKeySig
-    - nonce
-    type: object
-  node.NodeRegistration:
-    properties:
-      nodeName:
-        description: Node name (at least 6 characters)
-        type: string
-      nodeId:
-        description: Node ID in format http://ip:port or https://ip:port
-        type: string
-      nodePublicKey:
-        description: Node's public key (128 hex chars)
-        type: string
-      nodeMgtKey:
-        description: Node management key (Ethereum address)
-        type: string
-      relayerPublicKey:
-        description: Relayer's public key (128 hex chars)
-        type: string
-      forumHandle:
-        description: Telegram or X handle
-        type: string
-      forumType:
-        description: "Telegram or X"
-        type: string
-      email:
-        description: Email address
-        type: string
-      vpsProvider:
-        description: VPS provider or "self-hosted"
-        type: string
-      ramGB:
-        description: RAM in GB
-        type: number
-      cpuCores:
-        description: CPU core count
-        type: integer
-      didType:
-        description: Optional DID type
-        type: string
-      did:
-        description: Optional DID identifier
-        type: string
-      mpcGroups:
-        description: Array of MPC groups this node belongs to
-        items:
-          $ref: '#/definitions/node.MPCGroupInfo'
-        type: array
-      createdAt:
-        description: ISO 8601 timestamp
-        type: string
-    type: object
-  node.MPCGroupInfo:
-    properties:
-      groupId:
-        description: Group ID (deterministic hash)
-        type: string
-      keyList:
-        description: Array of node public keys
-        items:
-          type: string
-        type: array
-      nodeAddresses:
-        additionalProperties:
-          type: string
-        description: Map of nodeKey to IP:port
-        type: object
-      threshold:
-        description: Threshold value
-        type: integer
-    type: object
   node.SignRequestAgreePost:
+    type: object
     properties:
       clientSig:
         type: string
       requestId:
         type: string
-    type: object
   node.SignRequestPost:
+    type: object
     properties:
       chainID:
         description: 'Optional: for chain access control'
@@ -256,9 +1927,9 @@ definitions:
         description: signed by clientpk saved when keygen
         type: string
       keyList:
+        type: array
         items:
           type: string
-        type: array
       msgHash:
         type: string
       msgRaw:
@@ -288,1067 +1959,3 @@ definitions:
       extraJSON:
         description: Arbitrary JSON string for node context (stored and returned in listSignRequests / getSignRequestById)
         type: string
-    type: object
-info:
-  contact: {}
-paths:
-  /addNeighborNodes:
-    get:
-      consumes:
-      - application/json
-      description: add neighbor nodes
-      parameters:
-      - description: name
-        in: query
-        name: name
-        required: true
-        type: string
-      - description: key
-        in: query
-        name: key
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: add neighbor nodes
-      tags:
-      - Neighbor Nodes Mgt
-  /admin/getRelayer:
-    get:
-      consumes:
-      - application/json
-      description: get relayer by public key
-      parameters:
-      - description: publicKey
-        in: query
-        name: publicKey
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get relayer
-      tags:
-      - Relayer Management
-  /admin/listRelayers:
-    get:
-      consumes:
-      - application/json
-      description: list all whitelisted relayers
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: list relayers
-      tags:
-      - Relayer Management
-  /admin/registerRelayer:
-    post:
-      consumes:
-      - application/json
-      description: register a new relayer in the whitelist (can only be called once,
-        accepts single public key)
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/node.RelayerRegisterRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: register relayer
-      tags:
-      - Relayer Management
-  /generateClientKey:
-    get:
-      consumes:
-      - application/json
-      description: 'generate clientKey for dapps, note: node doesn''t save it'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: generate clientKey for dapps
-      tags:
-      - Node Tool
-  /getAllowedKeyTypes:
-    get:
-      consumes:
-      - application/json
-      description: get allowed keytypes of node
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get allowed keytypes of node
-      tags:
-      - Node Related Info
-  /getAllowedMsgCheckTypes:
-    get:
-      consumes:
-      - application/json
-      description: get allowed msgcheck types of node
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get allowed msgcheck types of node
-      tags:
-      - Node Related Info
-  /getKeyGenRequestById:
-    get:
-      consumes:
-      - application/json
-      description: get keygen request by id
-      parameters:
-      - description: id
-        in: query
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get keygen request by id
-      tags:
-      - Key Generation
-  /getKeyGenResultById:
-    get:
-      consumes:
-      - application/json
-      description: get keygen result by id
-      parameters:
-      - description: id
-        in: query
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get keygen result by id
-      tags:
-      - Key Generation
-  /getNewGroupRequestById:
-    get:
-      consumes:
-      - application/json
-      description: get newgroup request by id
-      parameters:
-      - description: id
-        in: query
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get newgroup request by id
-      tags:
-      - Nodes Group
-  /getNewGroupResultById:
-    get:
-      consumes:
-      - application/json
-      description: get newgroup result by id
-      parameters:
-      - description: id
-        in: query
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get newgroup result by id
-      tags:
-      - Nodes Group
-  /getNodeKey:
-    get:
-      consumes:
-      - application/json
-      description: get node key (node id), which is unique for node
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get node key (node id)
-      tags:
-      - Node Related Info
-  /getNodeMgtKey:
-    get:
-      consumes:
-      - application/json
-      description: get node management key
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get node management key
-      tags:
-      - Node Related Info
-  /getNodeMgtKeyNonce:
-    get:
-      consumes:
-      - application/json
-      description: get nonce of node management key
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get nonce of node management key
-      tags:
-      - Node Related Info
-  /hasPublicMgtKey:
-    get:
-      consumes:
-      - application/json
-      description: returns true if at least one Ed25519 management key is allowed (config PublicMgtKey or keys added via addManagementKey), false otherwise
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: check if public management key is configured
-      tags:
-      - Node Related Info
-  /getPublicMgtKeyNonce:
-    get:
-      consumes:
-      - application/json
-      description: returns the current nonce for an Ed25519 management key. Optional query param publicKey (64 hex) selects which key; if omitted, uses config PublicMgtKey.
-      produces:
-      - application/json
-      parameters:
-      - description: Ed25519 public key (64 hex). If omitted, uses config PublicMgtKey.
-        in: query
-        name: publicKey
-        required: false
-        type: string
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-        "400":
-          description: No key specified or key not allowed
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get nonce for public management key (Ed25519)
-      tags:
-      - Node Related Info
-  /addManagementKey:
-    post:
-      consumes:
-      - application/json
-      description: Adds a new Ed25519 public key to the allowed set for management API auth. Request must be signed by an existing Ed25519 management key (config PublicMgtKey or a key previously added). Only a permitted machine can add another key.
-      produces:
-      - application/json
-      parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          required:
-          - newPublicKey
-          - sig
-          properties:
-            newPublicKey:
-              type: string
-              description: 64 hex (32-byte Ed25519 public key) to add
-            nonce:
-              type: integer
-              description: Current nonce for the signer key (from getPublicMgtKeyNonce)
-            sig:
-              type: string
-              description: Ed25519 signature (128 hex) over canonical JSON of body with sig empty
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-        "400":
-          description: Invalid body or no Ed25519 key configured
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-        "401":
-          description: Invalid or missing Ed25519 signature
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: add an additional Ed25519 management public key
-      tags:
-      - Node Related Info
-  /getPingNodesResultById:
-    get:
-      consumes:
-      - application/json
-      description: get pingnodes result by id
-      parameters:
-      - description: id
-        in: query
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get pingnodes result by id
-      tags:
-      - Ping Nodes
-  /getInactiveNodes:
-    get:
-      consumes:
-      - application/json
-      description: get inactive nodes from ping results over a specified time period, optionally filtered by public key
-      parameters:
-      - description: hours
-        in: query
-        name: hours
-        required: false
-        type: number
-        default: 24
-      - description: pubKey
-        in: query
-        name: pubKey
-        required: false
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get inactive nodes
-      tags:
-      - Ping Nodes
-  /getPreSigningVerificationStatus:
-    get:
-      consumes:
-      - application/json
-      description: get pre-signing verification configuration and status
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get pre-signing verification status
-      tags:
-      - Node Related Info
-  /getClientSigStatus:
-    get:
-      consumes:
-      - application/json
-      description: returns whether client signature verification is ignored (IgnoreClientSigCheck). When true, client signatures during MPC coordination are not verified; set false in production.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get client signature check status
-      tags:
-      - Node Related Info
-  /getLogs:
-    get:
-      consumes:
-      - application/json
-      description: get logs for a specified number of hours back
-      parameters:
-      - description: hours
-        in: query
-        name: hours
-        required: false
-        type: number
-        default: 12
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get logs
-      tags:
-      - Node Related Info
-  /getPresignRequestById:
-    get:
-      consumes:
-      - application/json
-      description: get presign request by id
-      parameters:
-      - description: id
-        in: query
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get presign request by id
-      tags:
-      - Pre Sign
-  /getPresignResultById:
-    get:
-      consumes:
-      - application/json
-      description: get presign result by id
-      parameters:
-      - description: id
-        in: query
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get presign result by id
-      tags:
-      - Pre Sign
-  /getPresigningStatus:
-    get:
-      consumes:
-      - application/json
-      description: get presigning status including configuration and cache levels for all key groups
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get presigning status
-      tags:
-      - Pre Sign
-  /getSignRequestById:
-    get:
-      consumes:
-      - application/json
-      description: get sign request by id
-      parameters:
-      - description: id
-        in: query
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get sign request by id
-      tags:
-      - Sign
-  /getSignResultById:
-    get:
-      consumes:
-      - application/json
-      description: get sign result by id
-      parameters:
-      - description: id
-        in: query
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get sign result by id
-      tags:
-      - Sign
-  /getSuccessRate:
-    get:
-      consumes:
-      - application/json
-      description: get node success rate, including keygen and sign
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get node success rate
-      tags:
-      - Node Related Info
-  /keyGenRequest:
-    post:
-      consumes:
-      - application/json
-      description: send keygen request
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/node.KeyGenRequestPost'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: send keygen request
-      tags:
-      - Key Generation
-  /keyGenRequestAgree:
-    post:
-      consumes:
-      - application/json
-      description: agree keygen request
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/node.KeyGenRequestAgreePost'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: agree keygen request
-      tags:
-      - Key Generation
-  /listKeyGenRequests:
-    get:
-      consumes:
-      - application/json
-      description: list keygen requests
-      parameters:
-      - description: filter
-        in: query
-        name: filter
-        type: string
-      - description: pagenum
-        in: query
-        name: pagenum
-        type: number
-      - description: pagesize
-        in: query
-        name: pagesize
-        type: number
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: list keygen requests
-      tags:
-      - Key Generation
-  /listNeighborNodes:
-    get:
-      consumes:
-      - application/json
-      description: list neighbor nodes
-      parameters:
-      - description: pagenum
-        in: query
-        name: pagenum
-        type: number
-      - description: pagesize
-        in: query
-        name: pagesize
-        type: number
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: list neighbor nodes
-      tags:
-      - Neighbor Nodes Mgt
-  /listNewGroupRequests:
-    get:
-      consumes:
-      - application/json
-      description: list newgroup requests
-      parameters:
-      - description: filter
-        in: query
-        name: filter
-        type: string
-      - description: pagenum
-        in: query
-        name: pagenum
-        type: number
-      - description: pagesize
-        in: query
-        name: pagesize
-        type: number
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: list newgroup requests
-      tags:
-      - Nodes Group
-  /listPingResults:
-    get:
-      consumes:
-      - application/json
-      description: list pingnodes result list
-      parameters:
-      - description: pagenum
-        in: query
-        name: pagenum
-        type: number
-      - description: pagesize
-        in: query
-        name: pagesize
-        type: number
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: list pingnodes result
-      tags:
-      - Ping Nodes
-  /listPresignRequests:
-    get:
-      consumes:
-      - application/json
-      description: list presign requests
-      parameters:
-      - description: filter
-        in: query
-        name: filter
-        type: string
-      - description: pagenum
-        in: query
-        name: pagenum
-        type: number
-      - description: pagesize
-        in: query
-        name: pagesize
-        type: number
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: list presign requests
-      tags:
-      - Pre Sign
-  /listPresignResults:
-    get:
-      consumes:
-      - application/json
-      description: list newgroup results
-      parameters:
-      - description: afterID
-        in: query
-        name: afterID
-        type: string
-      - description: pagenum
-        in: query
-        name: pagenum
-        type: number
-      - description: pagesize
-        in: query
-        name: pagesize
-        type: number
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: list newgroup results
-      tags:
-      - Pre Sign
-  /listSignRequests:
-    get:
-      consumes:
-      - application/json
-      description: list sign requests
-      parameters:
-      - description: filter
-        in: query
-        name: filter
-        type: string
-      - description: pagenum
-        in: query
-        name: pagenum
-        type: number
-      - description: pagesize
-        in: query
-        name: pagesize
-        type: number
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: list sign requests
-      tags:
-      - Sign
-  /newGroupRequest:
-    post:
-      consumes:
-      - application/json
-      description: send newgroup request
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/node.NewGroupRequestPost'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: send newgroup request
-      tags:
-      - Nodes Group
-  /newGroupRequestAgree:
-    post:
-      consumes:
-      - application/json
-      description: agree newgroup request
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/node.NewGroupRequestAgreePost'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: agree newgroup request
-      tags:
-      - Nodes Group
-  /pingNodesRequest:
-    get:
-      consumes:
-      - application/json
-      description: 'send ping request to other nodes, note: can input nodekey arrary
-        as parameters'
-      parameters:
-      - description: nodekey
-        in: query
-        name: nodekey
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: send ping request to other nodes
-      tags:
-      - Ping Nodes
-  /presignRequest:
-    post:
-      consumes:
-      - application/json
-      description: send presign request
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/node.PresignRequestPost'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: send presign request
-      tags:
-      - Pre Sign
-  /presignRequestAgree:
-    post:
-      consumes:
-      - application/json
-      description: agree presign request
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/node.PresinRequestAgreePost'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: agree presign request
-      tags:
-      - Pre Sign
-  /signRequest:
-    post:
-      consumes:
-      - application/json
-      description: send sign request
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/node.SignRequestPost'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: send sign request
-      tags:
-      - Sign
-  /signRequestAgree:
-    post:
-      consumes:
-      - application/json
-      description: agree sign request
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/node.SignRequestAgreePost'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: agree sign request
-      tags:
-      - Sign
-  /updateRelayer:
-    post:
-      consumes:
-      - application/json
-      description: update public keys for the relayer (self-managed, requires signature
-        from existing key)
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/node.RelayerUpdateRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: update relayer public keys
-      tags:
-      - Relayer Management
-  /nodeRegister:
-    post:
-      consumes:
-      - application/json
-      description: one-time registration of node and relayer information (requires NodeMgtKey signature)
-      parameters:
-      - description: request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/node.NodeRegisterRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-        "403":
-          description: Node already registered
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-        "401":
-          description: Invalid signature
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: register node
-      tags:
-      - Node Registration
-  /fetchNodeData:
-    get:
-      consumes:
-      - application/json
-      description: fetch node registration data by node ID (IP:port format)
-      parameters:
-      - description: Node ID in format http://ip:port or https://ip:port
-        in: query
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-        "404":
-          description: Node not found
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: fetch node data
-      tags:
-      - Node Registration
-  /fetchNodeDataByPublicKey:
-    get:
-      consumes:
-      - application/json
-      description: fetch node registration data by node public key (128 hex chars)
-      parameters:
-      - description: Node public key (128 hex chars)
-        in: query
-        name: publicKey
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-        "404":
-          description: Node not found
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: fetch node data by public key
-      tags:
-      - Node Registration
-  /version:
-    get:
-      consumes:
-      - application/json
-      description: get node version
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      summary: get node version
-      tags:
-      - Node Related Info
-swagger: "2.0"
