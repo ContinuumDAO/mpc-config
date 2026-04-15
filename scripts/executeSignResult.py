@@ -275,6 +275,30 @@ def transaction_value_wei_from_merged(merged: dict[str, Any]) -> int:
     return 0
 
 
+def _infer_native_single_empty_msg_raw(d: dict[str, Any]) -> bool:
+    """
+    True when this is a single-tx native ETH send that omits msgRaw entirely: rebuild uses
+    destination + value + txParams (empty calldata). Not used for batch (messageRawBatch).
+    """
+    if not isinstance(d, dict):
+        return False
+    batch = d.get("messageRawBatch") or d.get("message_raw_batch")
+    if isinstance(batch, list) and len(batch) > 0:
+        return False
+    st = pick_str(d, "signatureText", "SignatureText") or ""
+    if "nativeTransfer" in st:
+        return True
+    val = pick_str(d, "value", "Value")
+    if val is not None and str(val).strip() != "":
+        return True
+    ex = _extra_json_object_from_merged(d)
+    if ex.get("sendGas") in (True, "true", "True", "1", 1):
+        return True
+    if ex.get("value") is not None and str(ex.get("value")).strip() != "":
+        return True
+    return False
+
+
 def is_batch_execution(msg_raws: list[str], merged: dict[str, Any]) -> bool:
     if len(msg_raws) > 1:
         return True
@@ -912,6 +936,8 @@ def _message_raws_from_dict(d: dict[str, Any]) -> list[str] | None:
     # Native ETH transfers use empty msgRaw (calldata length 0); still a valid single message.
     if single is not None:
         return [str(single).strip()]
+    if _infer_native_single_empty_msg_raw(d):
+        return [""]
     return None
 
 
@@ -928,8 +954,13 @@ def extract_message_raws(
         got = _message_raws_from_dict(sign_body)
         if got is not None:
             return got
+    merged = merge_sign_detail(sign_body, sign_result if sign_result is not None else {})
+    got = _message_raws_from_dict(merged)
+    if got is not None:
+        return got
     raise ValueError(
-        "No msgRaw/messageRaw/MessageRaw nor messageRawBatch on sign result or sign request."
+        "No msgRaw/messageRaw/MessageRaw nor messageRawBatch on sign result or sign request, "
+        "and could not infer a native ETH transfer (signatureText nativeTransfer, value, or ExtraJSON)."
     )
 
 
