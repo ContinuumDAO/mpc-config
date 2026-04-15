@@ -45,6 +45,9 @@ if str(_SCRIPTS_DIR) not in sys.path:
 from mpc_evm_signing_hash import assert_sign_request_fields_match_message_hash
 
 from mpc_mgt_helpers import (
+    api_code,
+    api_data,
+    api_error,
     compact_json,
     get_ed25519_nonce,
     http_json,
@@ -91,7 +94,7 @@ def list_sign_requests_ready_ids(base: str, pagesize: int) -> list[str]:
             "/listSignRequestsReady",
             query={"pagenum": str(pagenum), "pagesize": str(pagesize)},
         )
-        data = parsed.get("data")
+        data = api_data(parsed)
         if not isinstance(data, list) or not data:
             break
         for item in data:
@@ -123,11 +126,6 @@ def sign_result_has_signatures(data: Any) -> bool:
     return bool(data.get("signaturehex") or data.get("sigr"))
 
 
-def _api_code(resp: dict[str, Any]) -> Any:
-    c = resp.get("code")
-    return c if c is not None else resp.get("Code")
-
-
 def _get_sign_request_dict(base: str, request_id: str) -> dict[str, Any]:
     r = http_json_any_code(
         "GET",
@@ -135,10 +133,10 @@ def _get_sign_request_dict(base: str, request_id: str) -> dict[str, Any]:
         "/getSignRequestById",
         query={"id": request_id},
     )
-    c = _api_code(r)
+    c = api_code(r)
     if c is not None and c != 0:
         raise RuntimeError(f"getSignRequestById failed (code={c}): {r!r}")
-    data = r.get("data") if r.get("data") is not None else r.get("Data")
+    data = api_data(r)
     if not isinstance(data, dict):
         raise RuntimeError(f"getSignRequestById: expected data object, got {data!r}")
     return data
@@ -261,12 +259,12 @@ def poll_sign_result_ready(
             query={"id": request_id},
         )
         last = r
-        if r.get("code") == 0:
-            data = r.get("data")
+        if api_code(r) == 0:
+            data = api_data(r)
             if sign_result_has_signatures(data):
                 return data if isinstance(data, dict) else {}
         time.sleep(interval_sec)
-    err = (last or {}).get("error", "") if last else ""
+    err = api_error(last) if last else ""
     raise RuntimeError(
         f"Timed out waiting for signatures for {request_id!r} ({timeout_sec}s). Last error: {err!r}"
     )
@@ -379,7 +377,7 @@ def handle_sign_ready(
         step: dict[str, Any] = {"requestId": rid}
         try:
             tr = post_trigger_sign_request(base, priv, rid)
-            step["trigger"] = tr.get("data")
+            step["trigger"] = api_data(tr)
         except Exception as e:
             step["error"] = f"trigger: {e}"
             out["steps"].append(step)

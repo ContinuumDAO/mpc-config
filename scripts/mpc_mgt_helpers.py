@@ -47,6 +47,33 @@ def resolve_mpc_auth_base(mpc_auth_url: str, management_port: str | int | None) 
     return urllib.parse.urlunparse(p._replace(netloc=f"{p.netloc}:{port}")).rstrip("/")
 
 
+def api_code(resp: dict[str, Any]) -> Any:
+    """Management API envelope: ``code`` or ``Code`` (prefer ``code`` when both exist)."""
+    if not isinstance(resp, dict):
+        return None
+    if "code" in resp:
+        return resp["code"]
+    return resp.get("Code")
+
+
+def api_error(resp: dict[str, Any]) -> Any:
+    """Management API envelope: ``error`` or ``Error``."""
+    if not isinstance(resp, dict):
+        return None
+    if "error" in resp:
+        return resp["error"]
+    return resp.get("Error")
+
+
+def api_data(resp: dict[str, Any]) -> Any:
+    """Management API envelope: ``data`` or ``Data`` (prefer ``data`` when both exist)."""
+    if not isinstance(resp, dict):
+        return None
+    if "data" in resp:
+        return resp["data"]
+    return resp.get("Data")
+
+
 def http_json(
     method: str,
     base: str,
@@ -78,8 +105,11 @@ def http_json(
         parsed = json.loads(payload)
     except json.JSONDecodeError as e:
         raise RuntimeError(f"Invalid JSON from {path}: {payload[:500]}") from e
-    if parsed.get("code") != 0:
-        raise RuntimeError(f"API error {path}: {parsed.get('error', '')!r} data={parsed.get('data')}")
+    c = api_code(parsed)
+    if c is not None and c != 0:
+        raise RuntimeError(
+            f"API error {path}: {api_error(parsed)!r} data={api_data(parsed)!r}"
+        )
     return parsed
 
 
@@ -180,7 +210,7 @@ def get_ed25519_nonce(base: str, pub_hex: str) -> int:
         "/getPublicMgtKeyNonce",
         query={"publicKey": pub_hex},
     )
-    data = nonce_resp.get("data")
+    data = api_data(nonce_resp)
     if isinstance(data, dict) and "nonce" in data:
         nonce = data["nonce"]
     elif isinstance(data, int):

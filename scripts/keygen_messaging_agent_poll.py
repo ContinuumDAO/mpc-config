@@ -45,6 +45,7 @@ import sys
 from typing import Any
 
 from mpc_mgt_helpers import (
+    api_data,
     compact_json,
     get_ed25519_nonce,
     http_json,
@@ -74,7 +75,7 @@ def _list_unread_page(
             "pagesize": str(pagesize),
         },
     )
-    data = parsed.get("data") or {}
+    data = api_data(parsed) or {}
     lst = data.get("list") or []
     total = int(data.get("total") or 0)
     if not isinstance(lst, list):

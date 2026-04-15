@@ -94,6 +94,8 @@ if _spec is None or _spec.loader is None:
 _forge = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_forge)
 
+from mpc_mgt_helpers import api_code, api_data, api_error
+
 import generateMultiSignRequestFromCompose as _compose
 
 hex_to_bytes = _forge.hex_to_bytes
@@ -166,22 +168,12 @@ def rpc_call(url: str, method: str, params: list[Any]) -> Any:
     return out.get("result")
 
 
-def _api_code(resp: dict[str, Any]) -> Any:
-    """Management API may use ``code`` / ``Code`` (JSON from tools or older clients)."""
-    c = resp.get("code")
-    return c if c is not None else resp.get("Code")
-
-
-def _api_data(resp: dict[str, Any]) -> Any:
-    return resp.get("data") if resp.get("data") is not None else resp.get("Data")
-
-
 def unwrap_api_response(resp: dict[str, Any], what: str) -> Any:
-    c = _api_code(resp)
+    c = api_code(resp)
     if c is not None and c != 0:
-        err = resp.get("error") or resp.get("Error") or str(resp)
+        err = api_error(resp) or str(resp)
         raise ValueError(f"{what} failed (code={c}): {err}")
-    return _api_data(resp)
+    return api_data(resp)
 
 
 def fetch_sign_result(mpc_base: str, request_id: str) -> dict[str, Any]:
@@ -209,8 +201,8 @@ def fetch_sign_request_tx_params(mpc_base: str, request_id: str) -> dict[str, An
         resp = http_get_json(f"{mpc_base.rstrip('/')}/getSignRequestById?{q}")
     except (ValueError, OSError, json.JSONDecodeError):
         return None
-    c = _api_code(resp)
-    data = _api_data(resp)
+    c = api_code(resp)
+    data = api_data(resp)
     if (c is not None and c != 0) or data is None:
         return None
     if not isinstance(data, dict):
@@ -602,11 +594,11 @@ def signed_raw_single_like_app(
 def fetch_chain_detail_for_id(mpc_base: str, chain_id_num: int) -> dict[str, Any]:
     base = mpc_base.rstrip("/")
     resp = http_get_json(f"{base}/getChainDetails?chain_id={chain_id_num}")
-    ac = _api_code(resp)
+    ac = api_code(resp)
     if ac is not None and ac != 0:
-        err = resp.get("error") or resp.get("Error") or str(resp)
+        err = api_error(resp) or str(resp)
         raise ValueError(f"getChainDetails failed (code={ac}): {err}")
-    data = _api_data(resp)
+    data = api_data(resp)
     rows: list[dict[str, Any]]
     if isinstance(data, list):
         rows = [x for x in data if isinstance(x, dict)]

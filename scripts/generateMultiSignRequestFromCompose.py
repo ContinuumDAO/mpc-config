@@ -133,6 +133,8 @@ _scripts_dir = Path(__file__).resolve().parent
 if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 
+from mpc_mgt_helpers import api_code, api_data, api_error
+
 _spec = importlib.util.spec_from_file_location(
     "forge_sign",
     _scripts_dir / "generateSignRequestWithFoundryScript.py",
@@ -313,23 +315,13 @@ def http_get_json(url: str) -> dict[str, Any]:
         raise ValueError(f"Invalid JSON: {e}") from e
 
 
-def _api_code(resp: dict[str, Any]) -> Any:
-    """Management API may use ``code`` / ``Code`` (JSON from tools or older clients)."""
-    c = resp.get("code")
-    return c if c is not None else resp.get("Code")
-
-
-def _api_data(resp: dict[str, Any]) -> Any:
-    return resp.get("data") if resp.get("data") is not None else resp.get("Data")
-
-
 def _unwrap_management_api(resp: dict[str, Any], what: str) -> Any:
     """Require success (code 0 or omitted) and return ``data`` / ``Data`` (same as executeSignResult)."""
-    c = _api_code(resp)
+    c = api_code(resp)
     if c is not None and c != 0:
-        err = resp.get("error") or resp.get("Error") or str(resp)
+        err = api_error(resp) or str(resp)
         raise ValueError(f"{what} failed (code={c}): {err}")
-    return _api_data(resp)
+    return api_data(resp)
 
 
 def fetch_keygen_bundle(mpc_base: str, key_gen_id: str) -> dict[str, Any]:

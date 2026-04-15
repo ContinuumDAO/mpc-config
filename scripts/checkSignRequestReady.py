@@ -30,6 +30,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import Any
 
 _HTTP_UA = "checkSignRequestReady/1.0 (Python-urllib)"
 DEFAULT_MPC_AUTH_URL = "http://127.0.0.1"
@@ -70,11 +71,31 @@ def http_get_json(url: str) -> dict:
     return json.loads(raw)
 
 
+def _api_code(resp: dict) -> Any:
+    """Management API envelope: ``code`` or ``Code`` (stdlib-only; mirrors mpc_mgt_helpers)."""
+    if "code" in resp:
+        return resp["code"]
+    return resp.get("Code")
+
+
+def _api_error(resp: dict) -> Any:
+    if "error" in resp:
+        return resp["error"]
+    return resp.get("Error")
+
+
+def _api_data(resp: dict) -> Any:
+    if "data" in resp:
+        return resp["data"]
+    return resp.get("Data")
+
+
 def unwrap_api_response(resp: dict, what: str):
-    if resp.get("code") != 0:
-        err = resp.get("error") or str(resp)
-        raise ValueError(f"{what} failed (code={resp.get('code')}): {err}")
-    return resp.get("data")
+    c = _api_code(resp)
+    if c is not None and c != 0:
+        err = _api_error(resp) or str(resp)
+        raise ValueError(f"{what} failed (code={c}): {err}")
+    return _api_data(resp)
 
 
 def pick_str(d: dict, *keys: str):
@@ -121,10 +142,10 @@ def fetch_sign_result_status(mpc_base: str, request_id: str) -> tuple[str, dict 
         resp = http_get_json(url)
     except ValueError as e:
         return "http_error", None, str(e)
-    code = resp.get("code")
+    code = _api_code(resp)
     if code != 0:
-        return "none", None, str(resp.get("error") or "")
-    data = resp.get("data")
+        return "none", None, str(_api_error(resp) or "")
+    data = _api_data(resp)
     if not isinstance(data, dict):
         return "none", None, None
     return "ok", data, None
