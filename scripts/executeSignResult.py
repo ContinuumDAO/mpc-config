@@ -13,6 +13,14 @@ config from ``GET /getChainDetails``, and RPC ``estimateGas`` / fee discovery �
 ``gasMultiplier`` / ``gasPrice`` handling, and ``max(chain gasLimit, eth_estimateGas)``). The old “decode ``MessageRaw`` RLP only” approach often failed
 because MPC signs the hash of that **reconstructed** payload, not an arbitrary or stale RLP blob.
 
+**Native ETH (gas-token) sends** use **empty** ``msgRaw`` (no calldata). That is treated as a valid
+single message. The transfer amount in **wei** is read from ``value`` / ``Value`` on the sign
+request or result, and from ``ExtraJSON`` / ``extraJSON`` when the API merged ``value`` there
+(see API_IMPLEMENTATION.md send-gas / multi-agree fields). Current ``generateMultiSignRequestFromCompose``
+includes top-level ``value`` on ``bodyForSign`` for native actions.
+
+
+
 **Batch:** still pairs ``batchsignatures[i]`` with ``MessageRawBatch[i]`` unsigned RLP (same as the
 app ``buildBatchSignedTxsFromResult``).
 
@@ -237,6 +245,36 @@ def merge_sign_detail(sign_body: dict[str, Any] | None, sign_data: dict[str, Any
     return out
 
 
+def _extra_json_object_from_merged(merged: dict[str, Any]) -> dict[str, Any]:
+    """Parse ExtraJSON / extra_json when present (send-gas / native value may be stored here)."""
+    for key in ("extraJSON", "ExtraJSON", "extra_json"):
+        raw = merged.get(key)
+        if raw is None or str(raw).strip() == "":
+            continue
+        try:
+            j = json.loads(str(raw))
+            if isinstance(j, dict):
+                return j
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return {}
+
+
+def transaction_value_wei_from_merged(merged: dict[str, Any]) -> int:
+    """
+    Native transfer / send-gas amount in wei. Prefer top-level value; then ExtraJSON.value
+    (see API_IMPLEMENTATION.md).
+    """
+    val = pick_str(merged, "value", "Value")
+    if val is not None and str(val).strip() != "":
+        return int(str(val).strip(), 0)
+    ex = _extra_json_object_from_merged(merged)
+    v2 = ex.get("value")
+    if v2 is not None and str(v2).strip() != "":
+        return int(str(v2).strip(), 0)
+    return 0
+
+
 def is_batch_execution(msg_raws: list[str], merged: dict[str, Any]) -> bool:
     if len(msg_raws) > 1:
         return True
@@ -327,15 +365,7 @@ def build_unsigned_single_tx_dict_app_style(
     else:
         data_b = bytes(data_b)
 
-    val_raw = (
-        pick_str(merged, "value", "Value")
-        or merged.get("value")
-        or merged.get("Value")
-    )
-    if val_raw is None or val_raw == "":
-        value_int = 0
-    else:
-        value_int = int(str(val_raw).strip(), 0) if isinstance(val_raw, str) and val_raw.startswith("0x") else int(val_raw)
+    value_int = transaction_value_wei_from_merged(merged)
 
     fee_params = _compose.fetch_chain_fee_params(rpc_url, chain_id_num)
 
@@ -879,7 +909,8 @@ def _message_raws_from_dict(d: dict[str, Any]) -> list[str] | None:
     if isinstance(batch, list) and len(batch) > 0:
         return [str(x) for x in batch]
     single = pick_str(d, "msgRaw", "messageRaw", "msg_raw", "MessageRaw")
-    if single is not None and str(single).strip():
+    # Native ETH transfers use empty msgRaw (calldata length 0); still a valid single message.
+    if single is not None:
         return [str(single).strip()]
     return None
 

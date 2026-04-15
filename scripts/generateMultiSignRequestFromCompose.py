@@ -733,6 +733,38 @@ def _compose_exec_setup(compose: dict[str, Any], mpc_auth_url: str) -> ComposeEx
     )
 
 
+def native_transfer_value_wei_from_compose_action(raw_act: dict[str, Any]) -> int:
+    """Parse nativeTransfer compose action amount in wei (same rules as ``_compose_action_tx_dict``)."""
+    inputs = raw_act.get("inputs") or []
+    if not isinstance(inputs, list):
+        raise ValueError("composeActions: nativeTransfer inputs must be an array")
+    if len(inputs) != 1:
+        raise ValueError(
+            "composeActions: nativeTransfer requires exactly one input (uint256 value)"
+        )
+    param_units = raw_act.get("paramUnits") or raw_act.get("param_units") or {}
+    if not isinstance(param_units, dict):
+        param_units = {}
+    param_units_norm = {str(k): str(v) for k, v in param_units.items()}
+    inp0 = inputs[0] or {}
+    typ0 = str(inp0.get("type") or "uint256").strip()
+    if not is_uint256_type(typ0):
+        raise ValueError(
+            f"composeActions: nativeTransfer input must be uint256 (got {typ0!r})"
+        )
+    unit_key = "0"
+    unit = param_units_norm.get(unit_key) or param_units_norm.get(unit_key.zfill(1)) or "Wei"
+    raw_v = inp0.get("value")
+    val = display_value_to_raw(str(raw_v if raw_v is not None else ""), unit)
+    try:
+        value_wei = int(val)
+    except ValueError as e:
+        raise ValueError(f"composeActions: nativeTransfer value: {e}") from e
+    if value_wei < 0:
+        raise ValueError("composeActions: nativeTransfer value must be >= 0")
+    return value_wei
+
+
 def _compose_action_tx_dict(
     raw_act: dict[str, Any],
     index: int,
@@ -772,26 +804,10 @@ def _compose_action_tx_dict(
 
     value_wei: int | None = None
     if is_native:
-        if len(inputs) != 1:
-            raise ValueError(
-                f"composeActions[{index}]: nativeTransfer requires exactly one input (uint256 value)"
-            )
-        inp0 = inputs[0] or {}
-        typ0 = str(inp0.get("type") or "uint256").strip()
-        if not is_uint256_type(typ0):
-            raise ValueError(
-                f"composeActions[{index}]: nativeTransfer input must be uint256 (got {typ0!r})"
-            )
-        unit_key = "0"
-        unit = param_units_norm.get(unit_key) or param_units_norm.get(unit_key.zfill(1)) or "Wei"
-        raw_v = inp0.get("value")
-        val = display_value_to_raw(str(raw_v if raw_v is not None else ""), unit)
         try:
-            value_wei = int(val)
+            value_wei = native_transfer_value_wei_from_compose_action(raw_act)
         except ValueError as e:
-            raise ValueError(f"composeActions[{index}]: nativeTransfer value: {e}") from e
-        if value_wei < 0:
-            raise ValueError(f"composeActions[{index}]: nativeTransfer value must be >= 0")
+            raise ValueError(f"composeActions[{index}]: {e}") from e
         calldata = "0x"
         data_hex = "0x"
     else:
@@ -1051,6 +1067,7 @@ def build_compose_multisign(
         native0 = bool(actions[0].get("nativeTransfer") or actions[0].get("native_transfer"))
         if native0:
             msg_raw_calldata = ""
+            body["value"] = str(native_transfer_value_wei_from_compose_action(actions[0]))
         else:
             pu0 = actions[0].get("paramUnits") or actions[0].get("param_units") or {}
             pu_map = {str(k): str(v) for k, v in pu0.items()} if isinstance(pu0, dict) else {}
