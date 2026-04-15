@@ -234,13 +234,16 @@ To react when someone `@mentions` the agent in the KeyGen channel, use **Open Cl
 
 **Poll period (select one):** Run **`$MPA_PATH/scripts/mpc_cron_schedules.py`** to print the allowed intervals, or **`--interactive`** to pick by number. The fixed choices are **every 1, 5, 10, 30, 60 minutes** and **every 2, 4, 6, 8, 10, 12, 24 hours**. Each row gives an Open Claw **`--every`** string (e.g. **`1m`**, **`5m`**, **`1h`**, **`2h`**) and a standard **crontab** five-field line for non–Open Claw timers.
 
-**Example cron** (adjust paths; pick **`--every`** from **`mpc_cron_schedules.py`**). Ensure the job may run `exec`. Keep `--message` on one line so the shell parses it reliably:
+**Example cron** (adjust paths). The schedule is **not** fixed: run **`$MPA_PATH/.venv/bin/python $MPA_PATH/scripts/mpc_cron_schedules.py`** (or **`--interactive`**) and copy the **Open Claw `--every`** value you want (see **Poll period** above). Set shell variable **`EVERY`** to that string, then:
 
 ```bash
-openclaw cron add --name "keygen-agent-inbox" --every "5m" --session isolated \
+EVERY="5m"  # replace with your choice from mpc_cron_schedules.py (e.g. 1m, 30m, 1h, 12h, 24h)
+openclaw cron add --name "keygen-agent-inbox" --every "$EVERY" --session isolated \
   --message "Run: $MPA_PATH/.venv/bin/python $MPA_PATH/scripts/keygen_messaging_agent_poll.py. Parse the JSON on stdout. If match_count > 0: for each match read title and body (and getMessageThread if needed), figure out what the user wants, then do it—tools, management POSTs as appropriate, and/or reply via POST /sendMessage (Nonce, Sig, keyGenId, title or replyTo+body; see API_KEYGEN_MESSAGING.md). Body max 512 chars." \
   --tools "exec,read"
 ```
+
+Ensure the job may run `exec`. Keep `--message` on one line so the shell parses it reliably.
 
 The isolated job should inherit the same env as the agent service (**`KEYGEN_ID`**, **`AUTH_KEY_PATH`**, **`MPC_AUTH_URL`**, etc.). The poll script only **lists, filters, and marks read**. **Acting on message content** (reasoning, **`POST /sendMessage`**, other APIs) is always done by the agent per **`--message`** / **SKILL.md**—not by the Python script.
 
