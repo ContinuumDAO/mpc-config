@@ -21,7 +21,7 @@ If the user's node is already a part of a Group which has already created a KeyG
 
 ### AUTH_KEY_PATH
 
-The agent uses an ed25519 key to authenticate API interactions. This key is stored somewhere on the node (local to the agent). By default, it is `~/.ssh/mpc_auth_ed25519`, but may also be specified by the node owner via this environmental variable.
+The agent uses an ed25519 key to authenticate API interactions. **`AUTH_KEY_PATH`** must be a **directory** containing the private key file; the default basename is **`mpc_auth_ed25519`** (set **`AUTH_KEY_FILENAME`** to override). If **`AUTH_KEY_PATH`** is unset, the file **`~/.ssh/mpc_auth_ed25519`** is used.
 
 ## Groups
 

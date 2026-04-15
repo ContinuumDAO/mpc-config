@@ -29,8 +29,11 @@ Names align with ``docs/skill/SKILL.md`` (``KEYGEN_ID``, ``AUTH_KEY_PATH``) plus
 script-specific variables below.
 
 KEYGEN_ID                   KeyGen channel id (required).
-AUTH_KEY_PATH               Ed25519 management private key file (default
-                            ``~/.ssh/mpc_auth_ed25519``). PEM or OpenSSH; see AGENT_ED25519_SETUP.md.
+AUTH_KEY_PATH               Directory containing the Ed25519 management private key file
+                            (see ``AUTH_KEY_FILENAME``). If unset, the key file is
+                            ``~/.ssh/mpc_auth_ed25519``. Must not be a path to the key file itself.
+AUTH_KEY_FILENAME           Basename of the key file inside ``AUTH_KEY_PATH`` (default
+                            ``mpc_auth_ed25519``). PEM or OpenSSH; see AGENT_ED25519_SETUP.md.
 MPC_AUTH_URL                Management API host URL (default ``http://127.0.0.1``).
 MANAGEMENT_PORT             Management API port (default ``8080``).
 MPC_MGT_ED25519_SEED_HEX    Optional 64-hex (32-byte) raw seed; overrides key file.

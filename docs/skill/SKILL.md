@@ -131,7 +131,8 @@ Default env file: **`$MPA_PATH/.env`**. Load this file first (if present) before
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | **`KEYGEN_ID`** | If set, prefer this KeyGen for signing when unambiguous. If unset or ambiguous, ask the user via the configured channel (e.g. gateway **port 18789**). | Unset |
-| **`AUTH_KEY_PATH`** | Ed25519 **management** private key used to sign API bodies. | `~/.ssh/mpc_auth_ed25519` |
+| **`AUTH_KEY_PATH`** | Directory containing the Ed25519 **management** private key (see **`AUTH_KEY_FILENAME`**). If **unset**, scripts resolve the file **`~/.ssh/mpc_auth_ed25519`** (equivalent to directory `~/.ssh` + default name). | Unset (→ `~/.ssh/mpc_auth_ed25519`) |
+| **`AUTH_KEY_FILENAME`** | Basename of the key file inside **`AUTH_KEY_PATH`** (when set). | `mpc_auth_ed25519` |
 | **`MPA_PATH`** | If set, points to the directory containing references, scripts, recipes, and tools. | `~/.mpa` |
 | **`MPC_CONFIG_PATH`** | Absolute path to the node `configs.yaml` for this deployment (operator-defined, no hardcoded user/home assumption). | `/path/to/mpc-config/configs.yaml` |
 | **`MPC_AUTH_URL`** | Points to the base URL of the management API. | `http://127.0.0.1` |
