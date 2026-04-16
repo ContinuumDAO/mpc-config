@@ -39,3 +39,7 @@ Thumbs.db
 forge/out/
 forge/cache/
 forge/broadcast/
+
+#Python compilations
+scripts/__pycache__/
+recipes/__pycache__/
