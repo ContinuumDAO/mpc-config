@@ -448,4 +448,6 @@ NONCE=$(cast nonce "$WALLET_ADDRESS" --rpc-url "$RPC")
 ## Style notes for agents
 
 - Prefer **exact** JSON bodies and canonical signing strings as described in **API_IMPLEMENTATION**.
+- Lookup REST API endpoints in swagger.yaml first and only refer to API_IMPLEMENTATION if you need more details.
 - Use **`Thoughts`** and **`Purpose`** as durable audit and coordination context across nodes.
+- Use the API_KEYGEN_MESSAGING to keep the users in the group informed.
