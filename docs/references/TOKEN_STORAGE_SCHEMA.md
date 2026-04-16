@@ -162,7 +162,7 @@ Here `ID` is the RWA token ID, `version` is the RWA contract version; addresses 
 
 ## Adding and removing tokens
 
-- **POST /addToken**: Send `chainType`, `chainId`, `tokenType`, and `contract` (with at least `contractAddress`). For ERC721, include `tokenId` in the contract; the same (chainType, chainId, tokenType, contractAddress, tokenId) is updated if it exists, otherwise the contract is appended.
+- **POST /addToken**: Send `chainType`, `chainId`, `tokenType`, and `contract` (with at least `contractAddress`). For ERC721, include `tokenId` in the contract; the same (chainType, chainId, tokenType, contractAddress, tokenId) is updated if it exists, otherwise the contract is appended. **Agents:** For token types that store **`decimals`** (e.g. **ERC20**, **CTMERC20**), you **must** obtain the correct decimals from the **user or operator** (or from authoritative on-chain reads the user approves). **Do not** assume or default to **18**—many tokens use 6, 8, or other values; wrong decimals corrupt amounts and UX.
 - **POST /removeToken**: Send `chainType`, `chainId`, `tokenType`, and `contractAddress` to remove that contract from the list. For **ERC721**, `tokenId` is required: only the contract entry with that `contractAddress` and `tokenId` is removed.
 
 Both endpoints require management key signature (same as `postChainDetails` / `removeChainDetails`).
