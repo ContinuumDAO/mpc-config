@@ -42,6 +42,22 @@ on-chain address (EVM today) whose **MPC signature** requires cooperation of **a
 least threshold+1** nodes in a **Group**. No single node holds the full private
 key.
 
+## Examples of usage
+
+Here are some examples of what a user can say to their AI agent
+
+- Create a new KeyGen using the Group with all the nodes and tell me its Ethereum address. 
+  Use this KeyGen from now on.
+- I have added a little ETH to the new Ethereum address on Linea. Please register it.
+- Add the chain Linea mainnet to my node.
+- I added some ETH and USDC to my new Ethereum address on Arbitrum mainnet. Please add 
+  the ERC20 Asset USDC contract 0xaf88d065e77c8cC2239327C5EDb3A432268e5831 with decimals 6 on Arbitrum.
+- Add Arbitrum mainnet to my chain config
+- Add a new contact Fred with address 0xf33c74Ee25061966efC645BF2244F6EB0a492511
+- Send Fred 100 USDC on Arbitrum
+- Send Fred 1 ETH
+
+
 ## Prerequisites
 
 This skill assumes the **operator has already provisioned an MPA wallet
