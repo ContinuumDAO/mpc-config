@@ -109,7 +109,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getAllGroupIds`](#get-getallgroupids) - Get all GroupIds with their keyGens
 
 ### KeyGen Messaging
-KeyGen messaging is documented in [API_KEYGEN_MESSAGING.md](./API_KEYGEN_MESSAGING.md). Response format and conventions follow this document ([API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)). **sendMessage, markMessageRead, multiMarkMessagesRead, deleteMessage, and multiDeleteMessages require a management key signature** (MetaMask or Ed25519, depending on the client key in the keyGen); see API_KEYGEN_MESSAGING.md for Nonce/Sig and getMessageToSign / getNodeMgtKeyNonce / getAllowedEd25519MgtKeys. For **Open Claw** (or similar) on the node host, a poll-and-mark-read helper that uses `listMessages` + `multiMarkMessagesRead` is `$MPA_PATH/scripts/keygen_messaging_agent_poll.py`; setup details are in [AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md) §8.5.
+KeyGen messaging is documented in `./API_KEYGEN_MESSAGING.md`. Response format and conventions follow this document (`./API_IMPLEMENTATION.md`). **sendMessage, markMessageRead, multiMarkMessagesRead, deleteMessage, and multiDeleteMessages require a management key signature** (MetaMask or Ed25519, depending on the client key in the keyGen); see API_KEYGEN_MESSAGING.md for Nonce/Sig and getMessageToSign / getNodeMgtKeyNonce / getAllowedEd25519MgtKeys. For **Open Claw** (or similar), a poll-and-mark-read helper that uses `listMessages` + `multiMarkMessagesRead` is `$MPA_PATH/scripts/keygen_messaging_agent_poll.py`; scheduling and env are described in `../skill/SKILL.md` (**KeyGen inbox poll**). Ed25519 management signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`.
 - `POST /sendMessage` - Send a message (top-level or reply) in a keyGen channel (mgt key required)
 - `GET /listMessages` - List messages (with unread, time range, top_level, pagination)
 - `GET /getMessageById` - Get a single message by id
@@ -1457,11 +1457,11 @@ Returns all token configs stored on this node, grouped by `chainType`. Response 
 
 **Response:** `{ "code": 0, "error": "", "data": { "ethereum": [ ... ], "solana": [ ... ], ... } }`
 
-See [Token storage schema](./TOKEN_STORAGE_SCHEMA.md) for the full JSON structure and CTMRWA1 transfer signatures.
+See `./TOKEN_STORAGE_SCHEMA.md` for the full JSON structure and CTMRWA1 transfer signatures.
 
 ### Known Addresses (local node only)
 
-Known addresses are stored on the local node only (not propagated). Each entry is scoped by chain type (e.g. `ethereum`, `solana`) and includes an address, optional `name`, optional `chainIds` (empty = valid on all chains of that type), and `isContract` (false = EOA). See [Known Addresses schema](./KNOWN_ADDRESSES_SCHEMA.md).
+Known addresses are stored on the local node only (not propagated). Each entry is scoped by chain type (e.g. `ethereum`, `solana`) and includes an address, optional `name`, optional `chainIds` (empty = valid on all chains of that type), and `isContract` (false = EOA). See `./KNOWN_ADDRESSES_SCHEMA.md`.
 
 <a id="post-addknownaddress"></a>
 #### `POST /addKnownAddress`
@@ -1528,7 +1528,7 @@ Returns all known addresses stored on this node, grouped by chain type. Each ent
 
 **Response:** `{ "code": 0, "error": "", "data": { "ethereum": [ { "address": "0x...", "name": "My Wallet", "chainIds": ["1", "137"], "isContract": false, "updatedAt": "..." }, ... ], "solana": [ ... ], ... } }`
 
-See [Known Addresses schema](./KNOWN_ADDRESSES_SCHEMA.md) for the full document shape.
+See `./KNOWN_ADDRESSES_SCHEMA.md` for the full document shape.
 
 ### 3. Node Tools
 

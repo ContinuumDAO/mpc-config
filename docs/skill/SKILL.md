@@ -1,7 +1,11 @@
 ---
+
 name: mpa-wallet
-description: Operate and automate threshold multisignature workflows for MPC/MPA wallets on an isolated, dedicated host that contains no unrelated sensitive data or private keys.
-version: 1.0.10
+description: >
+  Operate and automate threshold multisignature workflows for MPC/MPA wallets
+  on an isolated, dedicated host that contains no unrelated sensitive data or
+  private keys.
+version: 1.0.12
 metadata:
   openclaw:
     requires:
@@ -26,130 +30,291 @@ metadata:
     primaryEnv: MPC_AUTH_URL
     os:
       - linux
-    homepage: https://clawhub.ai/patrickcure/mpa-wallet
+homepage: https://clawhub.ai/patrickcure/mpa-wallet
+
 ---
 
 # Skill: MPA / MPC wallet agent (OpenClaw / Clawhub)
 
-Use this skill when operating an **AI agent** (e.g. **OpenClaw**) that manages an **mpc-auth** node participating in a **Multi-Party Agent (MPA) wallet**: a single on-chain address (EVM today) whose **MPC signature** requires cooperation of **at least threshold+1** nodes in a **Group**. No single node holds the full private key.
+Use this skill when operating an **AI agent** (e.g. **OpenClaw**) that manages an
+**mpc-auth** node participating in a **Multi-Party Agent (MPA) wallet**: a single
+on-chain address (EVM today) whose **MPC signature** requires cooperation of **at
+least threshold+1** nodes in a **Group**. No single node holds the full private
+key.
 
 ## Prerequisites
 
-This skill assumes the **operator has already provisioned an MPA wallet environment** in ContinuumDAO terms—not a single standalone node:
+This skill assumes the **operator has already provisioned an MPA wallet
+environment** in ContinuumDAO terms—not a single standalone node:
 
-- **At least two mpc-auth nodes** must exist: one run by a **human** and one run for the **AI agent**. Threshold signing requires multiple parties; a minimal useful setup pairs a human-controlled node with an agent-controlled node.
-- The **agent’s node** must use **Ed25519 management signing** (`PublicMgtKey` / `POST /addManagementKey` flow) so automated `POST` calls to the management API are authenticated without MetaMask. See **[AGENT_ED25519_SETUP.md]($MPA_PATH/references/AGENT_ED25519_SETUP.md)** in this repo for technical steps.
+- **At least two mpc-auth nodes** must exist: one run by a **human** and one run
+for the **AI agent**. Threshold signing requires multiple parties; a minimal
+useful setup pairs a human-controlled node with an agent-controlled node.
+- The **agent’s node** must use **Ed25519 management signing** so automated
+`POST` calls to the management API are authenticated without MetaMask (operator
+provisions `**PublicMgtKey`** / allow-list). Operational signing details:
+`**$MPA_PATH/references/ED25519_MANAGEMENT_KEY_SIGNING.md**`.
 
 ## Host security requirements (mandatory)
 
-- Run this skill only on a **dedicated, isolated machine** used for MPC node operations.
-- Do **not** run this skill on hosts that contain unrelated secrets, wallets, SSH keys, cloud credentials, or developer tokens.
-- The only private key material available to the agent should be the **dedicated management key** used for management API authentication.
-- Restrict filesystem and network permissions to only what is required for the local mpc-auth node and expected RPC/API endpoints.
-- Prefer a dedicated key path (outside your normal user SSH key set) and ensure this key is not reused for other systems.
-- Ensure that there is at least one human-controlled node in the threshold + 1 required by the MPC algorithm to prevent malicious takeover via prompt injection of management signing keys compromising the MPC KeyGen.
+- Run this skill only on a **dedicated, isolated machine** used for MPC node
+  operations.
+- Do **not** run this skill on hosts that contain unrelated secrets, wallets,
+  SSH keys, cloud credentials, or developer tokens.
+- The only private key material available to the agent should be the **dedicated
+  management key** used for management API authentication.
+- Restrict filesystem and network permissions to only what is required for the
+  local mpc-auth node and expected RPC/API endpoints.
+- Prefer a dedicated key path (outside your normal user SSH key set) and ensure
+  this key is not reused for other systems.
+- Ensure that there is at least one human-controlled node in the **threshold+1**
+  required by the MPC algorithm, so the group cannot be taken over solely via
+  prompt injection against an automated management-signing client.
 
 ## Scope and egress guardrails (mandatory)
 
-- This skill is limited to **local MPA operations**: management API calls on **`$MPC_AUTH_URL:$MANAGEMENT_PORT`**, chain RPC calls configured by the node, and local files under **`$MPA_PATH`** plus the dedicated management key path.
-- Do **not** send data to external messaging platforms or third-party web APIs unless the operator explicitly enables that behavior outside this skill.
-- Do **not** read unrelated files, shell history, home-directory secrets, cloud credentials, wallet files, or SSH keys other than the dedicated management key.
-- Treat **`AUTH_KEY_PATH`** material as high-privilege signing input only: never print or transmit private key contents.
-- If a task would require leaving this scope, stop and ask for explicit operator approval first.
+- This skill is limited to **local MPA operations**: management API calls on
+`**$MPC_AUTH_URL:$MANAGEMENT_PORT**`, chain RPC calls configured by the node,
+and local files under `**$MPA_PATH**` plus the dedicated management key path.
+- Do **not** send data to external messaging platforms or third-party web APIs
+unless the operator explicitly enables that behavior outside this skill.
+- Do **not** read unrelated files, shell history, home-directory secrets, cloud
+credentials, wallet files, or SSH keys other than the dedicated management key.
+- Treat `**AUTH_KEY_PATH**` material as high-privilege signing input only: never
+print or transmit private key contents.
+- If a task would require leaving this scope, stop and ask for explicit operator
+approval first.
 
 **ContinuumDAO documentation** (end-user setup, before this skill applies):
 
-| Topic | Link |
-|--------|------|
-| **Running a node** (install, configure, operate an mpc-auth node) | [Node running instructions](https://docs.continuumdao.org/ContinuumDAO/RunningInstructions/NodeRunningInstruction) |
-| **Creating an MPC signer** (forming a **Group**, running **KeyGen**, obtaining the shared MPC wallet / address) | [Create MPC signer](https://docs.continuumdao.org/ContinuumDAO/MPCSigner/CreateMPCSigner) |
-| **Interact using Foundry** (create forge scripts, read on-chain data using cast) | [Foundry skill](https://docs.continuumdao.org/ContinuumDAO/OpenClaw/FoundryInstructionSkill) |
+- **Running a node** — install, configure, operate an mpc-auth node.  
+  https://docs.continuumdao.org/ContinuumDAO/RunningInstructions/NodeRunningInstruction
+- **Creating an MPC signer** — Group, KeyGen, shared MPC wallet / address.  
+  https://docs.continuumdao.org/ContinuumDAO/MPCSigner/CreateMPCSigner
+- **Interact using Foundry** — forge scripts, `cast` for on-chain reads.  
+  https://docs.continuumdao.org/ContinuumDAO/OpenClaw/FoundryInstructionSkill  
+(Building **`multiSignRequest`** bodies for **`POST /multiSignRequest`** is **only**
+via the repo helpers listed under **When this skill applies**—not arbitrary forge
+projects or hand-written JSON.)
 
-Complete those guides first; then use this skill for **day-to-day agent behavior** (messaging, `multiSignRequest`, agree/trigger/execute, and API discipline).
+Complete those guides first; then use this skill for **day-to-day agent
+behavior** (messaging, `multiSignRequest`, agree/trigger/execute, and API
+discipline).
+
+## New session and environment bootstrap
+
+On **session start**, follow **`$MPA_PATH/references/AI_AGENT_NEW_SESSION.md`**:
+load **`$MPA_PATH/.env`**, confirm **`MPA_PATH`**, **`MPC_AUTH_URL`**,
+**`MANAGEMENT_PORT`**, **`AUTH_KEY_PATH`**, and **`MPC_CONFIG_PATH`**; ensure
+**`$MPA_PATH/{recipes,references,scripts,tools}`** symlink to the clone under
+**`MPC_CONFIG_PATH`** when the repo dirs exist; verify **`GET /health`**; then
+set or obtain **`KEYGEN_ID`** (existing id or **`POST /keyGenRequest`** / agree
+flow per **`$MPA_PATH/references/API_IMPLEMENTATION.md`**). That doc also restates
+what the **mpa-wallet** skill is for.
 
 ---
 
 ## Overview (read this first)
 
-This section restates the ideas in **[`instructions.md`]($MPA_PATH/references/instructions.md)** in a form suited for **users and agents** who do not yet see why **Group**, **KeyGen**, **threshold**, and **two signature types** matter.
+This section restates the ideas in **`$MPA_PATH/references/instructions.md`**
+in a form suited for **users and agents** who do not yet see why **Group**,
+**KeyGen**, **threshold**, and **two signature types** matter.
 
 ### What you are operating
 
-A **Multi-Party Agent (MPA) wallet** is **one** shared wallet address (EVM today: one Ethereum address) whose **private key never exists whole on any server**. It is created and used via **Multi-Party Computation (MPC)** across a **Group** of **nodes** (often VPSs). **No single node can sign alone:** producing a valid **MPC signature** requires cooperation of at least **threshold+1** nodes. The integer **threshold** is set when the **KeyGen** is created. That is how the address stays protected if one machine is compromised.
+A **Multi-Party Agent (MPA) wallet** is **one** shared wallet address (EVM today:
+one Ethereum address) whose **private key never exists whole on any server**. It
+is created and used via **Multi-Party Computation (MPC)** across a **Group** of
+**nodes** (often VPSs). **No single node can sign alone:** producing a valid **MPC
+signature** requires cooperation of at least **threshold+1** nodes. The integer
+**threshold** is set when the **KeyGen** is created. That is how the address stays
+protected if one machine is compromised.
 
-The MPC address works on **any EVM network**; it is **not** locked to one smart contract.
+The MPC address works on **any EVM network**; it is **not** locked to one smart
+contract.
 
-**Humans and AI agents are symmetric.** Some nodes are operated by people, others by an agent (e.g. Open Claw). All use the same REST ideas: **message** the group, **propose** txs via **`/multiSignRequest`**, then **other** nodes **agree** or **reject** with **`/signRequestAgree`** (the **originator** who submitted **`/multiSignRequest`** does not need to agree), optionally add **`Thoughts`**, then **trigger** MPC signing and **broadcast**. The agent’s job is to take **intent** from the KeyGen messaging flow, produce **Foundry** scripts ([Foundry](https://www.getfoundry.sh/introduction/getting-started)), and turn outputs into **`multiSignRequest`** payloads—always subject to **threshold+1** agreement before **`triggerSignRequestById`**.
+**Humans and AI agents are symmetric.** Some nodes are operated by people, others
+by an agent (e.g. Open Claw). All use the same REST ideas: **message** the group
+to **propose** and refine **intent**; **build** **`multiSignRequest`** bodies
+**only** with **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`**,
+**`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`**, or
+**`$MPA_PATH/recipes/`** scripts (see **`$MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**
+and **`$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md`**). **Never** invent or
+hand-edit **`multiSignRequest`** JSON from scratch. **Submit**
+**`POST /multiSignRequest`** with that helper output plus management **`clientSig`**
+/ **`signedMessage`** (see **`$MPA_PATH/references/ED25519_MANAGEMENT_KEY_SIGNING.md`**).
+**Other** nodes **agree** or **reject** with **`/signRequestAgree`** (the
+**originator** does not need to agree), optionally add **`Thoughts`**, then **EVM
+execution** is **only** **`$MPA_PATH/scripts/executeSignResult.py`**: that script
+**`POST`**s **`/triggerSignRequestById`** (management-signed, with **`txParams`**
+/ **`messageHash`** when required), **polls** **`GET /getSignResultById`** until
+MPC signatures exist, then **`eth_sendRawTransaction`**—do **not** call
+**`POST /triggerSignRequestById`** **directly** or bypass the script. The agent’s
+job is to take **intent** from the KeyGen messaging flow, run **only** those
+helpers. Use **`multiSignJoin.py`** to merge **two** helper-sized JSON files into
+**one** batch; **save stdout** and run **`multiSignJoin.py`** again (previous output
+as **`--a`** or **`--b`**, plus another helper file) to extend ordered sequences on
+the same chain—**repeatedly** for multi-step flows. Then **`POST /multiSignRequest`**
+with management signing and later **`executeSignResult.py`** as required—**never**
+fabricate **`multiSignRequest`** JSON except via the approved helpers (compose,
+Forge, recipes, or **`multiSignJoin`** when merging two outputs).
+
+https://www.getfoundry.sh/introduction/getting-started
 
 ### The two signatures (critical distinction)
 
-1. **Management signature** — **Per-node API authentication.** Each client has its **own** key material; public keys are in config (e.g. **`mpc-config/configs.yaml`**). Every **`POST`** to the management API must be signed by **that** client’s management key (Ed25519 for agents, often MetaMask for interactive users). This proves **who is calling the API**, not what the MPC wallet authorizes on-chain.
-
-2. **MPC signature** — **On-chain authorization** by the **shared** wallet. There is **no** single MPC private key file. Nodes run a protocol so that, only after enough **agreements**, a signature valid for the **MPC public address** is produced.
+1. **Management signature** — **Per-node API authentication.** Each client has its
+  **own** key material; public keys are in config (e.g. `**mpc-config/configs.yaml**`).
+   Every `**POST**` to the management API must be signed by **that** client’s
+   management key (Ed25519 for agents, often MetaMask for interactive users). This
+   proves **who is calling the API**, not what the MPC wallet authorizes on-chain.
+2. **MPC signature** — **On-chain authorization** by the **shared** wallet. There
+  is **no** single MPC private key file. Nodes run a protocol so that, only after
+   enough **agreements**, a signature valid for the **MPC public address** is
+   produced.
 
 ### Groups, KeyGen, signing (short)
 
-- **Group:** Peers configure each other, one node proposes a group, invitees accept → **Group ID**. See **Groups** / **KeyGen** / **Signing** in [`instructions.md`]($MPA_PATH/references/instructions.md).
-- **KeyGen:** Started inside a group; all participants must accept; yields **pubKey** / (secp256k1) an **Ethereum address** and fixes **threshold**.
-- **Signing:** A member proposes a sign request; each node **accepts or rejects**; optional **`Thoughts`** guide whether to **shelve** and revise. With **threshold+1** accepts, **`triggerSignRequestById`** runs MPC signing; then **broadcast** txs and **`updateSignResultStatusById`**.
+- **Group:** Peers configure each other, one node proposes a group, invitees accept
+→ **Group ID**. See **Groups** / **KeyGen** / **Signing** in
+`**$MPA_PATH/references/instructions.md**`.
+- **KeyGen:** Started inside a group; all participants must accept; yields **pubKey**
+/ (secp256k1) an **Ethereum address** and fixes **threshold**. When all nodes have agreed,
+the KeyGen is automatically generated after a delay of up to 2 minutes.
+- **Signing:** A member proposes a sign request; each node **accepts or rejects**;
+optional `**Thoughts**` guide whether to **shelve** and revise. With **threshold+1**
+accepts, `**executeSignResult.py**` `**POST`**s `**/triggerSignRequestById`** (MPC
+signing), then **broadcast** txs and `**updateSignResultStatusById`**.
 
 ### Persistent context (why messages and Purpose matter)
 
-Each node stores the same logical data over time: **KeyGen messages** (`listMessages`, `getMessageThread`, …) and **sign-request / sign-result metadata** (**`Purpose`**, **`Thoughts`**). That **shared history** is what future decisions should use—regardless of which LLM or agent version is connected.
+Each node stores the same logical data over time: **KeyGen messages**
+(`listMessages`, `getMessageThread`, …) and **sign-request / sign-result metadata**
+(`**Purpose`**, `**Thoughts**`). That **shared history** is what future decisions
+should use—regardless of which LLM or agent version is connected.
 
 ---
 
 ## When this skill applies
 
-- Proposing or evaluating **multi-sign requests** (`POST /multiSignRequest`, `POST /signRequestAgree`, `POST /triggerSignRequestById`).
-- Using **KeyGen messaging** (`POST /sendMessage`, `GET /getMessageThread`) for group coordination.
-- Generating **Foundry** scripts and turning **`forge script`** output into API payloads.
-- **Combining** two **`multiSignRequest`**-style JSON outputs (from recipes or **`generateSignRequestWithFoundryScript`**) into **one** batch with **`multiSignJoin.py`** before **`POST /multiSignRequest`**.
-- Configuring **Ed25519 management** authentication for automated `POST` calls to the node API.
-- Explaining **threshold**, **Purpose**, **Thoughts**, **shelve**, and **execute** flows.
+- Generating **single or batched** transaction proposals and **`POST /multiSignRequest`**:
+  **only** use helper output from **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`**,
+  **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`**,
+  **`$MPA_PATH/scripts/multiSignJoin.py`** (including **chained** runs whose inputs are
+  prior helper or **`multiSignJoin`** output), or a script under **`$MPA_PATH/recipes/`**—see
+  **`$MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**. **Never** hand-write or
+  invent **`multiSignRequest`** JSON; add **`clientSig`** / **`signedMessage`** per
+  **`$MPA_PATH/references/ED25519_MANAGEMENT_KEY_SIGNING.md`**, then **`POST /multiSignRequest`**.
+  For the Foundry helper, feed **`forge script`** **`run-latest.json`** per
+  **`$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md`**. Common intents include **token
+  transfers**, **cross-chain** calls, and other **DeFi** protocol interactions.
+  **Evaluating** the multi-sign lifecycle (**`POST /signRequestAgree`**, etc.) when helping
+  operators interpret state. **EVM trigger + broadcast:** **only**
+  **`$MPA_PATH/scripts/executeSignResult.py`** (it **`POST`**s **`/triggerSignRequestById`**—do
+  not call that endpoint **directly**).
+- Using **KeyGen messaging** (`POST /sendMessage`, `GET /getMessageThread`) for
+group coordination.
+- **Combining** with **`multiSignJoin.py`:** merge **two** JSON outputs (recipes,
+  compose/Foundry helpers, or **a previous `multiSignJoin` stdout** saved to a file)
+  into **one** batch. **Chain merges** by running **`multiSignJoin.py`** again on
+  (merged file + next helper) to build longer same-chain sequences; then **`POST /multiSignRequest`**
+  with **only** that tool output plus management signing (see **`AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**).
+- Configuring **Ed25519 management** authentication for automated `POST` calls to
+the node API.
+- Explaining **threshold**, **Purpose**, **Thoughts**, **shelve**, and **execute**
+flows.
 
-Do **not** confuse **management signatures** (per-node API auth) with **MPC signatures** (threshold signing over a message).
+Do **not** confuse **management signatures** (per-node API auth) with **MPC
+signatures** (threshold signing over a message).
 
 ---
 
 ## Core concepts
 
-| Term | Meaning |
-|------|--------|
-| **Group** | Set of nodes that mutually trust each other for relay/config; identified by **Group ID**. Formed after configured nodes accept a group request. |
-| **KeyGen** | MPC key generation for a wallet; yields **pubKey** / (for secp256k1) an **Ethereum address**. Requires all invited nodes to accept. **Threshold** is fixed at KeyGen creation. |
-| **Threshold** | Minimum cooperating parties minus one in the usual t-of-n wording: signing needs **threshold+1** agreeing nodes. |
-| **Management signature** | Authenticates **this node’s** HTTP **POST**s to its management API. Keys come from `mpc-config/configs.yaml` (e.g. **PublicMgtKey** / **NodeMgtKey**). |
-| **MPC signature** | Produced only when enough nodes accept the **same** sign request and the network runs the TSS signing protocol—not a single machine’s private key. |
-| **multi-agree** | Policy where nodes explicitly agree (`signRequestAgree`) before `triggerSignRequestById`; use **`/multiSignRequest`**, not `/signRequest` (relayer/tx-check only). |
+- **Group:** Set of nodes that mutually trust each other for relay/config;
+  identified by **Group ID**. Formed after configured nodes accept a group
+  request.
+
+- **KeyGen:** MPC key generation for a wallet; yields **pubKey** / (for
+  secp256k1) an **Ethereum address**. Requires all invited nodes to accept.
+  **Threshold** is fixed at KeyGen creation.
+
+- **Threshold:** Minimum cooperating parties minus one in the usual t-of-n
+  wording: signing needs **threshold+1** agreeing nodes.
+
+- **Management signature:** Authenticates **this node’s** HTTP **POST**s to its
+  management API. Keys come from `mpc-config/configs.yaml` (e.g.
+  **PublicMgtKey** / **NodeMgtKey**).
+
+- **MPC signature:** Produced only when enough nodes accept the **same** sign
+  request and the network runs the TSS signing protocol—not a single machine’s
+  private key.
+
+- **multi-agree:** Policy where nodes explicitly agree (`signRequestAgree`)
+  before `triggerSignRequestById`; use **`POST /multiSignRequest`**, not
+  `/signRequest` (relayer/tx-check only).
 
 ---
 
 ## Environment (agent)
 
-Default env file: **`$MPA_PATH/.env`**. Load this file first (if present) before prompting for missing variables.
+Default env file: `**$MPA_PATH/.env**`. Load this file first (if present) before
+prompting for missing variables.
 
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| **`KEYGEN_ID`** | If set, prefer this KeyGen for signing when unambiguous. If unset or ambiguous, ask the user via the configured channel (e.g. gateway **port 18789**). | Unset |
-| **`AUTH_KEY_PATH`** | Directory containing the Ed25519 **management** private key (see **`AUTH_KEY_FILENAME`**). If **unset**, scripts resolve the file **`~/.ssh/mpc_auth_ed25519`** (equivalent to directory `~/.ssh` + default name). | Unset (→ `~/.ssh/mpc_auth_ed25519`) |
-| **`AUTH_KEY_FILENAME`** | Basename of the key file inside **`AUTH_KEY_PATH`** (when set). | `mpc_auth_ed25519` |
-| **`MPA_PATH`** | If set, points to the directory containing references, scripts, recipes, and tools. | `~/.mpa` |
-| **`MPC_CONFIG_PATH`** | Absolute path to the node `configs.yaml` for this deployment (operator-defined, no hardcoded user/home assumption). | `/path/to/mpc-config/configs.yaml` |
-| **`MPC_AUTH_URL`** | Points to the base URL of the management API. | `http://127.0.0.1` |
-| **`MANAGEMENT_PORT`** | The port of the management API. | `<management_api_port>` |
+- **`KEYGEN_ID`** — If set, prefer this KeyGen for signing when unambiguous. If
+  unset or ambiguous, ask the user via the configured channel (e.g. gateway
+  **port 18789**), or ask if they want a new KeyGen. **Default:** Unset.
 
-Base URL for a co-located node: **`$MPC_AUTH_URL:$MANAGEMENT_PORT`** (see `configs.yaml` for `ManagementAPIsPort`).
+- **`AUTH_KEY_PATH`** — Directory containing the Ed25519 **management** private
+  key (see **`AUTH_KEY_FILENAME`**). If **unset**, scripts resolve
+  **`~/.ssh/mpc_auth_ed25519`** (equivalent to `~/.ssh` + default basename).
+  **Default:** Unset (→ `~/.ssh/mpc_auth_ed25519`).
 
-`MPA_PATH` is a filesystem location, not a credential. `primaryEnv` is set to `MPC_AUTH_URL` because the management API endpoint is the primary operational target for this skill.
+- **`AUTH_KEY_FILENAME`** — Basename of the key file inside **`AUTH_KEY_PATH`**
+  (when set). **Default:** `mpc_auth_ed25519`.
 
-**`scripts/keygen_messaging_agent_poll.py`** uses **`KEYGEN_ID`**, **`AUTH_KEY_PATH`**, and **`MPC_AUTH_URL`**. The umbrella **`scripts/mpc_event_listener.py`** uses the same when **`--keygen-messages`** is enabled; **`KEYGEN_ID`** is not required for **`--sign-ready`** alone (that path still needs **`AUTH_KEY_PATH`** / **`MPC_MGT_ED25519_SEED_HEX`** to **`POST /triggerSignRequestById`**).
+- **`MPA_PATH`** — Directory containing references, scripts, recipes, and tools.
+  **Default:** `~/.mpa`.
+
+- **`MPC_CONFIG_PATH`** — Absolute path to the **mpc-config** repo root (clone
+  with **`configs.yaml`**, **`scripts/`**, **`recipes/`**, **`references/`**,
+  **`tools/`**, **`docs/`**). Used for symlinks into **`$MPA_PATH`** and owner
+  docs. **Default:** `/path/to/mpc-config`.
+
+- **`MPC_AUTH_URL`** — Base URL of the management API (host only).
+  **Default:** `http://127.0.0.1`.
+
+- **`MANAGEMENT_PORT`** — Management API port (see `ManagementAPIsPort` in
+  `configs.yaml`). **Default:** `<management_api_port>` (often **8080**).
+
+Base URL for a co-located node: `**$MPC_AUTH_URL:$MANAGEMENT_PORT**` (see
+`configs.yaml` for `ManagementAPIsPort`).
+
+`MPA_PATH` is a filesystem location, not a credential. `primaryEnv` is set to
+`MPC_AUTH_URL` because the management API endpoint is the primary operational
+target for this skill.
+
+Schedule **`$MPA_PATH/scripts/mpc_event_listener.py`** (see **KeyGen inbox poll**
+below)—not **`keygen_messaging_agent_poll.py`** alone. **`--keygen-messages`**
+runs the same poll as **`keygen_messaging_agent_poll.py`**; **`KEYGEN_ID`**,
+**`AUTH_KEY_PATH`**, and **`MPC_AUTH_URL`** apply. **`--sign-ready`** runs
+**`executeSignResult.py`** per ready id (which **`POST`**s **`/triggerSignRequestById`**).
+**`KEYGEN_ID`** is not required for **`--sign-ready`** alone (that path still needs
+**`AUTH_KEY_PATH`** / **`MPC_MGT_ED25519_SEED_HEX`** for management **`POST`**s inside
+**`executeSignResult.py`**). If **`KEYGEN_ID`** is not set for the keygen handler,
+ask the user what to do, including stopping **`--keygen-messages`** polling with
+cron.
 
 ### Python dependencies
 
-Use a **dedicated virtual environment** under **`$MPA_PATH/.venv`** (with the default **`MPA_PATH`**, that is **`~/.mpa/.venv`**). Install packages **into that venv** with **`pip`** from the venv (e.g. **`$MPA_PATH/.venv/bin/pip install …`**) or after **`source $MPA_PATH/.venv/bin/activate`** — **not** with bare **`pip3`** on the system interpreter. PyPI names use hyphens where applicable (**`eth-account`** installs the **`eth_account`** import).
+Use a **dedicated virtual environment** under `**$MPA_PATH/.venv`** (with the
+default `**MPA_PATH**`, that is `**~/.mpa/.venv**`). Install packages **into that
+venv** with `**pip`** from the venv (e.g. `**$MPA_PATH/.venv/bin/pip install …**`)
+or after `**source $MPA_PATH/.venv/bin/activate**` — **not** with bare `**pip3`**
+on the system interpreter. PyPI names use hyphens where applicable (`**eth-account**`
+installs the `**eth_account**` import).
 
-**Bootstrap once** (if **`$MPA_PATH/.venv`** does not exist):
+**Bootstrap once** (if `**$MPA_PATH/.venv`** does not exist):
 
 ```bash
 python3 -m venv "$MPA_PATH/.venv"
@@ -157,67 +322,195 @@ python3 -m venv "$MPA_PATH/.venv"
 
 Then install into the venv:
 
-1. **Base (all signing scripts in `$MPA_PATH/scripts`):** **`$MPA_PATH/.venv/bin/pip install eth-account`** — pulls **`rlp`**, **`eth_utils`**, **`hexbytes`**, etc., needed by **`generateSignRequestWithFoundryScript.py`**, **`generateMultiSignRequestFromCompose.py`**, **`multiSignJoin.py`**, and **`executeSignResult.py`**.
-2. **Compose + recipes:** **`$MPA_PATH/.venv/bin/pip install PyNaCl`** — only **`generateMultiSignRequestFromCompose.py`** and **`recipes/*.py`** need **`PyNaCl`** (optional Ed25519 fields on payloads). Skip if you use **only** the Forge helper, **`multiSignJoin`**, or **`executeSignResult`**.
-3. **KeyGen inbox poll + event listener:** **`$MPA_PATH/.venv/bin/pip install cryptography`** — satisfies **`keygen_messaging_agent_poll.py`** and **`mpc_event_listener.py`** (same minimum as **`$MPA_PATH/scripts/requirements-keygen-agent.txt`**). Alternatively: **`$MPA_PATH/.venv/bin/pip install -r $MPA_PATH/scripts/requirements-keygen-agent.txt`**.
+1. **Base (all signing scripts in `$MPA_PATH/scripts`):**
+  `**$MPA_PATH/.venv/bin/pip install eth-account`** — pulls `**rlp**`, `**eth_utils**`,
+   `**hexbytes**`, etc., needed by `**generateSignRequestWithFoundryScript.py**`,
+   `**generateMultiSignRequestFromCompose.py**`, `**multiSignJoin.py**`, and
+   `**executeSignResult.py**`.
+2. **Compose + recipes:** `**$MPA_PATH/.venv/bin/pip install PyNaCl`** — only
+  `**generateMultiSignRequestFromCompose.py**` and `**recipes/*.py**` need `**PyNaCl**`
+   (optional Ed25519 fields on payloads). Skip if you use **only** the Forge helper,
+   `**multiSignJoin`**, or `**executeSignResult**`.
+3. **KeyGen inbox poll + event listener:** `**$MPA_PATH/.venv/bin/pip install cryptography`**
+  — satisfies `**keygen_messaging_agent_poll.py**` and `**mpc_event_listener.py**`
+   (same minimum as `**$MPA_PATH/scripts/requirements-keygen-agent.txt**`).
+   Alternatively:
+   `**$MPA_PATH/.venv/bin/pip install -r $MPA_PATH/scripts/requirements-keygen-agent.txt**`.
 
-**Verify packages** before running helpers (agents should check the venv, not the system **`python3`**):
+**Verify packages** before running helpers (agents should check the venv, not the
+system `**python3`**):
 
 ```bash
 "$MPA_PATH/.venv/bin/pip" show eth-account PyNaCl cryptography 2>/dev/null | grep -E '^Name:|^Version:'
 "$MPA_PATH/.venv/bin/python" -c "import eth_account; import nacl; import cryptography"
 ```
 
-(Adjust the **`import`** line if optional packages were skipped — e.g. omit **`nacl`** / **`cryptography`** when not installed.)
+(Adjust the `**import**` line if optional packages were skipped — e.g. omit `**nacl**`
+/ `**cryptography**` when not installed.)
 
-**Run scripts** with **`$MPA_PATH/.venv/bin/python`** — for example **`$MPA_PATH/.venv/bin/python $MPA_PATH/scripts/generateSignRequestWithFoundryScript.py ...`**. Plain **`python3 ...`** only works if your shell’s **`PATH`** puts that venv first (prefer the explicit venv **`python`** path in automation).
+**Run scripts** with `**$MPA_PATH/.venv/bin/python**` — for example
+`**$MPA_PATH/.venv/bin/python $MPA_PATH/scripts/generateSignRequestWithFoundryScript.py ...**`.
+Plain `**python3 ...**` only works if your shell’s `**PATH**` puts that venv first
+(prefer the explicit venv `**python**` path in automation).
 
 ### KeyGen inbox poll (`@agent`)
 
-To **notice unread channel messages directed at the agent** without manual **`GET /listMessages`** each time, run **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** on a timer (recommended: **OpenClaw Gateway isolated cron**; see **`$MPA_PATH/references/AGENT_ED25519_SETUP.md`** §8.5 and [OpenClaw cron](https://docs.openclaw.ai/cron)).
+To **notice unread channel messages directed at the agent** without manual
+**`GET /listMessages`** each time, schedule **`$MPA_PATH/scripts/mpc_event_listener.py`**
+**`--keygen-messages`** (recommended: **OpenClaw Gateway** isolated cron; see
+**`$MPC_CONFIG_PATH/docs/AGENT_ED25519_SETUP.md`** §8.5; OpenClaw cron:
+https://docs.openclaw.ai/cron). That handler runs the same logic
+as **`keygen_messaging_agent_poll.py`**; use the poll script **only** for one-off
+debugging, not as the primary scheduled entry point.
 
-**Ask the operator once** whether they want scheduled polling (and where: e.g. OpenClaw cron) **before** you add or change a timer. **If they want a schedule, ask which period** from the fixed set: **every 1, 5, 10, 30, 60 minutes** or **every 2, 4, 6, 8, 10, 12, 24 hours**. Use **`$MPA_PATH/scripts/mpc_cron_schedules.py`** (**`--interactive`** on a TTY, or plain output for the table) to map the choice to OpenClaw **`--every`** and crontab. Do **not** assume background polling: some setups only use ad-hoc **`GET /listMessages`** / **`getMessageThread`**, and the script **marks matched messages read**. If they already declined, a cron entry already exists, or they explicitly asked you to wire the poll, skip re-asking.
+If polling may already be configured, report whether it is active, the last run
+time (if known), which handlers are enabled, and the period—then ask whether the
+operator wants to change it. **Ask the operator once** whether they want scheduled
+polling (and where: e.g. OpenClaw cron) **before** you add or change a timer. **If
+they want a schedule, ask which period** from the fixed set: **every 1, 5, 10,
+30, 60 minutes** or **every 2, 4, 6, 8, 10, 12, 24 hours**. Use
+**`$MPA_PATH/scripts/mpc_cron_schedules.py`** (**`--interactive`** on a TTY, or
+plain output for the table) to map the choice to OpenClaw **`--every`** and
+crontab. Do **not** assume background polling: some setups only use ad-hoc
+**`GET /listMessages`** / **`getMessageThread`**, and the handler **marks matched
+messages read**. If they already declined, a cron entry already exists, or they
+explicitly asked you to wire the poll, skip re-asking.
 
-1. **Once:** install **`cryptography`** into **`$MPA_PATH/.venv`** (see **[Python dependencies](#python-dependencies)**).
-2. **Run:** **`$MPA_PATH/.venv/bin/python`** with **`$MPA_PATH/scripts/keygen_messaging_agent_poll.py`** (and **`KEYGEN_ID`** set; **`AUTH_KEY_PATH`** / **`MPC_AUTH_URL`** if not defaults). **`--dry-run`** lists matching unread messages without calling **`multiMarkMessagesRead`**.
-3. **Output:** one JSON line: **`matches`**, **`match_count`**, **`marked_ids`**. The script marks matched messages read so the next poll does not repeat them.
-4. **After a non-empty `matches`:** the poll script only marks messages read; **you** must **read each match’s `title` and `body`** (and pull thread context with **`GET /getMessageThread`** / related APIs if needed), **infer intent**, then **act**—invoke tools, management **`POST`** routes (e.g. **`/multiSignRequest`**, **`/sendMessage`**), or both. Reply in-channel with **`POST /sendMessage`** when a text response is appropriate (management-signed; **`$MPA_PATH/references/API_KEYGEN_MESSAGING.md`**). Encode the same “parse → act” expectation in any **Open Claw cron `--message`** that runs this script. Humans can **`@agent`** in title or body to target the agent.
+1. **Once:** install **`cryptography`** into **`$MPA_PATH/.venv`** (see **Python
+   dependencies** below).
+2. **Run:** **`$MPA_PATH/.venv/bin/python`**
+   **`$MPA_PATH/scripts/mpc_event_listener.py`** **`--keygen-messages`** (and
+   **`KEYGEN_ID`** set; **`AUTH_KEY_PATH`** / **`MPC_AUTH_URL`** if not defaults).
+   **`--dry-run`** applies to the keygen handler only: list matches without
+   **`multiMarkMessagesRead`**.
+3. **Output:** one JSON line: **`handlers.keygen_messages`** contains **`matches`**,
+   **`match_count`**, **`marked_ids`** (same shape as **`keygen_messaging_agent_poll.py`**
+   stdout). If **`KEYGEN_ID`** is missing, the **`keygen_messages`** handler fails
+   (set **`KEYGEN_ID`**). For a JSON **`error`** line on stdout instead, run
+   **`keygen_messaging_agent_poll.py`** directly (debug only).
+4. **After `handlers.keygen_messages.match_count` > 0:** the handler only marks
+   messages read; **you** must **read each match’s `title` and `body`** (and pull
+   thread context with **`GET /getMessageThread`** / related APIs if needed),
+   **infer intent**, then **act**—invoke tools, management **`POST`** routes (e.g.
+   **`/sendMessage`**), or build **`multiSignRequest`** bodies with the approved
+   helpers and **`POST /multiSignRequest`** per
+   **`$MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`** (never invent the
+   JSON), or both. Reply in-channel with **`POST /sendMessage`** when a text
+   response is appropriate (management-signed;
+   **`$MPA_PATH/references/API_KEYGEN_MESSAGING.md`**). Encode the same “parse → act”
+   expectation in any **Open Claw cron `--message`** that runs this script. Humans
+   can **`@agent`** in title or body to target the agent.
 
-### Event listener (`mpc_event_listener.py`)
+### Event listener (`mpc_event_listener.py`) — optional extra handlers
 
-Use **`$MPA_PATH/scripts/mpc_event_listener.py`** when a **single** cron (or timer) should run **optional** handlers in one process: today **`keygen_messages`** (same as the KeyGen inbox poll above) and **`sign_ready`** (**`GET /listSignRequestsReady`** → **`GET /getSignRequestById`** + **`POST /triggerSignRequestById`** per id with **`txParams`** / **`messageHash`** for EVM requests, same as web **Get Sig** → poll **`GET /getSignResultById`** → **`executeSignResult.py`**, with optional **`--fast`**). **Ask the operator** which handlers to turn on: use **`--interactive`** (TTY) or explicit **`--keygen-messages`** / **`--sign-ready`**. For **`sign_ready`**, **`--execute-fast`** selects the **`executeSignResult --fast`** path (parallel receipt confirmation for batch txs); omit it for sequential execution. **`--sign-ready-dry-run`** only lists ready request ids; **`--no-execute`** triggers and waits for MPC signatures but skips broadcast. **Before** you add or change a timer for this script, **ask the operator once** if they want scheduled polling (and where: e.g. Open Claw cron); **if yes, ask which period** from the fixed set (**every 1, 5, 10, 30, 60 minutes** or **every 2, 4, 6, 8, 10, 12, 24 hours**) and map it with **`mpc_cron_schedules.py`** to Open Claw **`--every`** and crontab. Apply the same **ask once** / **skip re-asking** rules as the **KeyGen inbox poll** above. More handlers can be added to the same script over time.
+Use the **same** **`mpc_event_listener.py`** when one cron should also run
+**`sign_ready`** (**`GET /listSignRequestsReady`** → **`executeSignResult.py`** per
+id, which **`POST`**s **`/triggerSignRequestById`**, polls **`getSignResultById`**,
+then broadcasts—optional **`--fast`** / **`--execute-fast`**). **AI agents** run
+**only** **`executeSignResult.py`** for EVM execution. **Ask the operator** which
+handlers to turn on: use **`--interactive`** (TTY) or explicit **`--keygen-messages`**
+/ **`--sign-ready`** (or both). For **`sign_ready`**, **`--execute-fast`** selects
+the **`executeSignResult --fast`** path (parallel receipt confirmation for batch
+txs); omit it for sequential execution. **`--sign-ready-dry-run`** only lists ready
+request ids (no **`executeSignResult`**). **Before** you add or change a timer for
+this script, **ask the operator once** if they want scheduled polling (and where:
+e.g. Open Claw cron); **if yes, ask which period** from the fixed set (**every 1, 5,
+10, 30, 60 minutes** or **every 2, 4, 6, 8, 10, 12, 24 hours**) and map it with
+**`mpc_cron_schedules.py`** to Open Claw **`--every`** and crontab. Apply the same
+**ask once** / **skip re-asking** rules as the **KeyGen inbox poll** above. More
+handlers can be added to the same script over time.
 
 ---
 
 ## Default operational loop (high level)
 
-1. **Discuss** in KeyGen messaging: human or other nodes **`POST /sendMessage`**; everyone reads **`GET /getMessageThread`** (and related list/get APIs). Optionally use the **KeyGen inbox poll** above when the agent should wake on **`@agent`** mentions.
-2. **Plan**: use KeyGen message context plus local/on-chain state to produce **Foundry** scripts and a concise rationale.
-3. **Build tx intent**: for common flows, prefer **[recipes](#recipes-thin-cli-wrappers)** (**`linea_register.py`**, **`linea_fee_deposit.py`**, **`erc20_transfer.py`**, **`native_transfer.py`**, **`ctmerc20_transfer.py`**, **`ctmrwa1_transfer_whole.py`**, **`ctmrwa1_transfer_partial.py`**) which wrap **`generateMultiSignRequestFromCompose`** and use **`GET /getChainDetails`** when **`rpcGateway`** is omitted. Otherwise: run **`forge script … --sender <MPC address>`** → `broadcast/.../run-latest.json` and feed **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** to build JSON for **`POST /multiSignRequest`** (see **`$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md`**), **or** build **Compose-style** JSON (function signature + parameters) and run **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** (see **`$MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**). When you need **two** such payloads (e.g. ERC-20 transfer then a second call) as **one** proposal with **one** agree/trigger cycle, run **`$MPA_PATH/scripts/multiSignJoin.py`** with **`--a`**, **`--b`**, and **`--first-nonce`** set to the MPC wallet’s **EVM** nonce on that chain (**`cast nonce <MPC> --rpc-url $RPC`**)—see [multiSignJoin](#multisignjoin-merge-two-multisignrequest-json-files). Include a concise **`Purpose`** (≤256 chars).
-4. **Agree**: **other** nodes (everyone except the **originator** that created the request via **`POST /multiSignRequest`**) **`POST /signRequestAgree`** (accept/reject) until **threshold+1** agreements exist. The originator does **not** need to agree—creating the request already records their intent. Optional **`Thoughts`** per node to guide the agent (e.g. to **`POST /shelveSignRequest`** and revise).
-5. **Approval gate (recommended default):** require explicit human approval in KeyGen messaging before `POST /triggerSignRequestById`.
-6. **Trigger & sign**: after approval, when the request is ready to trigger, **`POST /triggerSignRequestById`**. **EVM (required):** the trigger body **must** include **`txParams`** and **`messageHash`** (same as web **Get Sig** / **`continuumdao-node-app`**) so the originator node **stores** the nonce/gas/fee snapshot and the tx signing hash—see **`$MPA_PATH/references/API_IMPLEMENTATION.md`** § **`POST /triggerSignRequestById`**. Without **`txParams`**, **`GET /getSignRequestById?tx_params=1`** returns **`Data: null`** and Execute / **`executeSignResult.py`** cannot match the signed preimage. **`mpc_event_listener.py`** **`sign_ready`** builds these from **`GET /getSignRequestById`** before trigger; manual triggers must still send **`txParams`** / **`messageHash`** for EVM. Poll **`GET /getSignResultById`** until signatures exist. **Readiness:** prefer **`$MPA_PATH/scripts/checkSignRequestReady.py`** (stdlib-only; uses **`getSignRequestById`**, **`getKeyGenResultById`**, **`getSignResultById`**) instead of **`GET /isSignRequestReadyById`** until the node runs a fixed **mpc-auth** build. After upgrade, **`/isSignRequestReadyById`** may be used again.
-7. **Execute**: require explicit human approval before broadcast, then send tx(s) with sufficient gas/credit. Prefer **`$MPA_PATH/scripts/executeSignResult.py`**: it uses **`GET /getSignResultById`** for signatures. **Single-tx:** rebuilds the unsigned transaction the same way as the **continuumdao-node-app** Execute flow — **`GET /getSignRequestById?tx_params=1`** (nonce/gas/fees snapshot from Get Sig), **`GET /getChainDetails`**, and RPC **`estimateGas`** / fee discovery, then applies **`r,s,v`** (or a prebuilt signed tx hex if present). **Batch:** pairs **`messageRawBatch[i]`** with **`batchsignatures[i]`** (unsigned RLP + signature per item). Message hex may also be read from the sign result (**`msgRaw`**, **`messageRaw`**, **`MessageRaw`**, **`messageRawBatch`**) or **`GET /getSignRequestById`** when needed. RPC comes from **`--rpc-url`** or **`getChainDetails.rpcGateway`**; **`eth_sendRawTransaction`**; by default **sequential** receipt waits; **`--fast`** for **concurrent** confirms. Then **`POST /updateSignResultStatusById`** with **`executed`** and **`transactionHash`** (or batch hashes).
-8. **Report**: **`POST /sendMessage`** summarizing what was done and what to expect.
-9. **Context**: for future spends, use **messages** plus **`Purpose` / `Thoughts`** on sign results (**`GET /listSignResults`**, **`GET /getSignRequestById`** / **`getSignResultById`**).
+1. **Discuss** in KeyGen messaging: human or other nodes `**POST /sendMessage**`;
+  everyone reads `**GET /getMessageThread**` (and related list/get APIs). Optionally
+   use **`mpc_event_listener.py`** **`--keygen-messages`** (KeyGen inbox poll above)
+   when the agent should wake on **`@agent`** mentions.
+2. **Plan**: use KeyGen message context plus local/on-chain state to pick a concise
+  rationale based on the user's wishes and **which** path applies: **`generateMultiSignRequestFromCompose.py`**,
+   **`generateSignRequestWithFoundryScript.py`**, **`$MPA_PATH/recipes/`**, and—**only when**
+   merging two separate helper outputs—**`multiSignJoin.py`** (including **chained** joins
+   for longer same-chain sequences).
+3. **Build and propose:** follow **`$MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**
+  — **only** those tools; Foundry broadcast JSON for **`generateSignRequestWithFoundryScript.py`**
+   per **`$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md`**. **Most proposals:** run **one**
+   compose/Forge/recipe helper and **`POST /multiSignRequest`** with that stdout (add **`clientSig`** /
+   **`signedMessage`** per **`ED25519_MANAGEMENT_KEY_SIGNING.md`**)—**no** **`multiSignJoin`** needed.
+   **When you need two helper outputs in one batch:** merge with **`multiSignJoin.py`**
+   (**`--first-nonce`** = MPC **`cast nonce`** for the **first** tx in that merge); **repeat**
+   with saved stdout plus another helper file to grow the batch. Include a concise **`Purpose`**
+   (≤256 chars). **`POST /multiSignRequest`** with **only** tool-produced JSON (**never** ad hoc).
+4. **Agree**: **other** nodes (everyone except the **originator** of the sign
+  request) `**POST /signRequestAgree**`
+   (accept/reject) until **threshold+1** agreements exist. The originator does
+   **not** need to agree—creating the request already records their intent. Optional
+   `**Thoughts**` per node to guide the agent (e.g. to `**POST /shelveSignRequest**`
+   and revise).
+5. **Approval gate (recommended default):** require explicit human approval in
+  KeyGen messaging before `**executeSignResult.py**` (see step 6).
+6. **Trigger, MPC sign, and broadcast (AI agent):** **only**
+  `**$MPA_PATH/scripts/executeSignResult.py**`. It `**POST`**s **`/triggerSignRequestById`**
+   only when `**getSignResultById**` does not yet have MPC signatures. **EVM
+   (required):** the `**multiSignRequest`** / sign-request body **must** carry
+   `**txNonce`**, `**txGasLimit**`, and fee fields so the script can build
+   `**txParams**` and `**messageHash**` like web **Get Sig** /
+   `**continuumdao-node-app`**—see `**$MPA_PATH/references/API_IMPLEMENTATION.md**` §
+   **`POST /triggerSignRequestById`**. Without `**txParams**`,
+   **`GET /getSignRequestById?tx_params=1`** returns `**Data: null**` and
+   `**executeSignResult.py**` cannot match the signed preimage. The script **polls**
+   `**GET /getSignResultById`** until signatures exist, then rebuilds and
+   **`eth_sendRawTransaction`**. **Single-tx:** same reconstruction as
+   **continuumdao-node-app** Execute — **`GET /getSignRequestById?tx_params=1`**,
+   **`GET /getChainDetails`**, RPC **`estimateGas`** / fee discovery, then **`r,s,v`**.
+   **Batch:** **`messageRawBatch[i]`** + **`batchsignatures[i]`**. By default
+   **sequential** receipt waits; **`--fast`** for concurrent confirms.
+   **Readiness:** **`GET /isSignRequestReadyById`** (see
+   **`$MPA_PATH/references/API_IMPLEMENTATION.md`**). Then
+   **`POST /updateSignResultStatusById`** with **`executed`** and **`transactionHash`**
+   (or batch hashes).
+7. **Report**: `**POST /sendMessage`** summarizing what was done and what to expect.
+8. **Context**: for future spends, use **messages** plus `**Purpose` / `Thoughts`**
+  on sign results (`**GET /listSignResults**`, `**GET /getSignRequestById**` /
+   `**getSignResultById**`).
 
 ---
 
 ## Other API capabilities (agent)
 
-Per **`$MPA_PATH/references/instructions.md`**, the agent may also: **`/keyGenRequest`**, **`/keyGenRequestAgree`**, **`/addKnownAddress`**, **`/postChainDetails`**, **`/addToken`**, health/version discovery, and **fee/credit** checks via **`GET /getGlobalNonceByKeyGenId`** (and top-up gas as needed). For **on-chain** fee state on **Linea mainnet**, use the subsection below.
+Per **`$MPA_PATH/references/instructions.md`**, the agent may also: **`/keyGenRequest`**,
+**`/keyGenRequestAgree`**, **`/addKnownAddress`**, **`/postChainDetails`**, **`/addToken`**,
+health/version discovery, and **fee/credit** checks via **`GET /getGlobalNonceByKeyGenId`**
+(and top-up gas as needed). For **on-chain** fee state on **Linea mainnet**, use the
+subsection below.
 
 ---
 
 ## Fee payment (Linea mainnet, chainId 59144)
 
-ContinuumDAO’s **fee / registration** contract on **Linea** is deployed at a fixed address. Agents should use **Foundry `cast`** against that contract with an RPC URL taken from the node’s chain config (same pattern as other on-chain checks).
+ContinuumDAO’s **fee / registration** contract on **Linea** is deployed at a fixed
+address. Agents should use **Foundry `cast`** against that contract with an RPC URL
+taken from the node’s chain config (same pattern as other on-chain checks).
 
 **Fee contract (Linea mainnet):** `0x55aD6Df6d8f8824486C3fd3373f1CF29eCecF0A3`
 
-**On-chain `register()` from the MPC wallet (multiSignRequest):** use the **[`linea_register.py`](#recipes-thin-cli-wrappers)** recipe (Linea **`59144`**, **`register()`**, RPC from **`getChainDetails`**). **Fee-token top-up (`deposit`)** from the MPC wallet: **[`linea_fee_deposit.py`](#recipes-thin-cli-wrappers)** with **`--amount-wei`** (smallest fee-token units); the MPC must **approve** the fee contract for the ERC20 fee token before **`deposit`** succeeds. For **approve + deposit** in a **single** batch **multiSignRequest**, use **`forge/script/LineaFeeApproveDeposit.s.sol`** → **`generateSignRequestWithFoundryScript.py`** (see **`$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md`** § Linea fee). For read-only **`cast`** checks below, any RPC URL from the node’s chain config is fine.
+**On-chain `register()` from the MPC wallet (multiSignRequest):** use the
+`**linea_register.py`** recipe in
+`**$MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md**` (recipes table)
+(Linea `**59144**`, `**register()**`, RPC from `**getChainDetails**`). **Fee-token
+top-up (`deposit`)** from the MPC wallet: `**linea_fee_deposit.py`** in the same
+table; the MPC must **approve** the fee contract for the ERC20 fee token before
+`**deposit`** succeeds. For **approve + deposit** in a **single** batch
+`**multiSignRequest`**, use `**forge/script/LineaFeeApproveDeposit.s.sol**` →
+`**generateSignRequestWithFoundryScript.py**` (see
+`**$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md**` § Linea fee). For read-only
+`**cast**` checks below, any RPC URL from the node’s chain config is fine.
 
-**Variables:** Set **`KEYGEN_ID`** to your KeyGen result id (see **Environment**). Set **`WALLET_ADDRESS`** to the MPC wallet **Ethereum address** for that KeyGen (from **`GET /getKeyGenResultById`** / **`ethereumaddress`**). Use your management API base URL as **`$MPC_AUTH_URL:$MANAGEMENT_PORT`**.
+**Variables:** Set `**KEYGEN_ID`** to your KeyGen result id (see **Environment**).
+Set `**WALLET_ADDRESS`** to the MPC wallet **Ethereum address** for that KeyGen
+(from `**GET /getKeyGenResultById`** / `**ethereumaddress**`). Use your management
+API base URL as `**$MPC_AUTH_URL:$MANAGEMENT_PORT**`.
 
 **RPC URL from the node** (Linea `chain_id` **59144**):
 
@@ -245,7 +538,15 @@ cast call 0x55aD6Df6d8f8824486C3fd3373f1CF29eCecF0A3 \
   "getRemainingNonces(address,uint256)(uint256)" $WALLET_ADDRESS $GNONCE --rpc-url $RPC
 ```
 
-**Note:** **`globalnonce`** here is the KeyGen’s MPC signing counter from the API. It is **not** the EVM account nonce from **`cast nonce`**. **Fee payment / top-up** can be sent as ordinary EVM transactions **from any funded wallet**—they do **not** require the **`multiSignRequest`** / threshold flow. Paying from a separate hot wallet or custodian is often more convenient than routing top-ups through the MPC wallet. If you do spend **from the MPC address** itself, those txs still go through **`multiSignRequest`** as usual. For ABI-level details of the fee contract, see **[$MPA_PATH/references/API_IMPLEMENTATION.md]($MPA_PATH/references/API_IMPLEMENTATION.md)** and on-chain docs your deployment publishes.
+**Note:** `**globalnonce`** here is the KeyGen’s MPC signing counter from the API. It
+is **not** the EVM account nonce from `**cast nonce`**. **Fee payment / top-up** can
+be sent as ordinary EVM transactions **from any funded wallet**—they do **not**
+require the `**multiSignRequest`** / threshold flow. Paying from a separate hot
+wallet or custodian is often more convenient than routing top-ups through the MPC
+wallet. If you do spend **from the MPC address** itself, those txs still go through
+`**multiSignRequest`** as usual. For ABI-level details of the fee contract, see
+`**$MPA_PATH/references/API_IMPLEMENTATION.md**`
+and on-chain docs your deployment publishes.
 
 ---
 
@@ -253,201 +554,161 @@ cast call 0x55aD6Df6d8f8824486C3fd3373f1CF29eCecF0A3 \
 
 When another member requests a signature, default decision inputs:
 
-- Group **messages** and the request **`Purpose`**.
+- Group **messages** and the request `**Purpose**`.
 - Independent analysis from available node messages, API state, and on-chain data.
 - Owner instructions left for the agent.
-- If uncertain, **message the owner** on the dedicated messaging API **`POST /sendMessage`** awaiting guidance.
+- If uncertain, **message the owner** on the dedicated messaging API
+`**POST /sendMessage**` awaiting guidance.
 
 Remember: **threshold+1** accepts are required to generate the MPC signature.
 
 ---
 
-## Authentication discipline
+## Management API authentication (Ed25519)
 
-- Every **`POST`** to the management API requires a **management** signature (Ed25519 or MetaMask flow per node config).
-- **`clientSig`** on **`multiSignRequest`** signs the **canonical request body** with the **management** key—not the MPC key.
-- Setup details: **[references/AGENT_ED25519_SETUP.md]($MPA_PATH/references/AGENT_ED25519_SETUP.md)**.
-
-### Management API nonce (which endpoint to call)
-
-Replay protection uses **two separate families** of nonces in **`NodeMgtKeyHistory`** (MongoDB). They are **independent**: using one kind of signer does **not** advance the other’s counter.
-
-- **Ethereum `NodeMgtKey`** (MetaMask / `personal_sign` on the **configured `0x…` address**): one monotonic sequence for that address. **Fetch next nonce with `GET /getNodeMgtKeyNonce`** when the **`POST`** body is signed with the Ethereum management key.
-- **Ed25519 management keys** (bootstrap **`PublicMgtKey`** and keys **`POST /addManagementKey`**), as used by **AI agents** and scripts: one sequence **per 64-hex public key**. **Fetch next nonce with `GET /getPublicMgtKeyNonce`** (optionally **`?publicKey=<64_hex>`** when the signer is an added key, not the config default). Use **`getPublicMgtKeyNonce`** for **`triggerSignRequestById`**, **`sendMessage`**, **`multiSignRequest`**, etc., when signing with Ed25519.
-
-**`GET /getNodeMgtKeyNonce`** and **`GET /getPublicMgtKeyNonce`** both return JSON **`Data`** shaped as **`{ "key": "<…>", "nonce": <int> }`** (the `key` field is either the **`0x…` Ethereum address** or the **64-hex Ed25519 public key**, matching the endpoint you called). Field names are lowercase inside `data`; the outer envelope may be **`Code`/`Error`/`Data`**.
-
-| You sign with | Fetch next nonce from | What `key` in the response means |
-|---------------|------------------------|-----------------------------------|
-| **Ed25519** management key (this skill’s default: **`AUTH_KEY_PATH`**) | **`GET /getPublicMgtKeyNonce`** — use **`?publicKey=<64_hex>`** when the signer is an **added** key, not the config **`PublicMgtKey`** | The **64-hex Ed25519 public key** (same key whose nonce you must use in the body). |
-| **Ethereum** **`NodeMgtKey`** (MetaMask / `personal_sign`) | **`GET /getNodeMgtKeyNonce`** | The **`0x…` NodeMgtKey** from config (same as **`GET /getNodeMgtKey`**). |
-
-**Do not** use **`getNodeMgtKeyNonce`** to validate Ed25519 activity. If the agent only ever signs with Ed25519, **`getNodeMgtKeyNonce`** can remain **`nonce: 0`** indefinitely—that is expected, because Ethereum-signed requests have their own counter. For Ed25519 **`sendMessage`**, **`triggerSignRequestById`**, **`addManagementKey`**, etc., always **`getPublicMgtKeyNonce`** (per **[API_IMPLEMENTATION.md]($MPA_PATH/references/API_IMPLEMENTATION.md)** **`GET /getPublicMgtKeyNonce`** / **`GET /getNodeMgtKeyNonce`**).
-
-**`nonce: 0`** from **`getPublicMgtKeyNonce`** means “next request should use nonce **0**” (no prior successful use for that public key in the DB). Same semantics for **`getNodeMgtKeyNonce`** and the Ethereum key.
-
-### `sign-clipboard`, **`--inline`**, and **`--inline-file`** (Ed25519 POST signing)
-
-The **`sign-clipboard`** helper (**[`tools/sign-clipboard`]($MPA_PATH/tools/sign-clipboard)** in this repo; see **`$MPA_PATH/tools/sign-clipboard/README.md`**) signs the **exact UTF-8 string** that the management API expects with the node’s **Ed25519 management key**.
-
-**For any `POST` whose body must be signed** (including **`POST /multiSignRequest`**, **`POST /signRequestAgree`**, **`POST /sendMessage`**, **`POST /triggerSignRequestById`**, and other management **`POST`** routes), agents **must** use **`--inline`** or **`--inline-file`** (not the clipboard path):
-
-```bash
-sign-clipboard --inline '<canonical JSON string>'
-# or, for large bodies (same bytes as the HTTP body—avoids shell quoting limits):
-sign-clipboard --inline-file /path/to/body.json
-```
-
-**Why `--inline` / `--inline-file`:** These pass the **message to sign** without reading the clipboard—either as a **literal argument** or as the **exact file contents**. That matches automation and scripts: the signed bytes must match what you **`POST`** (or the **`messageToSign`** / canonical JSON the API documents). Clipboard-based signing is fine for humans in the GUI; **`--inline`** / **`--inline-file`** avoid clipboard races, accidental whitespace or BOM changes, and missed copies when the agent is driving **`curl`** or Python **`urllib`**.
-
-**Behavior:**
-
-- **`--inline`** signs the argument **byte-for-byte** (after normal shell quoting—ensure the JSON matches the real request body, including key order if the API requires a canonical form).
-- **`--inline-file`** reads the message from the given path (**`~`** is expanded); file contents are signed **byte-for-byte** (a leading UTF-8 BOM is stripped, same as other modes). Use this when the JSON is **large** or awkward to quote.
-- The **128-hex Ed25519 signature** is written to **standard output** (one line). Use it as **`clientSig`** on the JSON body. If the endpoint also expects **`signedMessage`**, set it to the **same string** you signed when the API specifies that field (see **[$MPA_PATH/references/API_IMPLEMENTATION.md]($MPA_PATH/references/API_IMPLEMENTATION.md)** per route).
-- Combine with **`--bootstrap`**, **`--primary`**, or **`--key-file`** when multiple management keys exist (same rules as the README).
-- **Do not** combine **`--inline`**, **`--inline-file`**, or **`--stdin`** with each other; use one input mode.
-
-**Example (pattern only; body must match your generated payload):**
-
-```bash
-SIG=$(sign-clipboard --inline "$(jq -c . < body.json)" )
-curl -sS -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest" \
-  -H 'Content-Type: application/json' \
-  -d "$(jq --arg s "$SIG" '. + {clientSig: $s}' body.json)"
-```
-
-**Large body (sign the same file you send):**
-
-```bash
-jq -c . body.json > body.compact.json   # optional: one canonical line
-SIG=$(sign-clipboard --inline-file body.compact.json)
-curl -sS -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest" \
-  -H 'Content-Type: application/json' \
-  -d "$(jq --arg s "$SIG" '. + {clientSig: $s}' body.compact.json)"
-```
-
-(Adjust **`jq`** so you add **`clientSig`** (and **`signedMessage`** if required) **to** the unsigned object: the bytes you sign are **`messageToSign`**, not the merged POST body.)
+- Every `**POST**` to the management API requires a **management** signature
+(Ed25519 or Ethereum `**NodeMgtKey**` per node config).
+- `**clientSig**` on `**multiSignRequest**` signs `**messageToSign**` with the
+**management** key—not the MPC key.
+- `**GET /getPublicMgtKeyNonce**` vs `**GET /getNodeMgtKeyNonce**`,
+`**GET /getAllowedEd25519MgtKeys**`, `**sign-clipboard**` (`**--inline**` /
+`**--inline-file**`), and `**tools/ed25519_private_to_pubkey_hex.py**`:
+`**$MPA_PATH/references/ED25519_MANAGEMENT_KEY_SIGNING.md**`.
 
 ---
 
-## Creating transactions (`multiSignRequest`)
+## Creating `multiSignRequest` payloads
 
-Skim-level recipe for agents (e.g. OpenClaw). **Foundry path:** **[AI_AGENT_FORGE_SIGNREQUEST.md]($MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md)**. **Compose-style JSON (no Foundry broadcast):** **[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md]($MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**. **Shortcut:** see **[Recipes](#recipes-thin-cli-wrappers)** (**`linea_register`**, **`linea_fee_deposit`**, **`erc20_transfer`**, **`native_transfer`**, **`ctmerc20_transfer`**, **`ctmrwa1_transfer_whole`**, **`ctmrwa1_transfer_partial`**, …) before hand-writing compose JSON.
+**Skim:** **Foundry** → **`$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md`**.
+**Compose JSON** → **`$MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**.
+Prefer **Recipes** below (`linea_register`, `linea_fee_deposit`, `erc20_transfer`,
+…) before hand-writing compose JSON.
 
-### `messageToSign`, `signedMessage`, and the POST body
+**Do not** invent or hand-edit **`multiSignRequest`** JSON from scratch. **Only** use
+**`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`**,
+**`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`**, or a script under
+**`$MPA_PATH/recipes/`** (see **`$MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**
+and **`$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md`** for **`forge script`**
+inputs to the Foundry helper). **Typical flow:** one helper run → add **`clientSig`**
+/ **`signedMessage`** → **`POST /multiSignRequest`** (no **`multiSignJoin`**). **When**
+you need **two** helper outputs in **one** proposal, merge with **`multiSignJoin.py`**;
+**repeat** **`multiSignJoin.py`** using prior stdout as an input file to build longer
+sequences (same chain, **`--first-nonce`** = first tx nonce in the final
+batch—typically **`cast nonce`** on the MPC address). **After** any helper or
+**`multiSignJoin`** run prints **`bodyForSign`** / **`messageToSign`**, add
+**`clientSig`** (and **`signedMessage`** if required) per
+**`ED25519_MANAGEMENT_KEY_SIGNING.md`**, then **`POST /multiSignRequest`** with **that**
+JSON—the agent **may** call this endpoint; the restriction is **never** submitting a
+payload the tools did not produce.
 
-Recipe and helper stdout includes **`bodyForSign`** and **`messageToSign`**. This is the rule agents often get wrong:
-
-- **`messageToSign`** is the **only** string you sign with the **management** key (UTF-8, compact JSON). It is produced like **`json.dumps(bodyForSign, separators=(",", ":"), ensure_ascii=False)`** in **`generateMultiSignRequestFromCompose.py`** — same bytes the app uses before **`clientSig`** exists.
-- The **HTTP POST** body is **`bodyForSign`** plus **`clientSig`** plus **`signedMessage`**. You **do not** sign that merged object for **`multiSignRequest`** (the signature is over **`messageToSign`**, not over the final JSON that includes **`clientSig`**).
-- **`signedMessage`** is **verification metadata**, not a second copy of the whole POST body. For **Ed25519** management keys on **`multiSignRequest`**, set **`signedMessage`** to **`""`**. For **EIP-191 / MetaMask** keys, **`signedMessage`** must be the **exact** string that was signed — reuse **`messageToSign`** verbatim. It must **not** be JSON that includes **`clientSig`**, and **not** any re-stringified variant of the merged POST body.
-- **Prefer** **`postBody`** in stdout when you pass **`--ed25519-seed-hex`** or **`--eip191-private-key-hex`** to a recipe or **`generateMultiSignRequestFromCompose.py`**: it is already **`{...bodyForSign, "clientSig": "...", "signedMessage": "..."}`** ready to **`POST`**. No **`jq`** merge puzzle unless you are signing out-of-band.
-
-1. **Simulate with Foundry** — Run **`forge script`** with **`--rpc-url`** and **`--sender <MPC address>`**. **Do not** use **`--broadcast`** (the MPC key is not on disk). Consume the artifact **`broadcast/<Script>.s.sol/<chain_id>/run-latest.json`**.
-2. **Build the request JSON** — Run **`cast nonce <MPC address> --rpc-url $RPC`** and pass that value as **`--first-nonce`** to **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** (see **Scripts** below), together with **`--key-gen-id`**, **`--file`** pointing at **`run-latest.json`**, **`--purpose`**, and **`--mpc-auth-url`**. The helper needs **`eth_account`** (see **[Python dependencies](#python-dependencies)** and **`$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md`**).
-3. **Sign and submit** — Sign **`messageToSign`**. **POST** **`bodyForSign`** with **`clientSig`** set to that signature and **`signedMessage`** set as in the subsection above (or **`POST`** **`postBody`** if the helper produced it). Do not re-derive or re-stringify the unsigned body unless you are following the Foundry guide’s “empty **`clientSig`** first” variant.
-4. **Notify the group** — **`POST /sendMessage`** on the KeyGen channel with a short title/body and the **request id** returned from **`multiSignRequest`** so peers can review.
-
-### multiSignJoin: merge two multiSignRequest JSON files
-
-Use **`$MPA_PATH/scripts/multiSignJoin.py`** when you already have **two** JSON blobs in the same shape as **`generateMultiSignRequestFromCompose.py`** or **`generateSignRequestWithFoundryScript.py`** stdout (wrapper with **`bodyForSign`** / **`messageToSign`** or a raw body) and you want **one** **`POST /multiSignRequest`** that batches both transactions.
-
-- **Inputs:** **`--a`** and **`--b`** paths (or stdin patterns from recipes saved to files).
-- **Chain:** both payloads must use the same **`destinationChainID`**; the script errors if they differ.
-- **Nonces:** the script rewrites serialized unsigned txs so nonces are **consecutive** starting at **`--first-nonce`**. Set that to the MPC address’s **current EVM pending nonce** on that chain (**`cast nonce <address> --rpc-url …`**), not **`globalnonce`** from **`getGlobalNonceByKeyGenId`**.
-- **Gas / fees:** values are **preserved** from each input’s unsigned tx (whatever the recipe or Foundry helper embedded). **`multiSignJoin`** only adjusts nonces and recomputes signing hashes; it does **not** re-estimate gas or fees.
-- **Output:** a **batch-shaped** body (**`messageHashes`**, **`messageRawBatch`**, **`extraJSON.batchMeta`**) when the merged count is at least two (or when either input was already a batch). Add **`clientSig`** to the merged JSON, then **`POST /multiSignRequest`** as usual.
-
-**Example:** Prefer **`$MPA_PATH/.venv/bin/python`** so imports resolve to the venv (see **[Python dependencies](#python-dependencies)**). Plain **`python3`** only works if it is that interpreter.
-
-```bash
-"$MPA_PATH/.venv/bin/python" "$RECIPES/erc20_transfer.py" ... > /tmp/a.json
-"$MPA_PATH/.venv/bin/python" "$RECIPES/ctmerc20_transfer.py" ... > /tmp/b.json
-NONCE=$(cast nonce "$WALLET_ADDRESS" --rpc-url "$RPC")
-"$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/multiSignJoin.py" --a /tmp/a.json --b /tmp/b.json --first-nonce "$NONCE"
-```
-
-**Common mistakes**
-
-- Using **`forge script … --broadcast`** — wrong; simulation only until MPC signing completes.
-- Confusing **`globalnonce`** (KeyGen MPC counter from **`getGlobalNonceByKeyGenId`**) with **`cast nonce`** — for **`--first-nonce`**, use **EVM** **`cast nonce`** on the MPC address for **that chain**.
-- Treating **`signedMessage`** as the full POST body, or as JSON that already includes **`clientSig`** — for **`multiSignRequest`**, **`signedMessage`** is **`""`** (Ed25519) or equals **`messageToSign`** (EIP-191); see **`messageToSign`, `signedMessage`, and the POST body** above.
-- Forgetting **`sendMessage`** after submit — coordination and audit depend on it.
+That reference doc has **`messageToSign`** / **`signedMessage`** / **`postBody`**
+rules, **`multiSignJoin`** usage, and the **recipes** table.
 
 ---
 
 ## Scripts
 
-**Location:** These are python scripts for API automation that live in **`$MPA_PATH/scripts/`**.
-**Dependencies:** (**[Python dependencies](#python-dependencies)** — **`$MPA_PATH/.venv/bin/pip install eth-account`**, then **`PyNaCl`** when using compose/recipes). **`eth_account`** is required for all scripts **except** **`checkSignRequestReady.py`** (stdlib only).
+**Location:** Python scripts for API automation under **`$MPA_PATH/scripts/`**.
+**Dependencies:** (**Python dependencies** above —
+**`$MPA_PATH/.venv/bin/pip install eth-account`**, then **`PyNaCl`** for
+compose/recipes). **`eth_account`** is required for all of the following.
 
-| Location | Use |
-|----------|-----|
-| `checkSignRequestReady.py` | Client-side “ready to **`POST /triggerSignRequestById`**” for multi-agree (replaces **`/isSignRequestReadyById`** on older nodes). |
-| `generateSignRequestWithFoundryScript.py` | Forge broadcast JSON → **`multiSignRequest`** JSON helper. |
-| `generateMultiSignRequestFromCompose.py` | Compose-style JSON (function + args) → **`multiSignRequest`** body / **`messageToSign`**. Requires **`PyNaCl`**. |
-| `multiSignJoin.py` | Two recipe/helper JSON outputs → **one** batch **`multiSignRequest`**; **`--first-nonce`** = EVM **`cast nonce`**; same chain only; preserves gas/fees from inputs. See [multiSignJoin](#multisignjoin-merge-two-multisignrequest-json-files). |
-| `executeSignResult.py` | After **`getSignResultById`**: broadcast like the web **Execute** tab — **single-tx** uses **`getSignRequestById?tx_params=1`** + chain/RPC to match the signed preimage; **batch** uses **`messageRawBatch`** + **`batchsignatures`**. Sequential by default; **`--fast`** for parallel confirm. |
-| `keygen_messaging_agent_poll.py` | Poll KeyGen messaging for unread items that mention the agent, then mark them read. |
-| `mpc_event_listener.py` | Optional composed handlers (KeyGen poll, sign-ready trigger+execute); schedule one script for multiple event types. |
-| `mpc_cron_schedules.py` | Maps selectable poll periods (1–60 min, 2–24 h) to OpenClaw `--every` and crontab. |
+- **`generateSignRequestWithFoundryScript.py`** — Forge broadcast JSON →
+  **`multiSignRequest`** JSON. Use when the user needs Foundry script logic for
+  complex flows.
+
+- **`generateMultiSignRequestFromCompose.py`** — Compose JSON (one or batch calls)
+  → **`multiSignRequest`** body / **`messageToSign`**. Requires **`PyNaCl`**.
+
+- **`multiSignJoin.py`** — Join **two** helper JSON files → **one** batch
+  **`multiSignRequest`** output. **Chaining:** reuse stdout as **`--a`** or **`--b`**
+  with another helper. **`--first-nonce`** = nonce of the **first** tx in the merge.
+  Valid after **`clientSig`**. See **`$MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**.
+
+- **`executeSignResult.py`** — **Only** EVM path for **AI agents**: **`POST`**s
+  **`/triggerSignRequestById`** when needed, polls **`getSignResultById`**, then
+  broadcasts like web **Execute**. **Single-tx:** **`getSignRequestById?tx_params=1`**
+  + chain/RPC; **batch:** **`messageRawBatch`** + **`batchsignatures`**. Sequential
+  by default; **`--fast`** for parallel confirm.
+
+- **`keygen_messaging_agent_poll.py`** — Underlying KeyGen **`@agent`** poll (debug
+  or tests). Prefer **`mpc_event_listener.py`** **`--keygen-messages`** for
+  scheduled runs.
+
+- **`mpc_event_listener.py`** — **Preferred** cron entry: **`--keygen-messages`**
+  (inbox), optional **`--sign-ready`** → **`executeSignResult.py`** per ready id.
+
+- **`mpc_cron_schedules.py`** — Maps poll periods (1–60 min, 2–24 h) to Open Claw
+  **`--every`** and crontab.
 
 ## Recipes
 
-**Location:** These are thin CLI wrappers that live in **`$MPA_PATH/recipes/`**. They call **`generateMultiSignRequestFromCompose`** internally: **`GET /getKeyGenResultById`**, **`GET /getChainDetails`** (when **`rpcGateway`** is not overridden), then JSON-RPC for nonce / gas / fees.
-**Dependencies:** same as **`generateMultiSignRequestFromCompose.py`** (**[Python dependencies](#python-dependencies)** — **`eth-account`** and **`PyNaCl`** in **`$MPA_PATH/.venv`**).
-**Output:** JSON with **`bodyForSign`**, **`messageToSign`**; add **`clientSig`** and **`signedMessage`** (see **`messageToSign`, `signedMessage`, and the POST body** above) before **`POST /multiSignRequest`**; optional **`--ed25519-seed-hex`** / **`--eip191-private-key-hex`** to emit ready-to-POST **`postBody`**.
+**Location:** **`$MPA_PATH/recipes/`** — thin CLIs around
+**`generateMultiSignRequestFromCompose.py`** (same venv deps as compose). Check
+here before hand-writing compose JSON; common operations are covered.
 
-| Script | Use |
-|--------|-----|
-| **`linea_register.py`** | **`register()`** on the Linea fee contract (**`59144`**); stored chain RPC; default follows compose rules (chain **gasLimit** when set, else **`eth_estimateGas`**); **`--no-custom-gas-params`** sets **`noCustomGasParams`** (RPC-only gas/fees). |
-| **`linea_fee_deposit.py`** | **`deposit(address,uint256)`** on the Linea fee contract; **`--amount-wei`** (fee token smallest units); MPC **`ethereumaddress`** from **`getKeyGenResultById`**; **ERC20 approve** required before submit. |
-| **`erc20_transfer.py`** | **`transfer(address,uint256)`** on the token **`--token`**; **`--chain-id`**, **`--to`**, **`--amount`** / **`--amount-unit`**; optional **`--no-custom-gas-params`**, **`--rpc-gateway`**. |
-| **`native_transfer.py`** | Native gas token send to **`--to`** (compose **`nativeTransfer`**); same flags pattern as ERC-20. |
-| **`ctmerc20_transfer.py`** | CTMERC20 **`c3transfer(string,uint256,string)`** (same sig as **Add Asset** / **`GET /getTokens`** defaults in **`TOKEN_STORAGE_SCHEMA.md`**); **`--to-chain-id`** for the third arg (cross-chain); defaults to **`--chain-id`** when omitted. |
-| **`ctmrwa1_transfer_whole.py`** | CTMRWA1 **`transferWholeTokenX`** (whole **`fromTokenId`**); **`--from`**, **`--to`**, **`--from-token-id`**, **`--id`**, **`--version`**, **`--fee-token-str`**, optional **`--to-chain-id`**. |
-| **`ctmrwa1_transfer_partial.py`** | CTMRWA1 **`transferPartialTokenX`** (partial fungible **`value`**); **`--from-token-id`**, **`--to`**, **`--value`** / **`--value-unit`**, **`--id`**, **`--version`**, **`--fee-token-str`**, optional **`--to-chain-id`**. |
-
-**Example:** Use **`$MPA_PATH/.venv/bin/python`** like the [multiSignJoin](#multisignjoin-merge-two-multisignrequest-json-files) example (see **[Python dependencies](#python-dependencies)**).
-
-```bash
-"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/linea_register.py" --key-gen-id "$KEYGEN_ID" --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
-"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/linea_fee_deposit.py" --key-gen-id "$KEYGEN_ID" --amount-wei 1000000000000000000 --mpc-auth-url "$MPC_AUTH_URL:$MANAGEMENT_PORT"
-"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/erc20_transfer.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --to 0x... --amount 1 --amount-unit Ether
-"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/native_transfer.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --to 0x... --amount 0.01 --amount-unit Ether
-"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/ctmerc20_transfer.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --to 0x... --amount 100 --amount-unit Wei --to-chain-id 1
-"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/ctmrwa1_transfer_whole.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --from 0x... --to 0x... --from-token-id 1 --id 42 --version 1 --fee-token-str 0x...
-"$MPA_PATH/.venv/bin/python" "$MPA_PATH/recipes/ctmrwa1_transfer_partial.py" --key-gen-id "$KEYGEN_ID" --chain-id 59144 --token 0x... --from-token-id 1 --to 0x... --value 1 --value-unit Ether --id 42 --version 1 --fee-token-str 0x...
-```
+**Per-script behavior, the recipes table, and examples:**
+**`$MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**.
 
 ## References (bundled snapshots)
 
-**Location:** References directory containing API specification and agent instructions that live in **`$MPA_PATH/references`**.
+**Location:** API specs and agent notes under **`$MPA_PATH/references`**.
 
-| Document | Description |
-|----------|-------------|
-| [AGENT_BASICS.md]($MPA_PATH/references/AGENT_BASICS.md) | Overview of how an agent interacts with an MPA wallet. |
-| [instructions.md]($MPA_PATH/references/instructions.md) | Human-oriented full workflow; same story as above with more narrative. |
-| [AGENT_ED25519_SETUP.md]($MPA_PATH/references/AGENT_ED25519_SETUP.md) | Agent Ed25519 onboarding, `PublicMgtKey`, `addManagementKey`. |
-| [AI_AGENT_FORGE_SIGNREQUEST.md]($MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md) | End-to-end: Foundry → Python helper → `multiSignRequest`; **`clientSig`** rules. |
-| [AI_AGENT_COMPOSE_MULTISIGNREQUEST.md]($MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md) | Compose JSON → `multiSignRequest`; `generateMultiSignRequestFromCompose.py`. |
-| [API_IMPLEMENTATION.md]($MPA_PATH/references/API_IMPLEMENTATION.md) | Canonical REST API specification (endpoints, auth, bodies). |
-| [swagger.yaml]($MPA_PATH/references/swagger.yaml) | OpenAPI/Swagger for tooling and codegen. |
-| [TOKEN_STORAGE_SCHEMA.md]($MPA_PATH/references/TOKEN_STORAGE_SCHEMA.md) | Local token config (**ERC20**, **CTMERC20** `c3transfer` sig, **CTMRWA1**, etc.). |
-| [API_KEYGEN_MESSAGING.md]($MPA_PATH/references/API_KEYGEN_MESSAGING.md) | API specification for the inter-node messaging system. |
-| [KNOWN_ADDRESSES_SCHEMA.md]($MPA_PATH/references/KNOWN_ADDRESSES_SCHEMA.md) | Address book for commonly used addresses (both EOA and contract), managed and stored locally by the node only. |
-| [README.md]($MPA_PATH/references/README.md) | |
+- **`$MPC_CONFIG_PATH/docs/CONFIGURING_ED25519_KEYS.md`** (or **`$MPA_PATH/docs/...`**
+  if **`docs/`** is symlinked) — Node owner: **`PublicMgtKey`**, add keys, store
+  agent private keys.
+
+- **`$MPA_PATH/references/instructions.md`** — Human-oriented full workflow.
+
+- **`$MPA_PATH/references/ED25519_MANAGEMENT_KEY_SIGNING.md`** — Ed25519 management
+  signing: allow-list, nonces, tools, KeyGen **`ClientKeys`**.
+
+- **`$MPA_PATH/references/AI_AGENT_FORGE_SIGNREQUEST.md`** — Foundry → helper →
+  **`multiSignRequest`**; **`clientSig`** rules.
+
+- **`$MPA_PATH/references/AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`** — Compose JSON →
+  **`multiSignRequest`**; **`generateMultiSignRequestFromCompose.py`**.
+
+- **`$MPA_PATH/references/AI_AGENT_NEW_SESSION.md`** — `.env`, symlinks,
+  **`GET /health`**, **`KEYGEN_ID`** / KeyGen creation.
+
+- **`$MPA_PATH/references/API_IMPLEMENTATION.md`** — Canonical REST API (endpoints,
+  auth, bodies).
+
+- **`$MPA_PATH/references/swagger.yaml`** — OpenAPI/Swagger for tooling.
+
+- **`$MPA_PATH/references/TOKEN_STORAGE_SCHEMA.md`** — Local token config (**ERC20**,
+  **CTMERC20** **`c3transfer`**, **CTMRWA1**, etc.).
+
+- **`$MPA_PATH/references/API_KEYGEN_MESSAGING.md`** — Inter-node messaging API.
+
+- **`$MPA_PATH/references/KNOWN_ADDRESSES_SCHEMA.md`** — Local address book (EOA and
+  contract).
+
+- **`$MPA_PATH/references/README.md`** — Index of references.
+
 
 ## Tools
 
-**Location:** Directory containing tools including sign-clipboard for signing all POST requests, that live in **`$MPA_PATH/tools`**.
+**Location:** `**$MPA_PATH/tools`** — includes `**sign-clipboard**` (management
+`**POST**` signing) and `**ed25519_private_to_pubkey_hex.py**`. Usage and
+`**--inline**` / `**--inline-file**`:
+`**$MPA_PATH/references/ED25519_MANAGEMENT_KEY_SIGNING.md**`
+§ Tools; `**sign-clipboard/README.md**` for flags.
 
 ---
 
 ## Style notes for agents
 
-- Prefer **exact** JSON bodies and canonical signing strings as described in **API_IMPLEMENTATION**.
-- Lookup REST API endpoints in swagger.yaml first and only refer to API_IMPLEMENTATION if you need more details.
-- Use **`Thoughts`** and **`Purpose`** as durable audit and coordination context across nodes.
-- Use the API_KEYGEN_MESSAGING to keep the users in the group informed.
+- **`POST /multiSignRequest`:** use **only** JSON from
+  **`generateMultiSignRequestFromCompose.py`**, **`generateSignRequestWithFoundryScript.py`**,
+  **`recipes/`**, or **`multiSignJoin.py`** (including **chained** **`multiSignJoin`**
+  runs whose inputs are prior helper or join output files)—never improvise the payload.
+- Prefer **exact** JSON bodies and canonical signing strings as described in
+  **API_IMPLEMENTATION**.
+- Lookup REST API endpoints in **`swagger.yaml`** first; use **API_IMPLEMENTATION**
+  only when you need more detail.
+- Use **`Thoughts`** and **`Purpose`** as durable audit and coordination context
+  across nodes.
+- Use **API_KEYGEN_MESSAGING** so group members stay informed.
+

@@ -6,13 +6,9 @@ Composes optional handlers. Current handlers:
 
 - **keygen_messages** — same behavior as ``keygen_messaging_agent_poll.py`` (``@agent``
   unread poll + ``multiMarkMessagesRead``).
-- **sign_ready** — ``GET /listSignRequestsReady``, then for each id (sequential):
-  ``GET /getSignRequestById`` → ``POST /triggerSignRequestById`` (Ed25519 management key).
-  For **EVM** requests (``DestinationChainID`` + message hash), the trigger body includes
-  ``txParams`` and ``messageHash`` like **continuumdao-node-app** Get Sig, so the node
-  persists TxParams for ``GET /getSignRequestById?tx_params=1``. Then poll
-  ``GET /getSignResultById`` until signatures exist, then run ``executeSignResult.py``
-  (optional ``--fast``).
+- **sign_ready** — ``GET /listSignRequestsReady``, then for each id (sequential) run
+  ``executeSignResult.py`` (``POST /triggerSignRequestById`` when needed, poll, broadcast).
+  Optional ``--fast`` is passed through to ``executeSignResult``.
 
 Interactive mode (``--interactive``) prompts which handlers to enable and, for sign_ready,
 whether to use ``executeSignResult --fast``. Non-interactive use: pass ``--keygen-messages``
@@ -52,7 +48,6 @@ from mpc_mgt_helpers import (
     get_ed25519_nonce,
     http_json,
     http_json_any_code,
-    load_ed25519_private_key,
     public_key_64_hex,
     resolve_mpc_auth_base,
     sign_compact_json_empty_field,
@@ -354,11 +349,8 @@ def handle_sign_ready(
     management_port: str,
     pagesize: int,
     dry_run_list_only: bool,
-    no_execute: bool,
     execute_fast: bool,
     rpc_url: str | None,
-    poll_timeout_sec: float,
-    poll_interval_sec: float,
 ) -> dict[str, Any]:
     ready_ids = list_sign_requests_ready_ids(base, pagesize)
     out: dict[str, Any] = {
@@ -371,36 +363,8 @@ def handle_sign_ready(
     if dry_run_list_only or not ready_ids:
         return out
 
-    priv = load_ed25519_private_key()
-
     for rid in ready_ids:
         step: dict[str, Any] = {"requestId": rid}
-        try:
-            tr = post_trigger_sign_request(base, priv, rid)
-            step["trigger"] = api_data(tr)
-        except Exception as e:
-            step["error"] = f"trigger: {e}"
-            out["steps"].append(step)
-            continue
-
-        try:
-            poll_sign_result_ready(
-                base,
-                rid,
-                timeout_sec=poll_timeout_sec,
-                interval_sec=poll_interval_sec,
-            )
-            step["signatures_ready"] = True
-        except Exception as e:
-            step["error"] = f"poll: {e}"
-            out["steps"].append(step)
-            continue
-
-        if no_execute:
-            step["execute"] = "skipped (--no-execute)"
-            out["steps"].append(step)
-            continue
-
         proc = run_execute_sign_result(
             mpc_auth_url=mpc_auth_url,
             management_port=management_port,
@@ -432,7 +396,7 @@ def run_interactive() -> tuple[bool, bool, bool]:
     """Returns (keygen_messages, sign_ready, execute_fast_for_sign_ready)."""
     print("MPC event listener — enable handlers (this run only):", file=sys.stderr)
     keygen = _prompt_yes_no("Enable KeyGen @agent message poll (keygen_messages)?", default=False)
-    sign_ready = _prompt_yes_no("Enable sign-ready pipeline (list → trigger → execute)?", default=False)
+    sign_ready = _prompt_yes_no("Enable sign-ready pipeline (list → executeSignResult per id)?", default=False)
     execute_fast = False
     if sign_ready:
         execute_fast = _prompt_yes_no(
@@ -458,7 +422,7 @@ def main() -> None:
     ap.add_argument(
         "--sign-ready",
         action="store_true",
-        help="Process GET /listSignRequestsReady: trigger, poll signatures, executeSignResult",
+        help="Process GET /listSignRequestsReady: executeSignResult.py per ready id",
     )
     ap.add_argument(
         "--execute-fast",
@@ -466,14 +430,9 @@ def main() -> None:
         help="Pass --fast to executeSignResult (only with --sign-ready)",
     )
     ap.add_argument(
-        "--no-execute",
-        action="store_true",
-        help="With --sign-ready: trigger and wait for MPC signatures but do not broadcast",
-    )
-    ap.add_argument(
         "--sign-ready-dry-run",
         action="store_true",
-        help="Only list ready sign request ids; no trigger or execute",
+        help="Only list ready sign request ids; no executeSignResult",
     )
     ap.add_argument(
         "--dry-run",
@@ -485,18 +444,6 @@ def main() -> None:
         type=int,
         default=int(os.environ.get("MPC_EVENT_LISTENER_PAGESIZE", "50")),
         help="Page size for listSignRequestsReady (default: 50 or MPC_EVENT_LISTENER_PAGESIZE)",
-    )
-    ap.add_argument(
-        "--poll-timeout",
-        type=float,
-        default=float(os.environ.get("MPC_SIGN_POLL_TIMEOUT_SEC", "600")),
-        help="Seconds to wait for getSignResultById after trigger (default 600)",
-    )
-    ap.add_argument(
-        "--poll-interval",
-        type=float,
-        default=float(os.environ.get("MPC_SIGN_POLL_INTERVAL_SEC", "5")),
-        help="Seconds between getSignResultById polls (default 5)",
     )
     ap.add_argument(
         "--rpc-url",
@@ -529,8 +476,6 @@ def main() -> None:
 
     if args.execute_fast and not sign_on:
         raise SystemExit("--execute-fast only applies with --sign-ready")
-    if args.no_execute and not sign_on:
-        raise SystemExit("--no-execute only applies with --sign-ready")
     if args.sign_ready_dry_run and not sign_on:
         raise SystemExit("--sign-ready-dry-run only applies with --sign-ready")
 
@@ -549,11 +494,8 @@ def main() -> None:
             management_port=str(management_port),
             pagesize=max(1, min(500, args.pagesize)),
             dry_run_list_only=bool(args.sign_ready_dry_run),
-            no_execute=bool(args.no_execute),
             execute_fast=execute_fast,
             rpc_url=args.rpc_url,
-            poll_timeout_sec=float(args.poll_timeout),
-            poll_interval_sec=float(args.poll_interval),
         )
 
     sys.stdout.write(compact_json(result) + "\n")

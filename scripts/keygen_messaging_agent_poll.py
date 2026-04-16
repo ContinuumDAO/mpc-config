@@ -7,8 +7,10 @@ Designed for an **Open Claw** (or similar) **isolated cron** job.
 **What this script does not do:** it does not parse intent, plan, or send replies. It only
 filters unread messages, prints JSON, and marks them read so they are not redelivered.
 
-**What the AI agent must do after ``exec``:** read stdout (one JSON line). If
-``match_count`` > 0, for each item in ``matches`` use **title**, **body**, and thread
+**What the AI agent must do after ``exec``:** read stdout (one JSON line). If the
+object contains ``error`` (e.g. missing ``KEYGEN_ID``), surface that to the user and
+do not treat the run as a successful poll. If ``match_count`` > 0, for each item in
+``matches`` use **title**, **body**, and thread
 context (``GET /getMessageThread`` / ``getMessageById`` as needed) to infer what the
 human asked for, then **act**—call management APIs, run tools (e.g. Foundry/compose
 scripts), and/or **``POST /sendMessage``** with an appropriate reply (management-signed;
@@ -28,12 +30,14 @@ Environment
 Names align with ``docs/skill/SKILL.md`` (``KEYGEN_ID``, ``AUTH_KEY_PATH``) plus
 script-specific variables below.
 
-KEYGEN_ID                   KeyGen channel id (required).
+KEYGEN_ID                   KeyGen channel id (**required**). If unset or empty, the
+                            script prints a JSON line with ``error``, ``match_count``=0,
+                            and exits with code 1.
 AUTH_KEY_PATH               Directory containing the Ed25519 management private key file
                             (see ``AUTH_KEY_FILENAME``). If unset, the key file is
                             ``~/.ssh/mpc_auth_ed25519``. Must not be a path to the key file itself.
 AUTH_KEY_FILENAME           Basename of the key file inside ``AUTH_KEY_PATH`` (default
-                            ``mpc_auth_ed25519``). PEM or OpenSSH; see AGENT_ED25519_SETUP.md.
+                            ``mpc_auth_ed25519``). PEM or OpenSSH; see docs/references/ED25519_MANAGEMENT_KEY_SIGNING.md.
 MPC_AUTH_URL                Management API host URL (default ``http://127.0.0.1``).
 MANAGEMENT_PORT             Management API port (default ``8080``).
 MPC_MGT_ED25519_SEED_HEX    Optional 64-hex (32-byte) raw seed; overrides key file.
@@ -175,7 +179,18 @@ def main() -> None:
     )
     key_gen_id = os.environ.get("KEYGEN_ID", "").strip()
     if not key_gen_id:
-        raise SystemExit("KEYGEN_ID is required")
+        err_out: dict[str, Any] = {
+            "error": (
+                "KEYGEN_ID is not set or empty. Set KEYGEN_ID in the environment to the "
+                "KeyGen channel id (see docs/skill/SKILL.md Environment)."
+            ),
+            "match_count": 0,
+            "matches": [],
+            "marked_ids": [],
+            "dry_run": bool(args.dry_run),
+        }
+        sys.stdout.write(compact_json(err_out) + "\n")
+        raise SystemExit(1)
 
     try:
         pagesize = int(os.environ.get("MPC_KEYGEN_POLL_PAGESIZE", "50"))

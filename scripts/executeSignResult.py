@@ -2,8 +2,13 @@
 """
 executeSignResult
 
-Broadcast EVM transactions from a **successful** MPC sign result (after
-``POST /triggerSignRequestById`` and ``GET /getSignResultById``).
+Broadcast EVM transactions from an MPC sign request. When **HTTP** mode is used
+(``--sign-request-id`` without ``--sign-result-file``), this script **calls**
+``POST /triggerSignRequestById`` (management-signed, with EVM ``txParams`` /
+``messageHash`` when required), **polls** ``GET /getSignResultById`` until
+signatures exist, then builds and broadcasts—so **do not** trigger separately before
+running this script. If ``getSignResultById`` already has signatures, the script skips
+``POST /triggerSignRequestById``.
 
 **Single-tx (matches continuumdao-node-app “Execute”):** rebuilds the unsigned EIP-1559/legacy
 transaction using ``GET /getSignRequestById?tx_params=1`` (gas/nonce snapshot at Get Sig), chain
@@ -94,7 +99,13 @@ if _spec is None or _spec.loader is None:
 _forge = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_forge)
 
-from mpc_mgt_helpers import api_code, api_data, api_error
+from mpc_mgt_helpers import (
+    api_code,
+    api_data,
+    api_error,
+    http_json_any_code,
+    load_ed25519_private_key,
+)
 
 import generateMultiSignRequestFromCompose as _compose
 
@@ -174,6 +185,20 @@ def unwrap_api_response(resp: dict[str, Any], what: str) -> Any:
         err = api_error(resp) or str(resp)
         raise ValueError(f"{what} failed (code={c}): {err}")
     return api_data(resp)
+
+
+def fetch_sign_result_lenient(mpc_base: str, request_id: str) -> dict[str, Any]:
+    """GET /getSignResultById — empty dict if missing or non-zero code (before trigger)."""
+    r = http_json_any_code(
+        "GET",
+        mpc_base.rstrip("/"),
+        "/getSignResultById",
+        query={"id": request_id},
+    )
+    if api_code(r) != 0:
+        return {}
+    data = api_data(r)
+    return data if isinstance(data, dict) else {}
 
 
 def fetch_sign_result(mpc_base: str, request_id: str) -> dict[str, Any]:
@@ -1153,7 +1178,23 @@ def _execute_sign_result_main(
     else:
         if not request_id:
             raise SystemExit("error: --sign-request-id is required when not using --sign-result-file")
-        sign_data = fetch_sign_result(mpc, request_id)
+        sign_data = fetch_sign_result_lenient(mpc, request_id)
+        from mpc_event_listener import (
+            poll_sign_result_ready,
+            post_trigger_sign_request,
+            sign_result_has_signatures,
+        )
+
+        if not sign_result_has_signatures(sign_data):
+            priv = load_ed25519_private_key()
+            post_trigger_sign_request(mpc, priv, request_id)
+            poll_sign_result_ready(
+                mpc,
+                request_id,
+                timeout_sec=float(os.environ.get("MPC_EXECUTE_POLL_TIMEOUT_SEC", "600")),
+                interval_sec=float(os.environ.get("MPC_EXECUTE_POLL_INTERVAL_SEC", "2")),
+            )
+            sign_data = fetch_sign_result(mpc, request_id)
 
     if not isinstance(sign_data, dict):
         raise SystemExit("sign result must be a JSON object")

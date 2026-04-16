@@ -30,6 +30,15 @@ Example::
   python3 recipes/erc20_transfer.py ... > /tmp/a.json
   python3 recipes/ctmerc20_transfer.py ... > /tmp/b.json
   python3 scripts/multiSignJoin.py --a /tmp/a.json --b /tmp/b.json --first-nonce "$(cast nonce 0x... --rpc-url ...)"
+
+**Chaining (longer sequences):** stdout is the same **multiSignRequest-helper** shape
+as compose/Foundry output (``bodyForSign``, ``messageToSign``). You may **feed that
+JSON back** as ``--a`` or ``--b`` in another run, together with a new helper output,
+to append more transactions on the **same chain**. Repeat as needed for multi-step
+DeFi flows. Set ``--first-nonce`` to the MPC account nonce for the **first** tx in
+the **final** merged sequence (usually ``cast nonce <MPC address>`` at proposal time).
+Each completed stdout is ready for management signing and **POST /multiSignRequest**
+(see docs).
 """
 
 from __future__ import annotations

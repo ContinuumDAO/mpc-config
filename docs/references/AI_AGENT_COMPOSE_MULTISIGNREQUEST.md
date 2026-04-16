@@ -1,24 +1,48 @@
-# AI Agent Guide: Compose JSON → multiSignRequest
+# AI Agent Guide: Creating `POST /multiSignRequest` payloads
 
-This document is for **AI agents** that build **POST /multiSignRequest** payloads from **human-style compose data** (function signature, Solidity parameters, chain id)—the same conceptual input as the **Compose** panel in **`continuumdao-node-app`** (manual mode, not Foundry import). Use **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`**.
+This is the **home doc** for anything that produces a **`POST /multiSignRequest`** body (multi-agree keys only). **POST /signRequest** is for **tx-check / relayer** keys only.
 
-**Do not confuse with Foundry:** For transactions produced by **`forge script`** and **`run-latest.json`**, use **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** and **[AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md)** instead.
+## How you may build `multiSignRequest` payloads (strict)
 
-**Endpoint discipline:** **POST /multiSignRequest** is for **multi-agree** MPC keys only. **POST /signRequest** is for **tx-check / relayer** keys only.
+Valid EVM payloads must include correct **`msgHash`** / **`messageHashes`**, **`messageRawBatch`**, **`txParams`** alignment for trigger/execute, and **`extraJSON`** / batch metadata where required. **Do not** invent or hand-edit **`multiSignRequest`** JSON from scratch: the message must reflect **TxParams**, signing hashes, and app parity rules documented in **`./API_IMPLEMENTATION.md`** and the helper scripts.
+
+**Agents are expected to `POST /multiSignRequest`** with bodies produced **only** by the supported paths below (helpers and recipes). The mistake to avoid is fabricating JSON without those tools—not avoiding the endpoint.
+
+The **only** supported ways to obtain a new **`multiSignRequest`** body are:
+
+1. **Recipes** — run the supplied scripts under **`$MPA_PATH/recipes/`** (see [Recipes table](#recipes-table) below). They call **`generateMultiSignRequestFromCompose.py`** with the right **`GET /getKeyGenResultById`** / **`GET /getChainDetails`** behavior.
+2. **Compose helper** — **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** when you have (or build) **compose JSON** (function signature, parameters, chain id), matching the **Compose** flow in **`continuumdao-node-app`**. See [Compose JSON](#compose-json-schema) below.
+3. **Foundry helper** — **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** with **`forge script`** output (**`run-latest.json`**), together with Foundry as described in **`./AI_AGENT_FORGE_SIGNREQUEST.md`**.
+
+For **two** helper outputs merged into **one** batch proposal, use **`$MPA_PATH/scripts/multiSignJoin.py`** (see **`../skill/SKILL.md`** and **`multiSignJoin.py --help`**).
+
+**Output is a first-class payload:** stdout has the same **`bodyForSign`** / **`messageToSign`** envelope as the other helpers. Add **`clientSig`** / **`signedMessage`**, then **`POST /multiSignRequest`**—**never** edit the merged JSON by hand except via this tool.
+
+**Chaining (complicated sequences):** each run only joins **two** files. To build longer ordered sequences on the **same chain**, run **`multiSignJoin.py`** again: use the **previous run’s saved stdout** as **`--a`** or **`--b`**, and the next recipe/helper JSON as the other input. **`--first-nonce`** must be the MPC **`cast nonce`** (or equivalent) for the **first** transaction in the **combined** result after that merge. You can repeat this as many times as needed (e.g. approve → swap → bridge steps), still **only** through helper outputs and **`multiSignJoin`**—not hand-built JSON.
+
+**Management signing** (**clientSig**, nonces, **signedMessage**) is documented in **`./ED25519_MANAGEMENT_KEY_SIGNING.md`** (Ed25519) and **`./AI_AGENT_FORGE_SIGNREQUEST.md`** (shared **messageToSign** rules).
+
+---
+
+## Compose JSON → helper (manual compose)
+
+This section is for agents that build **compose JSON** (function signature, Solidity parameters, chain id)—the same conceptual input as the **Compose** panel in **`continuumdao-node-app`** (manual mode, not Foundry import). Run **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`**.
+
+**Foundry path:** For transactions produced by **`forge script`** and **`run-latest.json`**, use **`generateSignRequestWithFoundryScript.py`** and **`./AI_AGENT_FORGE_SIGNREQUEST.md`** instead of compose JSON.
 
 ### Checklist (multiSignRequest)
 
 1. **Resolve** **`keyGenId`**, the MPC wallet **`from`** address, and the **management API base URL** for the node you call (e.g. **`GET /getKeyGenResultById`**, environment such as **`KEYGEN_ID`** / **`AUTH_KEY_PATH`**, port from **`configs.yaml`** or the operator).
-2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **[AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md)** or **this document**.
+2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **`./AI_AGENT_FORGE_SIGNREQUEST.md`** or **this document**.
 3. **Review** **`Purpose`** (≤256 characters) and transaction fields (chain id, calldata, gas, nonces) against group intent and messages.
-4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** requires for your deployment).
-5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → track peer responses → **`POST /triggerSignRequestById`** when ready → broadcast raw transactions → **`POST /updateSignResultStatusById`**. **EVM:** **`POST /triggerSignRequestById`** must include **`txParams`** and **`messageHash`** so the node stores them (see **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** § **`POST /triggerSignRequestById`**). Narrative flow: **[instructions.md](./instructions.md)**.
+4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **`./API_IMPLEMENTATION.md`** requires for your deployment).
+5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → peers **`POST /signRequestAgree`** → when ready, **EVM execution for AI agents** is **only** **`$MPA_PATH/scripts/executeSignResult.py`** (it **`POST`**s **`/triggerSignRequestById`** with **`txParams`** / **`messageHash`**, polls **`getSignResultById`**, broadcasts—see **`../skill/SKILL.md`**). Do **not** call **`POST /triggerSignRequestById`** or broadcast **directly** from the agent. Then **`POST /updateSignResultStatusById`**. Human operators may still use the web app / manual **`curl`** flow described in **`./instructions.md`** and **`./API_IMPLEMENTATION.md`** § **`POST /triggerSignRequestById`**.
 
 ---
 
 ## Management API URL
 
-Point **`--mpc-auth-url`** at the node’s **management HTTP API** as **`$MPC_AUTH_URL:$MANAGEMENT_PORT`**. `MPC_AUTH_URL` should be host-only (for example `http://127.0.0.1` or `http://<IP>`), and `MANAGEMENT_PORT` should be the numeric `ManagementAPIsPort` in `configs.yaml`. See **[AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md)** §8.2 if you use a non-default port or remote access.
+Point **`--mpc-auth-url`** at the node’s **management HTTP API** as **`$MPC_AUTH_URL:$MANAGEMENT_PORT`**. `MPC_AUTH_URL` should be host-only (for example `http://127.0.0.1` or `http://<IP>`), and `MANAGEMENT_PORT` should be the numeric `ManagementAPIsPort` in `configs.yaml`. Load these from **`$MPA_PATH/.env`** when present (**`../skill/SKILL.md`** **Environment**).
 
 The script calls:
 
@@ -35,13 +59,13 @@ It also performs **JSON-RPC** against that RPC (`eth_getTransactionCount`, `eth_
 2. Run **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** to obtain **`bodyForSign`** and **`messageToSign`** (same convention as the web app before management signing).
 3. Add **`clientSig`** (and **`signedMessage`** for MetaMask-style management keys), then **POST /multiSignRequest**.
 
-The script fills **`keyList`** and **`pubKey`** from the node. It computes **EVM tx signing hashes** using the same helpers as the Foundry script so **`msgHash`** / **`messageHashes`** match **unsigned EIP-1559 / legacy** serialization. The numbered **Checklist** at the top of this file is the same sequence as **[instructions.md](./instructions.md)**.
+The script fills **`keyList`** and **`pubKey`** from the node. It computes **EVM tx signing hashes** using the same helpers as the Foundry script so **`msgHash`** / **`messageHashes`** match **unsigned EIP-1559 / legacy** serialization. The numbered **Checklist** at the top of this file is the same sequence as **`./instructions.md`**.
 
 ---
 
 ## Install dependencies (required)
 
-**Both** packages are **mandatory** (the script imports **PyNaCl** at startup). Use the venv at **`$MPA_PATH/.venv`** (create with **`python3 -m venv "$MPA_PATH/.venv"`** if missing). Full bootstrap and verification: **[SKILL.md](../skill/SKILL.md)** **Python dependencies**.
+**Both** packages are **mandatory** (the script imports **PyNaCl** at startup). Use the venv at **`$MPA_PATH/.venv`** (create with **`python3 -m venv "$MPA_PATH/.venv"`** if missing). Full bootstrap and verification: **`../skill/SKILL.md`** **Python dependencies**.
 
 ```bash
 "$MPA_PATH/.venv/bin/pip" install eth-account PyNaCl
@@ -130,13 +154,31 @@ Use **one** of these if the agent holds the management private material; otherwi
 
 ## Management `clientSig` (not the MPC key)
 
-Same rules as **[AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md)** § “How to get keyList, pubKey, and clientSig”:
+Same rules as **`./AI_AGENT_FORGE_SIGNREQUEST.md`** § “How to get keyList, pubKey, and clientSig”. **Ed25519**, **`getPublicMgtKeyNonce`**, and **`sign-clipboard --inline` / `--inline-file`**: **`./ED25519_MANAGEMENT_KEY_SIGNING.md`**.
 
-- **`clientSig`** authenticates the **management** key (Ed25519 or Ethereum), **not** the MPC wallet.
-- **Ed25519:** Sign the **`messageToSign`** string with the management secret key; **`clientSig`** = **128 hex**; **`signedMessage`** may be empty (backend can canonicalize).
-- **MetaMask / NodeMgtKey:** EIP-191 sign **`messageToSign`**; **`clientSig`** = **`0x` + signature**; **`signedMessage`** must equal the **exact** string that was signed.
+---
 
-**Management API nonces:** Endpoints such as **`sendMessage`**, **`triggerSignRequestById`**, and **`addManagementKey`** require a **`nonce`** that matches the node’s counter for the **management** key you sign with. Use **`GET /getPublicMgtKeyNonce`** (optional **`?publicKey=`** for added Ed25519 keys) for Ed25519; use **`GET /getNodeMgtKeyNonce`** only for Ethereum **`NodeMgtKey`** (MetaMask). Both return **`Data`: `{ "key": "…", "nonce": <int> }`**. **`multiSignRequest`** in the standard flow does not use those GETs for nonce; it is signed via **`messageToSign`** as above.
+## Recipes table
+
+Thin CLI wrappers under **`$MPA_PATH/recipes/`**. Each calls **`generateMultiSignRequestFromCompose.py`** internally (needs **`eth-account`** + **`PyNaCl`** in **`$MPA_PATH/.venv`** — **`../skill/SKILL.md`** **Python dependencies**).
+
+| Script | What it builds |
+|--------|------------------|
+| **`linea_register.py`** | **`register()`** on the Linea fee contract (chain **`59144`**); RPC from **`getChainDetails`** unless overridden. |
+| **`linea_fee_deposit.py`** | **`deposit(address,uint256)`** on the Linea fee contract; **`--amount-wei`**; MPC must have **approved** the fee token first. |
+| **`erc20_transfer.py`** | ERC-20 **`transfer(address,uint256)`** on **`--token`** toward **`--to`**. |
+| **`native_transfer.py`** | Native gas token transfer (**`nativeTransfer`** compose). |
+| **`ctmerc20_transfer.py`** | CTMERC20 **`c3transfer`** (cross-chain third arg **`--to-chain-id`**). |
+| **`ctmrwa1_transfer_whole.py`** | CTMRWA1 **`transferWholeTokenX`**. |
+| **`ctmrwa1_transfer_partial.py`** | CTMRWA1 **`transferPartialTokenX`**. |
+
+**Examples** (paths and flags): **`../skill/SKILL.md`** **Recipes** (short examples) or run **`--help`** on each script.
+
+---
+
+## Lifecycle after you have a payload
+
+Once **`POST /multiSignRequest`** succeeds, other nodes **`POST /signRequestAgree`**, then the originator runs the trigger / execute / broadcast step. **AI agents:** **only** **`executeSignResult.py`** for EVM (same as **`../skill/SKILL.md`** **Default operational loop**). **EVM** trigger bodies must carry **`txParams`** and **`messageHash`** (the script matches web **Get Sig** parity). Generic narrative: **`./instructions.md`** and **`./API_IMPLEMENTATION.md`**.
 
 ---
 
@@ -164,20 +206,21 @@ The script matches **`continuumdao-node-app`** **`handleComposeOK`** behavior:
 
 ## Checklist for the agent
 
-- [ ] Install deps in **`$MPA_PATH/.venv`**: **`"$MPA_PATH/.venv/bin/pip" install eth-account PyNaCl`** (see **[SKILL.md](../skill/SKILL.md)** **Python dependencies**).
+- [ ] Install deps in **`$MPA_PATH/.venv`**: **`"$MPA_PATH/.venv/bin/pip" install eth-account PyNaCl`** (see **`../skill/SKILL.md`** **Python dependencies**).
 - [ ] Compose JSON includes **`keyGenId`**, **`destinationChainId`**, and at least one **`composeActions`** entry with valid **`signature`**, **`destinationContract`**, and **`inputs`**.
 - [ ] Either set **`rpcGateway`** in JSON or ensure the chain exists on the node with an RPC in **Configure blockchains** (for **`getChainDetails`**).
 - [ ] Run the script with **`--mpc-auth-url`** pointing at **ManagementAPIsPort**.
 - [ ] Parse stdout JSON; use **`messageToSign`** to produce **`clientSig`** (or use **`postBody`** if you passed a signing flag).
 - [ ] **POST** the final JSON body to **`POST /multiSignRequest`** (not **`/signRequest`** for multi-agree keys).
-- [ ] Use the returned request id for **`/signRequestAgree`**, **`/triggerSignRequestById`** (EVM: include **`txParams`** + **`messageHash`** on trigger—see API doc), **`/getSignResultById`** as in the forge guide.
+- [ ] Use the returned request id for **`/signRequestAgree`**, then **`executeSignResult.py`** (not raw **`/triggerSignRequestById`** from the agent). **EVM:** parity via script + API (**`txParams`** / **`messageHash`**) per **`./API_IMPLEMENTATION.md`** and **`../skill/SKILL.md`**.
 
 ---
 
 ## References
 
 - **Script:** `$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py` (module docstring + argparse help).
-- **Forge path:** [AI_AGENT_FORGE_SIGNREQUEST.md](./AI_AGENT_FORGE_SIGNREQUEST.md).
-- **API:** [API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md) (§ **POST /multiSignRequest**).
-- **Batch behavior:** see **Single vs batch body shape** in this doc and **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)**.
+- **Forge path:** `./AI_AGENT_FORGE_SIGNREQUEST.md`.
+- **Ed25519 management signing:** `./ED25519_MANAGEMENT_KEY_SIGNING.md`.
+- **API:** `./API_IMPLEMENTATION.md` (§ **POST /multiSignRequest**).
+- **Batch behavior:** see **Single vs batch body shape** in this doc and **`./API_IMPLEMENTATION.md`**.
 - **UI parity:** `continuumdao-node-app` — Compose manual flow: `app/multi-sign/page.tsx` (`handleComposeOK`), calldata: `app/utils/continuumDAO.ts` (`encodeActionCalldata`), fees: `app/utils/chainFees.ts` (`fetchChainFeeParams`).

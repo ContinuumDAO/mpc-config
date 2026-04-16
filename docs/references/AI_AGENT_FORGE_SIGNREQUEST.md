@@ -5,14 +5,14 @@ This document is for **AI agents** and **other programmatic automation** that tu
 ### Checklist (multiSignRequest)
 
 1. **Resolve** **`keyGenId`**, the MPC wallet **`from`** address, and the **management API base URL** for the node you call (e.g. **`GET /getKeyGenResultById`**, environment such as **`KEYGEN_ID`** / **`AUTH_KEY_PATH`**, port from **`configs.yaml`** or the operator).
-2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **this document** or **[AI_AGENT_COMPOSE_MULTISIGNREQUEST.md](./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md)**.
+2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **this document** or **`./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**.
 3. **Review** **`Purpose`** (≤256 characters) and transaction fields (chain id, calldata, gas, nonces) against group intent and messages.
-4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** requires for your deployment).
-5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → track peer responses → **`POST /triggerSignRequestById`** when ready → broadcast raw transactions → **`POST /updateSignResultStatusById`**. **EVM:** **`POST /triggerSignRequestById`** must include **`txParams`** and **`messageHash`** so the node stores them (see **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** § **`POST /triggerSignRequestById`**). Narrative flow: **[instructions.md](./instructions.md)**.
+4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **`./API_IMPLEMENTATION.md`** requires for your deployment).
+5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → peers agree → when ready, **AI agents** run **only** **`$MPA_PATH/scripts/executeSignResult.py`** for EVM trigger + broadcast (see **`../skill/SKILL.md`**—do **not** call **`POST /triggerSignRequestById`** directly). **`updateSignResultStatusById`** after execution. **`./instructions.md`** and **`./API_IMPLEMENTATION.md`** describe the full protocol including manual **`curl`** / web **Execute**.
 
 ### Management API URL
 
-Point **`--mpc-auth-url`** at the node’s **management HTTP API** as **`$MPC_AUTH_URL:$MANAGEMENT_PORT`**. `MPC_AUTH_URL` should be host-only (for example `http://127.0.0.1` or `http://<IP>`), and `MANAGEMENT_PORT` should be numeric (`ManagementAPIsPort` in `configs.yaml`). See **[AGENT_ED25519_SETUP.md](./AGENT_ED25519_SETUP.md)** §8.2.
+Point **`--mpc-auth-url`** at the node’s **management HTTP API** as **`$MPC_AUTH_URL:$MANAGEMENT_PORT`**. `MPC_AUTH_URL` should be host-only (for example `http://127.0.0.1` or `http://<IP>`), and `MANAGEMENT_PORT` should be numeric (`ManagementAPIsPort` in `configs.yaml`). Load from **`$MPA_PATH/.env`** when present (**`../skill/SKILL.md`** **Environment**).
 
 ---
 
@@ -47,7 +47,7 @@ If the keygen is not ready yet, the API returns `code: 1` ("not ready"); wait fo
 
 #### Option 1: Ed25519 management key (recommended for agents)
 
-Use when the node has an Ed25519 management key configured (`GET /hasPublicMgtKey` returns `true`). No separate **management nonce** is required for **`multiSignRequest`** (signing uses **`messageToSign`** only). For **other** management endpoints that include **`nonce`** in the body (**`sendMessage`**, **`triggerSignRequestById`**, **`addManagementKey`**, …), use **`GET /getPublicMgtKeyNonce`** for Ed25519 — not **`GET /getNodeMgtKeyNonce`** (Ethereum **`NodeMgtKey`** only). See **[SKILL.md](../skill/SKILL.md)** § Management API nonce and **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)**.
+Use when the node has an Ed25519 management key configured (`GET /hasPublicMgtKey` returns `true`). No separate **management nonce** is required for **`multiSignRequest`** (signing uses **`messageToSign`** only). For **other** management endpoints that include **`nonce`** in the body (**`sendMessage`**, **`triggerSignRequestById`**, **`addManagementKey`**, …), use **`GET /getPublicMgtKeyNonce`** for Ed25519 — not **`GET /getNodeMgtKeyNonce`** (Ethereum **`NodeMgtKey`** only). See **`../skill/SKILL.md`** § Management API nonce and **`./API_IMPLEMENTATION.md`**.
 
 1. **Build the full request body** with all fields from the script output (e.g. `messageHashes`, `messageRawBatch`, `destinationChainID`, `keyList`, `pubKey`, `purpose`, etc.). Set **`clientSig`** and **`signedMessage`** to empty strings.
 2. **Canonical message to sign:** The backend expects the **canonical JSON** of that body (same field order as Go’s `json.Marshal`; `clientSig` and `signedMessage` must be empty). You can either:
@@ -75,7 +75,7 @@ Use when the node uses an Ethereum address as the management key (e.g. MetaMask)
 
 **Location:** `$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`.
 
-**Dependency:** Install **`eth-account`** into **`$MPA_PATH/.venv`** and run the helper with **`$MPA_PATH/.venv/bin/python`** (bootstrap: **`python3 -m venv "$MPA_PATH/.venv"`** if the directory does not exist). Full package list and verification: **[SKILL.md](../skill/SKILL.md)** **Python dependencies**.
+**Dependency:** Install **`eth-account`** into **`$MPA_PATH/.venv`** and run the helper with **`$MPA_PATH/.venv/bin/python`** (bootstrap: **`python3 -m venv "$MPA_PATH/.venv"`** if the directory does not exist). Full package list and verification: **`../skill/SKILL.md`** **Python dependencies**.
 
 ```bash
 "$MPA_PATH/.venv/bin/pip" install eth-account
@@ -250,8 +250,7 @@ Use **`--override-sender`** / **`--first-nonce`** when the broadcast **`from`** 
 4. **POST** the final body to **POST /multiSignRequest** only (not **/signRequest**—that path is for tx-check / relayer keys).
 5. **Use** the returned `requestId` for:
    - **signRequestAgree** (multi-agree),
-   - **triggerSignRequestById** (after enough agreements; **EVM:** POST body must include **`txParams`** and **`messageHash`** so they are stored—see **API_IMPLEMENTATION.md**),
-   - **getSignResultById** to get signature(s). For batch, use `data.batchSignatures[i]` for the i-th transaction.
+   - **EVM (AI agent):** **`executeSignResult.py`** only—it performs **triggerSignRequestById** (with **`txParams`** / **`messageHash`**) and **`getSignResultById`** as in **API_IMPLEMENTATION.md** / **`../skill/SKILL.md`**. For batch signatures, the script consumes `data.batchSignatures[i]` the same way as the web flow.
 
 ---
 
@@ -273,11 +272,11 @@ Use **`--override-sender`** / **`--first-nonce`** when the broadcast **`from`** 
 - [ ] Parse the JSON output; use `body` for **POST /multiSignRequest**.
 - [ ] Add `clientSig` to `body` (`keyList`/`pubKey` already filled if using the Python script with `--key-gen-id`).
 - [ ] POST the complete body to **POST /multiSignRequest** (not `/signRequest` for multi-agree keys).
-- [ ] Use the returned `requestId` for agree/trigger and then get sign result(s). **EVM:** on **`POST /triggerSignRequestById`**, send **`txParams`** and **`messageHash`** (see **API_IMPLEMENTATION.md** § **`POST /triggerSignRequestById`**).
+- [ ] Use the returned `requestId` for agree, then **`executeSignResult.py`** for trigger + signatures + broadcast (**EVM** **`txParams`** / **`messageHash`** handled inside the script—see **API_IMPLEMENTATION.md** and **`../skill/SKILL.md`**).
 
 ---
 
 ## References
 
-- **API:** [API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md) in this folder (§ POST /multiSignRequest, GET /getSignResultById). **signRequest** is documented there for tx-check / relayer flows only.
-- **Batch behavior:** See **Single vs batch** in this document and **[API_IMPLEMENTATION.md](./API_IMPLEMENTATION.md)** (`POST /multiSignRequest`).
+- **API:** `./API_IMPLEMENTATION.md` in this folder (§ POST /multiSignRequest, GET /getSignResultById). **signRequest** is documented there for tx-check / relayer flows only.
+- **Batch behavior:** See **Single vs batch** in this document and **`./API_IMPLEMENTATION.md`** (`POST /multiSignRequest`).

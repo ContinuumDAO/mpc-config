@@ -13,7 +13,7 @@ relayer keys). The server rejects multiSignRequest for non-multi-agree keys.
 **keyList** and **pubKey** are filled by calling **GET /getKeyGenResultById** on the
 local node. Set ``--mpc-auth-url`` to ``http://localhost:<port>`` where **port** is
 **ManagementAPIsPort** in the node’s ``configs.yaml`` (often 8080 in sample configs).
-See ``docs/references/AGENT_ED25519_SETUP.md`` §8.2. You must pass **--key-gen-id**.
+See ``docs/skill/SKILL.md`` (**Environment**) for ``$MPC_AUTH_URL``/``MANAGEMENT_PORT``. You must pass **--key-gen-id**.
 
 Reads Foundry broadcast JSON (e.g. from `forge script` without --broadcast but with --rpc-url and --sender, or
 broadcast/.../run-latest.json) from stdin or a file and prints a JSON wrapper
@@ -147,7 +147,7 @@ from mpc_mgt_helpers import api_code, api_data, api_error
 ANVIL_SIMULATION_CHAIN_ID = "364865"
 
 # Fallback only if configs.yaml still has the sample port. User should set
-# --mpc-auth-url from ManagementAPIsPort in configs.yaml (see AGENT_ED25519_SETUP.md).
+# --mpc-auth-url from ManagementAPIsPort in configs.yaml (see docs/skill/SKILL.md Environment).
 DEFAULT_MPC_AUTH_URL = "http://127.0.0.1"
 DEFAULT_MANAGEMENT_PORT = "8080"
 

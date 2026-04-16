@@ -1039,8 +1039,11 @@ OpenSSL Error[0]: error:80000002:system library::No such file or directory
 
 ## Additional documentation
 
+- **[docs/skill/SKILL.md](docs/skill/SKILL.md)** – **mpa-wallet** skill: agent defaults (`multiSignRequest` helpers, **`executeSignResult.py`** only for EVM execute, environment).
+- **[docs/references/AI_AGENT_NEW_SESSION.md](docs/references/AI_AGENT_NEW_SESSION.md)** – Agent session bootstrap: **`.env`**, symlinks, **`GET /health`**, **`KEYGEN_ID`**.
 - **[docs/references/API_IMPLEMENTATION.md](docs/references/API_IMPLEMENTATION.md)** – Full API reference (endpoints, request/response formats, Swagger).
-- **[docs/references/AGENT_ED25519_SETUP.md](docs/references/AGENT_ED25519_SETUP.md)** – Ed25519 agent setup for node management (no MetaMask).
+- **[docs/references/ED25519_MANAGEMENT_KEY_SIGNING.md](docs/references/ED25519_MANAGEMENT_KEY_SIGNING.md)** – Ed25519 management signing for agents (allow-list, nonces, tools).
+- **[docs/CONFIGURING_ED25519_KEYS.md](docs/CONFIGURING_ED25519_KEYS.md)** – Node owner: creating keys, **`PublicMgtKey`**, **`addManagementKey`**, private key storage.
 - **[docs/internal/README.md](docs/internal/README.md)** – Index of internal operator notes ( **`process_config.sh`**, Browser HTTPS, firewall).
 - **[docs/internal/MULTI_SIGNREQUEST_DESIGN.md](docs/internal/MULTI_SIGNREQUEST_DESIGN.md)** – Batch **`multiSignRequest`** design detail (signing flow).
 
