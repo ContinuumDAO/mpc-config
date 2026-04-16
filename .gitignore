@@ -1,10 +1,14 @@
 # Certificate files (private keys should never be committed)
-mosquitto/config/certs/*.key
-mosquitto/config/certs/*.csr
-mosquitto/config/certs/*.srl
+mosquitto/config/certs/
 
 # Certificate directory (optional - uncomment if you want to ignore all certs)
 # mosquitto/config/certs/
+
+# config
+configs.yaml
+
+# webTLS
+webTLS/config/certs/
 
 # Data directories
 data/
