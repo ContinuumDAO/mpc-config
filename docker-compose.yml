@@ -1,3 +1,4 @@
+# Relay node: runs MQTT broker (mosquitto). Use this on the first node in configs.yaml nodeAddresses.
 version: '3.8'
 services:
   mongodb:
@@ -38,16 +39,13 @@ services:
     image: continuumdao/mpc-auth:v1.0
     restart: always
     environment:
-      # Configuration can be set via environment variables or configs.yaml file
-      # If both are set, environment variables take precedence
       - GOLOG_FILE=logs/MPCAuthCore.log
       - GOLOG_OUTPUT=file
     ports:
-      # Management API (ManagementAPIsPort): bound to loopback — use SSH tunnel to host:8080; not exposed on public IP.
-      - "127.0.0.1:8080:8080"
-      - "18080:18080" # Public discovery GET /getNodeMgtKey (configs.yaml PublicDiscoveryPort; matches NODE_DISCOVERY_PORT on DAO app)
-      - "18081:18081" # Scanner/relayer HTTP (configs.yaml ScannerRelayerPort); POST /signRequest etc. when split from 8080
-      - "8443:8443"   # Browser HTTPS (DAO app); GET routes use JWT per configs.yaml BrowserHTTPS
+      - "127.0.0.1:8080:8080" # Management API — localhost only; SSH tunnel for admin
+      - "18080:18080" # Public discovery (PublicDiscoveryPort; DAO app NODE_DISCOVERY_PORT)
+      - "18081:18081" # ScannerRelayerPort (signRequest, governance GETs when split)
+      - "8443:8443"   # Browser HTTPS (DAO app); TLS certs in ./webTLS/config/certs
       # Optional: loopback read HTTP (mpc-auth BrowserLoopbackReadHTTP) — same JWT routes without TLS in browser (SSH tunnel).
       # Uncomment when configs.yaml sets BrowserLoopbackReadHTTP.Port (match host port to config, bind loopback only):
       # - "127.0.0.1:8445:8445"

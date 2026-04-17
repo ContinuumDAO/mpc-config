@@ -46,6 +46,9 @@ services:
       - "18080:18080" # Public discovery (PublicDiscoveryPort; DAO app NODE_DISCOVERY_PORT)
       - "18081:18081" # ScannerRelayerPort (signRequest, governance GETs when split)
       - "8443:8443"   # Browser HTTPS (DAO app); TLS certs in ./webTLS/config/certs
+      # Optional: loopback read HTTP (mpc-auth BrowserLoopbackReadHTTP) — same JWT routes without TLS in browser (SSH tunnel).
+      # Uncomment when configs.yaml sets BrowserLoopbackReadHTTP.Port (match host port to config, bind loopback only):
+      # - "127.0.0.1:8445:8445"
     depends_on:
       mongodb:
         condition: service_healthy

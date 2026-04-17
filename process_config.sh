@@ -43,6 +43,9 @@ DEFAULT_BROWSER_HTTPS_EXPECTED_ISSUER="https://mpa.continuumdao.org"
 # HTTP port written into nodeAddresses URLs (management API); default Docker mapping is often 8080—set to match your deployment.
 MPC_NODE_HTTP_PORT=8081
 
+# BrowserLoopbackReadHTTP listener port (mpc-auth); must match docker-compose 127.0.0.1:<host>:<container> mapping.
+DEFAULT_BROWSER_LOOPBACK_READ_HTTP_PORT="${DEFAULT_BROWSER_LOOPBACK_READ_HTTP_PORT:-8445}"
+
 # Certificate regeneration: set to 1 or use --force-mqtt-certs / --force-browser-https-certs to overwrite existing files.
 # Default is to leave existing mosquitto/config/certs/* and webTLS/config/certs/* in place (avoids permission errors).
 FORCE_REGENERATE_MQTT_CERTS="${FORCE_REGENERATE_MQTT_CERTS:-0}"
@@ -3365,10 +3368,11 @@ EOF
 
 # Configure docker-compose.yml based on node type (relay or client).
 # Uses two fixed files: docker-compose.relay.yml and docker-compose.client.yml.
-# Copies the appropriate one to docker-compose.yml (no sed/awk on the active file).
+# Copies the appropriate one to docker-compose.yml, then applies loopback port mapping (see apply_docker_compose_loopback_mapping).
 # When script is in console/, look for compose files in script dir then in parent (repo root).
 configure_docker_compose() {
     local is_relay_node="$1"
+    local enable_loopback="${2:-0}"
     local script_dir="$(cd "$(dirname "$0")" && pwd)"
     local compose_dir="$script_dir"
     if [ -d "$script_dir/mosquitto/config" ]; then
@@ -3404,9 +3408,128 @@ configure_docker_compose() {
     
     if cp "$template" "$docker_compose_file" 2>/dev/null; then
         print_success "docker-compose.yml configured for $node_type node (copied from $(basename "$template"))"
+        apply_docker_compose_loopback_mapping "$docker_compose_file" "$enable_loopback" || true
     else
         print_warning "Failed to copy $template to docker-compose.yml"
         return 1
+    fi
+}
+
+# After copying a compose template, uncomment or comment the loopback-only port line for BrowserLoopbackReadHTTP.
+apply_docker_compose_loopback_mapping() {
+    local file="$1"
+    local enable="$2"
+    local port="${DEFAULT_BROWSER_LOOPBACK_READ_HTTP_PORT:-8445}"
+    if [ ! -f "$file" ]; then
+        print_warning "docker-compose file not found: $file"
+        return 1
+    fi
+    if ! command -v python3 &> /dev/null; then
+        print_warning "python3 not found — could not adjust loopback port mapping in docker-compose.yml"
+        return 1
+    fi
+    COMPOSE_LOOPBACK_FILE="$file" COMPOSE_LOOPBACK_ENABLE="$enable" COMPOSE_LOOPBACK_PORT="$port" python3 << 'PYCOMPOSE'
+import os
+import sys
+
+path = os.environ.get("COMPOSE_LOOPBACK_FILE", "")
+enable = os.environ.get("COMPOSE_LOOPBACK_ENABLE", "0").strip() == "1"
+port = os.environ.get("COMPOSE_LOOPBACK_PORT", "8445").strip()
+needle = f"127.0.0.1:{port}:{port}"
+if not path or not needle:
+    sys.exit(1)
+try:
+    with open(path, "r") as f:
+        lines = f.readlines()
+except OSError as e:
+    sys.stderr.write(f"{path}: {e}\n")
+    sys.exit(1)
+
+out = []
+for line in lines:
+    if needle not in line:
+        out.append(line)
+        continue
+    stripped = line.lstrip()
+    if enable:
+        if stripped.startswith("# ") and needle in stripped:
+            out.append(f'      - "{needle}"\n')
+        elif stripped.startswith('- "') and needle in stripped:
+            out.append(line)
+        else:
+            out.append(line)
+    else:
+        if stripped.startswith('- "') and needle in stripped:
+            out.append(f'      # - "{needle}"\n')
+        else:
+            out.append(line)
+
+with open(path, "w") as f:
+    f.writelines(out)
+PYCOMPOSE
+    if [ "$enable" = "1" ]; then
+        print_success "docker-compose.yml: loopback read HTTP enabled on host (127.0.0.1:${port}:${port} → container)."
+    else
+        print_info "docker-compose.yml: loopback read HTTP port mapping commented out (disabled)."
+    fi
+}
+
+# Interactive (or ENABLE_BROWSER_LOOPBACK_READ_HTTP / --enable-loopback-http) — sets BROWSER_LOOPBACK_READ_HTTP_ENABLED to 0 or 1.
+prompt_browser_loopback_read_http() {
+    if [ -n "${ENABLE_BROWSER_LOOPBACK_READ_HTTP+x}" ]; then
+        case "$ENABLE_BROWSER_LOOPBACK_READ_HTTP" in
+            1|yes|true|Y|y|YES|TRUE|on|ON)
+                BROWSER_LOOPBACK_READ_HTTP_ENABLED=1
+                ;;
+            *)
+                BROWSER_LOOPBACK_READ_HTTP_ENABLED=0
+                ;;
+        esac
+        print_info "Browser loopback read HTTP (SSH tunnel / http://127.0.0.1): $([ "$BROWSER_LOOPBACK_READ_HTTP_ENABLED" = 1 ] && echo ENABLED || echo disabled) (from ENABLE_BROWSER_LOOPBACK_READ_HTTP)"
+        return 0
+    fi
+    if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+        BROWSER_LOOPBACK_READ_HTTP_ENABLED=0
+        if [ -n "${CONFIG_FILE:-}" ] && [ -f "$CONFIG_FILE" ] && command -v python3 &> /dev/null; then
+            local _blr_infer
+            _blr_infer=$(
+                CONFIG_FILE_BLR_Q="$CONFIG_FILE" python3 << 'PYINF' 2>/dev/null || true
+try:
+    from ruamel.yaml import YAML
+    import os
+    p = os.environ.get("CONFIG_FILE_BLR_Q", "")
+    if not p:
+        print(0)
+        raise SystemExit
+    y = YAML()
+    with open(p) as f:
+        d = y.load(f) or {}
+    b = d.get("BrowserLoopbackReadHTTP") if isinstance(d, dict) else None
+    port = int(b.get("Port") or 0) if isinstance(b, dict) else 0
+    print(1 if port > 0 else 0)
+except Exception:
+    print(0)
+PYINF
+            )
+            if [ "$_blr_infer" = "1" ]; then
+                BROWSER_LOOPBACK_READ_HTTP_ENABLED=1
+                print_info "Browser loopback read HTTP: enabled (preserved from existing configs.yaml; non-interactive run). Use --disable-loopback-http to turn off."
+                return 0
+            fi
+        fi
+        print_info "Browser loopback read HTTP: disabled (no TTY; use --enable-loopback-http or ENABLE_BROWSER_LOOPBACK_READ_HTTP=1)"
+        return 0
+    fi
+    echo ""
+    print_step "Optional: loopback HTTP read API (DAO app over SSH tunnel)"
+    print_info "Plain HTTP on 127.0.0.1 only — same JWT routes as Browser HTTPS; browser uses http://127.0.0.1 after ssh -L."
+    print_info "This updates configs.yaml and docker-compose.yml automatically (no manual editing)."
+    local _blr
+    read -r -p "Enable loopback HTTP for this node? [y/N]: " _blr < /dev/tty || true
+    if [[ "${_blr:-}" =~ ^[Yy]$ ]]; then
+        BROWSER_LOOPBACK_READ_HTTP_ENABLED=1
+    else
+        BROWSER_LOOPBACK_READ_HTTP_ENABLED=0
     fi
 }
 
@@ -3681,6 +3804,80 @@ PYMERGE
     print_info "Defaults: JWKSURL=$DEFAULT_BROWSER_HTTPS_JWKS_URL, ExpectedIssuer=$DEFAULT_BROWSER_HTTPS_EXPECTED_ISSUER (Pattern B). Override in configs.yaml for standalone issuer (Pattern A). Docker: port 8443, volume ./webTLS/config/certs. See docs/internal/PROCESS_CONFIG_BROWSER_HTTPS.md"
 }
 
+# Writes BrowserLoopbackReadHTTP.Port and NodeIPForJWTMatch from the loopback prompt (no manual configs.yaml edits).
+# Call after setup_browser_https so BrowserHTTPS is enabled first.
+apply_browser_loopback_read_http_config() {
+    local config_file="$1"
+    local enable_loopback="${2:-0}"
+    local port="${DEFAULT_BROWSER_LOOPBACK_READ_HTTP_PORT:-8445}"
+
+    if ! command -v python3 &> /dev/null; then
+        print_warning "python3 not found — cannot update BrowserLoopbackReadHTTP in configs.yaml"
+        return 1
+    fi
+    require_ruamel_yaml || return 1
+
+    local browser_ip=""
+    if [ "$enable_loopback" = "1" ]; then
+        browser_ip=$(get_browser_https_node_ip "$config_file") || browser_ip=""
+        if [ -z "$browser_ip" ]; then
+            print_warning "Could not match this host to a node address in configs.yaml — BrowserLoopbackReadHTTP.NodeIPForJWTMatch will be empty (JWT node_ip claim may need to match 127.0.0.1 or use DAO app public host field)."
+        fi
+    fi
+
+    CONFIG_FILE_BLR="$config_file" ENABLE_BLR="$enable_loopback" BLR_PORT="$port" BROWSER_IP_BLR="$browser_ip" python3 << 'PYBLR'
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+    from ruamel.yaml.comments import CommentedMap
+except ImportError:
+    sys.exit(1)
+
+path = os.environ.get("CONFIG_FILE_BLR", "")
+enable = os.environ.get("ENABLE_BLR", "0").strip() == "1"
+try:
+    port = int(os.environ.get("BLR_PORT", "8445").strip())
+except ValueError:
+    port = 8445
+browser_ip = os.environ.get("BROWSER_IP_BLR", "").strip()
+
+if not path:
+    sys.exit(1)
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)
+
+with open(path, "r") as f:
+    data = yaml.load(f)
+if not isinstance(data, dict):
+    data = {}
+blr = data.get("BrowserLoopbackReadHTTP")
+if blr is None or not isinstance(blr, dict):
+    blr = CommentedMap()
+    data["BrowserLoopbackReadHTTP"] = blr
+
+if enable:
+    blr["Port"] = port
+    blr["NodeIPForJWTMatch"] = browser_ip
+else:
+    blr["Port"] = 0
+    blr["NodeIPForJWTMatch"] = ""
+
+with open(path, "w") as f:
+    yaml.dump(data, f)
+PYBLR
+
+    if [ "$enable_loopback" = "1" ]; then
+        print_success "configs.yaml: BrowserLoopbackReadHTTP enabled (Port ${port}, NodeIPForJWTMatch set for this node). Restart docker-compose to apply."
+        print_info "See docs/internal/SSH_TUNNEL_LOOPBACK_HTTP.md"
+    else
+        print_info "configs.yaml: BrowserLoopbackReadHTTP disabled (Port 0)."
+    fi
+}
+
 show_process_config_help() {
     echo "Usage: $0 [ARGUMENTS]"
     echo ""
@@ -3690,9 +3887,13 @@ show_process_config_help() {
     echo "  --no-firewall     Skip the default host firewall step (ufw allow rules). Not recommended for production."
     echo "  --force-mqtt-certs              Prompt to overwrite existing mosquitto/config/certs/* (default: leave existing files)"
     echo "  --force-browser-https-certs     Allow regenerating webTLS/config/certs/browser.* when SAN/IP mismatches (default: leave existing files)"
+    echo "  --enable-loopback-http          Enable SSH-tunnel loopback read HTTP (configs.yaml + docker-compose; non-interactive)"
+    echo "  --disable-loopback-http         Disable loopback read HTTP (non-interactive)"
     echo "  --help | -h | -help | help   Show this message (arguments above + relay/client behavior below)"
     echo ""
     echo "Environment (optional): FORCE_REGENERATE_MQTT_CERTS=1 / FORCE_REGENERATE_BROWSER_HTTPS_CERTS=1 same as the flags above."
+    echo "  ENABLE_BROWSER_LOOPBACK_READ_HTTP=0|1 — loopback HTTP when not using an interactive TTY (or override the prompt)."
+    echo "  DEFAULT_BROWSER_LOOPBACK_READ_HTTP_PORT — listener/host port (default 8445; must match docker-compose mapping)."
     echo "  UFW_OPEN_MANAGEMENT_PORT=1 — add ufw allow for ManagementAPIsPort (default: management port not opened in UFW)."
     echo ""
     echo "This script validates configuration and generates certificates."
@@ -3719,6 +3920,7 @@ show_process_config_help() {
     echo "  - Validates database connectivity (if PreSigningVerification is configured)"
     echo "  - Generates MQTT (mosquitto) certificates"
     echo "  - Enables Browser HTTPS: TLS cert in webTLS/config/certs, configs.yaml BrowserHTTPS, Docker 8443"
+    echo "  - Prompts for SSH tunnel loopback HTTP (or use --enable-loopback-http / ENABLE_BROWSER_LOOPBACK_READ_HTTP); updates configs.yaml and docker-compose.yml"
     echo "  - Does not copy CA to client nodes by default (use --copy-certs for automatic SSH copy)"
     echo ""
     echo "On CLIENT NODES:"
@@ -3899,6 +4101,7 @@ apply_process_config_firewall() {
     fi
 
     print_info "Ports from configs.yaml: ManagementAPIsPort=$mgt_port, PublicDiscoveryPort=$pub_port, BrowserHTTPS (firewall allow port)=$bh_port, ScannerRelayerPort=${sr_port:-0}"
+    print_info "BrowserLoopbackReadHTTP (SSH tunnel) binds 127.0.0.1 in the container — no WAN UFW rule for that port; access is via ssh -L to localhost."
     print_info "Narrow inbound to scanner/DAO/relayer CIDRs in production; see docs/internal/PROCESS_CONFIG_FIREWALL.md"
     if [ "$is_relay" = "true" ]; then
         print_info "Relay node: MQTT broker TLS typically uses 8883/tcp (docker-compose)."
@@ -4041,6 +4244,16 @@ main() {
                 export FORCE_REGENERATE_BROWSER_HTTPS_CERTS
                 shift
                 ;;
+            --enable-loopback-http)
+                ENABLE_BROWSER_LOOPBACK_READ_HTTP=1
+                export ENABLE_BROWSER_LOOPBACK_READ_HTTP
+                shift
+                ;;
+            --disable-loopback-http)
+                ENABLE_BROWSER_LOOPBACK_READ_HTTP=0
+                export ENABLE_BROWSER_LOOPBACK_READ_HTTP
+                shift
+                ;;
             --help|-h|-help|help)
                 show_process_config_help
                 exit 0
@@ -4101,12 +4314,15 @@ main() {
     else
         print_info "Detected as CLIENT NODE (this machine is not first in configs.yaml nodeAddresses) - mosquitto will be commented out"
     fi
-    
+
+    prompt_browser_loopback_read_http
+
     configure_mqtt_broker "$CONFIG_FILE" "$IS_RELAY_NODE"
-    configure_docker_compose "$IS_RELAY_NODE"
+    configure_docker_compose "$IS_RELAY_NODE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED"
 
     setup_browser_https "$CONFIG_FILE"
-    
+    apply_browser_loopback_read_http_config "$CONFIG_FILE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED"
+
     prompt_relayer_api_url_if_missing "$CONFIG_FILE" || exit 1
 
     # Host firewall must run before Relayer validation — if validation exits 1, we still showed UFW status + enable prompt.
