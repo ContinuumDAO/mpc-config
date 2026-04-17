@@ -38,3 +38,4 @@ If you run your **own** issuer/JWKS (standalone deployment), set **`JWKSURL`** a
 
 - **`./process_config.sh --help`** — full argument and environment variable list.
 - **`configs.yaml`** — inline comments on **`BrowserHTTPS`**.
+- **`./SSH_TUNNEL_LOOPBACK_HTTP.md`** — **`mpc-auth`** **`BrowserLoopbackReadHTTP`**: plain HTTP on **127.0.0.1** only (same read JWT API as **:8443**; **SSH tunnel** + **`http://127.0.0.1`** in the browser, no nginx).

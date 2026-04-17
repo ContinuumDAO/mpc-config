@@ -4,6 +4,9 @@ mosquitto/config/certs/
 # Certificate directory (optional - uncomment if you want to ignore all certs)
 # mosquitto/config/certs/
 
+# Internal docs
+docs/internal/
+
 # config
 configs.yaml
 

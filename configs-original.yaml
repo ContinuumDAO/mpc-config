@@ -393,3 +393,11 @@ BrowserHTTPS:
   ExpectedIssuer: ""
   EnforceNodeIPClaim: false
 
+# Optional: plain HTTP on 127.0.0.1 only — same read-JWT API as BrowserHTTPS (no TLS in browser; SSH tunnel + http://127.0.0.1).
+# Requires BrowserHTTPS enabled (shared JWKS). Set Port > 0 and map the same port in docker-compose (127.0.0.1 only).
+# When EnforceNodeIPClaim is true and the browser uses http://127.0.0.1, set NodeIPForJWTMatch to this node's public IP
+# so JWT node_ip matches; or mint JWT with node_ip 127.0.0.1 and leave NodeIPForJWTMatch empty.
+BrowserLoopbackReadHTTP:
+  Port: 0
+  NodeIPForJWTMatch: ""
+
