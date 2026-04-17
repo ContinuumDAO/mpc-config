@@ -6,8 +6,7 @@ This repository contains the configuration files and setup scripts needed to dep
 
 - **`configs.yaml`** - Main node configuration file
 - **`configs-original.yaml`** - Pristine copy of the default `configs.yaml` from this repo; use `cp configs-original.yaml configs.yaml` to revert if something goes wrong. **`process_config.sh` copies it to `configs.yaml` automatically** if `configs.yaml` is missing.
-- **`process_config.sh`** - Configuration validator and certificate generator
-- **`docker-compose.yml`** - Docker Compose configuration for running the node
+- **`process_config.sh`** - Configuration validator and certificate generator; **generates `docker-compose.yml`** (not committed) from **`docker-compose.relay.yml`** (relay / first node) or **`docker-compose.client.yml`** (other nodes)
 - **`mosquitto/config/mosquitto.conf`** - MQTT broker configuration
 - **`sign-clipboard in tools/`** - Utility to sign Ed25519 messages
 - **`webTLS/config/certs`** - certs to allow TLS 1.3 encryption to the browser
@@ -56,6 +55,8 @@ This script will:
 
 ### 4. Deploy with Docker
 
+After **`./process_config.sh`** (step 3), **`docker-compose.yml`** exists in the project directory (copied from the relay or client template). Then:
+
 ```bash
 docker-compose up -d
 ```
@@ -65,9 +66,9 @@ This starts:
 - **Mosquitto** - MQTT broker (port 8883 for TLS) BUT ONLY on the RELAY node. The other nodes are clients.
 - **mpc-auth** - MPC node: HTTP management API on **:8080** (`ManagementAPIsPort`); optional **Browser HTTPS** (TLS 1.3) on a separate port when `BrowserHTTPS` is enabled in `configs.yaml` (browser-facing API with JWT on GET; see comments in `configs.yaml`)
 
-The `docker-compose.yml` pulls the Docker image from the registry: `continuumdao/mpc-auth:v1.0`
+The generated **`docker-compose.yml`** pulls the Docker image from the registry: `continuumdao/mpc-auth:v1.0`
 
-**Note:** The default configuration uses version `v1.0`. To use a different version, edit `docker-compose.yml` and change the image tag (e.g., `continuumdao/mpc-auth:v1.1`).
+**Note:** The default configuration uses version `v1.0`. To use a different version, edit **`docker-compose.relay.yml`** or **`docker-compose.client.yml`** (then run **`./process_config.sh`** again so **`docker-compose.yml`** is regenerated), or edit the generated **`docker-compose.yml`** directly and change the image tag (e.g., `continuumdao/mpc-auth:v1.1`).
 
 ## Documentation
 
@@ -292,7 +293,7 @@ brew install yq
 
 **Using Docker (Automatic Setup):**
 
-If you're using Docker with `docker-compose.yml`, mosquitto is **automatically configured**:
+If you're using Docker with the **generated** `docker-compose.yml` (from `process_config.sh`), mosquitto is **automatically configured**:
 
 **Deployment Order (IMPORTANT):**
 
@@ -305,7 +306,7 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    This starts:
    - **mongodb**: Local MongoDB instance (port 27017)
    - **mosquitto**: MQTT broker (ports 8883:8883 for TLS, 9999:1883 for unencrypted, 9001:9001 for websockets) - **ONLY ON RELAY NODE**
-   - **app**: The mpc-auth node (**127.0.0.1:8080** management, **18080**/**18081**/**8443** per `docker-compose.yml`)
+   - **app**: The mpc-auth node (**127.0.0.1:8080** management, **18080**/**18081**/**8443** per the compose templates / generated file)
    
    **Verify mosquitto is running:**
    ```bash
@@ -323,7 +324,7 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    ./process_config.sh
    ```
    
-   **Important:** The script generates certificates in `mosquitto/config/certs/` (relative to your project directory). For Docker deployments, this is the correct location since `docker-compose.yml` mounts `./mosquitto/config` to `/mosquitto/config` in the container.
+   **Important:** The script generates certificates in `mosquitto/config/certs/` (relative to your project directory). For Docker deployments, this is the correct location since the generated **`docker-compose.yml`** mounts `./mosquitto/config` to `/mosquitto/config` in the container.
    
    **On the relay node (first node):**
    - Validates configuration
@@ -471,7 +472,7 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    
    **Option A: Use process_config.sh (Recommended)**
    
-   On each client node, run the configuration script before starting Docker. It detects that the node is a client (not first in `nodeAddresses`) and configures `docker-compose.yml` accordingly (copies from `docker-compose.client.yml`, which has mosquitto disabled):
+   On each client node, run the configuration script before starting Docker. It detects that the node is a client (not first in `nodeAddresses`) and **writes `docker-compose.yml`** accordingly (copies from `docker-compose.client.yml`, which has mosquitto disabled):
    
    ```bash
    cd mpc-config
@@ -481,14 +482,14 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    
    The script will:
    - Detect this machine as a CLIENT NODE
-   - Copy `docker-compose.client.yml` to `docker-compose.yml` (mosquitto service disabled, app does not depend on mosquitto)
+   - Generate **`docker-compose.yml`** from **`docker-compose.client.yml`** (mosquitto service disabled, app does not depend on mosquitto)
    - Validate config and certificate setup
    
    **Option B: Use docker-compose profiles (Advanced)**
    
-   If you want to keep the same docker-compose.yml file for both relay and client nodes, you can use profiles:
+   If you want to keep the same **`docker-compose.yml`** for both relay and client nodes, you can use profiles (edit **`docker-compose.relay.yml`** before running **`process_config.sh`**, or edit the generated compose file if you do not rely on regeneration):
    
-   1. Update `docker-compose.yml` to add a profile to mosquitto:
+   1. Add a profile to mosquitto:
    ```yaml
    mosquitto:
      profiles: ["broker"]  # Add this line - mosquitto only starts with --profile broker
@@ -512,9 +513,9 @@ If you're using Docker with `docker-compose.yml`, mosquitto is **automatically c
    
    **Note:** With this approach, the app service on the relay node will start even if mosquitto isn't ready yet (since the dependency is commented out). This is usually fine since the app will retry connecting to the broker.
    
-   **Option C: Use separate docker-compose file for client nodes**
+   **Option C: Use the client template file directly**
    
-   Create `docker-compose.client.yml` that excludes mosquitto, then use:
+   This repo already includes **`docker-compose.client.yml`** (no mosquitto). Either run **`./process_config.sh`** (recommended) to generate **`docker-compose.yml`**, or:
    ```bash
    docker-compose -f docker-compose.client.yml up -d
    ```
@@ -794,7 +795,7 @@ If `docker-compose up -d` fails with:
 ERROR: Version in "./docker-compose.yml" is unsupported. You might be seeing this error because you're using the wrong Compose file version.
 ```
 
-**Cause:** This repo’s `docker-compose.yml` declares **`version: '3.8'`**. Older **standalone** Compose binaries (for example **`docker-compose` 1.25.x** from some distro packages) do not implement that schema version, even when **Docker Engine** itself is new (e.g. 26.x).
+**Cause:** The compose file **templates** (`docker-compose.relay.yml` / `docker-compose.client.yml`) and the generated **`docker-compose.yml`** declare **`version: '3.8'`**. Older **standalone** Compose binaries (for example **`docker-compose` 1.25.x** from some distro packages) do not implement that schema version, even when **Docker Engine** itself is new (e.g. 26.x).
 
 **Check what you have:**
 
@@ -837,7 +838,7 @@ Use **`docker compose`** everywhere this README shows **`docker-compose`** (e.g.
 
 **Alternative:** replace the standalone **`docker-compose`** executable with a [current v1.x release](https://github.com/docker/compose/releases) that supports Compose file **3.8** (less ideal than V2). See also Docker’s [Compose install overview](https://docs.docker.com/compose/install/).
 
-**Do not** downgrade the repo’s compose file just to satisfy an obsolete `docker-compose` 1.25 — upgrading Compose is the supported path.
+**Do not** downgrade the repo’s compose templates just to satisfy an obsolete `docker-compose` 1.25 — upgrading Compose is the supported path.
 
 ### Docker Image Not Found
 
@@ -847,14 +848,14 @@ If you see the error `manifest for continuumdao/mpc-auth:v1.0 not found: manifes
 
 **Solution 1: Use a Different Version (Recommended)**
 
-Check what versions are available and update `docker-compose.yml`:
+Check what versions are available and update **`docker-compose.relay.yml`** / **`docker-compose.client.yml`** (then re-run **`./process_config.sh`**) or the generated **`docker-compose.yml`**:
 
 ```bash
 # Try pulling a different version
 docker pull continuumdao/mpc-auth:v1.1  # Or another version
 ```
 
-Then update `docker-compose.yml` to use the available version:
+Then update the compose file to use the available version:
 ```yaml
 app:
   image: continuumdao/mpc-auth:v1.1  # Replace with available version
@@ -917,9 +918,9 @@ OpenSSL Error[0]: error:80000002:system library::No such file or directory
 
 **Solution:**
 
-1. **Navigate to your project directory** (where `docker-compose.yml` is located):
+1. **Navigate to your project directory** (where **`docker-compose.yml`** is generated after **`./process_config.sh`**):
    ```bash
-   cd ~/mpc-config  # or wherever your docker-compose.yml is
+   cd ~/mpc-config  # or wherever you cloned this repo
    ```
 
 2. **Check if certificates exist in the relative path:**
@@ -964,7 +965,7 @@ OpenSSL Error[0]: error:80000002:system library::No such file or directory
    docker-compose logs mosquitto
    ```
 
-**Important:** The certificates must be in the **relative path** `mosquitto/config/certs/` (relative to where `docker-compose.yml` is located), not in an absolute path like `/mosquitto/config/certs/` on the host filesystem.
+**Important:** The certificates must be in the **relative path** `mosquitto/config/certs/` (relative to the project directory / the generated **`docker-compose.yml`**), not in an absolute path like `/mosquitto/config/certs/` on the host filesystem.
 
 #### Mosquitto Error on Client Node - Server Certificate Missing
 
@@ -988,7 +989,7 @@ OpenSSL Error[0]: error:80000002:system library::No such file or directory
 
 2. **Exclude mosquitto from starting** (see "Client Node Setup" section above for detailed instructions):
    
-   **Quick fix:** Edit `docker-compose.yml` and comment out the entire `mosquitto:` service section, and also comment out the `mosquitto` dependency in the `app:` service's `depends_on:` section.
+   **Quick fix:** Run **`./process_config.sh`** on the client so **`docker-compose.yml`** is regenerated from **`docker-compose.client.yml`**, or edit **`docker-compose.client.yml`** and re-run **`process_config.sh`**. Manually editing **`docker-compose.yml`** is possible but will be overwritten on the next **`process_config.sh`** run unless you change the **template** instead.
 
 3. **Restart services:**
    ```bash

@@ -3428,7 +3428,9 @@ apply_docker_compose_loopback_mapping() {
         print_warning "python3 not found — could not adjust loopback port mapping in docker-compose.yml"
         return 1
     fi
-    COMPOSE_LOOPBACK_FILE="$file" COMPOSE_LOOPBACK_ENABLE="$enable" COMPOSE_LOOPBACK_PORT="$port" python3 << 'PYCOMPOSE'
+    local _lc_action
+    _lc_action=$(
+        COMPOSE_LOOPBACK_FILE="$file" COMPOSE_LOOPBACK_ENABLE="$enable" COMPOSE_LOOPBACK_PORT="$port" python3 << 'PYCOMPOSE'
 import os
 import sys
 
@@ -3437,41 +3439,99 @@ enable = os.environ.get("COMPOSE_LOOPBACK_ENABLE", "0").strip() == "1"
 port = os.environ.get("COMPOSE_LOOPBACK_PORT", "8445").strip()
 needle = f"127.0.0.1:{port}:{port}"
 if not path or not needle:
+    print("error", flush=True)
     sys.exit(1)
 try:
     with open(path, "r") as f:
         lines = f.readlines()
 except OSError as e:
     sys.stderr.write(f"{path}: {e}\n")
+    print("error", flush=True)
     sys.exit(1)
 
-out = []
-for line in lines:
-    if needle not in line:
-        out.append(line)
-        continue
-    stripped = line.lstrip()
+has_needle = any(needle in line for line in lines)
+action = "noop"
+
+if has_needle:
+    out = []
+    for line in lines:
+        if needle not in line:
+            out.append(line)
+            continue
+        stripped = line.lstrip()
+        if enable:
+            if stripped.startswith("# ") and needle in stripped:
+                out.append(f'      - "{needle}"\n')
+                action = "uncomment"
+            elif stripped.startswith('- "') and needle in stripped:
+                out.append(line)
+                action = "already_active"
+            else:
+                out.append(line)
+        else:
+            if stripped.startswith('- "') and needle in stripped:
+                out.append(f'      # - "{needle}"\n')
+                action = "comment"
+            else:
+                out.append(line)
+    lines = out
+elif not enable:
+    # has_needle false, disabling: nothing to change
+    pass
+else:
+    # Old docker-compose.yml (or hand-edited) with no loopback line: optionally insert after Browser HTTPS :8443 mapping.
     if enable:
-        if stripped.startswith("# ") and needle in stripped:
-            out.append(f'      - "{needle}"\n')
-        elif stripped.startswith('- "') and needle in stripped:
+        out = []
+        inserted = False
+        for line in lines:
             out.append(line)
-        else:
-            out.append(line)
-    else:
-        if stripped.startswith('- "') and needle in stripped:
-            out.append(f'      # - "{needle}"\n')
-        else:
-            out.append(line)
+            if inserted:
+                continue
+            st = line.lstrip()
+            if st.startswith("- ") and "8443:8443" in line:
+                out.append(
+                    "      # Optional: loopback read HTTP (mpc-auth BrowserLoopbackReadHTTP) — same JWT routes without TLS in browser (SSH tunnel).\n"
+                )
+                out.append(f'      - "{needle}"\n')
+                inserted = True
+                action = "inserted"
+        if not inserted:
+            print("missing_anchor", flush=True)
+            sys.exit(0)
+        lines = out
 
 with open(path, "w") as f:
-    f.writelines(out)
+    f.writelines(lines)
+print(action, flush=True)
 PYCOMPOSE
-    if [ "$enable" = "1" ]; then
-        print_success "docker-compose.yml: loopback read HTTP enabled on host (127.0.0.1:${port}:${port} → container)."
-    else
-        print_info "docker-compose.yml: loopback read HTTP port mapping commented out (disabled)."
-    fi
+    )
+
+    case "$_lc_action" in
+        error)
+            print_warning "Could not read or patch docker-compose.yml for loopback HTTP."
+            ;;
+        missing_anchor)
+            print_warning "docker-compose.yml has no loopback line and no 8443:8443 port line to attach it after — add the mapping manually or update mpc-config templates and re-run."
+            ;;
+        inserted)
+            print_success "docker-compose.yml: inserted loopback read HTTP mapping (127.0.0.1:${port}:${port}; file had no prior loopback line)."
+            ;;
+        uncomment|already_active)
+            if [ "$enable" = "1" ]; then
+                print_success "docker-compose.yml: loopback read HTTP enabled on host (127.0.0.1:${port}:${port} → container)."
+            fi
+            ;;
+        comment)
+            print_info "docker-compose.yml: loopback read HTTP port mapping commented out (disabled)."
+            ;;
+        noop)
+            if [ "$enable" = "1" ]; then
+                print_warning "docker-compose.yml: loopback enabled in configs but no ${port} mapping line was found or inserted — check your compose file."
+            else
+                print_info "docker-compose.yml: loopback read HTTP port mapping left unchanged (disabled / no loopback block)."
+            fi
+            ;;
+    esac
 }
 
 # Interactive (or ENABLE_BROWSER_LOOPBACK_READ_HTTP / --enable-loopback-http) — sets BROWSER_LOOPBACK_READ_HTTP_ENABLED to 0 or 1.
