@@ -74,8 +74,8 @@ index ``"0"``. Optional ``signature`` defaults to ``nativeTransfer``. Calldata i
 empty (``msgRaw`` is ``""`` for a single action).
 
 **Output:** JSON with ``endpoint``, ``bodyForSign``, ``messageToSign``, and
-optional ``postBody`` if signing flags were passed. Add ``clientSig`` (and for
-MetaMask flows ``signedMessage`` = ``messageToSign``) before POSTing.
+optional ``postBody`` if signing flags were passed. Add ``clientSig`` and
+``signedMessage`` = ``messageToSign`` (Ed25519 and EIP-191 helpers set both) before POSTing.
 Also ``triggerTxParams`` and ``triggerMessageHash``: the shape required for
 ``POST /triggerSignRequestById`` so ``GET /getSignRequestById?tx_params=1`` can
 return stored TxParams (see API docs). **multiSignRequest** uses ``txNonce`` /
@@ -1187,7 +1187,9 @@ def main() -> None:
 
     if args.ed25519_seed_hex:
         sig = sign_ed25519(out["messageToSign"], args.ed25519_seed_hex)
-        post = {**out["bodyForSign"], "clientSig": sig, "signedMessage": ""}
+        # Some mpc-auth builds require non-empty signedMessage for multiSignRequest;
+        # must match the UTF-8 string that was signed (same as EIP-191 postBody).
+        post = {**out["bodyForSign"], "clientSig": sig, "signedMessage": out["messageToSign"]}
         out["postBody"] = post
     elif args.eip191_private_key_hex:
         sig = sign_eip191(out["messageToSign"], args.eip191_private_key_hex)

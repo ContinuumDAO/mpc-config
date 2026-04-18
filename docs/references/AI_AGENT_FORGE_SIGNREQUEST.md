@@ -49,12 +49,9 @@ If the keygen is not ready yet, the API returns `code: 1` ("not ready"); wait fo
 
 Use when the node has an Ed25519 management key configured (`GET /hasPublicMgtKey` returns `true`). No separate **management nonce** is required for **`multiSignRequest`** (signing uses **`messageToSign`** only). For **other** management endpoints that include **`nonce`** in the body (**`sendMessage`**, **`triggerSignRequestById`**, **`addManagementKey`**, …), use **`GET /getPublicMgtKeyNonce`** for Ed25519 — not **`GET /getNodeMgtKeyNonce`** (Ethereum **`NodeMgtKey`** only). See **`../skill/SKILL.md`** § Management API nonce and **`./API_IMPLEMENTATION.md`**.
 
-1. **Build the full request body** with all fields from the script output (e.g. `messageHashes`, `messageRawBatch`, `destinationChainID`, `keyList`, `pubKey`, `purpose`, etc.). Set **`clientSig`** and **`signedMessage`** to empty strings.
-2. **Canonical message to sign:** The backend expects the **canonical JSON** of that body (same field order as Go’s `json.Marshal`; `clientSig` and `signedMessage` must be empty). You can either:
-   - Replicate the backend order and omit `clientSig`/`signedMessage`, or  
-   - Omit `signedMessage` in the request and let the backend recompute the canonical JSON when verifying (backend does this when `signedMessage` is empty and the client key is Ed25519).
-3. **Sign** that exact JSON string with the **Ed25519 private key** that matches one of the node’s allowed management keys (config `PublicMgtKey` or a key added via `POST /addManagementKey`). Signature must be **64 bytes**, encoded as **128 hex characters**.
-4. **Send** the same body with **`clientSig`** set to that 128-hex signature. You can leave **`signedMessage`** empty; the backend will use canonical JSON for verification.
+1. **Canonical message to sign:** The helper’s **`messageToSign`** string — compact JSON of **`bodyForSign`** only (no **`clientSig`** / **`signedMessage`** in the signed bytes).
+2. **Sign** that exact UTF-8 string with the **Ed25519 private key** that matches one of the node’s allowed management keys (config `PublicMgtKey` or a key added via `POST /addManagementKey`). **`clientSig`** must be **64 bytes**, encoded as **128 hex characters** (optional `0x` stripped).
+3. **POST** the full body: all fields from **`bodyForSign`** plus **`clientSig`** plus **`signedMessage`**, where **`signedMessage`** is the **same** string as **`messageToSign`** (mpc-auth **`POST /multiSignRequest`** requires non-empty **`signedMessage`** so the verifier can check **`Ed25519`** over that exact string). Repo helpers (`**generateMultiSignRequestFromCompose.py**`, **`recipes/*.py`**) set this automatically.
 
 **Note:** The Ed25519 keypair is the **management** keypair (e.g. from config or from the key you added). It is not the MPC key from keygen.
 

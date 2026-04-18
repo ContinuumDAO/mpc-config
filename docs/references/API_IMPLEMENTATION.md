@@ -2497,7 +2497,8 @@ Creates a new signing request for **multi-agree keys only**. No relayer authenti
 **Request Body (single):**
 ```json
 {
-  "clientSig": "<client signature over request (same scheme as keyGenRequest)>",
+  "clientSig": "<client signature over signedMessage (same scheme as keyGenRequest)>",
+  "signedMessage": "<exact UTF-8 string signed; same as messageToSign from compose helpers>",
   "keyList": ["node1_key", "node2_key", "node3_key"],
   "pubKey": "08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de",
   "msgHash": "751f68b43977269a16128143fa15e0e7ab3c15ba52484fe8278796561505698b",
@@ -2524,7 +2525,8 @@ Creates a new signing request for **multi-agree keys only**. No relayer authenti
 ```
 
 **Field Descriptions:**
-- `clientSig` (required): Client signature over the request (excluding `clientSig`), verified like keyGenRequest
+- `clientSig` (required): Client signature over the management-auth message (see `signedMessage`), verified like keyGenRequest
+- `signedMessage` (required in current mpc-auth): Exact UTF-8 string that was signed — the same compact JSON as the request fields **without** `clientSig` / `signedMessage` (compose helpers expose this as **`messageToSign`**). **Ed25519:** 128-hex `clientSig` verifies over `signedMessage` bytes. **MetaMask:** `personal_sign` over `signedMessage`. Empty `signedMessage` is rejected for `multiSignRequest`.
 - `keyList` (required): Array of node keys in the same GroupId that may participate; can be empty array `[]` to use keyList from KeyGenResult
 - `pubKey` (required): Public key (128 hex characters) from key generation (must be multi-agree key)
 - `msgHash` (required for **single**): Keccak256 hash of the message to sign. Omit when using `messageHashes` (batch). **EVM broadcast:** For secp256k1 keys, if the client will build a signed tx and call `eth_sendRawTransaction`, the recovered signer must match the keyGen's `ethereumaddress`. That only holds when the signature is over the **transaction signing hash** (hash of the serialized unsigned EIP-1559/legacy tx). If the client sends a different hash (e.g. only `keccak256(msgRaw)`), the MPC signs it correctly, but using that (r,s,v) on the full tx yields a different recovered address; send the tx signing hash as `msgHash` and use the same nonce/gas when building the signed tx.

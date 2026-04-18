@@ -247,7 +247,11 @@ def main() -> None:
 
     if args.ed25519_seed_hex:
         sig = _compose.sign_ed25519(out["messageToSign"], args.ed25519_seed_hex)
-        out["postBody"] = {**out["bodyForSign"], "clientSig": sig, "signedMessage": ""}
+        out["postBody"] = {
+            **out["bodyForSign"],
+            "clientSig": sig,
+            "signedMessage": out["messageToSign"],
+        }
     elif args.eip191_private_key_hex:
         sig = _compose.sign_eip191(out["messageToSign"], args.eip191_private_key_hex)
         out["postBody"] = {

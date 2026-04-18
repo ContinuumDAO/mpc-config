@@ -125,7 +125,21 @@ curl -sS -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/..." \
 
 ---
 
-## 7. Further reading
+## 7. Raw 32-byte seed vs key file (avoid PKCS#8 / base64 confusion)
+
+Some flows expose the **private key** as **PKCS#8 DER** (often shown as a **Base64** line) or as an **OpenSSH** / **PEM** file. Those are **not** the same thing as the **raw Ed25519 seed** used by helpers that take **`--ed25519-seed-hex`** or the env var **`MPC_MGT_ED25519_SEED_HEX`** in **`../skill/SKILL.md`** / **`scripts/mpc_mgt_helpers.py`**.
+
+| What you have | What to do |
+|-----------------|------------|
+| **64 hex characters** (32 bytes), lowercase/uppercase hex | Valid **`MPC_MGT_ED25519_SEED_HEX`** / **`--ed25519-seed-hex`**. |
+| **OpenSSH** (`-----BEGIN OPENSSH PRIVATE KEY-----`) or **PEM** file on disk | Use **`--ed25519-key-file`** on recipes (e.g. **`recipes/linea_register.py`**) or rely on **`AUTH_KEY_PATH`** + **`AUTH_KEY_FILENAME`** so **`mpc_mgt_helpers.load_ed25519_private_key()`** loads the file—**do not** `cat` the file into **`MPC_MGT_ED25519_SEED_HEX`**. |
+| **Base64** blob starting with **`MC`** (or similar) — PKCS#8 **DER** for Ed25519 | **Not** valid hex seed. Either save the key as a proper **`.pem`** / OpenSSH file and use **`--ed25519-key-file`**, or derive the **32-byte seed** with **`cryptography`** (same as loading that DER) and then use the **64-hex** seed only if you must use env-based signing. |
+
+If a recipe or script fails before printing JSON (e.g. empty **`curl -d`** and **`Error":"EOF"`** on **`POST /multiSignRequest`**), the usual cause is **invalid seed hex** (wrong length or wrong encoding), not the MPC logic.
+
+---
+
+## 8. Further reading
 
 | Topic | Document |
 |--------|----------|
@@ -134,4 +148,4 @@ curl -sS -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/..." \
 | Foundry → **`multiSignRequest`** | **`./AI_AGENT_FORGE_SIGNREQUEST.md`** |
 | KeyGen messaging bodies | **`./API_KEYGEN_MESSAGING.md`** |
 | Full REST spec | **`./API_IMPLEMENTATION.md`** |
-| Agent env defaults (`$MPA_PATH/.env`, **`AUTH_KEY_PATH`**) | **`../skill/SKILL.md`** **Environment** |
+| Agent env defaults (`$MPA_PATH/.env`, **`AUTH_KEY_PATH`**, **`MPC_MGT_ED25519_SEED_HEX`**) | **`../skill/SKILL.md`** **Environment** |

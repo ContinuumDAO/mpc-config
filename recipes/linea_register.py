@@ -13,6 +13,7 @@ Example::
 
   python3 recipes/linea_register.py --key-gen-id KeyGen2026... --mpc-auth-url http://localhost:8080
   python3 recipes/linea_register.py --key-gen-id KeyGen2026... --ed25519-seed-hex <64 hex chars>
+  python3 recipes/linea_register.py --key-gen-id KeyGen2026... --ed25519-key-file ~/.ssh/mpc_auth_ed25519
 """
 
 from __future__ import annotations
@@ -93,6 +94,47 @@ def linea_register_multisign_payload(
     return _compose.build_compose_multisign(compose, base)
 
 
+def _ed25519_seed_hex_from_key_file(path: str) -> str:
+    """OpenSSH or PEM Ed25519 private key file -> 64 hex chars (32-byte seed for PyNaCl)."""
+    try:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives.serialization import (
+            load_pem_private_key,
+            load_ssh_private_key,
+        )
+    except ImportError as e:
+        raise SystemExit(
+            "cryptography is required for --ed25519-key-file. "
+            "Install with: pip install cryptography "
+            "(see docs/skill/SKILL.md Python dependencies)"
+        ) from e
+
+    p = Path(path).expanduser()
+    if not p.is_file():
+        raise ValueError(f"Ed25519 key file not found: {p}")
+    blob = p.read_bytes()
+    key = None
+    for loader in (load_ssh_private_key, load_pem_private_key):
+        try:
+            k = loader(blob, password=None)
+            if isinstance(k, Ed25519PrivateKey):
+                key = k
+                break
+        except ValueError:
+            pass
+    if key is None:
+        raise ValueError(f"not an Ed25519 private key (OpenSSH or PEM): {p}")
+    raw = key.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    if len(raw) != 32:
+        raise ValueError(f"expected 32-byte Ed25519 seed, got {len(raw)}")
+    return raw.hex()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
@@ -141,7 +183,15 @@ def main() -> None:
     ap.add_argument(
         "--ed25519-seed-hex",
         metavar="HEX",
-        help="If set, sign messageToSign with Ed25519 and add postBody.clientSig",
+        help="If set, sign messageToSign with Ed25519 and add postBody.clientSig (64 hex = raw seed)",
+    )
+    ap.add_argument(
+        "--ed25519-key-file",
+        metavar="PATH",
+        help=(
+            "OpenSSH or PEM Ed25519 private key (e.g. ~/.ssh/mpc_auth_ed25519). "
+            "Use this instead of --ed25519-seed-hex when the key is not raw hex."
+        ),
     )
     ap.add_argument(
         "--eip191-private-key-hex",
@@ -163,9 +213,23 @@ def main() -> None:
         print(str(e), file=sys.stderr)
         sys.exit(1)
 
-    if args.ed25519_seed_hex:
-        sig = _compose.sign_ed25519(out["messageToSign"], args.ed25519_seed_hex)
-        out["postBody"] = {**out["bodyForSign"], "clientSig": sig, "signedMessage": ""}
+    seed_hex: str | None = None
+    if args.ed25519_key_file:
+        try:
+            seed_hex = _ed25519_seed_hex_from_key_file(args.ed25519_key_file)
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+    elif args.ed25519_seed_hex:
+        seed_hex = args.ed25519_seed_hex
+
+    if seed_hex:
+        sig = _compose.sign_ed25519(out["messageToSign"], seed_hex)
+        out["postBody"] = {
+            **out["bodyForSign"],
+            "clientSig": sig,
+            "signedMessage": out["messageToSign"],
+        }
     elif args.eip191_private_key_hex:
         sig = _compose.sign_eip191(out["messageToSign"], args.eip191_private_key_hex)
         out["postBody"] = {

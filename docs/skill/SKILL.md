@@ -289,6 +289,12 @@ prompting for missing variables.
 - **`AUTH_KEY_FILENAME`** — Basename of the key file inside **`AUTH_KEY_PATH`**
   (when set). **Default:** `mpc_auth_ed25519`.
 
+- **`MPC_MGT_ED25519_SEED_HEX`** — Optional override: **exactly 64 hex characters**
+  (32-byte raw Ed25519 seed), **not** a PEM/OpenSSH file contents and **not** a
+  PKCS#8 Base64 line—see **`$MPA_PATH/references/ED25519_MANAGEMENT_KEY_SIGNING.md`**
+  § *Raw 32-byte seed vs key file*. If unset, scripts load **`AUTH_KEY_PATH`**
+  / **`AUTH_KEY_FILENAME`** as a key **file**.
+
 - **`MPA_PATH`** — Directory containing references, scripts, recipes, and tools.
   **Default:** `~/.mpa`.
 
@@ -589,7 +595,9 @@ Remember: **threshold+1** accepts are required to generate the MPC signature.
 - `**GET /getPublicMgtKeyNonce**` vs `**GET /getNodeMgtKeyNonce**`,
 `**GET /getAllowedEd25519MgtKeys**`, `**sign-clipboard**` (`**--inline**` /
 `**--inline-file**`), and `**tools/ed25519_private_to_pubkey_hex.py**`:
-`**$MPA_PATH/references/ED25519_MANAGEMENT_KEY_SIGNING.md**`.
+`**$MPA_PATH/references/ED25519_MANAGEMENT_KEY_SIGNING.md`** (see **§7** *Raw 32-byte
+seed vs key file* for **`MPC_MGT_ED25519_SEED_HEX`** / recipe **`--ed25519-seed-hex`**
+vs **`--ed25519-key-file`**).
 
 ---
 

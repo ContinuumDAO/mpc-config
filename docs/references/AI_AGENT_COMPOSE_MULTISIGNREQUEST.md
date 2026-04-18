@@ -125,7 +125,7 @@ cat compose.json | "$MPA_PATH/.venv/bin/python" "$MPA_PATH/scripts/generateMulti
 
 | Flag | Effect |
 |------|--------|
-| **`--ed25519-seed-hex HEX`** | Signs **`messageToSign`** with Ed25519 (**64 hex** = 32-byte seed, or **128 hex** uses first 32 bytes as seed). Sets **`clientSig`** to **128 hex** (no `0x`) and **`signedMessage`** to **`""`**. |
+| **`--ed25519-seed-hex HEX`** | Signs **`messageToSign`** with Ed25519 (**64 hex** = 32-byte seed, or **128 hex** uses first 32 bytes as seed). Sets **`clientSig`** to **128 hex** (no `0x`) and **`signedMessage`** = **`messageToSign`** (required by mpc-auth for **`POST /multiSignRequest`**). |
 | **`--eip191-private-key-hex HEX`** | Signs with secp256k1 **personal_sign** (EIP-191). Sets **`clientSig`** with **`0x`** prefix and **`signedMessage`** = exact **`messageToSign`**. |
 
 Use **one** of these if the agent holds the management private material; otherwise compute **`clientSig`** yourself from **`messageToSign`** (see next section).
@@ -141,13 +141,13 @@ Use **one** of these if the agent holds the management private material; otherwi
 | **`messageToSign`** | **Exact string** to sign for management auth: compact JSON (**no spaces** after `:` or `,`), same as the app’s **`JSON.stringify(bodyForSign)`**. |
 | **`chainId`** | Destination chain id string. |
 | **`count`** | Number of compose actions (1 = single, ≥2 = batch). |
-| **`postBody`** | Present only if **`--ed25519-seed-hex`** or **`--eip191-private-key-hex`** was passed: ready-to-POST body including **`clientSig`** (and **`signedMessage`** for EIP-191). |
+| **`postBody`** | Present only if **`--ed25519-seed-hex`** or **`--eip191-private-key-hex`** was passed: ready-to-POST body including **`clientSig`** and **`signedMessage`** (= **`messageToSign`**). |
 
 ### `signedMessage` vs what you sign (avoid confusion)
 
-- You **always** sign the **`messageToSign`** string (UTF-8). That string is the compact JSON form of **`bodyForSign`** only — **before** **`clientSig`** exists.
-- The **HTTP** body is **`bodyForSign`** **plus** **`clientSig`** **plus** **`signedMessage`**. You **do not** compute a signature over that merged JSON for this endpoint.
-- **`signedMessage`** is not “the entire POST body as a string”. For **Ed25519**, send **`signedMessage`: `""`**. For **EIP-191**, **`signedMessage`** must be the **exact** string you signed — use the **`messageToSign`** value from stdout verbatim — not a serialization of the request including the signature.
+- You **always** sign the **`messageToSign`** string (UTF-8). That string is the compact JSON form of **`bodyForSign`** only — **before** **`clientSig`** and **`signedMessage`** exist as separate fields.
+- The **HTTP** body is **`bodyForSign`** **plus** **`clientSig`** **plus** **`signedMessage`**. You **do not** compute a signature over that merged JSON; **`clientSig`** is over **`messageToSign`** only.
+- **`signedMessage`** must be the **exact** string that was signed — the same **`messageToSign`** from stdout — for both **Ed25519** and **EIP-191** on **`POST /multiSignRequest`** (mpc-auth rejects empty **`signedMessage`**). Helpers set **`signedMessage`** = **`messageToSign`** automatically.
 - If **`postBody`** is present (signing flags), **`POST`** it as-is; no **`jq`** step is required to “re-canonicalize” what was signed.
 
 ---
