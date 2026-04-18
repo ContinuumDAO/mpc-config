@@ -715,8 +715,9 @@ here before hand-writing compose JSON; common operations are covered.
 ## Tools
 
 **Location:** `**$MPA_PATH/tools`** — includes `**sign-clipboard**` (management
-`**POST**` signing) and `**ed25519_private_to_pubkey_hex.py**`. Usage and
-`**--inline**` / `**--inline-file**`:
+`**POST**` signing), `**ed25519_private_to_pubkey_hex.py**`, and
+`**check_ed25519_mgt_keygen.py**` (debug allow-list + **`ClientKeys`** vs a seed or key file).
+Usage and `**--inline**` / `**--inline-file**`:
 `**$MPA_PATH/references/ED25519_MANAGEMENT_KEY_SIGNING.md**`
 § Tools; `**sign-clipboard/README.md**` for flags.
 

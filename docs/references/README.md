@@ -17,6 +17,10 @@ This directory contains reference docs for node APIs, agent workflows, and local
 | `./KNOWN_ADDRESSES_SCHEMA.md` | Local storage schema for known addresses. |
 | `./TOKEN_STORAGE_SCHEMA.md` | Local storage schema for token configuration data. |
 
+## Tools (under `mpc-config/tools/`)
+
+Small CLIs live next to **`scripts/`** and **`recipes/`** at the **mpc-config** repo root. The main index for Ed25519-related tools is **[`./ED25519_MANAGEMENT_KEY_SIGNING.md`](./ED25519_MANAGEMENT_KEY_SIGNING.md)** § **6. Tools** (`sign-clipboard`, **`ed25519_private_to_pubkey_hex.py`**, **`check_ed25519_mgt_keygen.py`**). **`check_ed25519_mgt_keygen.py`** validates a management private key against **`getAllowedEd25519MgtKeys`** and a KeyGen’s **`ClientKeys`** (see that doc **§8** troubleshooting).
+
 ## API Specification
 
 | File | Description |

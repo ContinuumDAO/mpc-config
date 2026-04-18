@@ -105,12 +105,13 @@ For **KeyGen messaging** (`POST /sendMessage`, `POST /markMessageRead`, …), th
 
 ---
 
-## 6. Tools: `sign-clipboard` and `ed25519_private_to_pubkey_hex.py`
+## 6. Tools (`$MPA_PATH/tools/`)
 
 | Tool | Path | Use |
 |------|------|-----|
 | **`sign-clipboard`** | **`$MPA_PATH/tools/sign-clipboard`** (see **`README.md`** there) | Sign the **exact** UTF-8 string the API expects. For automation, use **`--inline`** or **`--inline-file`** (not clipboard) so the signed bytes match the **`POST`** body or **`messageToSign`**. |
 | **`ed25519_private_to_pubkey_hex.py`** | **`$MPA_PATH/tools/ed25519_private_to_pubkey_hex.py`** | Derive **64-hex** public key from a private key file to **match** **`getAllowedEd25519MgtKeys`**. |
+| **`check_ed25519_mgt_keygen.py`** | **`$MPA_PATH/tools/check_ed25519_mgt_keygen.py`** | Given **`--seed-hex`** or **`--key-file`**, derive the Ed25519 **64-hex** pubkey and check **`GET /getAllowedEd25519MgtKeys`** and **`GET /getKeyGenResultById` → `ClientKeys`** (exit **0** only if the key appears in **both**). Use when debugging **`client sig is not valid`** on **`POST /multiSignRequest`** (see **§8**). Requires **PyNaCl**; **`--key-file`** needs **cryptography**. |
 
 **Example (`sign-clipboard`):**
 
@@ -139,7 +140,30 @@ If a recipe or script fails before printing JSON (e.g. empty **`curl -d`** and *
 
 ---
 
-## 8. Further reading
+## 8. Troubleshooting: `client sig is not valid` on `POST /multiSignRequest`
+
+The management **`clientSig`** must be an **Ed25519** signature (128 hex) over **`signedMessage`** (same bytes as **`messageToSign`** from the helper). If the node rejects the signature, check **in order**:
+
+1. **KeyGen `ClientKeys` vs your key** — For multi-agree KeyGens, mpc-auth expects the signer’s **64-hex Ed25519 public key** to appear as **a value** in **`GET /getKeyGenResultById` → `ClientKeys`** for the KeyGen you are using (the client identity your **node** registered for that wallet). If **`getAllowedEd25519MgtKeys`** lists an **added** key but **`ClientKeys`** still has only the **bootstrap** public key (or a **MetaMask** `0x…` address), signing with the **added** key will fail until **`ClientKeys`** matches that identity for your node (same onboarding as the web app).
+
+2. **Allow-list** — **`GET /getAllowedEd25519MgtKeys`** must include your public key.
+
+3. **Run the checker** — From the repo root:
+
+   ```bash
+   python3 tools/check_ed25519_mgt_keygen.py \
+     --mpc-base "http://127.0.0.1:8080" \
+     --key-gen-id "KeyGen2026..." \
+     --seed-hex "$ED25519_SEED_HEX"
+   ```
+
+   Or **`--key-file ~/.ssh/mpc_auth_ed25519`**. Exit code **0** only if the derived pubkey appears in **both** the allow-list and **`ClientKeys`**.
+
+4. **Fresh payload** — Re-run the recipe **once** and **`POST`** immediately; **`msgHash`** / fees tie to RPC state—do not mix an old **`clientSig`** with a new body.
+
+---
+
+## 9. Further reading
 
 | Topic | Document |
 |--------|----------|
