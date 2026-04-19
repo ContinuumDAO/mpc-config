@@ -38,7 +38,10 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from mpc_evm_signing_hash import assert_sign_request_fields_match_message_hash
+from mpc_evm_signing_hash import (
+    assert_sign_request_fields_match_message_hash,
+    merge_body_for_sign_into_sign_request,
+)
 
 from mpc_mgt_helpers import (
     api_code,
@@ -217,24 +220,47 @@ def _is_evm_sign_request(sr: dict[str, Any]) -> bool:
     return isinstance(mhs, list) and len(mhs) > 0
 
 
-def _evm_trigger_tx_params_and_message_hash(sr: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def _evm_trigger_tx_params_and_message_hash(
+    sr: dict[str, Any],
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]] | None, str]:
+    """
+    Build trigger ``txParams`` (single-tx) or ``txParamsBatch`` (multi-tx) plus ``messageHash``.
+
+    Prefer a full ``proposalTxParams`` / ``proposal_tx_params`` list from GET (or merged
+    ``body_for_sign``) when ``MessageHashes`` length matches; otherwise fall back to
+    the legacy ``txNonce`` / ``txGasLimit`` / fee fields on the sign-request object.
+    """
     mh = _pick_first_str(sr, "MessageHash", "msgHash")
+    mhs = sr.get("MessageHashes") or sr.get("messageHashes")
     if not mh:
-        mhs = sr.get("MessageHashes") or sr.get("messageHashes")
         if isinstance(mhs, list) and mhs:
             mh = str(mhs[0]).strip()
     if not mh:
         raise RuntimeError("MessageHash / MessageHashes missing on sign request")
 
+    pp = sr.get("proposalTxParams") or sr.get("proposal_tx_params")
+    if (
+        isinstance(mhs, list)
+        and len(mhs) >= 2
+        and isinstance(pp, list)
+        and len(pp) == len(mhs)
+        and all(isinstance(x, dict) for x in pp)
+    ):
+        batch = [dict(x) for x in pp]
+        for tp in batch:
+            _validate_trigger_tx_params(tp)
+        return None, batch, _normalize_message_hash_hex(mh)
+
     body_like = _body_like_tx_fields(sr)
     if "txNonce" not in body_like or "txGasLimit" not in body_like:
         raise RuntimeError(
-            "Sign request has DestinationChainID but missing txNonce or txGasLimit "
-            "(expected from POST /multiSignRequest). Cannot build txParams for trigger."
+            "Sign request has DestinationChainID but missing per-index proposal_tx_params on GET "
+            "(or merged bodyForSign) and missing txNonce or txGasLimit; pass body_for_sign from "
+            "executeSignResult.py --sign-request-file (saved compose / recipe JSON with bodyForSign)."
         )
     tp = _tx_params_from_body_like(body_like)
     _validate_trigger_tx_params(tp)
-    return tp, _normalize_message_hash_hex(mh)
+    return tp, None, _normalize_message_hash_hex(mh)
 
 
 def poll_sign_result_ready(
@@ -265,7 +291,22 @@ def poll_sign_result_ready(
     )
 
 
-def post_trigger_sign_request(base: str, priv, request_id: str) -> dict[str, Any]:
+def post_trigger_sign_request(
+    base: str,
+    priv,
+    request_id: str,
+    *,
+    body_for_sign: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    POST /triggerSignRequestById with management signature.
+
+    For EVM, ``txParams`` or ``txParamsBatch`` and ``messageHash`` are derived from
+    ``GET /getSignRequestById`` (optionally ``?tx_params=1``) and/or merged
+    ``bodyForSign`` from the recipe. When the GET payload omits nonce/gas fields,
+    pass the same ``bodyForSign`` via ``body_for_sign`` so proposal params and
+    first-tx ``txNonce``/fees match the signed preimage.
+    """
     pub = public_key_64_hex(priv)
     nonce = get_ed25519_nonce(base, pub)
     body: dict[str, Any] = {
@@ -274,10 +315,14 @@ def post_trigger_sign_request(base: str, priv, request_id: str) -> dict[str, Any
         "sig": "",
     }
     sr = _get_sign_request_dict(base, request_id)
+    sr = merge_body_for_sign_into_sign_request(sr, body_for_sign)
     if _is_evm_sign_request(sr):
         assert_sign_request_fields_match_message_hash(sr)
-        tx_params, msg_hash = _evm_trigger_tx_params_and_message_hash(sr)
-        body["txParams"] = tx_params
+        tx_params, tx_params_batch, msg_hash = _evm_trigger_tx_params_and_message_hash(sr)
+        if tx_params_batch is not None:
+            body["txParamsBatch"] = tx_params_batch
+        elif tx_params is not None:
+            body["txParams"] = tx_params
         body["messageHash"] = msg_hash
     body["sig"] = sign_compact_json_empty_field(priv, body, "sig")
     return http_json("POST", base, "/triggerSignRequestById", body=body)

@@ -475,16 +475,16 @@ handlers can be added to the same script over time.
 6. **Trigger, MPC sign, and broadcast (AI agent):** **only**
   `**$MPA_PATH/scripts/executeSignResult.py**`. It `**POST`**s **`/triggerSignRequestById`**
    only when `**getSignResultById**` does not yet have MPC signatures. **EVM
-   (required):** the `**multiSignRequest`** / sign-request body **must** carry
-   `**txNonce`**, `**txGasLimit**`, and fee fields so the script can build
-   `**txParams**` and `**messageHash**` like web **Get Sig** /
-   `**continuumdao-node-app`**—see `**$MPA_PATH/references/API_IMPLEMENTATION.md**` §
-   **`POST /triggerSignRequestById`**. Without `**txParams**`,
-   **`GET /getSignRequestById?tx_params=1`** returns `**Data: null**` and
-   `**executeSignResult.py**` cannot match the signed preimage. The script **polls**
-   `**GET /getSignResultById`** until signatures exist, then rebuilds and
+   (required):** pass **`--sign-request-file PATH`** to the **saved JSON from the same
+   compose/recipe run** (stdout that includes **`bodyForSign`** with **`txNonce`** /
+   **`txGasLimit`** / fee fields), plus **`--sign-request-id`**. The management API does
+   not return those fields on **`GET /getSignRequestById`**; the file is what lets the
+   script build **`txParams`** and **`messageHash`** for trigger (same as web **Get Sig**).
+   See `**$MPA_PATH/references/API_IMPLEMENTATION.md**` § **`POST /triggerSignRequestById`**.
+   After trigger, **`GET /getSignRequestById?tx_params=1`** can return the stored snapshot.
+   The script **polls** `**GET /getSignResultById`** until signatures exist, then rebuilds and
    **`eth_sendRawTransaction`**. **Single-tx:** same reconstruction as
-   **continuumdao-node-app** Execute — **`GET /getSignRequestById?tx_params=1`**,
+   **continuumdao-node-app** Execute — **`GET /getSignRequestById?tx_params=1`** (or merged file),
    **`GET /getChainDetails`**, RPC **`estimateGas`** / fee discovery, then **`r,s,v`**.
    **Batch:** **`messageRawBatch[i]`** + **`batchsignatures[i]`**. By default
    **sequential** receipt waits; **`--fast`** for concurrent confirms.

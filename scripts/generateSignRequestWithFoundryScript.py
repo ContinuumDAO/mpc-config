@@ -98,28 +98,31 @@ Usage
 
 Output
 ------
-The script prints a single JSON object to stdout with:
+The script prints a single JSON object to stdout with the same helper shape as
+``generateMultiSignRequestFromCompose.py``:
 
-  endpoint   Always "multiSignRequest" (this payload is for POST /multiSignRequest only).
-  body       Object to send as the request body. keyList and pubKey are filled from the node;
-             add clientSig (management key) before posting.
-  chainId    Destination chain ID (decimal string) from the broadcast or --destination-chain-id.
-  count      Number of transactions (1 = single, >1 = batch).
+  endpoint          Always "multiSignRequest".
+  bodyForSign       Object for POST /multiSignRequest (add **clientSig** before posting).
+  messageToSign     Compact JSON string of ``bodyForSign`` (what management signs).
+  chainId           Destination chain ID (decimal string) from the broadcast or ``--destination-chain-id``.
+  count             Number of transactions (1 = single, >1 = batch).
+  triggerTxParams   First-index ``txParams`` shape for ``POST /triggerSignRequestById`` (same as compose).
+  triggerMessageHash  Hash string to pair with ``triggerTxParams`` (first message when batch).
 
-  body fields:
-  - destinationChainID   (required) Decimal chain ID string.
-  - For a single transaction (count === 1):
-    - msgHash, msgRaw    Signing hash (hex, no 0x) and serialized unsigned tx (hex with 0x).
-    - destinationAddress, signatureText, extraJSON  Optional; from options or derived.
-  - For a batch (count > 1):
-    - messageHashes, messageRawBatch   Arrays of signing hash and serialized tx per item.
-    - extraJSON   JSON string containing batchMeta: array of { destinationAddress, signatureText }
-                  per transaction (for display in the app).
-    - destinationAddress, signatureText  First item's values (top-level for compatibility).
-  - keyList, pubKey   From GET /getKeyGenResultById for --key-gen-id (same machine as node).
-  - purpose           When given via --purpose.
+  ``bodyForSign`` includes:
 
-Use this output as the basis for the POST body; add **clientSig** only, then POST to /multiSignRequest.
+  - destinationChainID, keyList, pubKey (from GET /getKeyGenResultById).
+  - **txParams** (single-tx) or **proposalTxParams** (batch): proposal fields aligned with
+    ``GET /getSignRequestById?tx_params=1``.
+  - **txNonce**, **txGasLimit**, and fee fields (**txGasPrice** or **txMaxFeePerGas** / **txMaxPriorityFeePerGas**)
+    for the first transaction (same role as compose output for merge/trigger tooling).
+  - Single: msgHash, msgRaw (serialized unsigned tx hex with 0x), optional destinationAddress /
+    destinationContract, signatureText, extraJSON.
+  - Batch: msgHash/msgRaw (first item), messageHashes, messageRawBatch, extraJSON with batchMeta,
+    destinationAddress, signatureText for the first row.
+  - purpose  When given via ``--purpose``.
+
+Add **clientSig** to ``bodyForSign``, then POST to /multiSignRequest.
 
 Requires: eth_account (install into ``$MPA_PATH/.venv``; see ``docs/skill/SKILL.md`` **Python dependencies**)
 """
@@ -657,15 +660,57 @@ def tx_to_signing_hash_and_raw(tx: dict) -> tuple[str, str]:
         return message_hash, message_raw
 
 
+def _legacy_from_tx_dict(tx: dict[str, Any]) -> bool:
+    """Match ``tx_to_signing_hash_and_raw`` / compose EIP-1559 vs legacy classification."""
+    type_hex = tx.get("type")
+    if type_hex in ("0x2", "0x02"):
+        return False
+    if tx.get("maxFeePerGas") is not None or tx.get("maxPriorityFeePerGas") is not None:
+        return False
+    return True
+
+
+def _first_tx_compose_fee_fields(tx: dict[str, Any]) -> dict[str, Any]:
+    """txNonce / txGasLimit / fee fields for the first tx (same role as compose ``bodyForSign``)."""
+    td = dict(tx)
+    n = hex_to_int(td.get("nonce"))
+    if td.get("type") in ("0x2", "0x02") or td.get("maxFeePerGas") is not None:
+        return {
+            "txNonce": int(n),
+            "txGasLimit": str(hex_to_int(td.get("gas"))),
+            "txMaxFeePerGas": str(hex_to_int(td.get("maxFeePerGas"))),
+            "txMaxPriorityFeePerGas": str(hex_to_int(td.get("maxPriorityFeePerGas"))),
+        }
+    return {
+        "txNonce": int(n),
+        "txGasLimit": str(hex_to_int(td.get("gas"))),
+        "txGasPrice": str(hex_to_int(td.get("gasPrice"))),
+    }
+
+
+def _tx_dict_for_proposal(tx: dict[str, Any]) -> dict[str, Any]:
+    """Copy tx with decimal-string nonce so ``proposal_tx_params_from_unsigned_tx`` parses safely."""
+    td = dict(tx)
+    td["nonce"] = str(hex_to_int(td.get("nonce")))
+    return td
+
+
 def generate_sign_request(broadcast: dict, options: dict) -> dict:
-    txs = broadcast.get("transactions") or []
-    list_: list[tuple[str, str, str]] = []  # (messageHash, messageRaw, to)
+    from generateMultiSignRequestFromCompose import (
+        dumps_js,
+        proposal_tx_params_from_unsigned_tx,
+        trigger_tx_params_from_compose_body,
+    )
+
+    txs_in = broadcast.get("transactions") or []
+    entries: list[tuple[str, str, str, dict[str, Any]]] = []
     chain_id_str = options.get("destination_chain_id") or ""
 
-    for item in txs:
-        tx = normalize_tx(item)
-        if not tx:
+    for item in txs_in:
+        tx_raw = normalize_tx(item)
+        if not tx_raw:
             continue
+        tx = dict(tx_raw)
         if not chain_id_str:
             c = tx.get("chainId") or broadcast.get("chain")
             if c is not None:
@@ -673,11 +718,11 @@ def generate_sign_request(broadcast: dict, options: dict) -> dict:
         try:
             msg_hash, msg_raw = tx_to_signing_hash_and_raw(tx)
             to_addr = to_address(tx)
-            list_.append((msg_hash, msg_raw, to_addr))
+            entries.append((msg_hash, msg_raw, to_addr, tx))
         except Exception as e:
             raise RuntimeError(f"Failed to encode transaction: {e}") from e
 
-    if not list_:
+    if not entries:
         if is_dry_run_broadcast(broadcast):
             raise ValueError(
                 "This file is a dry-run output (no transaction data). Run with --broadcast and the Anvil default key "
@@ -698,41 +743,73 @@ def generate_sign_request(broadcast: dict, options: dict) -> dict:
         else destination_chain_id
     )
 
-    body: dict[str, Any] = {
-        "destinationChainID": safe_destination_chain_id,
-        "purpose": options.get("purpose"),
-    }
+    proposal_rows = [
+        proposal_tx_params_from_unsigned_tx(
+            _tx_dict_for_proposal(e[3]),
+            legacy=_legacy_from_tx_dict(e[3]),
+        )
+        for e in entries
+    ]
+
+    if len(entries) == 1:
+        a_hash, a_raw, a_to, a_tx = entries[0]
+        body: dict[str, Any] = {}
+        if options.get("key_list") is not None:
+            body["keyList"] = options["key_list"]
+        if options.get("pub_key"):
+            body["pubKey"] = options["pub_key"]
+        body["msgHash"] = a_hash
+        body["msgRaw"] = a_raw
+        body["destinationChainID"] = safe_destination_chain_id
+        dest_single = options.get("destination_address") or a_to or None
+        if dest_single:
+            body["destinationAddress"] = dest_single
+            body["destinationContract"] = dest_single
+        body["signatureText"] = options.get("signature_text")
+        body["extraJSON"] = options.get("extra_json") or ""
+        body.update(_first_tx_compose_fee_fields(a_tx))
+        if options.get("purpose"):
+            body["purpose"] = options["purpose"]
+        body["txParams"] = proposal_rows[0]
+        message_to_sign = dumps_js(body)
+        return {
+            "endpoint": "multiSignRequest",
+            "bodyForSign": body,
+            "messageToSign": message_to_sign,
+            "chainId": safe_destination_chain_id,
+            "count": 1,
+            "triggerTxParams": trigger_tx_params_from_compose_body(body),
+            "triggerMessageHash": a_hash,
+        }
+
+    body = {}
     if options.get("key_list") is not None:
         body["keyList"] = options["key_list"]
     if options.get("pub_key"):
         body["pubKey"] = options["pub_key"]
 
-    if len(list_) == 1:
-        body["msgHash"] = list_[0][0]
-        body["msgRaw"] = list_[0][1]
-        body["destinationAddress"] = options.get("destination_address") or list_[0][2] or None
-        if body["destinationAddress"] is None:
-            del body["destinationAddress"]
-        body["signatureText"] = options.get("signature_text")
-        body["extraJSON"] = options.get("extra_json") or ""
-        return {
-            "endpoint": "multiSignRequest",
-            "body": body,
-            "chainId": safe_destination_chain_id,
-            "count": 1,
-        }
+    first_tx = entries[0][3]
+    first_data = first_tx.get("data") or first_tx.get("input") or "0x"
+    if isinstance(first_data, bytes):
+        first_calldata = "0x" + first_data.hex()
+    else:
+        first_calldata = str(first_data) if str(first_data).startswith("0x") else ("0x" + str(first_data))
+    first_msg_raw_compact = first_calldata[2:] if first_calldata.startswith("0x") else first_calldata
 
-    # Batch: messageHashes, messageRawBatch, batchMeta in extraJSON
-    body["messageHashes"] = [x[0] for x in list_]
-    body["messageRawBatch"] = [x[1] for x in list_]
-    dest_addresses = options.get("destination_addresses") or [x[2] for x in list_]
-    sig_texts = options.get("signature_texts") or [""] * len(list_)
+    body["msgHash"] = entries[0][0]
+    body["msgRaw"] = first_msg_raw_compact
+    body["messageHashes"] = [x[0] for x in entries]
+    body["messageRawBatch"] = [x[1] for x in entries]
+    body["destinationChainID"] = safe_destination_chain_id
+
+    dest_addresses = options.get("destination_addresses") or [x[2] for x in entries]
+    sig_texts = options.get("signature_texts") or [""] * len(entries)
     batch_meta = [
         {
             "destinationAddress": dest_addresses[i] if i < len(dest_addresses) else "",
             "signatureText": sig_texts[i] if i < len(sig_texts) else "",
         }
-        for i in range(len(list_))
+        for i in range(len(entries))
     ]
     extra_json = options.get("extra_json") or "{}"
     try:
@@ -743,15 +820,24 @@ def generate_sign_request(broadcast: dict, options: dict) -> dict:
         parsed = {}
     parsed["batchMeta"] = batch_meta
     body["extraJSON"] = json.dumps(parsed)
-    body["destinationAddress"] = (dest_addresses[0] if dest_addresses else list_[0][2]) or None
-    if body["destinationAddress"] is None:
-        del body["destinationAddress"]
+    dest0 = (dest_addresses[0] if dest_addresses else entries[0][2]) or None
+    if dest0:
+        body["destinationAddress"] = dest0
     body["signatureText"] = sig_texts[0] if sig_texts else None
+    body.update(_first_tx_compose_fee_fields(entries[0][3]))
+    if options.get("purpose"):
+        body["purpose"] = options["purpose"]
+    body["proposalTxParams"] = proposal_rows
+
+    message_to_sign = dumps_js(body)
     return {
         "endpoint": "multiSignRequest",
-        "body": body,
+        "bodyForSign": body,
+        "messageToSign": message_to_sign,
         "chainId": safe_destination_chain_id,
-        "count": len(list_),
+        "count": len(entries),
+        "triggerTxParams": trigger_tx_params_from_compose_body(body),
+        "triggerMessageHash": entries[0][0],
     }
 
 

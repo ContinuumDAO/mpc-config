@@ -26,8 +26,10 @@ includes top-level ``value`` on ``bodyForSign`` for native actions.
 
 
 
-**Batch:** still pairs ``batchsignatures[i]`` with ``MessageRawBatch[i]`` unsigned RLP (same as the
-app ``buildBatchSignedTxsFromResult``).
+**Batch:** pairs ``batchsignatures[i]`` with ``MessageRawBatch[i]``. When ``GET /getSignRequestById?tx_params=1``
+returns a **JSON array** (one TxParams per batch index, merged execute + proposal on mpc-auth), the script
+rebuilds each unsigned tx like single-tx Execute and verifies **MessageHash** per index; otherwise it falls
+back to RLP decode from ``messageRawBatch[i]`` (same as ``buildBatchSignedTxsFromResult``).
 
 Loads message hex from the sign result or ``GET /getSignRequestById`` (or JSON files) when needed.
 
@@ -52,7 +54,12 @@ Examples::
 
   $MPA_PATH/.venv/bin/python scripts/executeSignResult.py \\
     --sign-request-id Sign20260111003720999cf104d0f \\
+    --sign-request-file /tmp/compose_stdout.json \\
     --mpc-auth-url http://127.0.0.1 --management-port 8080
+
+  **EVM:** pass ``--sign-request-file`` with the **saved JSON from the same compose/recipe run**
+  (stdout that includes ``bodyForSign``). The node does not return ``txNonce``/gas on
+  ``GET /getSignRequestById``; the file supplies them for ``POST /triggerSignRequestById`` and Execute.
 
   $MPA_PATH/.venv/bin/python scripts/executeSignResult.py \\
     --sign-result-file /tmp/result.json \\
@@ -219,8 +226,43 @@ def fetch_sign_request(mpc_base: str, request_id: str) -> dict[str, Any]:
     return data
 
 
-def fetch_sign_request_tx_params(mpc_base: str, request_id: str) -> dict[str, Any] | None:
-    """GET /getSignRequestById?tx_params=1 — same TxParams snapshot the UI stores at Get Sig (continuumdao-node-app Execute)."""
+def _coerce_tx_params_dict(data: Any) -> dict[str, Any] | None:
+    """
+    Validate one TxParams object from GET ?tx_params=1 (matches mpc-auth / continuumdao-node-app shape).
+    """
+    if not isinstance(data, dict):
+        return None
+    raw_type = data.get("txType")
+    ts = str(raw_type or "").strip().lower()
+    if ts in ("0x2", "2"):
+        ts_norm = "eip1559"
+    elif ts in ("eip1559", "legacy"):
+        ts_norm = ts
+    else:
+        return None
+    if data.get("gasLimit") in (None, ""):
+        return None
+    nonce = data.get("nonce")
+    if nonce is None:
+        return None
+    try:
+        n_int = int(nonce)
+    except (TypeError, ValueError):
+        return None
+    out = {**data, "txType": ts_norm, "nonce": n_int}
+    return out
+
+
+def fetch_sign_request_tx_params(
+    mpc_base: str, request_id: str,
+) -> dict[str, Any] | list[dict[str, Any] | None] | None:
+    """
+    GET /getSignRequestById?tx_params=1 — TxParams for Execute.
+
+    - **Single-tx:** ``data`` is one object; returns a dict or ``None``.
+    - **Batch:** ``data`` is an array (one entry per batch index); returns a list of the same length,
+      with ``None`` entries where a slot is missing or invalid (caller falls back to RLP for that index).
+    """
     q = urllib.parse.urlencode({"id": request_id, "tx_params": "1"})
     try:
         resp = http_get_json(f"{mpc_base.rstrip('/')}/getSignRequestById?{q}")
@@ -230,16 +272,16 @@ def fetch_sign_request_tx_params(mpc_base: str, request_id: str) -> dict[str, An
     data = api_data(resp)
     if (c is not None and c != 0) or data is None:
         return None
-    if not isinstance(data, dict):
-        return None
-    tx_type = data.get("txType")
-    if tx_type not in ("eip1559", "legacy"):
-        return None
-    if data.get("gasLimit") in (None, ""):
-        return None
-    if not isinstance(data.get("nonce"), int):
-        return None
-    return data
+    if isinstance(data, list):
+        parsed: list[dict[str, Any] | None] = []
+        for item in data:
+            parsed.append(_coerce_tx_params_dict(item))
+        if not any(p is not None for p in parsed):
+            return None
+        return parsed
+    if isinstance(data, dict):
+        return _coerce_tx_params_dict(data)
+    return None
 
 
 def rpc_quantity_to_int(x: Any) -> int:
@@ -383,16 +425,23 @@ def build_unsigned_single_tx_dict_app_style(
     Rebuild unsigned tx dict the same way continuumdao-node-app Execute does (not raw MessageRaw RLP),
     using TxParams from getSignRequestById?tx_params=1 and RPC fees/estimateGas.
     """
+    tx_from_raw: dict[str, Any] | None = None
     execute_is_create = False
     try:
-        u = message_raw_hex_to_unsigned_dict((msg_raw or "").strip())
-        execute_is_create = u.get("to") is None
+        tx_from_raw = message_raw_hex_to_unsigned_dict((msg_raw or "").strip())
+        execute_is_create = tx_from_raw.get("to") is None
     except (ValueError, TypeError):
         execute_is_create = False
 
+    raw_to = (tx_from_raw or {}).get("to")
     to_s = pick_str(merged, "to", "To")
     dest = pick_str(merged, "DestinationAddress", "destinationAddress")
-    to_addr = (to_s or dest or "").strip() or None
+    if raw_to not in (None, ""):
+        to_addr = str(raw_to).strip()
+        if to_addr and not to_addr.startswith("0x"):
+            to_addr = "0x" + to_addr
+    else:
+        to_addr = (to_s or dest or "").strip() or None
     if not execute_is_create and not to_addr:
         raise ValueError(
             "missing destination address (to / DestinationAddress); cannot build tx like the web Execute flow"
@@ -459,8 +508,11 @@ def build_unsigned_single_tx_dict_app_style(
 
     # Nonce: TxParams first, then sign result fields, then chain pending
     nonce: int | None = None
-    if tx_params is not None and isinstance(tx_params.get("nonce"), int):
-        nonce = int(tx_params["nonce"])
+    if tx_params is not None and tx_params.get("nonce") is not None:
+        try:
+            nonce = int(tx_params["nonce"])  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            nonce = None
     else:
         for k in ("txNonce", "nonce", "Nonce"):
             v = merged.get(k)
@@ -574,17 +626,25 @@ def signed_raw_single_like_app(
     sig: dict[str, Any],
     chain_detail: dict[str, Any],
     chain_id_num: int,
+    *,
+    tx_params: dict[str, Any] | None = None,
+    stored_message_hash: str | None = None,
 ) -> bytes:
     pre = try_prebuilt_signed_tx_bytes(sig)
     if pre is not None:
         return pre
 
-    tx_params = fetch_sign_request_tx_params(mpc_base, request_id)
+    if tx_params is None:
+        fetched = fetch_sign_request_tx_params(mpc_base, request_id)
+        if isinstance(fetched, list):
+            tx_params = fetched[0] if fetched and fetched[0] is not None else None
+        else:
+            tx_params = fetched if isinstance(fetched, dict) else None
     executor = fetch_ethereum_address_for_sign(mpc_base, merged)
     tx_dict = build_unsigned_single_tx_dict_app_style(
         merged, msg_raw, tx_params, chain_detail, rpc_url, executor, chain_id_num
     )
-    stored_mh = pick_str(merged, "MessageHash", "msgHash")
+    stored_mh = (stored_message_hash or "").strip() or pick_str(merged, "MessageHash", "msgHash")
     if stored_mh and tx_params is not None and tx_params.get("gasLimit") not in (None, ""):
         built = compute_message_hash_from_execute_unsigned_dict(tx_dict)
         if normalize_message_hash_hex(built) != normalize_message_hash_hex(stored_mh):
@@ -895,13 +955,37 @@ def build_signed_raw_dispatch(
     batch: bool,
     chain_detail: dict[str, Any],
     chain_id_num: int,
+    *,
+    item_tx_params: dict[str, Any] | None = None,
+    item_stored_message_hash: str | None = None,
+    prefetched_tx_params: dict[str, Any] | list[dict[str, Any] | None] | None = None,
 ) -> bytes:
     """
     Single-tx: rebuild unsigned tx like continuumdao-node-app Execute (TxParams + RPC + estimateGas).
-    Batch: combine batchsignatures[i] with MessageRawBatch[i] RLP (app buildBatchSignedTxsFromResult).
+    Batch: if ``item_tx_params`` is valid for this index (from GET ?tx_params=1 array), rebuild like Execute;
+    else decode ``messageRawBatch[i]`` RLP (app ``buildBatchSignedTxsFromResult``).
     """
     if batch:
+        coerced = _coerce_tx_params_dict(item_tx_params) if item_tx_params is not None else None
+        if coerced is not None:
+            return signed_raw_single_like_app(
+                mpc_base,
+                rpc_url,
+                request_id,
+                merged,
+                msg_raw,
+                sig,
+                chain_detail,
+                chain_id_num,
+                tx_params=coerced,
+                stored_message_hash=item_stored_message_hash,
+            )
         return _sign_from_message_raw_rlp(msg_raw, sig)
+    tp = item_tx_params
+    if tp is None and isinstance(prefetched_tx_params, dict):
+        tp = _coerce_tx_params_dict(prefetched_tx_params)
+    elif tp is None and isinstance(prefetched_tx_params, list) and prefetched_tx_params:
+        tp = prefetched_tx_params[0]
     return signed_raw_single_like_app(
         mpc_base,
         rpc_url,
@@ -911,6 +995,8 @@ def build_signed_raw_dispatch(
         sig,
         chain_detail,
         chain_id_num,
+        tx_params=tp,
+        stored_message_hash=item_stored_message_hash,
     )
 
 
@@ -1123,8 +1209,9 @@ def main() -> None:
     ap.add_argument(
         "--sign-request-file",
         metavar="PATH",
-        help="JSON from getSignRequestById, raw body, or envelope {data}/{Data}; optional when the "
-        "sign result already includes message raw and DestinationChainID",
+        help="Saved compose/recipe stdout (bodyForSign) or getSignRequestById envelope. "
+        "For EVM HTTP mode, strongly recommended: supplies txNonce/gas for trigger and broadcast "
+        "because GET /getSignRequestById omits those fields.",
     )
     ap.add_argument(
         "--rpc-url",
@@ -1167,6 +1254,13 @@ def _execute_sign_result_main(
     sign_request_id_box: list[str],
 ) -> None:
     request_id = sign_request_id_box[0]
+
+    sign_body: dict[str, Any] | None = None
+    if args.sign_request_file:
+        loaded_sr = load_json_file(args.sign_request_file)
+        raw_req = coerce_wrapped_json_object(loaded_sr)
+        sign_body = unwrap_sign_body(raw_req if isinstance(raw_req, dict) else loaded_sr)
+
     if args.sign_result_file:
         loaded = load_json_file(args.sign_result_file)
         sign_data = coerce_wrapped_json_object(loaded)
@@ -1187,7 +1281,7 @@ def _execute_sign_result_main(
 
         if not sign_result_has_signatures(sign_data):
             priv = load_ed25519_private_key()
-            post_trigger_sign_request(mpc, priv, request_id)
+            post_trigger_sign_request(mpc, priv, request_id, body_for_sign=sign_body)
             poll_sign_result_ready(
                 mpc,
                 request_id,
@@ -1212,12 +1306,7 @@ def _execute_sign_result_main(
             "or DestinationChainID."
         )
 
-    sign_body: dict[str, Any] | None = None
-    if args.sign_request_file:
-        loaded = load_json_file(args.sign_request_file)
-        raw_req = coerce_wrapped_json_object(loaded)
-        sign_body = unwrap_sign_body(raw_req if isinstance(raw_req, dict) else loaded)
-    elif not can_skip_sign_request:
+    if sign_body is None and not can_skip_sign_request:
         if not request_id:
             raise SystemExit(
                 "error: --sign-request-id is required when the sign result lacks message raw or "
@@ -1253,9 +1342,21 @@ def _execute_sign_result_main(
     rpc_url = resolve_rpc_url(mpc, chain_num, args.rpc_url)
     chain_detail_row = fetch_chain_detail_for_id(mpc, chain_num)
 
+    prefetched_tx: dict[str, Any] | list[dict[str, Any] | None] | None = None
+    if request_id:
+        prefetched_tx = fetch_sign_request_tx_params(mpc, request_id)
+
     timeout = float(args.receipt_timeout)
 
     def work(i: int, mr: str, sg: dict[str, Any]) -> dict[str, Any]:
+        item_tp: dict[str, Any] | None = None
+        if batch_exec and isinstance(prefetched_tx, list) and i < len(prefetched_tx):
+            item_tp = prefetched_tx[i]
+        item_mh = pick_str(sg, "messagehash", "messageHash", "MessageHash")
+        if not item_mh:
+            mh_list = merged.get("MessageHashes") or merged.get("messageHashes")
+            if isinstance(mh_list, list) and i < len(mh_list) and mh_list[i] is not None:
+                item_mh = str(mh_list[i]).strip()
         raw = build_signed_raw_dispatch(
             mpc,
             rpc_url,
@@ -1266,6 +1367,9 @@ def _execute_sign_result_main(
             batch_exec,
             chain_detail_row,
             chain_num,
+            item_tx_params=item_tp if batch_exec else None,
+            item_stored_message_hash=item_mh if batch_exec else None,
+            prefetched_tx_params=prefetched_tx if not batch_exec else None,
         )
         tx_hash = eth_send_raw_transaction(rpc_url, raw)
         receipt = wait_for_receipt(rpc_url, tx_hash, timeout_sec=timeout)

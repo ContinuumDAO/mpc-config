@@ -64,6 +64,38 @@ def _body_like_tx_fields(sr: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def merge_body_for_sign_into_sign_request(
+    sr: dict[str, Any],
+    body_for_sign: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """
+    Overlay compose ``bodyForSign`` fields onto a ``GET /getSignRequestById`` object.
+
+    The management API may omit ``txNonce`` / ``txGasLimit`` / fee fields and
+    proposal-level ``txParams`` / ``proposalTxParams`` on ``GET`` depending on version;
+    recipe output carries the full ``bodyForSign``. Merging enables trigger and
+    MessageHash checks to match the preimage the MPC will sign.
+    """
+    if not body_for_sign:
+        return sr
+    out = dict(sr)
+    for k in (
+        "txParams",
+        "proposalTxParams",
+        "proposal_tx_params",
+        "txNonce",
+        "txGasLimit",
+        "txGasPrice",
+        "txMaxFeePerGas",
+        "txMaxPriorityFeePerGas",
+    ):
+        if k in body_for_sign and body_for_sign[k] is not None:
+            out[k] = body_for_sign[k]
+    if "value" in body_for_sign and body_for_sign["value"] is not None:
+        out["value"] = body_for_sign["value"]
+    return out
+
+
 def normalize_message_hash_hex(h: str) -> str:
     s = h.strip().lower()
     if s.startswith("0x"):
@@ -138,7 +170,10 @@ def expected_message_hash_from_sign_request(sr: dict[str, Any]) -> str:
 
     body_like = _body_like_tx_fields(sr)
     if "txNonce" not in body_like or "txGasLimit" not in body_like:
-        raise ValueError("missing txNonce or txGasLimit on sign request")
+        raise ValueError(
+            "missing txNonce or txGasLimit (use executeSignResult.py --sign-request-file with "
+            "saved compose JSON that includes bodyForSign; GET /getSignRequestById omits these fields)"
+        )
 
     raw_nonce = body_like["txNonce"]
     nonce = int(raw_nonce) if not isinstance(raw_nonce, int) else raw_nonce

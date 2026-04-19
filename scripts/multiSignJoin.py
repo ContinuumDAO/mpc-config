@@ -17,6 +17,10 @@ Guarantees:
   **recipes/** produced, including default **ChainDetails**-backed gas or
   ``--no-custom-gas-params`` RPC-only mode). This script only changes **nonces**
   and recomputes signing hashes; it does **not** re-derive gas limits or fees.
+- **Proposal tx params** (``proposalTxParams`` per index, matching
+  ``generateMultiSignRequestFromCompose`` / ``GET ?tx_params=1``) are filled from
+  the re-nonce’d unsigned txs. **triggerTxParams** in the helper output matches
+  the first index (same as compose batch).
 
 Requires **eth_account** (same as other scripts in this folder).
 
@@ -55,6 +59,8 @@ import rlp
 _scripts_dir = Path(__file__).resolve().parent
 if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
+
+import generateMultiSignRequestFromCompose as _gmp
 
 _spec = importlib.util.spec_from_file_location(
     "forge_sign",
@@ -346,6 +352,13 @@ def _normalize_chain_id(body: dict[str, Any]) -> str:
     return str(parse_chain_id(str(c)))
 
 
+def _tx_dict_is_legacy(td: dict[str, Any]) -> bool:
+    """Match fee classification used when building first-tx ``tx*`` helper fields."""
+    if td.get("type") in ("0x2", "0x02") or td.get("maxFeePerGas") is not None:
+        return False
+    return True
+
+
 def _merge_purpose(a: str | None, b: str | None, override: str | None) -> str | None:
     if override is not None and override.strip():
         return override.strip()
@@ -394,6 +407,7 @@ def join_multisign_bodies(
     message_hashes: list[str] = []
     message_raw_batch: list[str] = []
 
+    proposal_tx_params_batch: list[dict[str, Any]] = []
     for i, tx in enumerate(txs):
         td = dict(tx)
         td["nonce"] = str(first_nonce + i)
@@ -401,6 +415,8 @@ def join_multisign_bodies(
         mh, mr = tx_to_signing_hash_and_raw(td)
         message_hashes.append(mh)
         message_raw_batch.append(mr)
+        leg = _tx_dict_is_legacy(td)
+        proposal_tx_params_batch.append(_gmp.proposal_tx_params_from_unsigned_tx(td, legacy=leg))
 
     first_tx = txs[0]
     first_data = first_tx.get("data") or first_tx.get("input") or "0x"
@@ -455,6 +471,8 @@ def join_multisign_bodies(
     if cid:
         out_body["clientId"] = cid
 
+    out_body["proposalTxParams"] = proposal_tx_params_batch
+
     message_to_sign = dumps_js(out_body)
 
     return {
@@ -463,6 +481,8 @@ def join_multisign_bodies(
         "messageToSign": message_to_sign,
         "chainId": chain_a,
         "count": len(txs),
+        "triggerTxParams": _gmp.trigger_tx_params_from_compose_body(out_body),
+        "triggerMessageHash": message_hashes[0],
     }
 
 

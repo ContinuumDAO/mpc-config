@@ -9,7 +9,7 @@ This directory contains reference docs for node APIs, agent workflows, and local
 | `../CONFIGURING_ED25519_KEYS.md` | Node owner: Ed25519 **`PublicMgtKey`**, **`addManagementKey`**, private key storage (operational signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`). |
 | `./ED25519_MANAGEMENT_KEY_SIGNING.md` | Ed25519 management API signing for agents (allow-list, nonces, KeyGen `ClientKeys`). |
 | `./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md` | Authoritative guide for **`multiSignRequest`** payloads: recipes, compose + Foundry helpers, **`multiSignJoin`**, **`messageToSign`** rules. |
-| `./AI_AGENT_FORGE_SIGNREQUEST.md` | Build `POST /multiSignRequest` payloads from Foundry script output. |
+| `./AI_AGENT_FORGE_SIGNREQUEST.md` | Foundry broadcast JSON → **`bodyForSign`** / **`messageToSign`** (same envelope as compose). |
 | `./AI_AGENT_NEW_SESSION.md` | Agent startup: read `$MPA_PATH/.env`, symlinks to `MPC_CONFIG_PATH`, `GET /health`, then `KEYGEN_ID` or KeyGen creation. |
 | `./API_IMPLEMENTATION.md` | Full management API behavior, endpoint contracts, and conventions. |
 | `./API_KEYGEN_MESSAGING.md` | KeyGen-scoped messaging API model and endpoint usage. |

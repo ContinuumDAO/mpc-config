@@ -527,11 +527,51 @@ def dumps_js(obj: Any) -> str:
     return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
 
 
+def proposal_tx_params_from_unsigned_tx(
+    tx: dict[str, Any], *, legacy: bool
+) -> dict[str, Any]:
+    """
+    Map an unsigned tx dict (from ``_compose_action_tx_dict``) to ``POST /multiSignRequest``
+    ``txParams`` / ``proposalTxParams[]`` shape (same field names as trigger / ``GET ?tx_params=1``).
+    """
+    nonce = int(str(tx.get("nonce", "0")).strip(), 10)
+    gas_raw = tx.get("gas", "0x0")
+    gas_lim = _tx_field_int(gas_raw) if isinstance(gas_raw, str) else int(gas_raw)
+    if legacy:
+        gp = tx.get("gasPrice", "0x0")
+        gpw = _tx_field_int(gp) if isinstance(gp, str) else int(gp)
+        return {
+            "nonce": nonce,
+            "gasLimit": str(gas_lim),
+            "txType": "legacy",
+            "gasPrice": str(gpw),
+        }
+    mf = tx.get("maxFeePerGas", "0x0")
+    mp = tx.get("maxPriorityFeePerGas", "0x0")
+    mfv = _tx_field_int(mf) if isinstance(mf, str) else int(mf)
+    mpv = _tx_field_int(mp) if isinstance(mp, str) else int(mp)
+    return {
+        "nonce": nonce,
+        "gasLimit": str(gas_lim),
+        "txType": "eip1559",
+        "maxFeePerGas": str(mfv),
+        "maxPriorityFeePerGas": str(mpv),
+    }
+
+
 def trigger_tx_params_from_compose_body(body: dict[str, Any]) -> dict[str, Any]:
     """
     Map ``bodyForSign`` fields to ``txParams`` for ``POST /triggerSignRequestById``
     (same shape as ``GET /getSignRequestById?tx_params=1``).
     """
+    existing = body.get("txParams")
+    if isinstance(existing, dict) and str(existing.get("gasLimit") or "").strip():
+        return dict(existing)
+    pb = body.get("proposalTxParams")
+    if isinstance(pb, list) and len(pb) > 0 and isinstance(pb[0], dict):
+        if str(pb[0].get("gasLimit") or "").strip():
+            return dict(pb[0])
+
     raw_nonce = body.get("txNonce")
     nonce = int(raw_nonce) if not isinstance(raw_nonce, int) else raw_nonce
     gl = body.get("txGasLimit")
@@ -985,6 +1025,7 @@ def build_compose_multisign(
     batch_meta: list[dict[str, str]] = []
     first_tx_fee: dict[str, Any] = {}
     first_calldata: str | None = None
+    proposal_tx_params_batch: list[dict[str, Any]] = []
 
     for i, raw_act in enumerate(actions):
         if i == 0:
@@ -1025,6 +1066,9 @@ def build_compose_multisign(
         msg_hash, msg_raw = tx_to_signing_hash_and_raw(tx)
         message_hashes.append(msg_hash)
         message_raw_batch.append(msg_raw)
+        proposal_tx_params_batch.append(
+            proposal_tx_params_from_unsigned_tx(tx, legacy=s.legacy)
+        )
 
         sig = (raw_act.get("signature") or "").strip()
         if bool(raw_act.get("nativeTransfer") or raw_act.get("native_transfer")) and not sig:
@@ -1098,6 +1142,11 @@ def build_compose_multisign(
         body["clientId"] = client_id
     if purpose:
         body["purpose"] = purpose
+
+    if len(actions) == 1:
+        body["txParams"] = proposal_tx_params_batch[0]
+    else:
+        body["proposalTxParams"] = proposal_tx_params_batch
 
     message_to_sign = dumps_js(body)
 

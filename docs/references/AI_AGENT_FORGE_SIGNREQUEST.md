@@ -51,7 +51,7 @@ Use when the node has an Ed25519 management key configured (`GET /hasPublicMgtKe
 
 1. **Canonical message to sign:** The helper’s **`messageToSign`** string — compact JSON of **`bodyForSign`** only (no **`clientSig`** / **`signedMessage`** in the signed bytes).
 2. **Sign** that exact UTF-8 string with the **Ed25519 private key** that matches one of the node’s allowed management keys (config `PublicMgtKey` or a key added via `POST /addManagementKey`). **`clientSig`** must be **64 bytes**, encoded as **128 hex characters** (optional `0x` stripped).
-3. **POST** the full body: all fields from **`bodyForSign`** plus **`clientSig`** plus **`signedMessage`**, where **`signedMessage`** is the **same** string as **`messageToSign`** (mpc-auth **`POST /multiSignRequest`** requires non-empty **`signedMessage`** so the verifier can check **`Ed25519`** over that exact string). Repo helpers (`**generateMultiSignRequestFromCompose.py**`, **`recipes/*.py`**) set this automatically.
+3. **POST** the full body: all fields from **`bodyForSign`** plus **`clientSig`** plus **`signedMessage`**, where **`signedMessage`** is the **same** string as **`messageToSign`** (mpc-auth **`POST /multiSignRequest`** requires non-empty **`signedMessage`** so the verifier can check **`Ed25519`** over that exact string). Repo helpers (`**generateMultiSignRequestFromCompose.py**`, **`generateSignRequestWithFoundryScript.py**`, **`recipes/*.py`**) set this automatically.
 
 **Note:** The Ed25519 keypair is the **management** keypair (e.g. from config or from the key you added). It is not the MPC key from keygen.
 
@@ -136,24 +136,42 @@ Example: dry-run JSON with no fees, EIP-1559 and fresh sender/nonce:
   < broadcast/.../run-latest.json
 ```
 
-**Output:** One JSON object to stdout, for example:
+**Output:** One JSON object to stdout with the **same envelope** as **`generateMultiSignRequestFromCompose.py`**: **`bodyForSign`**, **`messageToSign`**, **`chainId`**, **`count`**, plus **`triggerTxParams`** and **`triggerMessageHash`** (convenience for **`POST /triggerSignRequestById`**; **`executeSignResult.py`** still applies). Example (batch):
 
 ```json
 {
   "endpoint": "multiSignRequest",
-  "body": {
-    "messageHashes": ["abc123...", "def456..."],
-    "messageRawBatch": ["0x02f8...", "0x02f8..."],
-    "destinationChainID": "11155111"
+  "bodyForSign": {
+    "keyList": ["…"],
+    "pubKey": "…",
+    "msgHash": "abc123…",
+    "msgRaw": "a9059cbb…",
+    "messageHashes": ["abc123…", "def456…"],
+    "messageRawBatch": ["0x02f8…", "0x02f8…"],
+    "destinationChainID": "11155111",
+    "extraJSON": "{\"batchMeta\":[{\"destinationAddress\":\"0x…\",\"signatureText\":\"\"},…]}",
+    "txNonce": 12,
+    "txGasLimit": "21000",
+    "txMaxFeePerGas": "…",
+    "txMaxPriorityFeePerGas": "…",
+    "proposalTxParams": [
+      { "nonce": 12, "gasLimit": "…", "txType": "eip1559", "maxFeePerGas": "…", "maxPriorityFeePerGas": "…" },
+      { "nonce": 13, "gasLimit": "…", "txType": "eip1559", "maxFeePerGas": "…", "maxPriorityFeePerGas": "…" }
+    ]
   },
+  "messageToSign": "{\"keyList\":…,\"pubKey\":…}",
   "chainId": "11155111",
-  "count": 2
+  "count": 2,
+  "triggerTxParams": { "nonce": 12, "gasLimit": "…", "txType": "eip1559", "maxFeePerGas": "…", "maxPriorityFeePerGas": "…" },
+  "triggerMessageHash": "abc123…"
 }
 ```
 
 - **`endpoint`:** Always `"multiSignRequest"` for this flow. Ignore **signRequest** unless you are on a separate tx-check / relayer integration.
-- **`body`:** Already includes `keyList` and `pubKey` from the node. Add **`clientSig`** (management key), then **POST /multiSignRequest**.
-- **`count`:** Number of transactions in the broadcast (1 still uses **multiSignRequest** with `msgHash` / `msgRaw`).
+- **`bodyForSign`:** Includes **`keyList`** and **`pubKey`** from the node, hashes and serialized unsigned txs, **`destinationChainID`**, first-tx fee snapshot (**`txNonce`** / **`txGasLimit`** / fee fields), and **`txParams`** (one tx) or **`proposalTxParams`** (batch)—aligned with **`GET /getSignRequestById?tx_params=1`**. Add **`clientSig`** and **`signedMessage`**, then **POST /multiSignRequest**. Do **not** use the removed legacy top-level key **`body`**.
+- **`messageToSign`:** Compact JSON of **`bodyForSign`** only (what management signs for **`clientSig`**).
+- **`triggerTxParams` / `triggerMessageHash`:** First index for trigger; batch proposals use **`proposalTxParams`** inside **`bodyForSign`**.
+- **`count`:** Number of transactions in the broadcast (1 still uses **multiSignRequest** with **`msgHash`** / **`msgRaw`** and **`txParams`**).
 
 ---
 
@@ -239,26 +257,28 @@ Use **`--override-sender`** / **`--first-nonce`** when the broadcast **`from`** 
 ## What to do with the output
 
 1. **Parse** the script’s stdout as JSON.
-2. **Read** `body` (and confirm `endpoint` is **`multiSignRequest`**).
-3. **Add** to `body`:
+2. **Read** **`bodyForSign`** and **`messageToSign`** (and confirm **`endpoint`** is **`multiSignRequest`**).
+3. **Add** to **`bodyForSign`** (or build the HTTP body as **`bodyForSign`** plus signing fields):
    - **keyList** / **pubKey**: already set by the Python script (same as `GET /getKeyGenResultById`). If not using the script, fetch manually; see [How to get keyList, pubKey, and clientSig](#how-to-get-keylist-pubkey-and-clientsig).
-   - **clientSig**: management key signature (Ed25519 or MetaMask) over the canonical request body; see the same section for step-by-step.
-   - Optionally, but purpose is strongly recommended (including link to github if applicable): `purpose`, `destinationAddress`, `extraJSON`, `signatureText`.
-4. **POST** the final body to **POST /multiSignRequest** only (not **/signRequest**—that path is for tx-check / relayer keys).
+   - **clientSig** / **signedMessage**: management key (Ed25519 or MetaMask); sign **`messageToSign`** exactly—see the same section for step-by-step.
+   - Optionally, but purpose is strongly recommended (including link to github if applicable): **`purpose`**, **`destinationAddress`**, **`extraJSON`**, **`signatureText`**.
+4. **POST** the final **`POST /multiSignRequest`** body (**`bodyForSign`** fields + **`clientSig`** + **`signedMessage`**) only (not **/signRequest**—that path is for tx-check / relayer keys).
 5. **Use** the returned `requestId` for:
    - **signRequestAgree** (multi-agree),
-   - **EVM (AI agent):** **`executeSignResult.py`** only—it performs **triggerSignRequestById** (with **`txParams`** / **`messageHash`**) and **`getSignResultById`** as in **API_IMPLEMENTATION.md** / **`../skill/SKILL.md`**. For batch signatures, the script consumes `data.batchSignatures[i]` the same way as the web flow.
+   - **EVM (AI agent):** **`executeSignResult.py`** only—it performs **triggerSignRequestById** (with **`txParams`** or **`txParamsBatch`** / **`messageHash`**) and **`getSignResultById`** as in **API_IMPLEMENTATION.md** / **`../skill/SKILL.md`**. Save the same helper stdout as **`--sign-request-file`** so **`bodyForSign`** (nonce, gas, **`proposalTxParams`**) is available if **GET** omits fields. For batch signatures, the script consumes `data.batchSignatures[i]` the same way as the web flow.
 
 ---
 
 ## Single vs batch (both use multiSignRequest)
 
-| Count | Body fields (always **POST /multiSignRequest**) |
-|-------|--------------------------------------------------|
-| 1     | `msgHash`, `msgRaw`                              |
-| ≥2    | `messageHashes[]`, `messageRawBatch[]`           |
+| Count | Body fields (inside **`bodyForSign`**; always **POST /multiSignRequest**) |
+|-------|---------------------------------------------------------------------------|
+| 1     | **`msgHash`**, **`msgRaw`** (full serialized unsigned tx hex with **`0x`**), **`txParams`**, first-tx **`txNonce`** / **`txGasLimit`** / fee fields |
+| ≥2    | **`messageHashes[]`**, **`messageRawBatch[]`**, top-level **`msgHash`** / **`msgRaw`** (first item), **`proposalTxParams[]`**, first-tx fee snapshot |
 
-**signRequest** is unrelated to this table (tx-check / relayer only). The script sets the correct **multiSignRequest** body shape from the number of transactions.
+**Note:** Compose’s single-tx **`msgRaw`** is **calldata only** (no `0x`); this Foundry helper uses the **full RLP unsigned tx** in **`msgRaw`** for a single transaction—both are valid **`multiSignRequest`** shapes for the node; **`txParams`** matches the preimage.
+
+**signRequest** is unrelated to this table (tx-check / relayer only). The script sets the correct **multiSignRequest** **`bodyForSign`** shape from the number of transactions.
 
 ---
 
@@ -266,8 +286,8 @@ Use **`--override-sender`** / **`--first-nonce`** when the broadcast **`from`** 
 
 - [ ] Obtain or generate Foundry broadcast JSON (e.g. `run-latest.json` or forge script JSON output).
 - [ ] Run the Python script with that JSON as input.
-- [ ] Parse the JSON output; use `body` for **POST /multiSignRequest**.
-- [ ] Add `clientSig` to `body` (`keyList`/`pubKey` already filled if using the Python script with `--key-gen-id`).
+- [ ] Parse the JSON output; use **`bodyForSign`** for **POST /multiSignRequest** (and **`messageToSign`** for management signing).
+- [ ] Add **`clientSig`** / **`signedMessage`** to the POST body (`keyList`/`pubKey` already filled if using the Python script with `--key-gen-id`).
 - [ ] POST the complete body to **POST /multiSignRequest** (not `/signRequest` for multi-agree keys).
 - [ ] Use the returned `requestId` for agree, then **`executeSignResult.py`** for trigger + signatures + broadcast (**EVM** **`txParams`** / **`messageHash`** handled inside the script—see **API_IMPLEMENTATION.md** and **`../skill/SKILL.md`**).
 

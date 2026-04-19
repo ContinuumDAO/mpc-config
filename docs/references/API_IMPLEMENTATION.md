@@ -2540,6 +2540,9 @@ Creates a new signing request for **multi-agree keys only**. No relayer authenti
 - `purpose` (optional): Text from the creator, max 256 characters; visible to nodes considering `signRequestAgree` (stored and returned in list/get endpoints and `getSignResultById`). Stored as a key/value map in `Purpose`: the creator node key (128 hex) is the key and the purpose text is the value, so which node created the request is identifiable in `getSignRequestById`, `listSignRequests`, and `listSignRequestsReady`. Example response: `"Purpose": { "04a1b2c3...128hex": "Bridge transfer to L2" }`.
 - `sendGas` (optional, **multi-agree gas token only**): Set to `true` for native transfer requests created from the Assets "Send gas" dialog. Included in the signed payload when present. Stored in `ExtraJSON` and propagated; returned in `getSignRequestById` and `listSignRequests` via `ExtraJSON`.
 - `value` (optional, **multi-agree gas token only**): Amount in wei for the native transfer. Included in the signed payload when present. Stored in `ExtraJSON` and propagated; returned in `getSignRequestById` and `listSignRequests` via `ExtraJSON`. Also available in sign result metadata for Execute.
+- **`txParams`** (optional, **EVM**): Proposal-time gas/nonce snapshot for **single-tx** requests — same shape as trigger/GET `txParams` (`nonce`, `gasLimit`, `txType`, EIP-1559 or legacy fee fields). Stored on **`proposal_tx_params`** (one entry) and **propagated**. **Mutually exclusive** with **`proposalTxParams`** on the same POST.
+- **`proposalTxParams`** (optional, **EVM**): For **batch**, array of length **N** = **`len(messageHashes)`**, one **`txParams`‑shaped** object per index. For **single-tx**, at most **one** element (equivalent to **`txParams`**). Propagated. **Mutually exclusive** with **`txParams`**.
+- **`skipMessageHashVerification`** (optional): Boolean; stored and propagated. Reserved for server-side hash recomputation policy (strict vs skip); does not change **`msgHash`** / **`messageHashes`** on the wire.
 
 **Response:**
 ```json
@@ -2664,13 +2667,17 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequests?filter=all&pagenum=0&pages
 
 <a id="get-getsignrequestbyid"></a>
 #### `GET /getSignRequestById`
-Gets a specific signing request by ID. Returns the same structure as each item in `listSignRequests` (including `KeyGenRequestId`, `DestinationChainID`, `Purpose`, **`TxParams` when they were stored** at `POST /triggerSignRequestById`, etc.). Optional fields only appear if this node is running a build that includes them (see note under `listSignRequests`).
+Gets a specific signing request by ID. Returns the same structure as each item in `listSignRequests` (including `KeyGenRequestId`, `DestinationChainID`, `Purpose`, **`proposalTxParams`** / **`proposal_tx_params`** when set at **`multiSignRequest`**, **`TxParams`** / **`executeTxParams`** for **local** execute snapshots after trigger — field names match the JSON your **mpc-auth** build emits). Optional fields only appear if this node is running a build that includes them (see note under `listSignRequests`).
 
 **Query Parameters:**
 - `id` (required): Sign request ID
-- `tx_params` (optional): If `1`, response `data` is **only** the TxParams object (same shape as below), not the full sign request. Use this when the client already has the sign request and only needs TxParams for Execute.
+- `tx_params` (optional): If `1`, response **`data`** is **only** the TxParams payload for **Execute**, not the full sign request:
+  - **Single-tx:** one JSON **object** (`nonce`, `gasLimit`, `txType`, EIP-1559 or legacy fee fields).
+  - **Batch** (multiple `messageHashes`): JSON **array** of **N** objects — one per batch index — in order. **Precedence per slot:** if the originator ran **`POST /triggerSignRequestById`** on **this** node, the merged **execute** snapshot (**`execute_tx_params`**) is returned when present; otherwise **`proposal_tx_params`** for that index; if neither exists for that index, the slot may be `null` or missing depending on stored data.
 
-**TxParams** are stored only on the node that received `POST /triggerSignRequestById` when the trigger body included **`txParams`** (see [triggerSignRequestById](#post-triggersignrequestbyid)). For **EVM** multi-agree requests, the originator **must** send **`txParams`** on trigger so they are persisted; otherwise **`GET /getSignRequestById?tx_params=1`** returns **`Data: null`** and Execute (and automation that relies on TxParams) cannot rebuild the same unsigned transaction (nonce, gas, fees) that was signed. The object contains `nonce`, `gasLimit`, `txType`, and either EIP-1559 or legacy gas fields.
+Without **`tx_params=1`**, full sign request JSON includes propagated **`proposal_tx_params`** (and on the originator after trigger, local **`execute_tx_params`** / **`TxParams`** for execute snapshots — not propagated to peers).
+
+**EVM Execute:** Callers should prefer **`?tx_params=1`** so automation gets the same nonce/gas/fees used for **`MessageHash`**. If **`data`** is **`null`**, proposal fields were not sent at **`multiSignRequest`** and trigger did not persist a merged snapshot — use **`--sign-request-file`** / compose output or trigger with **`txParams`** / **`txParamsBatch`** as documented under [triggerSignRequestById](#post-triggersignrequestbyid).
 
 **Example:**
 ```bash
@@ -2901,7 +2908,11 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequestsReady?pagenum=0&pagesize=10
 #### `POST /triggerSignRequestById`
 **Multi-agree only.** When at least **threshold+1** nodes have accepted (and rejections are excluded), triggers signature generation: sends **SIGNREQUESTCONFIRMSUCCESS** and starts the sign worker(s). For **single** requests, one signature is produced; for **batch** requests, one trigger produces one SignResult with N signatures (retrieved via `GET /getSignResultById` as the `batchSignatures` array). **Only the originator may call this:** the request’s **Purpose** map must have this node’s key as the (originator) key; otherwise the server returns an error. **If the sign request status is `"shelved"`** (set via `POST /shelveSignRequest`), the server returns an error and does not trigger. **Idempotent:** if the request was already triggered, returns success with data `"Already triggered"`. Does not affect tx-check flow. Requires management key signature (MetaMask or Ed25519).
 
-**EVM (required for automation and Execute):** For **EVM** signing requests, the originator **must** include **`txParams`** and **`messageHash`** in the trigger body so the node **stores** them locally (same behavior as the web app **Get Sig** flow). **`txParams`** must be persisted so **`GET /getSignRequestById?tx_params=1`** returns the nonce/gas/fee snapshot for Execute and CLI tools. **`messageHash`** must be the **transaction signing hash** (hash of the serialized unsigned tx matching those params) so the MPC signs the same preimage the client will use to build the raw signed transaction. Omitting **`txParams`** leaves nothing to return for `tx_params=1` (**`Data: null`**), which breaks signature recovery checks and reliable broadcast. AI agents and scripts must not call trigger with only `requestId` + management signature for EVM requests.
+**EVM (Execute / automation):** For **EVM** multi-agree requests, the originator should include **`messageHash`** (single-tx: the transaction signing hash for the unsigned tx the MPC will sign; updates local **`MessageHash`** before the worker runs). For gas/nonce/fees stored on **this node only** (not propagated), send:
+- **`txParams`**: one object — used for **single-tx**, or for **batch** merged **only at index 0** with **`proposal_tx_params[0]`** unless **`txParamsBatch`** is set (see below).
+- **`txParamsBatch`** (optional, **batch only**): array of length **N** = **`len(messageHashes)`**; each element merges with **`proposal_tx_params[i]`** into **`execute_tx_params[i]`** on this node. Do not send both **`txParams`** and **`txParamsBatch`** in the same request.
+
+After trigger, **`GET /getSignRequestById?tx_params=1`** returns the **merged** execute snapshot(s) when present; if the client already sent full **`proposalTxParams`** at **`multiSignRequest`**, **`?tx_params=1`** can still return usable params **before** trigger (proposal only). **`executeSignResult.py`** and the node-app Execute flow rely on this for hash checks.
 
 **Request Body:**
 ```json
@@ -2912,12 +2923,13 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequestsReady?pagenum=0&pagesize=10
 }
 ```
 
-Minimal body above is structurally valid; **for EVM multi-agree, add `txParams` and `messageHash` as below.**
+Minimal body above is structurally valid; **for EVM multi-agree, add `messageHash` and `txParams` and/or `txParamsBatch` as below.**
 
 - `requestId` (required): Sign request ID.
 - `nonce`, `sig`: Management key signature over the JSON body with `sig` set to empty (same as other mgt-key endpoints).
-- `txParams` (**required**, **EVM** multi-agree): Object with `nonce` (number), `gasLimit` (string), `txType` (`"eip1559"` or `"legacy"`), and for EIP-1559: `maxFeePerGas`, `maxPriorityFeePerGas` (strings); for legacy: `gasPrice` (string). **Must be sent** on trigger so the node **stores** it on **this node only** (not propagated). Returned in `getSignRequestById` (`tx_params=1`) so the app can rebuild the same tx at Execute. If omitted, nothing is stored and `getSignRequestById?tx_params=1` returns **`Data: null`**.
-- `messageHash` (**required**, **EVM** multi-agree): The **transaction signing hash** (hex, typically 64 hex chars without `0x`) for the unsigned tx that matches **`txParams`**. The backend updates the sign request's MessageHash on **this node only** before starting the sign worker; the MPC signs this hash. Not propagated to other nodes. Omitting it risks signing a different preimage than Execute builds.
+- `txParams` (**EVM**): Object with `nonce` (number), `gasLimit` (string), `txType` (`"eip1559"` or `"legacy"`), and for EIP-1559: `maxFeePerGas`, `maxPriorityFeePerGas` (strings); for legacy: `gasPrice` (string). **Local only** (not propagated). Merged with **`proposal_tx_params[0]`** into the Execute snapshot (**`TxParams`** for single-tx; index **0** for batch when **`txParamsBatch`** is omitted). Returned via **`GET ...?tx_params=1`** (single object or array index 0) after merge.
+- `txParamsBatch` (optional, **EVM**, **batch**): Array of **N** objects (same shape as `txParams`); merges per index with **`proposal_tx_params`** into **`execute_tx_params`**. Mutually exclusive with **`txParams`**.
+- `messageHash` (**strongly recommended**, **EVM** single-tx): The **transaction signing hash** (hex, typically 64 hex chars without `0x`) for the unsigned tx. The backend updates the sign request's **`MessageHash`** on **this node only** before starting the sign worker. Not propagated. For **batch**, per-index hashes are the **`messageHashes`** stored on the sign request (trigger does not replace the whole batch with one hash).
 
 **Response (triggered):**
 ```json

@@ -134,14 +134,18 @@ Use **one** of these if the agent holds the management private material; otherwi
 
 ## Script output (stdout JSON)
 
+The table below describes **`generateMultiSignRequestFromCompose.py`**. **`generateSignRequestWithFoundryScript.py`** emits the **same top-level keys** (**`endpoint`**, **`bodyForSign`**, **`messageToSign`**, **`chainId`**, **`count`**, **`triggerTxParams`**, **`triggerMessageHash`**); it does **not** support **`--ed25519-seed-hex`** / **`postBody`** (see **`./AI_AGENT_FORGE_SIGNREQUEST.md`**).
+
 | Key | Meaning |
 |-----|---------|
 | **`endpoint`** | Always **`"multiSignRequest"`**. |
-| **`bodyForSign`** | Object to sign: includes **`keyList`**, **`pubKey`**, hashes/raw fields, **`destinationChainID`**, optional **`purpose`**, **`clientId`**, **`txNonce`** / **`txGasLimit`** / fee fields for the first tx, etc. **No** **`clientSig`** / **`signedMessage`** here. |
+| **`bodyForSign`** | Object to sign: includes **`keyList`**, **`pubKey`**, hashes/raw fields, **`destinationChainID`**, optional **`purpose`**, **`clientId`**, **`txNonce`** / **`txGasLimit`** / fee fields for the first tx, **`txParams`** (single) or **`proposalTxParams`** (batch), etc. **No** **`clientSig`** / **`signedMessage`** here. |
 | **`messageToSign`** | **Exact string** to sign for management auth: compact JSON (**no spaces** after `:` or `,`), same as the app’s **`JSON.stringify(bodyForSign)`**. |
 | **`chainId`** | Destination chain id string. |
 | **`count`** | Number of compose actions (1 = single, ≥2 = batch). |
-| **`postBody`** | Present only if **`--ed25519-seed-hex`** or **`--eip191-private-key-hex`** was passed: ready-to-POST body including **`clientSig`** and **`signedMessage`** (= **`messageToSign`**). |
+| **`triggerTxParams`** | Convenience: first-index **`txParams`** for **`POST /triggerSignRequestById`** (also emitted by the Foundry helper). |
+| **`triggerMessageHash`** | Hash paired with **`triggerTxParams`** (first **`msgHash`** when batch). |
+| **`postBody`** | **Compose only:** present if **`--ed25519-seed-hex`** or **`--eip191-private-key-hex`** was passed: ready-to-POST body including **`clientSig`** and **`signedMessage`** (= **`messageToSign`**). |
 
 ### `signedMessage` vs what you sign (avoid confusion)
 
@@ -178,7 +182,7 @@ Thin CLI wrappers under **`$MPA_PATH/recipes/`**. Each calls **`generateMultiSig
 
 ## Lifecycle after you have a payload
 
-Once **`POST /multiSignRequest`** succeeds, other nodes **`POST /signRequestAgree`**, then the originator runs the trigger / execute / broadcast step. **AI agents:** **only** **`executeSignResult.py`** for EVM (same as **`../skill/SKILL.md`** **Default operational loop**). **EVM** trigger bodies must carry **`txParams`** and **`messageHash`** (the script matches web **Get Sig** parity). Generic narrative: **`./instructions.md`** and **`./API_IMPLEMENTATION.md`**.
+Once **`POST /multiSignRequest`** succeeds, other nodes **`POST /signRequestAgree`**, then the originator runs the trigger / execute / broadcast step. **AI agents:** **only** **`executeSignResult.py`** for EVM (same as **`../skill/SKILL.md`** **Default operational loop**). **EVM** trigger bodies must carry **`txParams`** and **`messageHash`**, or **`txParamsBatch`** for multi-message batches (the script matches web **Get Sig** parity). Generic narrative: **`./instructions.md`** and **`./API_IMPLEMENTATION.md`**.
 
 ---
 
@@ -190,6 +194,7 @@ The script matches **`continuumdao-node-app`** **`handleComposeOK`** behavior:
 |---------|----------------|--------|
 | **1** | **`msgHash`**, **`msgRaw`** | **`msgRaw`** is **calldata only**, **without** leading **`0x`** (not the full RLP unsigned tx). |
 | **≥ 2** | **`messageHashes`**, **`messageRawBatch`** | Full **serialized unsigned tx** hex per item (with **`0x`**). Also sets first-item **`msgHash`** / **`msgRaw`** (first calldata, no `0x`) for app compatibility. **`extraJSON`** contains **`{"batchMeta":[...]}`** with per-tx **`destinationAddress`** and **`signatureText`**. |
+| **Foundry helper (`generateSignRequestWithFoundryScript.py`)** | Same batch/hashing rules for **`messageHashes`** / **`messageRawBatch`** | Single-tx **`msgRaw`** is the **full** serialized unsigned transaction (with **`0x`**), not calldata-only—see **`./AI_AGENT_FORGE_SIGNREQUEST.md`**. |
 
 **MPC signing** still uses the **transaction signing hash** in **`msgHash`** / **`messageHashes`**; do not replace those with `keccak256(calldata)` only.
 
