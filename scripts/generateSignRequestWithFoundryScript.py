@@ -390,10 +390,15 @@ def augment_broadcast_with_fees(
             new_txs.append(item)
             continue
         tx = dict(raw)
+        g = raw.get("gas")
+        broadcast_gas = hex_to_int(g) if g is not None and str(g).strip() != "" else 0
+        if broadcast_gas <= 0:
+            broadcast_gas = hex_to_int(default_gas_hex)
         if gas_limit_config is not None:
-            tx["gas"] = _to_hex_wei(gas_limit_config)
+            # Match compose / getChainDetails behaviour: chain gasLimit is often 21000 for transfers;
+            # never cap contract calls below the broadcast gas limit (or default transfer floor).
+            tx["gas"] = _to_hex_wei(max(gas_limit_config, broadcast_gas))
         else:
-            g = raw.get("gas")
             if g is None or g == "" or hex_to_int(g) == 0:
                 tx["gas"] = default_gas_hex
         if legacy:
