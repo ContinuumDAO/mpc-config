@@ -612,37 +612,44 @@ def parse_no_custom_gas_params(compose: dict[str, Any]) -> bool:
 
 def chain_snapshot_for_custom_gas_extra_json(chain_detail: dict[str, Any]) -> dict[str, Any]:
     """
-    Snapshot of **GET /getChainDetails** for ``extraJSON.customGasChainDetails`` (same
-    convention as continuumdao-node-app when **Use Custom Gas Config** is on). Omits
-    only missing/empty string values; keeps ``False`` and numeric ``0``.
+    Gas-related hints from **GET /getChainDetails** for ``extraJSON.customGasChainDetails``
+    (same convention as continuumdao-node-app). Omits ``chainId`` / ``chainName`` (already on
+    the sign request) and **rpcGateway** (URLs may embed API keys). Only non-empty fields;
+    EIP-1559 chains get gasLimit + baseFee + priorityFee + baseFeeMultiplier; legacy chains get
+    gasLimit + gasMultiplier + gasPrice.
     """
     if not chain_detail:
         return {}
-    out: dict[str, Any] = {}
-    groups = (
-        ("chainId", ("chainId", "ChainId")),
-        ("chainName", ("chainName", "ChainName")),
-        ("rpcGateway", ("rpcGateway", "RpcGateway", "rpc_gateway")),
-        ("explorer", ("explorer", "Explorer")),
-        ("legacy", ("legacy", "Legacy")),
-        ("testnet", ("testnet", "Testnet")),
-        ("gasLimit", ("gasLimit", "GasLimit")),
-        ("baseFee", ("baseFee", "BaseFee")),
-        ("priorityFee", ("priorityFee", "PriorityFee")),
-        ("baseFeeMultiplier", ("baseFeeMultiplier", "BaseFeeMultiplier")),
-        ("gasMultiplier", ("gasMultiplier", "GasMultiplier")),
-        ("gasPrice", ("gasPrice", "GasPrice")),
-        ("gasName", ("gasName", "GasName")),
-        ("updatedAt", ("updatedAt", "UpdatedAt")),
+    legacy_raw = pick_str(chain_detail, "legacy", "Legacy")
+    legacy = bool(
+        legacy_raw is True
+        or (isinstance(legacy_raw, str) and legacy_raw.strip().lower() == "true")
     )
-    for canon, key_tuple in groups:
-        v = pick_str(chain_detail, *key_tuple)
+
+    def push(d: dict[str, Any], key: str, v: Any) -> None:
         if v is None:
-            continue
+            return
         if isinstance(v, str) and v.strip() == "":
-            continue
-        out[canon] = v
-    return out
+            return
+        d[key] = v
+
+    fields: dict[str, Any] = {}
+    push(fields, "gasLimit", pick_str(chain_detail, "gasLimit", "GasLimit"))
+    if legacy:
+        push(fields, "gasMultiplier", pick_str(chain_detail, "gasMultiplier", "GasMultiplier"))
+        push(fields, "gasPrice", pick_str(chain_detail, "gasPrice", "GasPrice"))
+    else:
+        push(fields, "baseFee", pick_str(chain_detail, "baseFee", "BaseFee"))
+        push(fields, "priorityFee", pick_str(chain_detail, "priorityFee", "PriorityFee"))
+        push(
+            fields,
+            "baseFeeMultiplier",
+            pick_str(chain_detail, "baseFeeMultiplier", "BaseFeeMultiplier"),
+        )
+
+    if not fields:
+        return {}
+    return {"legacy": legacy, **fields}
 
 
 def _tx_field_int(x: Any) -> int:
