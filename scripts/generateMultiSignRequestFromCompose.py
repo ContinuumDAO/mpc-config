@@ -76,6 +76,9 @@ empty (``msgRaw`` is ``""`` for a single action).
 **Output:** JSON with ``endpoint``, ``bodyForSign``, ``messageToSign``, and
 optional ``postBody`` if signing flags were passed. Add ``clientSig`` and
 ``signedMessage`` = ``messageToSign`` (Ed25519 and EIP-191 helpers set both) before POSTing.
+When ``noCustomGasParams`` is false or omitted (default), ``bodyForSign.extraJSON`` includes
+``customGasChainDetails`` (snapshot of **GET /getChainDetails**) for Join/Execute disclosure,
+same as continuumdao-node-app **Use Custom Gas Config**; omitted when ``noCustomGasParams`` is true.
 Also ``triggerTxParams`` and ``triggerMessageHash``: the shape required for
 ``POST /triggerSignRequestById`` so ``GET /getSignRequestById?tx_params=1`` can
 return stored TxParams (see API docs). **multiSignRequest** uses ``txNonce`` /
@@ -605,6 +608,41 @@ def parse_no_custom_gas_params(compose: dict[str, Any]) -> bool:
     if "no_custom_gas_params" in compose:
         return bool(compose["no_custom_gas_params"])
     return False
+
+
+def chain_snapshot_for_custom_gas_extra_json(chain_detail: dict[str, Any]) -> dict[str, Any]:
+    """
+    Snapshot of **GET /getChainDetails** for ``extraJSON.customGasChainDetails`` (same
+    convention as continuumdao-node-app when **Use Custom Gas Config** is on). Omits
+    only missing/empty string values; keeps ``False`` and numeric ``0``.
+    """
+    if not chain_detail:
+        return {}
+    out: dict[str, Any] = {}
+    groups = (
+        ("chainId", ("chainId", "ChainId")),
+        ("chainName", ("chainName", "ChainName")),
+        ("rpcGateway", ("rpcGateway", "RpcGateway", "rpc_gateway")),
+        ("explorer", ("explorer", "Explorer")),
+        ("legacy", ("legacy", "Legacy")),
+        ("testnet", ("testnet", "Testnet")),
+        ("gasLimit", ("gasLimit", "GasLimit")),
+        ("baseFee", ("baseFee", "BaseFee")),
+        ("priorityFee", ("priorityFee", "PriorityFee")),
+        ("baseFeeMultiplier", ("baseFeeMultiplier", "BaseFeeMultiplier")),
+        ("gasMultiplier", ("gasMultiplier", "GasMultiplier")),
+        ("gasPrice", ("gasPrice", "GasPrice")),
+        ("gasName", ("gasName", "GasName")),
+        ("updatedAt", ("updatedAt", "UpdatedAt")),
+    )
+    for canon, key_tuple in groups:
+        v = pick_str(chain_detail, *key_tuple)
+        if v is None:
+            continue
+        if isinstance(v, str) and v.strip() == "":
+            continue
+        out[canon] = v
+    return out
 
 
 def _tx_field_int(x: Any) -> int:
@@ -1147,6 +1185,23 @@ def build_compose_multisign(
         body["txParams"] = proposal_tx_params_batch[0]
     else:
         body["proposalTxParams"] = proposal_tx_params_batch
+
+    # Disclosure for peers: chain row used for gas hints (omit when --no-custom-gas-params / RPC-only).
+    if not s.no_custom_gas_params:
+        snap = chain_snapshot_for_custom_gas_extra_json(s.chain_detail)
+        if snap:
+            if len(actions) == 1:
+                body["extraJSON"] = dumps_js({"customGasChainDetails": snap})
+            else:
+                ex = body.get("extraJSON") or "{}"
+                try:
+                    parsed_ex = json.loads(ex) if isinstance(ex, str) else dict(ex)
+                except json.JSONDecodeError:
+                    parsed_ex = {}
+                if not isinstance(parsed_ex, dict):
+                    parsed_ex = {}
+                parsed_ex["customGasChainDetails"] = snap
+                body["extraJSON"] = dumps_js(parsed_ex)
 
     message_to_sign = dumps_js(body)
 

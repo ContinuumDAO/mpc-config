@@ -12,7 +12,9 @@ Guarantees:
 - **Output shape** is always the **batch** form (``messageHashes``, ``messageRawBatch``,
   ``extraJSON.batchMeta``, plus first-item ``msgHash`` / ``msgRaw`` compatibility fields)
   when either input was not already a batch, or when the merged transaction count is
-  at least two (covers ERC20 transfer then swap, etc.).
+  at least two (covers ERC20 transfer then swap, etc.). If either input's ``extraJSON``
+  includes ``customGasChainDetails`` (from compose/Foundry with chain gas disclosure),
+  the merged ``extraJSON`` keeps it (first input wins, then second).
 - **Gas and fees** are taken from each input’s serialized transactions (whatever
   **recipes/** produced, including default **ChainDetails**-backed gas or
   ``--no-custom-gas-params`` RPC-only mode). This script only changes **nonces**
@@ -130,6 +132,23 @@ def _parse_extra_batch_meta(body: dict[str, Any]) -> list[dict[str, str]]:
             }
         )
     return out
+
+
+def _custom_gas_chain_details_from_body(body: dict[str, Any]) -> dict[str, Any] | None:
+    """Parse ``extraJSON.customGasChainDetails`` from a compose/Foundry helper ``bodyForSign``."""
+    raw = body.get("extraJSON") or body.get("extra_json") or ""
+    if not (isinstance(raw, str) and raw.strip()):
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    c = parsed.get("customGasChainDetails") or parsed.get("CustomGasChainDetails")
+    if isinstance(c, dict) and c:
+        return c
+    return None
 
 
 def _decode_type2_unsigned(raw: bytes) -> dict[str, Any]:
@@ -447,6 +466,11 @@ def join_multisign_bodies(
         purpose,
     )
 
+    extra_merged: dict[str, Any] = {"batchMeta": batch_meta}
+    cg_join = _custom_gas_chain_details_from_body(body_a) or _custom_gas_chain_details_from_body(body_b)
+    if cg_join:
+        extra_merged["customGasChainDetails"] = cg_join
+
     out_body: dict[str, Any] = {
         "destinationChainID": chain_a,
         "msgHash": message_hashes[0],
@@ -455,7 +479,7 @@ def join_multisign_bodies(
         "messageRawBatch": message_raw_batch,
         "destinationAddress": batch_meta[0].get("destinationAddress") or "",
         "signatureText": batch_meta[0].get("signatureText") or "",
-        "extraJSON": dumps_js({"batchMeta": batch_meta}),
+        "extraJSON": dumps_js(extra_merged),
     }
     if key_list is not None:
         out_body["keyList"] = key_list

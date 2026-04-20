@@ -127,6 +127,8 @@ Example: broadcast from another key, sign with the KeyGen address and current no
 | Legacy | `--gas-price-gwei`, `--gas-price` (minimum gwei; max with `--gas-price-gwei`), `--gas-multiplier` (extra % on gas price) |
 | Both | `--gas-limit` (per-tx when augmenting) |
 
+When any of these augment flags is used, **`generateSignRequestWithFoundryScript.py`** also sets **`extraJSON.customGasChainDetails`** to a snapshot from **`GET /getChainDetails`** for the destination chain (same convention as the Multi-Sign app and **`generateMultiSignRequestFromCompose.py`**), with a fallback to the CLI-derived augment hints if the node lookup fails.
+
 Example: dry-run JSON with no fees, EIP-1559 and fresh sender/nonce:
 
 ```bash

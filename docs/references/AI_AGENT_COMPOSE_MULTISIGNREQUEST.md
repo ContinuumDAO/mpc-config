@@ -193,7 +193,7 @@ The script matches **`continuumdao-node-app`** **`handleComposeOK`** behavior:
 | `count` | Primary fields | Notes |
 |---------|----------------|--------|
 | **1** | **`msgHash`**, **`msgRaw`** | **`msgRaw`** is **calldata only**, **without** leading **`0x`** (not the full RLP unsigned tx). |
-| **≥ 2** | **`messageHashes`**, **`messageRawBatch`** | Full **serialized unsigned tx** hex per item (with **`0x`**). Also sets first-item **`msgHash`** / **`msgRaw`** (first calldata, no `0x`) for app compatibility. **`extraJSON`** contains **`{"batchMeta":[...]}`** with per-tx **`destinationAddress`** and **`signatureText`**. |
+| **≥ 2** | **`messageHashes`**, **`messageRawBatch`** | Full **serialized unsigned tx** hex per item (with **`0x`**). Also sets first-item **`msgHash`** / **`msgRaw`** (first calldata, no `0x`) for app compatibility. **`extraJSON`** contains **`{"batchMeta":[...]}`** with per-tx **`destinationAddress`** and **`signatureText`**. When **`noCustomGasParams`** is false or omitted (default), **`generateMultiSignRequestFromCompose.py`** also adds **`customGasChainDetails`** (snapshot of **`GET /getChainDetails`**) in the same object for Join/Execute disclosure. |
 | **Foundry helper (`generateSignRequestWithFoundryScript.py`)** | Same batch/hashing rules for **`messageHashes`** / **`messageRawBatch`** | Single-tx **`msgRaw`** is the **full** serialized unsigned transaction (with **`0x`**), not calldata-only—see **`./AI_AGENT_FORGE_SIGNREQUEST.md`**. |
 
 **MPC signing** still uses the **transaction signing hash** in **`msgHash`** / **`messageHashes`**; do not replace those with `keccak256(calldata)` only.

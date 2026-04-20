@@ -700,6 +700,34 @@ def _tx_dict_for_proposal(tx: dict[str, Any]) -> dict[str, Any]:
     return td
 
 
+def _apply_custom_gas_extra_json_to_body(body: dict[str, Any], options: dict) -> None:
+    """
+    Merge optional ``custom_gas_chain_details`` into ``extraJSON`` (same ``customGasChainDetails``
+    key as continuumdao-node-app / ``generateMultiSignRequestFromCompose``).
+    """
+    ex = options.get("extra_json")
+    if ex is None:
+        ex_str = ""
+    elif isinstance(ex, str):
+        ex_str = ex
+    else:
+        ex_str = json.dumps(ex)
+    cg = options.get("custom_gas_chain_details")
+    if isinstance(cg, dict) and cg:
+        parsed: dict[str, Any] = {}
+        if ex_str.strip():
+            try:
+                parsed = json.loads(ex_str)
+            except (json.JSONDecodeError, TypeError):
+                parsed = {}
+        if not isinstance(parsed, dict):
+            parsed = {}
+        parsed["customGasChainDetails"] = cg
+        body["extraJSON"] = json.dumps(parsed)
+    else:
+        body["extraJSON"] = ex_str
+
+
 def generate_sign_request(broadcast: dict, options: dict) -> dict:
     from generateMultiSignRequestFromCompose import (
         dumps_js,
@@ -771,7 +799,7 @@ def generate_sign_request(broadcast: dict, options: dict) -> dict:
             body["destinationAddress"] = dest_single
             body["destinationContract"] = dest_single
         body["signatureText"] = options.get("signature_text")
-        body["extraJSON"] = options.get("extra_json") or ""
+        _apply_custom_gas_extra_json_to_body(body, options)
         body.update(_first_tx_compose_fee_fields(a_tx))
         if options.get("purpose"):
             body["purpose"] = options["purpose"]
@@ -824,6 +852,9 @@ def generate_sign_request(broadcast: dict, options: dict) -> dict:
     except (json.JSONDecodeError, TypeError):
         parsed = {}
     parsed["batchMeta"] = batch_meta
+    cg = options.get("custom_gas_chain_details")
+    if isinstance(cg, dict) and cg:
+        parsed["customGasChainDetails"] = cg
     body["extraJSON"] = json.dumps(parsed)
     dest0 = (dest_addresses[0] if dest_addresses else entries[0][2]) or None
     if dest0:
@@ -1061,6 +1092,7 @@ def main() -> None:
         )
 
     # Gas/fee augmentation (optional; same logic as manual batch in app)
+    chain_detail_augment: dict[str, Any] | None = None
     gas_args = [
         args.legacy,
         args.is_eip1559,
@@ -1094,6 +1126,7 @@ def main() -> None:
         if args.gas_price_gwei is not None:
             fee_params["gasPriceGwei"] = args.gas_price_gwei
         broadcast = augment_broadcast_with_fees(broadcast, chain_detail, fee_params)
+        chain_detail_augment = chain_detail
 
     options: dict = {}
     if args.destination_chain_id:
@@ -1118,6 +1151,24 @@ def main() -> None:
         )
         options["key_list"] = key_list
         options["pub_key"] = pub_key
+        if chain_detail_augment is not None:
+            try:
+                from generateMultiSignRequestFromCompose import (
+                    chain_snapshot_for_custom_gas_extra_json,
+                    fetch_chain_detail_for_id,
+                )
+
+                cid_str = infer_chain_id_for_rpc_broadcast(broadcast, args.destination_chain_id)
+                cid = int(cid_str.strip() or "0", 10)
+                if cid > 0:
+                    node_row = fetch_chain_detail_for_id(mpc_base, cid)
+                    snap = chain_snapshot_for_custom_gas_extra_json(node_row)
+                else:
+                    snap = chain_snapshot_for_custom_gas_extra_json(chain_detail_augment)
+            except Exception:
+                snap = chain_snapshot_for_custom_gas_extra_json(chain_detail_augment)
+            if snap:
+                options["custom_gas_chain_details"] = snap
     except ValueError as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)
