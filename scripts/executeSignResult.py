@@ -24,7 +24,19 @@ request or result, and from ``ExtraJSON`` / ``extraJSON`` when the API merged ``
 (see API_IMPLEMENTATION.md send-gas / multi-agree fields). Current ``generateMultiSignRequestFromCompose``
 includes top-level ``value`` on ``bodyForSign`` for native actions.
 
-
+**Uniswap / Permit2 (EIP-712) — not EVM raw tx here:** If ``extraJSON`` (merged from the sign
+request) contains a **``permit2``** object with **``"kind": "PermitSingle"``** (as emitted by
+``recipes/uniswapV4/permit2_approval.py``), the MPC signature is for the **EIP-712 typed-data
+hash** (``msgHash``), **not** for an RLP **unsigned transaction**. This script **skips** EVM
+broadcast in that case and prints **AI agent** next steps on **stderr**: use the returned signature
+in your **Permit2** flow, then obtain swap **calldata** (e.g. ``recipes/uniswapV4/uniswap_trade_swap.py``
+calls Trade **``POST /v1/swap``**—preview only, no chain tx). The **on-chain swap** should be a
+**separate** ``multiSignRequest`` whose ``bodyForSign`` matches a real Universal Router
+transaction. Use **``recipes/uniswapV4/uniswap_swap_multisign.py``** to build that **POST /multiSignRequest**
+payload from the Trade **/v1/swap** JSON and the management API / RPC, then run this script on **that** sign
+result. Optional
+``--preview-uniswap-swap-calldata`` (with ``UNISWAP_TRADE_API_KEY``) fetches a **swap** JSON preview
+into stdout for inspection.
 
 **Batch:** pairs ``batchsignatures[i]`` with ``MessageRawBatch[i]``. When ``GET /getSignRequestById?tx_params=1``
 returns a **JSON array** (one TxParams per batch index, merged execute + proposal on mpc-auth), the script
@@ -317,6 +329,105 @@ def _extra_json_object_from_merged(merged: dict[str, Any]) -> dict[str, Any]:
         except (json.JSONDecodeError, TypeError):
             continue
     return {}
+
+
+def is_permit2_permit_single_typed_data_request(merged: dict[str, Any]) -> bool:
+    """
+    True when extraJSON (after merge) indicates ``permit2_approval`` Permit2 **PermitSingle** EIP-712
+    (``msgHash`` is not a tx signing hash). :func:`executeSignResult` only broadcasts EVM **transactions**.
+    """
+    ex = _extra_json_object_from_merged(merged)
+    p2 = ex.get("permit2")
+    if not isinstance(p2, dict):
+        return False
+    return str(p2.get("kind") or "").strip() == "PermitSingle"
+
+
+def _run_uniswap_trade_swap_subprocess(merged: dict[str, Any], scripts_dir: Path) -> dict[str, Any]:
+    """
+    Run ``recipes/uniswapV4/uniswap_trade_swap.py`` with a quote from extraJSON. Requires
+    ``UNISWAP_TRADE_API_KEY``. Uses ``--permit2-disabled`` for a **preview** (may differ from
+    the final /swap with permit2 enabled). Returns parsed JSON or an error object.
+    """
+    if not (os.environ.get("UNISWAP_TRADE_API_KEY") or "").strip():
+        return {"error": "Set UNISWAP_TRADE_API_KEY in the environment to run swap preview."}
+    ex = _extra_json_object_from_merged(merged)
+    uq = ex.get("uniswapTradeQuote")
+    if not isinstance(uq, dict) or not uq:
+        return {
+            "error": "extraJSON has no uniswapTradeQuote object to pass to the Trade /swap call."
+        }
+    swap_py = scripts_dir.parent / "recipes" / "uniswapV4" / "uniswap_trade_swap.py"
+    if not swap_py.is_file():
+        return {"error": f"missing {swap_py}"}
+    import subprocess
+
+    body = json.dumps({"uniswapTradeQuote": uq}, separators=(",", ":"), ensure_ascii=False)
+    r = subprocess.run(
+        [sys.executable, str(swap_py), "--stdin", "--permit2-disabled"],
+        input=body.encode("utf-8"),
+        env=os.environ.copy(),
+        capture_output=True,
+        timeout=120,
+    )
+    err_txt = (r.stderr or b"").decode("utf-8", errors="replace")
+    if r.returncode != 0:
+        return {
+            "error": "uniswap_trade_swap failed",
+            "returncode": r.returncode,
+            "stderr": err_txt[:4000],
+        }
+    try:
+        return json.loads(r.stdout.decode("utf-8").strip() or "{}")
+    except json.JSONDecodeError as e:
+        return {
+            "error": f"invalid JSON from uniswap_trade_swap: {e}",
+            "rawStdout": r.stdout.decode("utf-8", errors="replace")[:2000],
+        }
+
+
+def print_agent_permit2_sign_success_not_evm_broadcst(
+    sign_request_id: str | None,
+    *,
+    preview_swap: dict[str, Any] | None = None,
+) -> None:
+    """
+    TSS has produced an MPC **signature** for **EIP-712 Permit2 PermitSingle**; that is not
+    the same as signing an **unsigned RLP EVM transaction** for ``eth_sendRawTransaction``.
+    """
+    lines: list[str] = [
+        "",
+        "---",
+        "AI agent / operator (executeSignResult skipped on-chain EVM broadcast):",
+        "This sign result is a Uniswap/Permit2 **PermitSingle** (EIP-712) `msgHash` from extraJSON,",
+        "not a serialized unsigned EVM transaction. `executeSignResult.py` is for broadcasting",
+        "**EVM transactions** (compose/Foundry-style) via `r,s,v` on a tx hash.",
+        "",
+        "What the originator should do after sign-request status is **success** (MPC sign complete):",
+        "1. Use the returned **secp256k1** signature in the on-chain or meta flow your stack expects",
+        "   (e.g. `Permit2.permit` / `permitTransferFrom` per the Permit2 spec).",
+        "2. The **swap** is a **separate** EVM transaction (Universal Router). Use Trade **POST /v1/swap**",
+        "   to obtain calldata (helper: `recipes/uniswapV4/uniswap_trade_swap.py` — API only, no chain tx).",
+        "3. **Automation:** `recipes/uniswapV4/uniswap_swap_multisign.py` builds the **POST /multiSignRequest**",
+        "   body (bodyForSign + messageToSign) for the **router swap** from the create-swap JSON, aligned with",
+        "   the same `txParams` / `messageHash` pattern as `generateMultiSignRequestFromCompose.py`. Submit that",
+        "   request, wait for TSS **success** on **that** id, and run `executeSignResult.py` on **that** sign result to broadcast.",
+        "4. `POST /updateSignResultStatusById` with `executed`+txHash applies once a **chain** tx is",
+        "   actually mined for the **swap** request; coordinate the Permit2 sign result with your group",
+        "   (e.g. `sendMessage`) as needed.",
+    ]
+    if sign_request_id:
+        lines.append(f"   Sign request id: {sign_request_id}")
+    if preview_swap is not None:
+        if "error" in preview_swap:
+            lines.append("   Trade /swap **preview** failed (see stdout JSON uniswapSwapPreview).")
+        else:
+            lines.append(
+                "   A **best-effort** Trade `POST /v1/swap` preview (permit2-disabled) is in stdout under uniswapSwapPreview."
+            )
+    lines.append("Reference: `docs/references/instructions.md`, `recipes/uniswapV4/permit2_approval.py` docstring.")
+    lines.append("---")
+    print("\n".join(lines), file=sys.stderr)
 
 
 def transaction_value_wei_from_merged(merged: dict[str, Any]) -> int:
@@ -1228,6 +1339,14 @@ def main() -> None:
         default=180.0,
         help="Seconds to wait for each transaction receipt (default: 180)",
     )
+    ap.add_argument(
+        "--preview-uniswap-swap-calldata",
+        action="store_true",
+        help=(
+            "When skipping Permit2 EIP-712 (see module doc), optionally run uniswap_trade_swap.py "
+            "with extraJSON.uniswapTradeQuote (needs UNISWAP_TRADE_API_KEY). Preview only; no chain tx."
+        ),
+    )
     args = ap.parse_args()
     mpc = resolve_mpc_auth_base(args.mpc_auth_url, args.management_port)
 
@@ -1324,6 +1443,41 @@ def _execute_sign_result_main(
 
     merged = merge_sign_detail(sign_body, sign_data)
     batch_exec = is_batch_execution(msg_raws, merged)
+
+    if is_permit2_permit_single_typed_data_request(merged):
+        preview: dict[str, Any] | None = None
+        if args.preview_uniswap_swap_calldata:
+            preview = _run_uniswap_trade_swap_subprocess(merged, _scripts_dir)
+        print_agent_permit2_sign_success_not_evm_broadcst(
+            (request_id or "").strip() or None,
+            preview_swap=preview,
+        )
+        out_skip: dict[str, Any] = {
+            "evmExecuteSkipped": True,
+            "skipReason": "permit2_eip712_permitSingle_not_evm_rlp_tx",
+            "signRequestId": (request_id or "").strip() or None,
+            "aiAgentNext": (
+                "After Permit2 use: `recipes/uniswapV4/uniswap_swap_multisign.py` emits the multiSignRequest for "
+                "the Universal Router swap; run executeSignResult on that sign result after TSS success."
+            ),
+        }
+        dest_chain_skip = (
+            pick_str(sign_data, "DestinationChainID", "destinationChainID")
+            or (
+                pick_str(sign_body, "DestinationChainID", "destinationChainID", "destination_chain_id")
+                if sign_body
+                else None
+            )
+        )
+        if dest_chain_skip is not None and str(dest_chain_skip).strip() != "":
+            try:
+                out_skip["destinationChainID"] = parse_chain_id(str(dest_chain_skip).strip())
+            except (TypeError, ValueError):
+                out_skip["destinationChainID"] = str(dest_chain_skip).strip()
+        if preview is not None:
+            out_skip["uniswapSwapPreview"] = preview
+        print(json.dumps(out_skip, indent=2))
+        return
 
     dest_chain = (
         pick_str(sign_data, "DestinationChainID", "destinationChainID")

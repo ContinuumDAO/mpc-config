@@ -73,6 +73,11 @@ address, a single ``inputs`` entry ``uint256`` value, and ``paramUnits`` for
 index ``"0"``. Optional ``signature`` defaults to ``nativeTransfer``. Calldata is
 empty (``msgRaw`` is ``""`` for a single action).
 
+**Pre-encoded calldata** (e.g. Uniswap Universal Router from Trade ``POST /v1/swap``):
+set ``preencodedData`` to hex, ``destinationContract`` to the transaction ``to``,
+``value`` to the call’s native wei (string), optional per-action gas/fee fields. Recipe:
+``recipes/uniswapV4/uniswap_swap_multisign.py``.
+
 **Output:** JSON with ``endpoint``, ``bodyForSign``, ``messageToSign``, and
 optional ``postBody`` if signing flags were passed. Add ``clientSig`` and
 ``signedMessage`` = ``messageToSign`` (Ed25519 and EIP-191 helpers set both) before POSTing.
@@ -516,6 +521,24 @@ def _maybe_int(v: Any) -> int | None:
             return None
 
 
+# Public alias for recipe scripts (optional gas/fee string fields, hex or decimal).
+parse_optional_int = _maybe_int
+
+
+def _int_from_value_field(v: Any) -> int:
+    """Parse wei from hex/decimal string or int (e.g. Uniswap ``value``, ``swap.value``)."""
+    if v is None:
+        return 0
+    if isinstance(v, int):
+        return max(0, v)
+    s = str(v).strip()
+    if not s:
+        return 0
+    if s.startswith("0x") or s.startswith("0X"):
+        return int(s, 16)
+    return int(s, 10)
+
+
 def _first_client_id(client_keys: Any) -> str | None:
     if not isinstance(client_keys, dict):
         return None
@@ -865,12 +888,27 @@ def _compose_action_tx_dict(
     if not isinstance(raw_act, dict):
         raise ValueError(f"composeActions[{index}] must be an object")
     is_native = bool(raw_act.get("nativeTransfer") or raw_act.get("native_transfer"))
-    sig = (raw_act.get("signature") or "").strip()
-    if is_native and not sig:
-        sig = "nativeTransfer"
-    dest = (raw_act.get("destinationContract") or raw_act.get("destination_contract") or "").strip()
-    if not sig or not dest:
-        raise ValueError(f"composeActions[{index}]: signature and destinationContract required")
+    pre_raw = raw_act.get("preencodedData") or raw_act.get("preencoded_data")
+    is_preencoded = pre_raw is not None and str(pre_raw).strip() != ""
+    if is_native and is_preencoded:
+        raise ValueError(
+            f"composeActions[{index}]: nativeTransfer cannot be combined with preencodedData"
+        )
+
+    if is_preencoded:
+        dest = (raw_act.get("destinationContract") or raw_act.get("destination_contract") or "").strip()
+        if not dest:
+            raise ValueError(
+                f"composeActions[{index}]: preencodedData requires destinationContract (to address)"
+            )
+        sig = (raw_act.get("signature") or "preencodedCall").strip()
+    else:
+        sig = (raw_act.get("signature") or "").strip()
+        if is_native and not sig:
+            sig = "nativeTransfer"
+        dest = (raw_act.get("destinationContract") or raw_act.get("destination_contract") or "").strip()
+        if not sig or not dest:
+            raise ValueError(f"composeActions[{index}]: signature and destinationContract required")
     inputs = raw_act.get("inputs") or []
     if not isinstance(inputs, list):
         raise ValueError(f"composeActions[{index}]: inputs must be an array")
@@ -880,12 +918,16 @@ def _compose_action_tx_dict(
     param_units_norm = {str(k): str(v) for k, v in param_units.items()}
 
     value_wei: int | None = None
-    if is_native:
+    pre_value_wei: int = 0
+    if is_preencoded:
+        p = str(pre_raw).strip()
+        data_hex = p if p.startswith("0x") else "0x" + p
+        pre_value_wei = _int_from_value_field(raw_act.get("value"))
+    elif is_native:
         try:
             value_wei = native_transfer_value_wei_from_compose_action(raw_act)
         except ValueError as e:
             raise ValueError(f"composeActions[{index}]: {e}") from e
-        calldata = "0x"
         data_hex = "0x"
     else:
         calldata = encode_action_calldata(sig, inputs, param_units_norm)
@@ -893,11 +935,16 @@ def _compose_action_tx_dict(
 
     to_addr = _eth_address_param(dest)
 
+    if is_preencoded:
+        v_est: int | None = pre_value_wei if pre_value_wei > 0 else None
+    elif is_native:
+        v_est = value_wei
+    else:
+        v_est = None
+
     est = _maybe_int(raw_act.get("estimatedGas") or raw_act.get("estimated_gas"))
     gas_limit: int
-    rpc_est = eth_estimate_gas(
-        rpc_url, executor, to_addr, data_hex, value_wei if is_native else None
-    )
+    rpc_est = eth_estimate_gas(rpc_url, executor, to_addr, data_hex, v_est)
     if est is not None and est > 0:
         gas_limit = est
     elif not no_custom_gas_params and gas_limit_config is not None and gas_limit_config > 0:
@@ -944,7 +991,11 @@ def _compose_action_tx_dict(
             "gasPrice": _to_hex_wei(gas_price_wei),
             "gas": _to_hex_wei(gas_limit),
             "to": to_addr,
-            "value": _to_hex_wei(value_wei if is_native and value_wei is not None else 0),
+            "value": _to_hex_wei(
+                value_wei
+                if is_native and value_wei is not None
+                else (pre_value_wei if is_preencoded else 0)
+            ),
             "data": data_hex,
             "chainId": str(dest_chain_num),
         }
@@ -995,7 +1046,11 @@ def _compose_action_tx_dict(
             "maxFeePerGas": _to_hex_wei(max_fee),
             "maxPriorityFeePerGas": _to_hex_wei(max_prio),
             "to": to_addr,
-            "value": _to_hex_wei(value_wei if is_native and value_wei is not None else 0),
+            "value": _to_hex_wei(
+                value_wei
+                if is_native and value_wei is not None
+                else (pre_value_wei if is_preencoded else 0)
+            ),
             "data": data_hex,
             "chainId": str(dest_chain_num),
         }
@@ -1075,20 +1130,25 @@ def build_compose_multisign(
     for i, raw_act in enumerate(actions):
         if i == 0:
             is_native0 = bool(raw_act.get("nativeTransfer") or raw_act.get("native_transfer"))
-            sig0 = (raw_act.get("signature") or "").strip()
-            if is_native0 and not sig0:
-                sig0 = "nativeTransfer"
-            inputs0 = raw_act.get("inputs") or []
-            if not isinstance(inputs0, list):
-                inputs0 = []
-            param_units0 = raw_act.get("paramUnits") or raw_act.get("param_units") or {}
-            pu_map0 = {str(k): str(v) for k, v in param_units0.items()} if isinstance(param_units0, dict) else {}
-            calldata0 = (
-                encode_action_calldata(sig0, inputs0, pu_map0)
-                if not is_native0
-                else "0x"
-            )
-            first_calldata = calldata0 if calldata0.startswith("0x") else "0x" + calldata0
+            pre0 = raw_act.get("preencodedData") or raw_act.get("preencoded_data")
+            if pre0 is not None and str(pre0).strip() != "":
+                p = str(pre0).strip()
+                first_calldata = p if p.startswith("0x") else "0x" + p
+            else:
+                sig0 = (raw_act.get("signature") or "").strip()
+                if is_native0 and not sig0:
+                    sig0 = "nativeTransfer"
+                inputs0 = raw_act.get("inputs") or []
+                if not isinstance(inputs0, list):
+                    inputs0 = []
+                param_units0 = raw_act.get("paramUnits") or raw_act.get("param_units") or {}
+                pu_map0 = {str(k): str(v) for k, v in param_units0.items()} if isinstance(param_units0, dict) else {}
+                calldata0 = (
+                    encode_action_calldata(sig0, inputs0, pu_map0)
+                    if not is_native0
+                    else "0x"
+                )
+                first_calldata = calldata0 if calldata0.startswith("0x") else "0x" + calldata0
 
         tx, ft = _compose_action_tx_dict(
             raw_act,
@@ -1116,6 +1176,9 @@ def build_compose_multisign(
         )
 
         sig = (raw_act.get("signature") or "").strip()
+        penc = raw_act.get("preencodedData") or raw_act.get("preencoded_data")
+        if penc is not None and str(penc).strip() and not sig:
+            sig = "preencodedCall"
         if bool(raw_act.get("nativeTransfer") or raw_act.get("native_transfer")) and not sig:
             sig = "nativeTransfer"
         dest = (raw_act.get("destinationContract") or raw_act.get("destination_contract") or "").strip()
@@ -1130,14 +1193,16 @@ def build_compose_multisign(
             }
         )
 
-    first_dest = (actions[0].get("destinationContract") or actions[0].get("destination_contract") or "").strip()
-    first_sig = (actions[0].get("signature") or "").strip()
-    if (
-        bool(actions[0].get("nativeTransfer") or actions[0].get("native_transfer"))
-        and not first_sig
-    ):
+    a0 = actions[0]
+    first_dest = (a0.get("destinationContract") or a0.get("destination_contract") or "").strip()
+    pre_top = a0.get("preencodedData") or a0.get("preencoded_data")
+    is_pre_top = pre_top is not None and str(pre_top).strip() != ""
+    first_sig = (a0.get("signature") or "").strip()
+    if is_pre_top and not first_sig:
+        first_sig = "preencodedCall"
+    if (bool(a0.get("nativeTransfer") or a0.get("native_transfer")) and not first_sig):
         first_sig = "nativeTransfer"
-    first_inputs = actions[0].get("inputs") or []
+    first_inputs = a0.get("inputs") or []
     if not isinstance(first_inputs, list):
         first_inputs = []
     first_names = [str((inp or {}).get("name") or "").strip() for inp in first_inputs]
@@ -1145,12 +1210,16 @@ def build_compose_multisign(
 
     body: dict[str, Any] = {}
     if len(actions) == 1:
-        native0 = bool(actions[0].get("nativeTransfer") or actions[0].get("native_transfer"))
+        native0 = bool(a0.get("nativeTransfer") or a0.get("native_transfer"))
         if native0:
             msg_raw_calldata = ""
-            body["value"] = str(native_transfer_value_wei_from_compose_action(actions[0]))
+            body["value"] = str(native_transfer_value_wei_from_compose_action(a0))
+        elif is_pre_top:
+            p = str(pre_top).strip()
+            cd = p if p.startswith("0x") else "0x" + p
+            msg_raw_calldata = cd[2:] if cd.startswith("0x") else cd
         else:
-            pu0 = actions[0].get("paramUnits") or actions[0].get("param_units") or {}
+            pu0 = a0.get("paramUnits") or a0.get("param_units") or {}
             pu_map = {str(k): str(v) for k, v in pu0.items()} if isinstance(pu0, dict) else {}
             cd = encode_action_calldata(
                 first_sig,
