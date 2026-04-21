@@ -2494,11 +2494,20 @@ Creates a new signing request for **multi-agree keys only**. No relayer authenti
 
 **Single vs batch:** For a **single** message, send `msgHash` (required) and optional `msgRaw`. For a **batch** of N messages (e.g. a sequence of transactions), send `messageHashes` (array of N hex strings, length ≥ 2) and optionally `messageRawBatch` (length 0 or N); do not send `msgHash`/`msgRaw` for batch. One agree and one trigger then produce one SignResult whose `batchSignatures` array holds the N signatures (see `GET /getSignResultById`).
 
+**Client signature (`clientSig`), `signedMessage`, and `purpose` in the signed payload:**
+
+The node verifies `clientSig` using the **KeyGen `ClientKeys`** entry for this node (and/or **PublicMgtKey** / **NodeMgtKey** where applicable), with the same key-type rules as mpc-auth (`VerifyMultiSignRequestPostSigFlex` and management-key paths).
+
+- **`purpose` in JSON:** The `purpose` field is **always present** in the Go request struct’s JSON encoding: `encoding/json` emits **`"purpose"`** even when the value is `""`. Any **`messageToSign` / compact JSON** you build for **`signedMessage`** (compose helpers, agents) **must include the `purpose` key** (string, possibly empty). Omitting `purpose` from the bytes you sign will not match what the node verifies. This aligns with the stored **Purpose** map (creator node key → text, including empty text).
+- **P256 (128-hex client key in ClientKeys):** The signed payload uses **deterministic JSON** (sorted object keys), with `clientSig` cleared; it **includes `"purpose"`** (possibly `"purpose":""`).
+- **Ed25519 (64-hex client key):** If **`signedMessage`** is non-empty, verification uses that exact UTF-8 string. If **`signedMessage`** is **omitted or empty** and the node verifies via **PublicMgtKey** (or the ClientKeys Ed25519 path with canonical JSON), the node uses **`json.Marshal`** of the POST body with **`clientSig` and `signedMessage` set to empty strings** — that canonical string **always contains `"purpose"`**. Compose flows should either include `purpose` in `messageToSign` or match the node’s canonical marshal.
+- **Ethereum address (MetaMask / `NodeMgtKey`):** **`signedMessage` is required** (non-empty). It must be the exact string passed to **`personal_sign`**. That JSON **must include `"purpose"`** (`""` if unused). The node returns **`400`** if `signedMessage` is empty on this path.
+
 **Request Body (single):**
 ```json
 {
   "clientSig": "<client signature over signedMessage (same scheme as keyGenRequest)>",
-  "signedMessage": "<exact UTF-8 string signed; same as messageToSign from compose helpers>",
+  "signedMessage": "<exact UTF-8 string signed; same as messageToSign from compose helpers — must include \"purpose\">",
   "keyList": ["node1_key", "node2_key", "node3_key"],
   "pubKey": "08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de",
   "msgHash": "751f68b43977269a16128143fa15e0e7ab3c15ba52484fe8278796561505698b",
@@ -2506,6 +2515,7 @@ Creates a new signing request for **multi-agree keys only**. No relayer authenti
   "destinationChainID": "11155111",
   "destinationAddress": "0x...",
   "extraJSON": "{}",
+  "purpose": "",
   "sendGas": true,
   "value": "1000000000000000000"
 }
@@ -2525,8 +2535,8 @@ Creates a new signing request for **multi-agree keys only**. No relayer authenti
 ```
 
 **Field Descriptions:**
-- `clientSig` (required): Client signature over the management-auth message (see `signedMessage`), verified like keyGenRequest
-- `signedMessage` (required in current mpc-auth): Exact UTF-8 string that was signed — the same compact JSON as the request fields **without** `clientSig` / `signedMessage` (compose helpers expose this as **`messageToSign`**). **Ed25519:** 128-hex `clientSig` verifies over `signedMessage` bytes. **MetaMask:** `personal_sign` over `signedMessage`. Empty `signedMessage` is rejected for `multiSignRequest`.
+- `clientSig` (required): Client signature over the management-auth message; see **Client signature (`clientSig`), `signedMessage`, and `purpose` in the signed payload** above.
+- `signedMessage` (required for **MetaMask** / Ethereum `NodeMgtKey`; optional for some **Ed25519** paths): Exact UTF-8 string that was signed — typically the same compact JSON as the request fields **without** `clientSig` / `signedMessage` (compose helpers expose this as **`messageToSign`**). **Must include the `purpose` key** (string, possibly `""`) so the signed bytes match the node. **MetaMask:** `personal_sign` over `signedMessage`; empty `signedMessage` → **`400`**. **Ed25519 via PublicMgtKey:** if `signedMessage` is empty, the node verifies over **canonical JSON** of the full body (with `clientSig` / `signedMessage` cleared), which always includes `"purpose"`.
 - `keyList` (required): Array of node keys in the same GroupId that may participate; can be empty array `[]` to use keyList from KeyGenResult
 - `pubKey` (required): Public key (128 hex characters) from key generation (must be multi-agree key)
 - `msgHash` (required for **single**): Keccak256 hash of the message to sign. Omit when using `messageHashes` (batch). **EVM broadcast:** For secp256k1 keys, if the client will build a signed tx and call `eth_sendRawTransaction`, the recovered signer must match the keyGen's `ethereumaddress`. That only holds when the signature is over the **transaction signing hash** (hash of the serialized unsigned EIP-1559/legacy tx). If the client sends a different hash (e.g. only `keccak256(msgRaw)`), the MPC signs it correctly, but using that (r,s,v) on the full tx yields a different recovered address; send the tx signing hash as `msgHash` and use the same nonce/gas when building the signed tx.
@@ -2537,7 +2547,7 @@ Creates a new signing request for **multi-agree keys only**. No relayer authenti
 - `destinationAddress` (optional): Destination address (EVM signatures only; stored and returned in `listSignRequests` / `getSignRequestById`)
 - `extraJSON` (optional): Arbitrary JSON string for node context; used for **Ed25519** key types (not secp256k1). Stored and returned in `listSignRequests` / `getSignRequestById`. For send-gas requests, the backend merges `sendGas` and `value` into this object before storing.
 - `signatureText` (optional): For EVM/secp256k1, a JSON string with structure `{"signature": "<function signature>", "names": ["<name1>", "<name2>", ...]}` where `signature` is the function selector text (e.g. `transfer(address,uint256)`) and `names` is an array of parameter names in order. Example: `{"signature": "transfer(address,uint256)", "names": ["to", "amount"]}`. Other chains: program name or custom text. Stored and returned in `listSignRequests` / `getSignRequestById`.
-- `purpose` (optional): Text from the creator, max 256 characters; visible to nodes considering `signRequestAgree` (stored and returned in list/get endpoints and `getSignResultById`). Stored as a key/value map in `Purpose`: the creator node key (128 hex) is the key and the purpose text is the value, so which node created the request is identifiable in `getSignRequestById`, `listSignRequests`, and `listSignRequestsReady`. Example response: `"Purpose": { "04a1b2c3...128hex": "Bridge transfer to L2" }`.
+- `purpose` (optional text, **required JSON key for signing**): Free text from the creator, max 256 characters; use `""` when there is no description. Visible to nodes considering `signRequestAgree` (stored and returned in list/get endpoints and `getSignResultById`). Stored as a map in `Purpose`: the creator node key (128 hex) is the key and the purpose text is the value, so the originator is identifiable even when the text is empty. The signed JSON / **`messageToSign`** **always** includes `"purpose"` (see signing rules above). Example response: `"Purpose": { "04a1b2c3...128hex": "Bridge transfer to L2" }`.
 - `sendGas` (optional, **multi-agree gas token only**): Set to `true` for native transfer requests created from the Assets "Send gas" dialog. Included in the signed payload when present. Stored in `ExtraJSON` and propagated; returned in `getSignRequestById` and `listSignRequests` via `ExtraJSON`.
 - `value` (optional, **multi-agree gas token only**): Amount in wei for the native transfer. Included in the signed payload when present. Stored in `ExtraJSON` and propagated; returned in `getSignRequestById` and `listSignRequests` via `ExtraJSON`. Also available in sign result metadata for Execute.
 - **`txParams`** (optional, **EVM**): Proposal-time gas/nonce snapshot for **single-tx** requests — same shape as trigger/GET `txParams` (`nonce`, `gasLimit`, `txType`, EIP-1559 or legacy fee fields). Stored on **`proposal_tx_params`** (one entry) and **propagated**. **Mutually exclusive** with **`proposalTxParams`** on the same POST.
@@ -2565,12 +2575,13 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest \
     "msgRaw": "",
     "destinationChainID": "11155111",
     "destinationAddress": "0x...",
-    "extraJSON": "{}"
+    "extraJSON": "{}",
+    "purpose": ""
   }'
 ```
 
 **Error Responses:**
-- `400 Bad Request`: Key not found or key is not multi-agree type; for single, missing `msgHash`; for batch, invalid `messageHashes` (e.g. non-hex or `messageRawBatch` length not 0 or N)
+- `400 Bad Request`: Key not found or key is not multi-agree type; for single, missing `msgHash`; for batch, invalid `messageHashes` (e.g. non-hex or `messageRawBatch` length not 0 or N); MetaMask path with empty `signedMessage`
 - `401 Unauthorized`: Client signature invalid
 - `500 Internal Server Error`: Internal processing error
 

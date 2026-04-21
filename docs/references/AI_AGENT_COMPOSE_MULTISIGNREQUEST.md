@@ -4,7 +4,7 @@ This is the **home doc** for anything that produces a **`POST /multiSignRequest`
 
 ## How you may build `multiSignRequest` payloads (strict)
 
-Valid EVM payloads must include correct **`msgHash`** / **`messageHashes`**, **`messageRawBatch`**, **`txParams`** alignment for trigger/execute, and **`extraJSON`** / batch metadata where required. **Do not** invent or hand-edit **`multiSignRequest`** JSON from scratch: the message must reflect **TxParams**, signing hashes, and app parity rules documented in **`./API_IMPLEMENTATION.md`** and the helper scripts.
+Valid EVM payloads must include correct **`msgHash`** / **`messageHashes`**, **`messageRawBatch`**, **`txParams`** alignment for trigger/execute, and **`extraJSON`** / batch metadata where required. **`bodyForSign` / `messageToSign` must include a `purpose` string** (use `""` when unused); mpc-auth always treats **`purpose`** as part of the signed JSON (see **`./API_IMPLEMENTATION.md`** § **`POST /multiSignRequest`**). **Do not** invent or hand-edit **`multiSignRequest`** JSON from scratch: the message must reflect **TxParams**, signing hashes, and app parity rules documented in **`./API_IMPLEMENTATION.md`** and the helper scripts.
 
 **Agents are expected to `POST /multiSignRequest`** with bodies produced **only** by the supported paths below (helpers and recipes). The mistake to avoid is fabricating JSON without those tools—not avoiding the endpoint.
 
