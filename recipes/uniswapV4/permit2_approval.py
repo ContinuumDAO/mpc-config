@@ -377,8 +377,12 @@ def permit2_approval_multisign_payload(
     request (API: mutually exclusive on the same POST).
 
     Returns a dict with ``endpoint``, ``bodyForSign``, ``messageToSign``, ``chainId``,
-    ``count``, ``eip712`` (full typed-data for audit), and ``triggerMessageHash`` /
-    ``triggerTxParams`` when proposal gas fields are present (same helpers as compose).
+    ``count``, ``eip712`` (full typed-data for audit). Optional ``txParams`` outputs use the
+    same compose helpers as other recipes **only** when you passed ``tx_params`` / ``proposal_tx_params``;
+    for default Permit2 EIP-712, **do not** send those to ``POST /triggerSignRequestById`` — use
+    ``triggerSignRequestByIdOmit`` in the output (omitted ``txParams`` and ``messageHash`` so mpc-auth
+    keeps the ``msgHash`` from this ``bodyForSign``). See ``mpc_sign_request_digest.py`` and mpc-auth
+    ``TriggerSignRequestById`` comment.
     """
     c = _compose()
     base = c.resolve_mpc_auth_base(mpc_auth_url, management_port)
@@ -484,10 +488,22 @@ def permit2_approval_multisign_payload(
         "chainId": dest_chain,
         "count": 1,
         "eip712": full_msg,
-        "triggerMessageHash": digest_hex,
+        # 32-byte EIP-712 digest (no 0x) — same value as body.msgHash; for audit / scripts only.
+        "eip712DigestHex": digest_hex,
+        # Trigger: always omit txParams and messageHash for this recipe unless you use real EVM proposal fields.
+        "triggerSignRequestByIdOmit": {
+            "txParams": True,
+            "messageHash": True,
+            "reason": "EIP-712 PermitSingle; mpc-auth signs stored MessageHash; MessageRaw is JSON UTF-8 hex, not calldata",
+        },
     }
     if body.get("txParams") or body.get("proposalTxParams"):
         out["triggerTxParams"] = c.trigger_tx_params_from_compose_body(body)
+        out["triggerSignRequestByIdOmit"] = {
+            "txParams": False,
+            "messageHash": False,
+            "reason": "bodyForSign includes proposal gas fields; merge with getSignRequestById and trigger as other compose flows",
+        }
     return out
 
 

@@ -6,15 +6,16 @@ and print JSON that includes the raw API response, hints for
 :mod:`permit2_keygen_params`, and a one-line payload for ``--json-quote``.
 
 The **swapper** address in the request body is the MPC wallet, resolved the same way as
-:mod:`permit2_keygen_params` via **KEYGEN_ID** and **GET /getKeyGenResultById**. The management base URL is read from **MPC_AUTH_URL** (assumed set in the environment per
-``docs/skill/SKILL.md``; optional override: ``--mpc-auth-url``). The management port is taken only
+:mod:`permit2_keygen_params` via **KEYGEN_ID** and **GET /getKeyGenResultById**. The management base URL is read from **MPC_AUTH_URL** (**export** it so Python inherits it; ``env | grep MPC_AUTH_URL`` should show a line) per
+``docs/skill/SKILL.md``, or pass ``--mpc-auth-url``. The management port is taken only
 from **MANAGEMENT_PORT** (same as elsewhere in this repo; default ``8080`` if unset).
 
 **Required arguments**
 
 - ``--amount`` — input or output size in the token’s base units (string, e.g. USDC with 6 decimals).
 - ``--chain-id`` — chain id for ``tokenIn``; also used for ``tokenOut`` unless ``--token-out-chain-id`` is set.
-- ``--token-in`` / ``--token-out`` — Token contract addresses, **or** the chain’s **native gas token** sentinel (see **Native tokens** below).
+- ``--token-in`` — input token contract address, **or** the chain’s **native gas token** sentinel (see **Native tokens** below).
+- ``--token-out`` — output token contract address, **or** the native sentinel for the output chain.
 - Uniswap: ``--api-key`` or env ``UNISWAP_TRADE_API_KEY`` (``x-api-key`` header).
 - KeyGen: ``--key-gen-id`` or env ``KEYGEN_ID``.
 
@@ -33,7 +34,7 @@ from **MANAGEMENT_PORT** (same as elsewhere in this repo; default ``8080`` if un
 use the zero address for **either** side you intend as native: ``0x0000000000000000000000000000000000000000``.
 That value is the Trade API’s convention for the chain’s **native** asset in ``tokenIn`` / ``tokenOut``;
 **amount** is still in that asset’s **wei** (18 decimals for ETH on most EVM chains). The same
-``--token-in`` / ``--token-out`` flags accept this address like any other.
+``--token-in`` and ``--token-out`` accept this address like any other.
 
 **Output**
 
@@ -250,7 +251,10 @@ def main() -> None:
         sys.exit(1)
     if not mpc:
         print(
-            "MPC_AUTH_URL is not set. Export the management API base (see docs/skill/SKILL.md).",
+            "MPC management base URL is missing. This script needs MPC_AUTH_URL in the **process** "
+            "environment (not only a shell variable). Use: export MPC_AUTH_URL=http://... "
+            "then run again, or pass --mpc-auth-url http://... "
+            "Check: env | grep MPC_AUTH_URL (must show a line). See docs/skill/SKILL.md.",
             file=sys.stderr,
         )
         sys.exit(1)

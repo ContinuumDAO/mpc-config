@@ -336,11 +336,9 @@ def is_permit2_permit_single_typed_data_request(merged: dict[str, Any]) -> bool:
     True when extraJSON (after merge) indicates ``permit2_approval`` Permit2 **PermitSingle** EIP-712
     (``msgHash`` is not a tx signing hash). :func:`executeSignResult` only broadcasts EVM **transactions**.
     """
-    ex = _extra_json_object_from_merged(merged)
-    p2 = ex.get("permit2")
-    if not isinstance(p2, dict):
-        return False
-    return str(p2.get("kind") or "").strip() == "PermitSingle"
+    from mpc_sign_request_digest import is_permit2_eip712_merged
+
+    return is_permit2_eip712_merged(merged)
 
 
 def _run_uniswap_trade_swap_subprocess(merged: dict[str, Any], scripts_dir: Path) -> dict[str, Any]:

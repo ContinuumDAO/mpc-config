@@ -8,7 +8,7 @@ This document is for **AI agents** and **other programmatic automation** that tu
 2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **this document** or **`./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`**.
 3. **Review** **`Purpose`** (≤256 characters) and transaction fields (chain id, calldata, gas, nonces) against group intent and messages.
 4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **`./API_IMPLEMENTATION.md`** requires for your deployment).
-5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → peers agree → when ready, **AI agents** run **only** **`$MPA_PATH/scripts/executeSignResult.py`** for EVM trigger + broadcast (see **`../skill/SKILL.md`**—do **not** call **`POST /triggerSignRequestById`** directly). **`updateSignResultStatusById`** after execution. **`./instructions.md`** and **`./API_IMPLEMENTATION.md`** describe the full protocol including manual **`curl`** / web **Execute**.
+5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → peers agree → when ready, **AI agents** run **only** **`$MPA_PATH/scripts/executeSignResult.py`** for trigger + (when applicable) on-chain execution (see **`../skill/SKILL.md`**—do **not** call **`POST /triggerSignRequestById`** directly). For **EVM** unsigned-tx sign requests, the script builds **`/triggerSignRequestById`** with **`txParams`** and **`messageHash`**. For **EIP-712** digests (e.g. Uniswap V4 **Permit2** from **`$MPA_PATH/recipes/uniswapV4/permit2_approval.py`**), **omit** those fields — see **`./API_IMPLEMENTATION.md`** and **`$MPA_PATH/scripts/mpc_sign_request_digest.py`**. **`updateSignResultStatusById`** after successful broadcast. **`./instructions.md`** and **`./API_IMPLEMENTATION.md`** cover manual **`curl`** / web **Execute**.
 
 ### Management API URL
 
@@ -172,7 +172,7 @@ Example: dry-run JSON with no fees, EIP-1559 and fresh sender/nonce:
 - **`endpoint`:** Always `"multiSignRequest"` for this flow. Ignore **signRequest** unless you are on a separate tx-check / relayer integration.
 - **`bodyForSign`:** Includes **`keyList`** and **`pubKey`** from the node, hashes and serialized unsigned txs, **`destinationChainID`**, first-tx fee snapshot (**`txNonce`** / **`txGasLimit`** / fee fields), and **`txParams`** (one tx) or **`proposalTxParams`** (batch)—aligned with **`GET /getSignRequestById?tx_params=1`**. Add **`clientSig`** and **`signedMessage`**, then **POST /multiSignRequest**. Do **not** use the removed legacy top-level key **`body`**.
 - **`messageToSign`:** Compact JSON of **`bodyForSign`** only (what management signs for **`clientSig`**).
-- **`triggerTxParams` / `triggerMessageHash`:** First index for trigger; batch proposals use **`proposalTxParams`** inside **`bodyForSign`**.
+- **`triggerTxParams` / `triggerMessageHash`:** First index for trigger; batch proposals use **`proposalTxParams`** inside **`bodyForSign`**. (Permit2 / EIP-712 **multiSignRequest** from **`recipes/uniswapV4/`** is different — see that folder’s **README** and **triggerSignRequestByIdOmit** in **`permit2_approval.py`** output.)
 - **`count`:** Number of transactions in the broadcast (1 still uses **multiSignRequest** with **`msgHash`** / **`msgRaw`** and **`txParams`**).
 
 ---
@@ -267,7 +267,7 @@ Use **`--override-sender`** / **`--first-nonce`** when the broadcast **`from`** 
 4. **POST** the final **`POST /multiSignRequest`** body (**`bodyForSign`** fields + **`clientSig`** + **`signedMessage`**) only (not **/signRequest**—that path is for tx-check / relayer keys).
 5. **Use** the returned `requestId` for:
    - **signRequestAgree** (multi-agree),
-   - **EVM (AI agent):** **`executeSignResult.py`** only—it performs **triggerSignRequestById** (with **`txParams`** or **`txParamsBatch`** / **`messageHash`**) and **`getSignResultById`** as in **API_IMPLEMENTATION.md** / **`../skill/SKILL.md`**. Save the same helper stdout as **`--sign-request-file`** so **`bodyForSign`** (nonce, gas, **`proposalTxParams`**) is available if **GET** omits fields. For batch signatures, the script consumes `data.batchSignatures[i]` the same way as the web flow.
+   - **EVM unsigned tx (AI agent):** **`executeSignResult.py`** only — it runs **triggerSignRequestById** with **`txParams`** (or **`txParamsBatch`**) and **`messageHash`** when the signed preimage is a normal unsigned transaction, and **`getSignResultById`**, as in **API_IMPLEMENTATION.md** / **`../skill/SKILL.md`**. **EIP-712 digest-only** (Permit2): trigger **without** those fields; the script will not treat the sign result as **`eth_sendRawTransaction`**. Save helper stdout as **`--sign-request-file`** when **GET** may omit proposal fields. For batch, the script consumes `data.batchSignatures[i]` like the web flow.
 
 ---
 
@@ -291,7 +291,7 @@ Use **`--override-sender`** / **`--first-nonce`** when the broadcast **`from`** 
 - [ ] Parse the JSON output; use **`bodyForSign`** for **POST /multiSignRequest** (and **`messageToSign`** for management signing).
 - [ ] Add **`clientSig`** / **`signedMessage`** to the POST body (`keyList`/`pubKey` already filled if using the Python script with `--key-gen-id`).
 - [ ] POST the complete body to **POST /multiSignRequest** (not `/signRequest` for multi-agree keys).
-- [ ] Use the returned `requestId` for agree, then **`executeSignResult.py`** for trigger + signatures + broadcast (**EVM** **`txParams`** / **`messageHash`** handled inside the script—see **API_IMPLEMENTATION.md** and **`../skill/SKILL.md`**).
+- [ ] Use the returned `requestId` for agree, then **`executeSignResult.py`** for trigger + signatures + broadcast. **EVM RLP/unsigned-tx** flows: **`txParams`** / **`messageHash`** (or batch **`txParamsBatch`**) are handled per **API_IMPLEMENTATION.md** / **`../skill/SKILL.md`**. **EIP-712 / recipes:** if not using this Forge path, see **`$MPA_PATH/recipes/uniswapV4/README.md`** and digest-only **trigger** rules.
 
 ---
 
