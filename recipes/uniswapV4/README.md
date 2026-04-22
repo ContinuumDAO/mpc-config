@@ -2,6 +2,22 @@
 
 This note is for **operators and AI agents** wiring Uniswap’s **Trade API** to this repo’s **multiSignRequest** + **executeSignResult** pipeline. Environment variables and management API patterns are documented in `docs/skill/SKILL.md` and `docs/references/API_IMPLEMENTATION.md`.
 
+## Prerequisites (Uniswap Trade API)
+
+Scripts that call Uniswap’s HTTP API need a **Trade API key** (sent as the **`x-api-key`** header):
+
+| Variable | Role |
+|----------|------|
+| **`UNISWAP_TRADE_API_KEY`** | Required for `uniswap_trade_quote.py` and `uniswap_trade_swap.py`. Alternative: **`--api-key`** on the command line. |
+| **`UNISWAP_TRADE_BASE_URL`** | Optional. Default `https://trade-api.gateway.uniswap.org/v1`. Override if Uniswap documents a different base. |
+| **`UNISWAP_UR_VERSION`** | Optional. Default `2.0`; sets **`x-universal-router-version`**. Match across quote → swap. |
+
+Obtain or rotate keys in the [Uniswap developer dashboard](https://developers.uniswap.org/dashboard/welcome). Details also appear in each script’s module docstring and `--help`.
+
+**No Uniswap API key:** `permit2_keygen_params.py`, `permit2_approval.py`, and `uniswap_swap_multisign.py` only talk to your **MPC management API** (and optionally **JSON-RPC** for Permit2 allowance reads). They do not call the Trade API.
+
+**Python:** Use the dependencies noted in `docs/skill/SKILL.md` / `scripts/requirements-keygen-agent.txt` where those scripts apply (`eth_account`, etc.).
+
 ## What you are building
 
 Two **separate** on-chain concerns:

@@ -139,10 +139,10 @@ DEFAULT_SPENDER_BY_CHAIN_ID: dict[int, str] = {
 }
 
 _AGENT_ADD_CHAIN = (
-    "AI agent: add this chain on the MPC node with POST /postChainDetails (body signed with the "
+    "AI agent: if the chain is not configured on the MPC node, add this chain on the MPC node with POST /postChainDetails (body signed with the "
     "node management key). Required fields include chainName, chainId, rpcGateway, and legacy / "
     "gas fields as needed. See docs/references/API_IMPLEMENTATION.md — POST /postChainDetails and "
-    "GET /getChainDetails."
+    "GET /getChainDetails. If the chain is configured on the MPC node, skip this step."
 )
 
 
