@@ -4,7 +4,7 @@ This is the **home doc** for anything that produces a **`POST /multiSignRequest`
 
 ## How you may build `multiSignRequest` payloads (strict)
 
-Valid **EVM unsigned-transaction** payloads must include correct **`msgHash`** / **`messageHashes`**, **`messageRawBatch`**, **`txParams`** alignment for trigger/execute, and **`extraJSON`** / batch metadata where required. **EIP-712 / Permit2** recipes (e.g. **`$MPA_PATH/recipes/uniswapV4/permit2_approval.py`**) are **not** the same: **`msgHash`** is a typed-data digest, **`msgRaw`** is not calldata; trigger omits **`txParams`** and **`messageHash`** — see **`./API_IMPLEMENTATION.md`** § **`POST /triggerSignRequestById`** and **`$MPA_PATH/scripts/mpc_sign_request_digest.py`**. **`bodyForSign` / `messageToSign` must include a `purpose` string** (use `""` when unused); mpc-auth always treats **`purpose`** as part of the signed JSON (see **`./API_IMPLEMENTATION.md`** § **`POST /multiSignRequest`**). **Do not** invent or hand-edit **`multiSignRequest`** JSON from scratch: the message must reflect **TxParams**, signing hashes, and app parity rules documented in **`./API_IMPLEMENTATION.md`** and the helper scripts.
+Valid **EVM unsigned-transaction** payloads must include correct **`msgHash`** / **`messageHashes`**, **`messageRawBatch`**, **`txParams`** alignment for trigger/execute, and **`extraJSON`** / batch metadata where required. Agent automation in this repo assumes **broadcastable EVM transactions** only; **`./API_IMPLEMENTATION.md`** § **`POST /triggerSignRequestById`** describes **`txParams`** / **`messageHash`** / **`txParamsBatch`**. **`bodyForSign` / `messageToSign` must include a `purpose` string** (use `""` when unused); mpc-auth always treats **`purpose`** as part of the signed JSON (see **`./API_IMPLEMENTATION.md`** § **`POST /multiSignRequest`**). **Do not** invent or hand-edit **`multiSignRequest`** JSON from scratch: the message must reflect **TxParams**, signing hashes, and app parity rules documented in **`./API_IMPLEMENTATION.md`** and the helper scripts.
 
 **Agents are expected to `POST /multiSignRequest`** with bodies produced **only** by the supported paths below (helpers and recipes). The mistake to avoid is fabricating JSON without those tools—not avoiding the endpoint.
 
@@ -36,7 +36,7 @@ This section is for agents that build **compose JSON** (function signature, Soli
 2. **Build** the unsigned **`POST /multiSignRequest`** body with a repo helper: **`$MPA_PATH/scripts/generateSignRequestWithFoundryScript.py`** (Foundry) or **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** (compose JSON), following **`./AI_AGENT_FORGE_SIGNREQUEST.md`** or **this document**.
 3. **Review** **`Purpose`** (≤256 characters) and transaction fields (chain id, calldata, gas, nonces) against group intent and messages.
 4. **Sign for HTTP:** add **management** **`clientSig`** (and any other fields **`./API_IMPLEMENTATION.md`** requires for your deployment).
-5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → peers **`POST /signRequestAgree`** → when ready, **for broadcastable EVM txs** (compose / Foundry / standard recipes), **AI agents** use **only** **`$MPA_PATH/scripts/executeSignResult.py`**: it **`POST`**s **`/triggerSignRequestById`** with **`txParams`** and **`messageHash`** when the preimage is an RLP unsigned tx, polls **`getSignResultById`**, and broadcasts (see **`../skill/SKILL.md`**). **EIP-712 Permit2** and other **digest-only** requests: the script omits those trigger fields; **`executeSignResult.py`** does **not** broadcast that sign result as a raw chain tx. Do **not** call **`POST /triggerSignRequestById`** or broadcast **directly** from the agent. Then **`POST /updateSignResultStatusById`** (when applicable). Human operators: **`./instructions.md`** and **`./API_IMPLEMENTATION.md`** § **`POST /triggerSignRequestById`**.
+5. **Submit and complete the lifecycle:** **`POST /multiSignRequest`** → peers **`POST /signRequestAgree`** → when ready, **AI agents** use **only** **`$MPA_PATH/scripts/executeSignResult.py`**: it **`POST`**s **`/triggerSignRequestById`** with **`txParams`** and **`messageHash`** (or **`txParamsBatch`** for batch), polls **`getSignResultById`**, and broadcasts (see **`../skill/SKILL.md`**). Do **not** call **`POST /triggerSignRequestById`** or broadcast **directly** from the agent. Then **`POST /updateSignResultStatusById`** (when applicable). Human operators: **`./instructions.md`** and **`./API_IMPLEMENTATION.md`** § **`POST /triggerSignRequestById`**.
 
 ---
 
@@ -144,7 +144,7 @@ The table below describes **`generateMultiSignRequestFromCompose.py`**. **`gener
 | **`chainId`** | Destination chain id string. |
 | **`count`** | Number of compose actions (1 = single, ≥2 = batch). |
 | **`triggerTxParams`** | Convenience: first-index **`txParams`** for **`POST /triggerSignRequestById`** (also emitted by the Foundry helper). |
-| **`triggerMessageHash`** | Hash paired with **`triggerTxParams`** (first **`msgHash`** when batch). **Not used** for **EIP-712-only** / Permit2 digests; do not mix with **`eth_estimateGas`**-style **tx** against **`MessageRaw`**. |
+| **`triggerMessageHash`** | Hash paired with **`triggerTxParams`** (first **`msgHash`** when batch). |
 | **`postBody`** | **Compose only:** present if **`--ed25519-seed-hex`** or **`--eip191-private-key-hex`** was passed: ready-to-POST body including **`clientSig`** and **`signedMessage`** (= **`messageToSign`**). |
 
 ### `signedMessage` vs what you sign (avoid confusion)
@@ -182,7 +182,7 @@ Thin CLI wrappers under **`$MPA_PATH/recipes/`**. Each calls **`generateMultiSig
 
 ## Lifecycle after you have a payload
 
-Once **`POST /multiSignRequest`** succeeds, other nodes **`POST /signRequestAgree`**, then the originator runs the trigger / execute / broadcast step. **AI agents:** **only** **`executeSignResult.py`** for automation (same as **`../skill/SKILL.md`** **Default operational loop**). For **EVM** unsigned-tx sign requests, trigger bodies (inside the script) carry **`txParams`** and **`messageHash`**, or **`txParamsBatch`** for batch — Get Sig / Execute parity. For **Permit2 EIP-712** / digest-only, **`post_trigger_sign_request`** in **`mpc_event_listener.py`** and the **continuumdao-node-app** **Get Sig** flow **omit** **`txParams`** and **`messageHash`**; **`executeSignResult.py`** then skips on-chain broadcast for that result. See **`$MPA_PATH/scripts/mpc_sign_request_digest.py`**, **`recipes/uniswapV4/README.md`**, and **`./API_IMPLEMENTATION.md`**.
+Once **`POST /multiSignRequest`** succeeds, other nodes **`POST /signRequestAgree`**, then the originator runs the trigger / execute / broadcast step. **AI agents:** **only** **`executeSignResult.py`** for automation (same as **`../skill/SKILL.md`** **Default operational loop**). Trigger bodies (inside the script) carry **`txParams`** and **`messageHash`**, or **`txParamsBatch`** for batch — Get Sig / Execute parity. See **`recipes/uniswapV4/README.md`** and **`./API_IMPLEMENTATION.md`**.
 
 ---
 
@@ -217,7 +217,7 @@ The script matches **`continuumdao-node-app`** **`handleComposeOK`** behavior:
 - [ ] Run the script with **`--mpc-auth-url`** pointing at **ManagementAPIsPort**.
 - [ ] Parse stdout JSON; use **`messageToSign`** to produce **`clientSig`** (or use **`postBody`** if you passed a signing flag).
 - [ ] **POST** the final JSON body to **`POST /multiSignRequest`** (not **`/signRequest`** for multi-agree keys).
-- [ ] Use the returned request id for **`/signRequestAgree`**, then **`executeSignResult.py`** (not raw **`/triggerSignRequestById`** from the agent). **EVM RLP/unsigned-tx** requests: script + API (**`txParams`** / **`messageHash`**) per **`./API_IMPLEMENTATION.md`** and **`../skill/SKILL.md`**. **EIP-712 Permit2** (e.g. **`permit2_approval.py`**): do **not** expect **`txParams`** on trigger; follow digest-only rules under **`./API_IMPLEMENTATION.md`** § **`POST /triggerSignRequestById`**.
+- [ ] Use the returned request id for **`/signRequestAgree`**, then **`executeSignResult.py`** (not raw **`/triggerSignRequestById`** from the agent). **`txParams`** / **`messageHash`** (or batch **`txParamsBatch`**) per **`./API_IMPLEMENTATION.md`** and **`../skill/SKILL.md`**.
 
 ---
 

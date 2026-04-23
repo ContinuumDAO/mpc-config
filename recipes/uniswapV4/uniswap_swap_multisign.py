@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-Build **POST /multiSignRequest** for a **Uniswap Trade API** ``POST /v1/swap`` response
-(Universal Router calldata) after a Permit2 / EIP-712 step, so **executeSignResult** can
-broadcast a normal EVM secp256k1 signature (same path as
-``generateMultiSignRequestFromCompose.build_compose_multisign``).
+Build **POST /multiSignRequest** for a **Uniswap Trade API** ``POST /v1/swap`` response.
 
-**Input:** JSON as returned by ``uniswap_trade_swap.py`` (``create_swap_calldata``), with a
-top-level **``swap``** object (see Uniswap ``CreateSwapResponse`` / ``TransactionRequest``):
-``to``, ``data``, ``value``, ``chainId``, and optional gas/fee fields.
+**Recommended (aligned with continuumdao-node-app):** use ``uniswap_trade_swap.py`` (Trade API
+classic-allowance header ``x-permit2-disabled: true``), then build a **batch** of on-chain txs (ERC-20 approve + swap, or
+approve + on-chain allowance-hub step + swap) via ``--batch-approve-and-swap``.
 
-The recipe turns ``swap`` into a single **pre-encoded** compose action
-(``preencodedData`` in ``generateMultiSignRequestFromCompose``) so the MPC wallet nonce,
-**GET /getChainDetails** gas rules, and **eth_estimateGas** match other compose recipes.
+**Single-tx mode (default):** one **pre-encoded** compose action for the swap calldata only.
+That path assumes ERC-20 allowance is already sufficient on-chain.
+
+**Batch mode input:** create-swap JSON **and** a **quote snapshot** (``--quote-file`` / ``--quote-json``)
+with classic ``quote.input.amount``, plus ``--token-in``. See ``uniswap_v4_skip_permit2_batch_multisign.py``.
+
+**Input (single-tx):** JSON as returned by ``uniswap_trade_swap.py``, with a top-level **``swap``**
+object: ``to``, ``data``, ``value``, ``chainId``, and optional gas/fee fields.
 
 **Required**
 
@@ -26,9 +28,15 @@ The recipe turns ``swap`` into a single **pre-encoded** compose action
 - ``--skip-gas-check`` (skip native balance precheck; see ``recipe_gas_precheck``)
 - ``--ed25519-seed-hex`` / ``--eip191-private-key-hex`` — append **postBody** with **clientSig**
 
-Example::
+Example (recommended batch)::
 
-  python3 recipes/uniswapV4/uniswap_trade_swap.py ... > swap.json
+  python3 recipes/uniswapV4/uniswap_trade_quote.py ... > quote.json
+  python3 recipes/uniswapV4/uniswap_trade_swap.py --quote-file quote.json > swap.json
+  python3 recipes/uniswapV4/uniswap_swap_multisign.py --batch-approve-and-swap \\
+    --key-gen-id KeyGen... --swap-file swap.json --quote-file quote.json --token-in 0x...
+
+Example (legacy single calldata tx)::
+
   python3 recipes/uniswapV4/uniswap_swap_multisign.py --key-gen-id KeyGen... --swap-file swap.json
 """
 
@@ -265,6 +273,43 @@ def main() -> None:
         help="composeActions[0].signature (signatureText / batch meta, default: %(default)s)",
     )
     ap.add_argument(
+        "--batch-approve-and-swap",
+        action="store_true",
+        help=(
+            "Build 2- or 3-tx batch (ERC-20 approve + [allowance-hub approve] + swap) like the app classic-allowance flow. "
+            "Requires --quote-file or --quote-json and --token-in (after uniswap_trade_swap.py)."
+        ),
+    )
+    ap.add_argument(
+        "--quote-file",
+        default="",
+        metavar="FILE",
+        help="With --batch-approve-and-swap: quote JSON (uniswap_trade_quote output or /quote body)",
+    )
+    ap.add_argument(
+        "--quote-json",
+        default="",
+        help="With --batch-approve-and-swap: inline quote JSON",
+    )
+    ap.add_argument(
+        "--token-in",
+        default="",
+        metavar="ADDR",
+        help="With --batch-approve-and-swap: ERC-20 token address (input token)",
+    )
+    ap.add_argument(
+        "--swap-deadline-unix",
+        type=int,
+        default=None,
+        help="With --batch-approve-and-swap: unix seconds for allowance-hub approve expiration (3-tx path; optional)",
+    )
+    ap.add_argument(
+        "--slippage-percent",
+        type=float,
+        default=None,
+        help="With --batch-approve-and-swap: extra slippage on approve amount (EXACT_OUTPUT; optional)",
+    )
+    ap.add_argument(
         "--ed25519-seed-hex",
         metavar="HEX",
         help="If set, sign messageToSign with Ed25519 and output postBody with clientSig",
@@ -302,19 +347,58 @@ def main() -> None:
 
     chain_opt = (args.chain_id or "").strip() or None
     try:
-        out = uniswap_swap_multisign_payload(
-            args.mpc_auth_url,
-            args.management_port,
-            args.key_gen_id,
-            parsed,
-            destination_chain_id=chain_opt,
-            purpose=(args.purpose or "").strip(),
-            no_custom_gas_params=bool(args.no_custom_gas_params),
-            rpc_gateway=(args.rpc_gateway or "").strip() or None,
-            skip_gas_check=bool(args.skip_gas_check),
-            signature_label=(args.signature_label or "uniswapUniversalRouterSwap").strip()
-            or "uniswapUniversalRouterSwap",
-        )
+        if args.batch_approve_and_swap:
+            if not (args.token_in or "").strip():
+                print("--batch-approve-and-swap requires --token-in", file=sys.stderr)
+                sys.exit(1)
+            if (args.quote_json or "").strip():
+                quote_raw = args.quote_json
+            elif (args.quote_file or "").strip():
+                quote_raw = Path(args.quote_file).read_text(encoding="utf-8")
+            else:
+                print("--batch-approve-and-swap requires --quote-file or --quote-json", file=sys.stderr)
+                sys.exit(1)
+            try:
+                quote_parsed = json.loads(quote_raw)
+            except json.JSONDecodeError as e:
+                print(f"Invalid quote JSON: {e}", file=sys.stderr)
+                sys.exit(1)
+            if not isinstance(quote_parsed, dict):
+                print("Quote JSON must be an object", file=sys.stderr)
+                sys.exit(1)
+            utq = quote_parsed.get("uniswapTradeQuote")
+            quote_use = utq if isinstance(utq, dict) else quote_parsed
+            from uniswap_v4_skip_permit2_batch_multisign import uniswap_v4_skip_permit2_batch_multisign_payload
+
+            out = uniswap_v4_skip_permit2_batch_multisign_payload(
+                args.mpc_auth_url,
+                args.management_port,
+                args.key_gen_id,
+                parsed,
+                quote_use,
+                (args.token_in or "").strip(),
+                swap_deadline_unix=args.swap_deadline_unix,
+                slippage_percent=args.slippage_percent,
+                destination_chain_id=chain_opt,
+                purpose=(args.purpose or "").strip(),
+                no_custom_gas_params=bool(args.no_custom_gas_params),
+                rpc_gateway=(args.rpc_gateway or "").strip() or None,
+                skip_gas_check=bool(args.skip_gas_check),
+            )
+        else:
+            out = uniswap_swap_multisign_payload(
+                args.mpc_auth_url,
+                args.management_port,
+                args.key_gen_id,
+                parsed,
+                destination_chain_id=chain_opt,
+                purpose=(args.purpose or "").strip(),
+                no_custom_gas_params=bool(args.no_custom_gas_params),
+                rpc_gateway=(args.rpc_gateway or "").strip() or None,
+                skip_gas_check=bool(args.skip_gas_check),
+                signature_label=(args.signature_label or "uniswapUniversalRouterSwap").strip()
+                or "uniswapUniversalRouterSwap",
+            )
     except (TypeError, ValueError, RuntimeError) as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)

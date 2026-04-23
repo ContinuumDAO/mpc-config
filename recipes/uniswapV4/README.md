@@ -14,88 +14,77 @@ Scripts that call Uniswap’s HTTP API need a **Trade API key** (sent as the **`
 
 Obtain or rotate keys in the [Uniswap developer dashboard](https://developers.uniswap.org/dashboard/welcome). Details also appear in each script’s module docstring and `--help`.
 
-**No Uniswap API key:** `permit2_keygen_params.py`, `permit2_approval.py`, and `uniswap_swap_multisign.py` only talk to your **MPC management API** (and optionally **JSON-RPC** for Permit2 allowance reads). They do not call the Trade API.
+**Python:** Use the dependencies noted in `docs/skill/SKILL.md` / `scripts/requirements-keygen-agent.txt` (`eth_account`, `PyNaCl`, etc.).
 
-**Python:** Use the dependencies noted in `docs/skill/SKILL.md` / `scripts/requirements-keygen-agent.txt` where those scripts apply (`eth_account`, etc.).
+**`uniswap_mpc_helpers.py`** and **`uniswap_v4_skip_permit2_batch_multisign.py`** only talk to your **MPC management API** and chain **JSON-RPC** (no Uniswap HTTP key required for those steps).
 
-## What you are building
+## Flow (aligned with continuumdao-node-app)
 
-Two **separate** on-chain concerns:
+Quotes and swap calldata send Uniswap’s **classic ERC-20 allowance** header **`x-permit2-disabled: true`** (required header name from the Trade API). Routing then expects **ERC-20 `approve` + swap** (and, when Trade targets the Universal Router directly, an extra on-chain **allowance-hub `approve` toward the router** in the same batch — see the batch builder).
 
-1. **Permit2 (optional but common):** An **EIP-712** `PermitSingle` message. The MPC signs **`msgHash`** for typed data—**not** an RLP transaction. `scripts/executeSignResult.py` **does not** broadcast that as a raw EVM tx; it prints next steps (see that script’s docstring).
-2. **Universal Router swap:** A normal **EVM transaction** (`to`, `data`, `value`). You build a **`multiSignRequest`** whose `bodyForSign` matches that unsigned tx; after TSS you **do** use `executeSignResult.py` to broadcast and wait for receipts.
+1. **Dispatcher route** (`swap.to` ≠ inner router in calldata): **2 txs** — `ERC20.approve(swap.to)`, then swap.
+2. **Direct router route** (`swap.to` equals inner router): **3 txs** — `ERC20.approve(allowance hub)`, allowance hub **`approve(token, router, amount, expiration)`**, then swap.
 
-## Recommended order of operations
+### 1. Quote (`POST /v1/quote`)
 
-### 1. Quote (Trade API)
+`uniswap_trade_quote.py` — outputs `uniswapTradeQuote` plus `uniswapBatchRecipe` hints.
 
-Run `uniswap_trade_quote.py` with **Uniswap API key**, **MPC wallet** as swapper (`KEYGEN_ID` / `--key-gen-id`), **chain**, **tokens**, **amount**. Save the JSON (or the one-line quote for handoff).
+### 2. Create swap calldata (`POST /v1/swap`)
 
-- Script: `uniswap_trade_quote.py` (this folder)
-- Output includes fields useful for Permit2 and for `POST /v1/swap`.
+`uniswap_trade_swap.py` — same **`x-universal-router-version`** as the quote. No separate permit signature in the request body.
 
-### 2. Permit2 path (when the quote uses Permit2)
+### 3. Build **`POST /multiSignRequest`** (batch)
 
-Use the quote to configure **Permit2** allowance parameters:
+- **`uniswap_v4_skip_permit2_batch_multisign.py`**, or  
+- **`uniswap_swap_multisign.py --batch-approve-and-swap`**
 
-- `permit2_keygen_params.py` — derives nonces, deadlines, spender, and kwargs for the approval recipe.
-- `permit2_approval.py` — emits **`POST /multiSignRequest`** for the **EIP-712** permit digest (not calldata).
+You need: create-swap JSON, quote snapshot with classic **`quote.input.amount`**, and **`--token-in`**. Optional: **`--swap-deadline-unix`**, **`--slippage-percent`** (e.g. EXACT_OUTPUT).
 
-After **multi-agree** completes, use the returned **secp256k1** signature in the flow your stack expects (e.g. bundled with the swap or as input to Trade API—see Uniswap docs for `signature` / `permitData` on **`POST /v1/swap`**).
+Example:
 
-If your integration uses **`x-permit2-disabled: true`** and classic token **approval** elsewhere, you can skip this block; keep **Universal Router version** headers consistent across quote → swap.
+```bash
+python3 recipes/uniswapV4/uniswap_trade_quote.py ... > quote.json
+python3 recipes/uniswapV4/uniswap_trade_swap.py --quote-file quote.json > swap.json
+python3 recipes/uniswapV4/uniswap_v4_skip_permit2_batch_multisign.py \
+  --key-gen-id "$KEYGEN_ID" \
+  --swap-file swap.json \
+  --quote-file quote.json \
+  --token-in 0x... \
+  --swap-deadline-unix 1735689600
+```
 
-### 3. Create swap calldata (Trade API, no chain tx)
+### 4. Execute on chain
 
-Call **`POST /v1/swap`** via `uniswap_trade_swap.py`: pass the **quote** object, and when required the **signed permit** (`--signature`) and/or **`permitData`** (`--permit-json` / file). This returns JSON with a top-level **`swap`** object (`to`, `data`, `value`, `chainId`, gas fields).
+`scripts/executeSignResult.py` for this sign request id (batch: multiple txs in order).
 
-- Script: `uniswap_trade_swap.py` (this folder)
+### 5. Status
 
-### 4. Turn swap JSON into `multiSignRequest` (MPC)
-
-From the **full create-swap response**, run:
-
-- `uniswap_swap_multisign.py` — builds **`bodyForSign`**, **`messageToSign`**, **`txParams`**, **`triggerTxParams`**, etc., aligned with `generateMultiSignRequestFromCompose.build_compose_multisign`.
-
-Submit **`POST /multiSignRequest`** (plus any **clientSig** / **signedMessage** your node requires). Wait until the sign request reaches **success** (TSS signatures present).
-
-### 5. Execute on chain
-
-Run `scripts/executeSignResult.py` for this **swap** sign request id (with management URL, optional `--sign-request-file` holding `bodyForSign`, RPC as documented). The script triggers if needed, polls sign results, rebuilds the unsigned tx from stored **txParams**, signs with MPC output, **broadcasts**, and **waits for transaction receipts**.
-
-### 6. Close the loop in the management API
-
-After successful broadcast, follow the stderr instructions: **`POST /updateSignResultStatusById`** with **`executed`** and the **transaction hash(es)** so the node and peers record execution.
+**`POST /updateSignResultStatusById`** with **`executed`** and transaction hash(es).
 
 ## Minimal checklist for an AI agent
 
 | Step | Artifact |
 |------|-----------|
-| Quote | `uniswap_trade_quote.py` → quote JSON |
-| Permit2 (if used) | `permit2_keygen_params.py` → `permit2_approval.py` → `POST /multiSignRequest` → TSS success → signature for swap request body |
+| Quote | `uniswap_trade_quote.py` → JSON |
 | Swap calldata | `uniswap_trade_swap.py` → JSON with `swap` |
-| EVM sign request | `uniswap_swap_multisign.py` → `POST /multiSignRequest` → TSS success |
+| EVM batch sign request | `uniswap_v4_skip_permit2_batch_multisign.py` or `uniswap_swap_multisign.py --batch-approve-and-swap` |
 | Broadcast | `scripts/executeSignResult.py` |
-| Status | `POST /updateSignResultStatusById` (`executed` + tx hash) |
+| Status | `POST /updateSignResultStatusById` |
 
-## Purpose and `extraJSON` (Permit2 round vs swap round)
+## Purpose and `extraJSON`
 
-Each **`multiSignRequest`** is its own record: a **separate** `messageToSign` and sign-request id. Nothing in the API **requires** the second request to repeat the first request’s **purpose** text.
-
-- **`purpose` (max 256 chars):** Use **round 1** to describe what other nodes are approving for the **EIP-712 Permit2** sign (the `permit2_approval` defaults tie this to the *intended* trade). Use **round 2** to describe the **on-chain swap** (Universal Router / `multiSignRequest` for the EVM tx). You *may* reuse similar wording for consistency in `listSignRequests`, but a **blind copy** of the permit-only blurb is easy to misread in round 2; prefer a **short, swap-specific** line for the second request (e.g. “Uniswap Universal Router swap — chain 42161”).
-
-- **`extraJSON`:** **Not** needed for a correct **`msgHash`** (the hash is the unsigned tx in round 2, or the typed-data hash in round 1). It is **optional** metadata for operators and peers (see `docs/references/API_IMPLEMENTATION.md`). The **Permit2** recipe often puts **`permit2` audit** and optional **`uniswapTradeQuote`** there so reviewers see quote context. The **swap** recipe can leave **`extraJSON`** minimal; when you do **not** use `--no-custom-gas-params`, `generateMultiSignRequestFromCompose` may still add **`customGasChainDetails`** in `extraJSON` for the same “custom gas” disclosure as other compose flows—that is **not** the same as pasting a full Trade API quote. Duplicating the full quote JSON on the **swap** request is **optional** and only for traceability, not for signing correctness.
+**`extraJSON`** includes **`batchMeta`** (per-index labels) and optional **`customGasChainDetails`** when using configured gas. The last batch item’s **`uniswapV4`** blob holds audit metadata (quote snapshot, approve path, gas build source).
 
 ## Related files
 
 | File | Role |
 |------|------|
+| `uniswap_mpc_helpers.py` | KeyGen owner resolution; Universal Router address map |
 | `uniswap_trade_quote.py` | `POST /v1/quote` |
 | `uniswap_trade_swap.py` | `POST /v1/swap` |
-| `permit2_keygen_params.py` | Permit2 + quote alignment |
-| `permit2_approval.py` | Permit2 **multiSignRequest** (EIP-712 hash) |
-| `uniswap_swap_multisign.py` | Router **multiSignRequest** (EVM tx hash) |
-| `scripts/executeSignResult.py` | Trigger, sign, broadcast **EVM** txs; **skips** raw broadcast for PermitSingle permit-only results |
-| `scripts/generateMultiSignRequestFromCompose.py` | Shared compose / `preencodedData` mechanics used by `uniswap_swap_multisign` |
+| `uniswap_v4_skip_permit2_batch_multisign.py` | Batch `multiSignRequest` |
+| `uniswap_swap_multisign.py` | `--batch-approve-and-swap` or legacy single-tx calldata compose |
+| `scripts/executeSignResult.py` | Trigger, sign, broadcast |
+| `scripts/generateMultiSignRequestFromCompose.py` | Shared compose / signing-hash helpers |
 
-Re-running gas or nonce-changing steps (new quote, new `multiSignRequest` run) changes **`msgHash`**; do not mix outputs from different runs for the same sign request.
+Re-running gas or nonce-changing steps changes **`msgHash`** / **`messageHashes`**; do not mix outputs from different runs for the same sign request.

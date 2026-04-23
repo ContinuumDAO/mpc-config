@@ -4,6 +4,10 @@
 **quote** object returned from **``POST /v1/quote``** (see
 `Create swap calldata <https://developers.uniswap.org/docs/api-reference/create_swap_transaction>`__).
 
+**MPC:** this script always sends ``x-permit2-disabled: true`` (Uniswap’s header for classic ERC-20 allowance). Pair the
+output with ``uniswap_v4_skip_permit2_batch_multisign.py`` (approve + swap batch). Use the same
+``x-universal-router-version`` as ``POST /v1/quote``.
+
 This script only needs **``UNISWAP_TRADE_API_KEY``** and a JSON file (or inline JSON) containing the
 quote. You can pass the full object emitted by ``uniswap_trade_quote.py`` (it will use the
 ``uniswapTradeQuote`` field) or the raw quote body from the quote response.
@@ -15,11 +19,9 @@ quote. You can pass the full object emitted by ``uniswap_trade_quote.py`` (it wi
 
 **Optional API body** (see Uniswap docs; omitted keys are not sent, except where noted)
 
-- ``--signature`` — signed permit when using Permit2
 - ``--refresh-gas-price`` / ``--simulate-transaction`` / ``--include-gas-info`` — booleans
 - ``--safety-mode`` (e.g. ``SAFE``), ``--deadline`` (unix ts), ``--urgency`` (default in API: ``urgent``)
-- ``--permit-json`` — JSON for ``permitData`` (string path via env not supported; use file + jq or pipe)
-- ``--universal-router-version`` / ``UNISWAP_UR_VERSION``; ``--permit2-disabled``; ``--base-url`` / ``UNISWAP_TRADE_BASE_URL``
+- ``--universal-router-version`` / ``UNISWAP_UR_VERSION``; ``--base-url`` / ``UNISWAP_TRADE_BASE_URL``
 """
 
 from __future__ import annotations
@@ -106,9 +108,6 @@ def create_swap_calldata(
     api_key: str,
     quote: dict[str, Any],
     universal_router_version: str = "2.0",
-    permit2_disabled: bool = False,
-    signature: str | None = None,
-    permit_data: Any = None,
     include_gas_info: bool = False,
     refresh_gas_price: bool = False,
     simulate_transaction: bool = False,
@@ -126,13 +125,10 @@ def create_swap_calldata(
         **_H,
         "x-api-key": api_key,
         "x-universal-router-version": (universal_router_version or "2.0").strip(),
-        "x-permit2-disabled": "true" if permit2_disabled else "false",
+        "x-permit2-disabled": "true",
+        "x-erc20eth-enabled": "false",
     }
     body: dict[str, Any] = {"quote": quote}
-    if signature is not None:
-        body["signature"] = signature
-    if permit_data is not None:
-        body["permitData"] = permit_data
     if include_gas_info:
         body["includeGasInfo"] = True
     if refresh_gas_price:
@@ -169,11 +165,6 @@ def main() -> None:
         help="x-universal-router-version (default: 2.0)",
     )
     ap.add_argument(
-        "--permit2-disabled",
-        action="store_true",
-        help="x-permit2-disabled: true",
-    )
-    ap.add_argument(
         "--quote-file",
         metavar="FILE",
         default="",
@@ -188,12 +179,6 @@ def main() -> None:
         "--stdin",
         action="store_true",
         help="Read JSON for the quote (raw or wrapper) from stdin",
-    )
-    ap.add_argument("--signature", default="", help="POST body: signature (signed permit)")
-    ap.add_argument(
-        "--permit-json",
-        default="",
-        help='JSON string for POST body "permitData" (e.g. output from your signing step)',
     )
     ap.add_argument(
         "--include-gas-info",
@@ -260,25 +245,12 @@ def main() -> None:
         print(str(e), file=sys.stderr)
         sys.exit(1)
 
-    permit_data: Any = None
-    if (args.permit_json or "").strip():
-        try:
-            permit_data = json.loads(args.permit_json)
-        except json.JSONDecodeError as e:
-            print(f"Invalid --permit-json: {e}", file=sys.stderr)
-            sys.exit(1)
-
-    sig = (args.signature or "").strip() or None
-
     try:
         out = create_swap_calldata(
             base_url=args.base_url,
             api_key=api_key,
             quote=q_obj,
             universal_router_version=args.universal_router_version,
-            permit2_disabled=bool(args.permit2_disabled),
-            signature=sig,
-            permit_data=permit_data,
             include_gas_info=bool(args.include_gas_info),
             refresh_gas_price=bool(args.refresh_gas_price),
             simulate_transaction=bool(args.simulate_transaction),

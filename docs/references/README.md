@@ -11,8 +11,8 @@ This directory contains reference docs for node APIs, agent workflows, and local
 | `./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md` | Authoritative guide for **`multiSignRequest`** payloads: recipes, compose + Foundry helpers, **`multiSignJoin`**, **`messageToSign`** rules. |
 | `./AI_AGENT_FORGE_SIGNREQUEST.md` | Foundry broadcast JSON → **`bodyForSign`** / **`messageToSign`** (same envelope as compose). |
 | `./AI_AGENT_NEW_SESSION.md` | Agent startup: read `$MPA_PATH/.env`, symlinks to `MPC_CONFIG_PATH`, `GET /health`, then `KEYGEN_ID` or KeyGen creation. |
-| `./API_IMPLEMENTATION.md` | Full management API behavior, endpoint contracts, and conventions. § **`POST /triggerSignRequestById`** documents **EVM** trigger (**`txParams`/`messageHash`**) vs **EIP-712 digest-only** (omit those fields; see **`$MPA_PATH/scripts/mpc_sign_request_digest.py`**, **mpc-auth** `workflows.go` comment on **`TriggerSignRequestById`**, **continuumdao-node-app**). |
-| `$MPA_PATH/scripts/mpc_sign_request_digest.py` | Python: detect digest-only sign requests (Permit2, etc.); ensures **`/triggerSignRequestById`** does not attach **`txParams`** / **`messageHash`** when **`MessageRaw`** is not EVM calldata. |
+| `./API_IMPLEMENTATION.md` | Full management API behavior, endpoint contracts, and conventions. § **`POST /triggerSignRequestById`** documents **EVM** trigger (**`txParams`/`messageHash`/`txParamsBatch`**) for supported automation (**executeSignResult.py**, **continuumdao-node-app**). |
+| `$MPA_PATH/scripts/mpc_sign_request_digest.py` | Reserved hook for future non–unsigned-tx trigger rules; digest-only detection is currently disabled (automation always uses standard EVM trigger fields). |
 | `./API_KEYGEN_MESSAGING.md` | KeyGen-scoped messaging API model and endpoint usage. |
 | `./instructions.md` | End-to-end operational instructions for agent-managed node workflows. |
 | `./KNOWN_ADDRESSES_SCHEMA.md` | Local storage schema for known addresses. |

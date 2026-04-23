@@ -2923,9 +2923,9 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequestsReady?pagenum=0&pagesize=10
 - **`txParams`**: one object — used for **single-tx**, or for **batch** merged **only at index 0** with **`proposal_tx_params[0]`** unless **`txParamsBatch`** is set (see below).
 - **`txParamsBatch`** (optional, **batch only**): array of length **N** = **`len(messageHashes)`**; each element merges with **`proposal_tx_params[i]`** into **`execute_tx_params[i]`** on this node. Do not send both **`txParams`** and **`txParamsBatch`** in the same request.
 
-**EIP-712 / digest-only (not an RLP unsigned tx).** When **`POST /multiSignRequest`** created the request with a **32-byte domain digest** (e.g. Uniswap **Permit2 `PermitSingle`**, typed-data **`msgHash`**) and **`msgRaw`** is **not** EVM calldata (often UTF-8 hex of the EIP-712 JSON for audit), the originator must **omit** both **`txParams`** and **`messageHash`** on **`POST /triggerSignRequestById`**. The sign worker then uses the **`MessageHash` already stored** at proposal time. Sending **`eth_estimateGas`**-style **txParams** with **`to` = verifying contract** and **`data` = JSON hex** is wrong and reverts. Optional conventions in **`extraJSON`**: e.g. **`permit2.evm.type: "permit2_approval"`** or recipe **`permit2.kind: "PermitSingle"`**; automation detection: **`$MPA_PATH/scripts/mpc_sign_request_digest.py`**, and **`continuumdao-node-app`** (Execute / Get Sig) uses the same rules. A future first-class **signRequestKind** field in **extraJSON** may be used for SSH or other non-tx digests; mpc-auth does not require it for correctness. See also the **`TriggerSignRequestById`** comment in the **mpc-auth** `workflows.go` source.
+**Automation note (this repo):** **`executeSignResult.py`**, **`mpc_event_listener.py`**, and the **continuumdao-node-app** agent guides assume **`POST /multiSignRequest`** carries **unsigned EVM transaction** material (**`msgRaw`** / **`messageRawBatch`** + **`txParams`** alignment). **`POST /triggerSignRequestById`** therefore includes **`txParams`** / **`txParamsBatch`** and **`messageHash`** as below. mpc-auth may still accept a **minimal** trigger body (management **`requestId`**, **`nonce`**, **`sig`** only) for **legacy** proposals that are not standard unsigned txs; that path is **not** used by the supported Python automation.
 
-After trigger, **`GET /getSignRequestById?tx_params=1`** returns the **merged** execute snapshot(s) when present; if the client already sent full **`proposalTxParams`** at **`multiSignRequest`**, **`?tx_params=1`** can still return usable params **before** trigger (proposal only). For digest-only sign requests, the **`?tx_params=1`** response may return **`null`** or no execute snapshot (there is no unsigned tx to rebuild for **this** id). **`executeSignResult.py`** and the **continuumdao-node-app** build unsigned txs / hash checks only for **EVM** broadcast paths; for Permit2 EIP-712 it skips broadcast and prints next steps.
+After trigger, **`GET /getSignRequestById?tx_params=1`** returns the **merged** execute snapshot(s) when present; if the client already sent full **`proposalTxParams`** at **`multiSignRequest`**, **`?tx_params=1`** can still return usable params **before** trigger (proposal only).
 
 **Request Body:**
 ```json
@@ -2936,13 +2936,13 @@ After trigger, **`GET /getSignRequestById?tx_params=1`** returns the **merged** 
 }
 ```
 
-Minimal body above is structurally valid. **For standard EVM multi-agree (broadcastable unsigned tx),** add `messageHash` and `txParams` and/or `txParamsBatch` as below. **For EIP-712 / digest-only sign requests,** do **not** add those fields (management **`nonce`/`sig`/`requestId` only**).
+Minimal body above is structurally valid. **For supported automation,** add `messageHash` and `txParams` and/or `txParamsBatch` as below (see **`executeSignResult.py`** and **`./instructions.md`**).
 
 - `requestId` (required): Sign request ID.
 - `nonce`, `sig`: Management key signature over the JSON body with `sig` set to empty (same as other mgt-key endpoints).
 - `txParams` (**EVM**): Object with `nonce` (number), `gasLimit` (string), `txType` (`"eip1559"` or `"legacy"`), and for EIP-1559: `maxFeePerGas`, `maxPriorityFeePerGas` (strings); for legacy: `gasPrice` (string). **Local only** (not propagated). Merged with **`proposal_tx_params[0]`** into the Execute snapshot (**`TxParams`** for single-tx; index **0** for batch when **`txParamsBatch`** is omitted). Returned via **`GET ...?tx_params=1`** (single object or array index 0) after merge.
 - `txParamsBatch` (optional, **EVM**, **batch**): Array of **N** objects (same shape as `txParams`); merges per index with **`proposal_tx_params`** into **`execute_tx_params`**. Mutually exclusive with **`txParams`**.
-- `messageHash` (optional, **EVM** single-tx when the preimage is an **unsigned transaction**): The **transaction signing hash** (hex, typically 64 hex chars without `0x`) for the unsigned RLP-style tx. The backend updates the sign request's **`MessageHash`** on **this node only** before starting the sign worker. Not propagated. **Omit** for **EIP-712 / digest-only** sign requests (Permit2, etc.); the worker then signs the **`MessageHash` from `POST /multiSignRequest`**. For **batch**, per-index hashes are the **`messageHashes`** stored on the sign request (trigger does not replace the whole batch with one hash).
+- `messageHash` (optional, **EVM** single-tx when the preimage is an **unsigned transaction**): The **transaction signing hash** (hex, typically 64 hex chars without `0x`) for the unsigned RLP-style tx. The backend updates the sign request's **`MessageHash`** on **this node only** before starting the sign worker. Not propagated. For **batch**, per-index hashes are the **`messageHashes`** stored on the sign request (trigger does not replace the whole batch with one hash).
 
 **Response (triggered):**
 ```json
@@ -2964,7 +2964,7 @@ Minimal body above is structurally valid. **For standard EVM multi-agree (broadc
 
 **Errors:** If the node posting is not the originator (this node’s key is not the key in the Purpose map), the server returns `500` with error message like: `only the originator (node key in Purpose) can trigger this sign request`. If the sign request status is `"shelved"`, the server returns `500` with error: `sign request ... is shelved; cannot trigger signature generation`.
 
-**Example (management + request id only — valid for EIP-712 / Permit2 digest-only; also structurally valid before adding EVM fields):**
+**Example (management + request id only — minimal trigger; may apply to legacy proposals outside supported automation):**
 ```bash
 curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/triggerSignRequestById \
   -H "Content-Type: application/json" \
@@ -2975,7 +2975,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/triggerSignRequestById \
   }'
 ```
 
-**Example (EVM unsigned tx):** include **`txParams`** and **`messageHash`** in the JSON body (values must match the unsigned tx you intend to broadcast). Shape matches **`continuumdao-node-app`** Get Sig / **`docs/SIGN_REQUEST_TX_PARAMS.md`** in the **continuumdao-node-app** repo. **Do not** use this pattern for **Permit2 EIP-712** sign requests; use the minimal example above.
+**Example (EVM unsigned tx):** include **`txParams`** and **`messageHash`** in the JSON body (values must match the unsigned tx you intend to broadcast). Shape matches **`continuumdao-node-app`** Get Sig / **`docs/SIGN_REQUEST_TX_PARAMS.md`** in the **continuumdao-node-app** repo.
 
 <a id="post-updatesignresultstatusbyid"></a>
 #### `POST /updateSignResultStatusById`

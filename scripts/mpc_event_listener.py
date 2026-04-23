@@ -42,8 +42,6 @@ from mpc_evm_signing_hash import (
     assert_sign_request_fields_match_message_hash,
     merge_body_for_sign_into_sign_request,
 )
-from mpc_sign_request_digest import is_digest_only_trigger_sign_request
-
 from mpc_mgt_helpers import (
     api_code,
     api_data,
@@ -307,10 +305,9 @@ def post_trigger_sign_request(
     ``bodyForSign``) so Execute can rebuild the same tx. When the GET payload omits
     nonce/gas fields, pass the same ``bodyForSign`` via ``body_for_sign``.
 
-    For **EIP-712 / digest-only** sign requests (e.g. Uniswap Permit2 ``PermitSingle``),
-    ``MessageRaw`` is not calldata. Do not attach ``txParams`` or ``messageHash``; see
-    ``is_digest_only_trigger_sign_request`` in ``mpc_sign_request_digest.py`` and
-    WorkFlows.TriggerSignRequestById in mpc-auth.
+    Supported automation uses **EVM unsigned-transaction** preimages; attach ``txParams``
+    / ``txParamsBatch`` and ``messageHash`` when :func:`_is_evm_sign_request` applies.
+    See **API_IMPLEMENTATION.md** § ``POST /triggerSignRequestById``.
     """
     pub = public_key_64_hex(priv)
     nonce = get_ed25519_nonce(base, pub)
@@ -321,10 +318,6 @@ def post_trigger_sign_request(
     }
     sr = _get_sign_request_dict(base, request_id)
     sr = merge_body_for_sign_into_sign_request(sr, body_for_sign)
-    if is_digest_only_trigger_sign_request(sr):
-        # mpc-auth: worker signs stored MessageHash; MessageRaw is not contract data.
-        body["sig"] = sign_compact_json_empty_field(priv, body, "sig")
-        return http_json("POST", base, "/triggerSignRequestById", body=body)
     if _is_evm_sign_request(sr):
         assert_sign_request_fields_match_message_hash(sr)
         tx_params, tx_params_batch, msg_hash = _evm_trigger_tx_params_and_message_hash(sr)

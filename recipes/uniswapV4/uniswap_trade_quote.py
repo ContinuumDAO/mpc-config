@@ -2,13 +2,17 @@
 """
 **Purpose:** ``POST`` a swap **quote** request to Uniswap’s Trade API
 (``/v1/quote``, default base ``https://trade-api.gateway.uniswap.org/v1``)
-and print JSON that includes the raw API response, hints for
-:mod:`permit2_keygen_params`, and a one-line payload for ``--json-quote``.
+and print JSON that includes the raw API response, hints for the **batch multisign** recipe,
+and a one-line payload for piping into ``uniswap_trade_swap.py``.
 
-The **swapper** address in the request body is the MPC wallet, resolved the same way as
-:mod:`permit2_keygen_params` via **KEYGEN_ID** and **GET /getKeyGenResultById**. The management base URL is read from **MPC_AUTH_URL** (**export** it so Python inherits it; ``env | grep MPC_AUTH_URL`` should show a line) per
-``docs/skill/SKILL.md``, or pass ``--mpc-auth-url``. The management port is taken only
-from **MANAGEMENT_PORT** (same as elsewhere in this repo; default ``8080`` if unset).
+The **swapper** address in the request body is the MPC wallet, resolved via **KEYGEN_ID** and
+**GET /getKeyGenResultById** (:mod:`uniswap_mpc_helpers.resolve_owner_from_keygen`). The management
+base URL is read from **MPC_AUTH_URL** (**export** it so Python inherits it; ``env | grep MPC_AUTH_URL``
+should show a line) per ``docs/skill/SKILL.md``, or pass ``--mpc-auth-url``. The management port is
+taken only from **MANAGEMENT_PORT** (same as elsewhere in this repo; default ``8080`` if unset).
+
+Requests send Uniswap’s classic-allowance header ``x-permit2-disabled: true`` (required API name) so quotes align with on-chain **approve + swap** batches
+(see ``README.md`` in this folder).
 
 **Required arguments**
 
@@ -27,7 +31,6 @@ from **MANAGEMENT_PORT** (same as elsewhere in this repo; default ``8080`` if un
 - ``--token-out-chain-id`` — override chain id for the output token (cross-chain quotes).
 - ``--base-url`` — API root without ``/quote`` (env: ``UNISWAP_TRADE_BASE_URL``).
 - ``--universal-router-version`` — ``x-universal-router-version`` (env: ``UNISWAP_UR_VERSION``; default ``2.0``).
-- ``--permit2-disabled`` — set ``x-permit2-disabled: true`` (no ``permitData`` in the response).
 
 **Native tokens (ETH, POL, etc.):** Per Uniswap’s
 `How do I swap native tokens? <https://api-docs.uniswap.org/guides/supported_chains#how-do-i-swap-native-tokens>`__,
@@ -38,17 +41,14 @@ That value is the Trade API’s convention for the chain’s **native** asset in
 
 **Output**
 
-- Default: full JSON (``uniswapTradeQuote`` + ``permit2KeygenParams`` hints and ``jsonQuoteOneLine``).
-- ``--print-json-quote-line`` — only the one-line body for ``permit2_keygen_params --json-quote``.
+- Default: full JSON (``uniswapTradeQuote`` + ``uniswapBatchRecipe`` hints and ``jsonQuoteOneLine``).
+- ``--print-json-quote-line`` — only the one-line quote body (for ``uniswap_trade_swap.py --quote-json``).
 - ``--out FILE`` — also write the full JSON to a file.
 
-**Handoff to** ``permit2_keygen_params.py``: use the same ``--chain-id``, ``--token`` as
-``--token-in``, and ``--amount-in`` equal to this script’s ``--amount`` for ``EXACT_INPUT``. Pass
-the quote as ``--json-quote`` (from ``jsonQuoteOneLine`` or a file). Align ``--spender`` and router
-version with your eventual ``/swap``; Trade API field shapes can change. For **swap calldata** after
-you have a quote, use ``uniswap_trade_swap.py`` and
-`Create swap calldata <https://developers.uniswap.org/docs/api-reference/create_swap_transaction>`__.
-See also `Get a quote <https://developers.uniswap.org/docs/api-reference/aggregator_quote>`__.
+**Handoff:** run ``uniswap_trade_swap.py`` with the quote, then ``uniswap_v4_skip_permit2_batch_multisign.py``
+(or ``uniswap_swap_multisign.py --batch-approve-and-swap``) — see ``README.md``.
+See `Create swap calldata <https://developers.uniswap.org/docs/api-reference/create_swap_transaction>`__
+and `Get a quote <https://developers.uniswap.org/docs/api-reference/aggregator_quote>`__.
 
 **Is this ``chain_id`` supported? (for operators / AI agents)**
 
@@ -86,9 +86,7 @@ for _p in (_THIS, _SCRIPTS):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from permit2_keygen_params import (  # noqa: E402
-    resolve_owner_from_keygen,
-)
+from uniswap_mpc_helpers import resolve_owner_from_keygen  # noqa: E402
 
 _DEFAULT_TRADE_BASE = "https://trade-api.gateway.uniswap.org/v1"
 _UNISWAP_DEV_DASHBOARD = "https://developers.uniswap.org/dashboard/welcome"
@@ -187,11 +185,6 @@ def main() -> None:
         default=os.environ.get("UNISWAP_UR_VERSION") or "2.0",
         help="x-universal-router-version header (default: 2.0, align with v4 + docs)",
     )
-    ap.add_argument(
-        "--permit2-disabled",
-        action="store_true",
-        help="Set x-permit2-disabled: true (no permitData in response)",
-    )
     ap.add_argument("--type", default="EXACT_INPUT", choices=("EXACT_INPUT", "EXACT_OUTPUT"))
     ap.add_argument("--amount", required=True, help="Amount in token base units (string, e.g. USDC 6dp)")
     ap.add_argument("--chain-id", required=True, help="tokenInChainId and tokenOutChainId (unless --token-out-chain-id)")
@@ -225,7 +218,7 @@ def main() -> None:
     ap.add_argument(
         "--print-json-quote-line",
         action="store_true",
-        help="Print only one line of JSON (the raw Trade API data object) for permit2_keygen_params --json-quote",
+        help="Print only one line of JSON (raw Trade API quote) for uniswap_trade_swap --quote-json",
     )
     ap.add_argument(
         "--out",
@@ -300,7 +293,7 @@ def main() -> None:
         **_H,
         "x-api-key": api_key,
         "x-universal-router-version": (args.universal_router_version or "2.0").strip(),
-        "x-permit2-disabled": "true" if args.permit2_disabled else "false",
+        "x-permit2-disabled": "true",
         "x-erc20eth-enabled": "false",
     }
 
@@ -316,19 +309,22 @@ def main() -> None:
     one_line = json.dumps(raw_api, separators=(",", ":"), ensure_ascii=False)
     link: dict[str, Any] = {
         "uniswapTradeQuote": raw_api,
-        "permit2KeygenParams": {
-            "script": "recipes/uniswapV4/permit2_keygen_params.py",
+        "uniswapBatchRecipe": {
+            "scripts": {
+                "swap": "recipes/uniswapV4/uniswap_trade_swap.py",
+                "batchMultisign": "recipes/uniswapV4/uniswap_v4_skip_permit2_batch_multisign.py",
+            },
             "hint": {
                 "chainId": str(c_in),
-                "token": body["tokenIn"],
-                "amountIn": str(body["amount"]),
+                "tokenIn": body["tokenIn"],
+                "amount": str(body["amount"]),
                 "keyGenId": key_gen,
             },
             "jsonQuoteOneLine": one_line,
             "suggested": (
-                f"{sys.executable} recipes/uniswapV4/permit2_keygen_params.py "
-                f"--mpc-auth-url ... --chain-id {c_in} --token {body['tokenIn']} "
-                f"--amount-in {body['amount']} --json-quote {one_line!r}  # line may be long; use a file or env"
+                f"{sys.executable} recipes/uniswapV4/uniswap_trade_swap.py --quote-file quote.json > swap.json && "
+                f"{sys.executable} recipes/uniswapV4/uniswap_v4_skip_permit2_batch_multisign.py "
+                f"--key-gen-id {key_gen!r} --swap-file swap.json --quote-file quote.json --token-in {body['tokenIn']}"
             ),
         },
     }
