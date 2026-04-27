@@ -15,7 +15,10 @@ transaction using ``GET /getSignRequestById?tx_params=1`` (gas/nonce snapshot at
 config from ``GET /getChainDetails``, and RPC ``estimateGas`` / fee discovery — then applies
 ``r,s,v`` / ``ethereumSignature``. Fee and gas-limit math when TxParams omit EIP-1559 caps matches
 ``generateMultiSignRequestFromCompose.build_compose_multisign`` (same RPC fee snapshot, ``baseFeeMultiplier``,
-``gasMultiplier`` / ``gasPrice`` handling, and ``max(chain gasLimit, eth_estimateGas)``). The old “decode ``MessageRaw`` RLP only” approach often failed
+``gasMultiplier`` / ``gasPrice`` handling, and ``max(chain gasLimit, eth_estimateGas)``). When txParams
+do not fix fees, priority / max-fee use the same **Get Sig** tiers as the web app: ``GET /getChainDetails``
+``defaultGetSigFeeSpeed`` (``slow`` / ``normal`` / ``fast``, default ``normal``), ``eth_feeHistory`` reward
+percentiles, and legacy gas-price permille (mirrors ``continuumdao-node-app`` / ``getSigFeeSpeed.ts``). The old “decode ``MessageRaw`` RLP only” approach often failed
 because MPC signs the hash of that **reconstructed** payload, not an arbitrary or stale RLP blob.
 
 **Native ETH (gas-token) sends** use **empty** ``msgRaw`` (no calldata). That is treated as a valid
@@ -421,7 +424,9 @@ def build_unsigned_single_tx_dict_app_style(
 ) -> dict[str, Any]:
     """
     Rebuild unsigned tx dict the same way continuumdao-node-app Execute does (not raw MessageRaw RLP),
-    using TxParams from getSignRequestById?tx_params=1 and RPC fees/estimateGas.
+    using TxParams from getSignRequestById?tx_params=1 and RPC fees/estimateGas. When txParams do not
+    set fees, uses ``defaultGetSigFeeSpeed`` on ``chain_detail`` (from GET /getChainDetails) and the
+    same Get Sig fee math as the app (eth_feeHistory / legacy permille); see getSigFeeSpeed.ts.
     """
     tx_from_raw: dict[str, Any] | None = None
     execute_is_create = False
@@ -557,6 +562,10 @@ def build_unsigned_single_tx_dict_app_style(
             gas_price_wei = int(str(gp_raw).strip()) if isinstance(gp_raw, int) else int(str(gp_raw).strip(), 0)
         else:
             gas_price_wei = _compose.eth_gas_price(rpc_url)
+            t_l = normalize_get_sig_fee_speed_tier(chain_detail)
+            if t_l != "normal":
+                m = _LEGACY_GAS_SCALE_PERMILLE.get(t_l, 1000)
+                gas_price_wei = (gas_price_wei * m) // 1000
             if gas_fee_multiplier is not None and gas_fee_multiplier > 0:
                 gas_price_wei = (gas_price_wei * (100 + gas_fee_multiplier)) // 100
             if chain_gas_price_gwei is not None and chain_gas_price_gwei > 0:
@@ -589,11 +598,15 @@ def build_unsigned_single_tx_dict_app_style(
         max_prio = int(str(tx_mp).strip())
         max_fee = int(str(tx_mf).strip())
     elif fee_params.get("isEip1559"):
-        base = float(fee_params.get("baseFeeGwei") or 0)
-        prio = float(fee_params.get("priorityFeeGwei") or 0)
-        base_component = base * base_fee_multiplier_pct / 100.0
-        max_prio = _compose._gwei_to_wei_ceil(prio) if prio > 0 else _compose._gwei_to_wei_ceil(1.0)
-        max_fee = _compose._gwei_to_wei_ceil(base_component + prio)
+        speed_tier = normalize_get_sig_fee_speed_tier(chain_detail)
+        max_fee, max_prio = eip1559_max_fees_wei_get_sig_tier(
+            rpc_url,
+            chain_detail,
+            fee_params,
+            base_fee_multiplier_pct,
+            gas_fee_multiplier,
+            speed_tier,
+        )
     else:
         gp = _compose.eth_gas_price(rpc_url)
         max_prio = max(gp // 10, 10**9)
@@ -709,6 +722,136 @@ def pick_str(d: dict[str, Any], *keys: str) -> Any:
         if lk in lower:
             return lower[lk]
     return None
+
+
+# Get Sig fee tiers — mirrors app/utils/getSigFeeSpeed.ts (eth_feeHistory percentiles, legacy scaling).
+_GET_SIG_FEE_TIER_INDEX: dict[str, int] = {"slow": 0, "normal": 1, "fast": 2}
+_GET_SIG_REWARD_PERCENTILES: tuple[int, int, int] = (15, 50, 85)
+_GET_SIG_TIER_BASE_EXTRA_PCT: dict[str, int] = {"slow": 0, "normal": 0, "fast": 12}
+_LEGACY_GAS_SCALE_PERMILLE: dict[str, int] = {"slow": 920, "normal": 1000, "fast": 1180}
+
+
+def normalize_get_sig_fee_speed_tier(chain_detail: dict[str, Any]) -> str:
+    """``slow`` / ``normal`` / ``fast`` from chain details; default ``normal`` (matches getSigFeeSpeed.ts)."""
+    raw = pick_str(chain_detail, "defaultGetSigFeeSpeed", "default_get_sig_fee_speed")
+    s = str(raw or "").strip().lower()
+    if s in ("slow", "normal", "fast"):
+        return s
+    return "normal"
+
+
+def _raw_priority_from_fee_history(rpc_url: str, tier: str) -> int | None:
+    """Last block reward at percentile for *tier*; wei; unscaled. None if unusable."""
+    idx = _GET_SIG_FEE_TIER_INDEX.get(tier, 1)
+    try:
+        raw = rpc_call(
+            rpc_url,
+            "eth_feeHistory",
+            ["0x14", "latest", list(_GET_SIG_REWARD_PERCENTILES)],
+        )
+    except (RuntimeError, OSError, ValueError, TypeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    rewards = raw.get("reward")
+    if not isinstance(rewards, list) or not rewards:
+        return None
+    last = rewards[-1]
+    if last is None or not isinstance(last, list) or idx >= len(last):
+        return None
+    cell = last[idx]
+    if cell is None:
+        return None
+    try:
+        w = int(cell, 16) if isinstance(cell, str) else int(cell)
+    except (TypeError, ValueError):
+        return None
+    return w if w > 0 else None
+
+
+def _fetch_tier_priority_fee_wei(rpc_url: str, tier: str) -> int:
+    """Priority fee in wei: feeHistory percentile, tier scale, fallbacks (getSigFeeSpeed ``fetchTierPriorityFeeWei``)."""
+    p = _raw_priority_from_fee_history(rpc_url, tier)
+    if p is not None and p > 0:
+        wei = p
+    else:
+        try:
+            mp = rpc_call(rpc_url, "eth_maxPriorityFeePerGas", [])
+            pwei = int(mp, 16) if isinstance(mp, str) else int(mp)
+        except (RuntimeError, OSError, ValueError, TypeError):
+            pwei = int(1.5e9)  # 1.5 gwei
+        wei = pwei
+    if tier == "slow":
+        wei = (wei * 88) // 100
+    elif tier == "fast":
+        wei = (wei * 125) // 100
+    if wei < 1_000_000:  # below 0.001 gwei -> 1 gwei (TypeScript)
+        wei = 10**9
+    return wei
+
+
+def eip1559_max_fees_wei_get_sig_tier(
+    rpc_url: str,
+    chain_detail: dict[str, Any],
+    fee_params: dict[str, Any],
+    base_fee_multiplier_pct: int,
+    gas_fee_multiplier: int | None,
+    tier: str,
+) -> tuple[int, int]:
+    """
+    maxFee / maxPriority for EIP-1559 when not taken from stored txParams — aligned with
+    ``resolveGetSigFeeWei`` (non-advanced) in getSigFeeSpeed.ts.
+    """
+    priority_wei = _fetch_tier_priority_fee_wei(rpc_url, tier)
+    tier_pri_gwei = priority_wei / 1_000_000_000.0
+    fetched_base = float(fee_params.get("baseFeeGwei") or 0.0)
+    fetched_prio = float(fee_params.get("priorityFeeGwei") or 0.0)
+    configured_base = 0.0
+    b_raw = pick_str(chain_detail, "baseFee", "BaseFee")
+    if b_raw not in (None, ""):
+        try:
+            configured_base = float(b_raw)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            pass
+    configured_priority = 0.0
+    p_raw = pick_str(chain_detail, "priorityFee", "PriorityFee")
+    if p_raw not in (None, ""):
+        try:
+            configured_priority = float(p_raw)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            pass
+    effective_base = max(fetched_base, configured_base)
+    effective_priority_gwei = max(
+        tier_pri_gwei,
+        configured_priority,
+        fetched_prio if fetched_prio > 0 else 0.0,
+    )
+    bfm = max(100, int(base_fee_multiplier_pct))
+    base_comp = (effective_base * bfm) / 100.0
+    extra = _GET_SIG_TIER_BASE_EXTRA_PCT.get(tier, 0)
+    if extra:
+        base_comp = (base_comp * (100 + extra)) / 100.0
+    max_fee_gwei = base_comp + effective_priority_gwei
+    max_priority_wei = (
+        _compose._gwei_to_wei_ceil(effective_priority_gwei)
+        if effective_priority_gwei > 0
+        else 10**9
+    )
+    if effective_base > 0:
+        max_fee_wei = _compose._gwei_to_wei_ceil(max_fee_gwei)
+    else:
+        max_fee_wei = max(max_priority_wei * 2, _compose._gwei_to_wei_ceil(max_fee_gwei))
+
+    if gas_fee_multiplier is not None and gas_fee_multiplier > 0:
+        gm = 100 + int(gas_fee_multiplier)
+        max_priority_wei = (max_priority_wei * gm) // 100
+        max_fee_wei = (max_fee_wei * gm) // 100
+
+    bf_w = _compose.latest_base_fee_per_gas_wei(rpc_url)
+    if bf_w is not None and bf_w > 0 and max_fee_wei < bf_w + max_priority_wei:
+        max_fee_wei = bf_w + max_priority_wei + 1_000_000  # +0.001 gwei
+    max_fee_wei = max(max_fee_wei, max_priority_wei)
+    return max_fee_wei, max_priority_wei
 
 
 def resolve_rpc_url(

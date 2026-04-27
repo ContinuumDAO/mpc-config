@@ -1170,6 +1170,7 @@ Stores or updates chain config for one chain on this node. Requires management k
   "priorityFee": 2,
   "baseFeeMultiplier": 200,
   "gasPrice": 25,
+  "defaultGetSigFeeSpeed": "normal",
   "signedMessage": "{\"nonce\":1,\"chainName\":\"Ethereum Mainnet\",\"chainId\":\"1\",\"rpcGateway\":\"https://eth.llamarpc.com\",\"legacy\":false,\"testnet\":false,\"gasName\":\"ETH\"}",
   "clientSig": "0x..."
 }
@@ -1190,6 +1191,7 @@ Stores or updates chain config for one chain on this node. Requires management k
 - `baseFeeMultiplier` (optional): EIP-1559 only. Percentage applied to base fee for the base component of `maxFeePerGas` (e.g. 200 = 2× base). Must be ≥ 100 so that `maxFeePerGas ≥ baseFee + maxPriorityFeePerGas`. Omitted or 200 preserves previous default behaviour.
 - `gasMultiplier` (optional): Gas multiplier for legacy chains.
 - `gasPrice` (optional): Gas price in gwei for legacy chains.
+- `defaultGetSigFeeSpeed` (optional): Default fee tier for the Execute tab **Get Sig / Get Sigs** step on this chain: `slow`, `normal`, or `fast` (RPC `eth_feeHistory`–based). Omit on older nodes; clients should treat missing as `normal`. Not used for `advanced` (user-edited gwei).
 - `signedMessage` (required): The exact string that was signed (e.g. JSON of nonce, chainName, chainId, rpcGateway, explorer, legacy, testnet, gasName, and optional gas fields).
 - `clientSig` (required): Signature from management key. **MetaMask:** sign `signedMessage` with `personal_sign` (NodeMgtKey address), send 0x-prefixed signature. **Ed25519:** sign the same `signedMessage` with an allowed Ed25519 key (config PublicMgtKey or added via addManagementKey), send 128-hex signature.
 
@@ -1242,6 +1244,7 @@ Returns chain config details stored on this node. Optional query parameter selec
 - `baseFeeMultiplier` (number, optional): EIP-1559 only. Percentage for base component of maxFeePerGas (e.g. 200 = 2× base); must be ≥ 100.
 - `gasMultiplier` (number, optional): Gas multiplier for legacy chains (%).
 - `gasPrice` (number, optional): Gas price in gwei for legacy chains.
+- `defaultGetSigFeeSpeed` (string, optional): `slow` | `normal` | `fast` — default Get Sig(s) fee tier for this chain in continuumdao-node-app. Omitted on legacy stored configs; clients default to `normal`.
 - `updatedAt` (string): Last update time (RFC3339).
 
 **Query Parameters:**
@@ -1266,6 +1269,7 @@ Returns chain config details stored on this node. Optional query parameter selec
     "baseFeeMultiplier": 200,
     "gasMultiplier": 0,
     "gasPrice": 0,
+    "defaultGetSigFeeSpeed": "normal",
     "updatedAt": "2026-02-25T12:00:00Z"
   }
 }
@@ -1291,6 +1295,7 @@ Returns chain config details stored on this node. Optional query parameter selec
       "baseFeeMultiplier": 200,
       "gasMultiplier": 0,
       "gasPrice": 0,
+      "defaultGetSigFeeSpeed": "normal",
       "updatedAt": "2026-02-25T12:00:00Z"
     },
     {
