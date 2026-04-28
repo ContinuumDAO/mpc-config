@@ -4008,8 +4008,9 @@ show_process_config_help() {
     echo ""
     echo "Optional mpc-auth Docker systemd helpers (Linux + systemd, end of run):"
     echo "  Prompts install or re-sync of mpc-config/systemd/ (daemon-reload) with [y/N] defaults No;"
-    echo "  if units already exist, offers re-copy with --no-env and daemon-reload; optional restart via"
-    echo "  mpc-auth-docker-restart.service (⚠ container restart). See systemd/README.md."
+    echo "  when mpc-auth units exist on the host, separately prompts to start mpc-auth-docker-restart.service:"
+    echo "  Enter or n skips; y runs sudo systemctl start … (password prompt if needed). ⚠ container restart."
+    echo "  See systemd/README.md."
     echo ""
 }
 
@@ -4348,15 +4349,16 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
         fi
         local _rs
         echo ""
-        print_warning "This runs: systemctl start mpc-auth-docker-restart.service → docker restart of the mpc-auth container."
-        read -r -p "Run mpc-auth-docker-restart.service now? [y/N]: " _rs < /dev/tty || true
+        print_warning "This runs: sudo systemctl start mpc-auth-docker-restart.service → docker restart of the mpc-auth container."
+        print_info "You can skip with Enter or n; answering y prompts for sudo (if needed)."
+        read -r -p "Start mpc-auth-docker-restart.service now? [y/N — Enter skips]: " _rs < /dev/tty || true
         case "${_rs:-}" in
             [yY])
                 # shellcheck disable=SC2024
                 if sudo -n systemctl start mpc-auth-docker-restart.service 2>/dev/null || sudo systemctl start mpc-auth-docker-restart.service; then
                     print_success "Started mpc-auth-docker-restart.service (container restart)."
                 else
-                    print_warning "Could not start mpc-auth-docker-restart.service (need sudo?)."
+                    print_warning "Could not start mpc-auth-docker-restart.service (sudo failed or denied?)."
                 fi
                 ;;
             *)
@@ -4369,6 +4371,8 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
         print_step "Installing mpc-auth Docker systemd helpers (PROCESS_CONFIG_INSTALL_SYSTEMD / --install-mpc-auth-systemd)"
         if ! _run_mpc_auth_systemd_install; then
             print_info "See: ${sd_root}/README.md"
+            _maybe_prompt_restart_mpc_auth_container
+            print_info "Docs: systemd/README.md — maintenance API: GET /maintenance/restartGate"
             return 0
         fi
         _maybe_prompt_restart_mpc_auth_container
@@ -4391,28 +4395,25 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
         read -r -p "Re-copy unit files + scripts from this repo (--no-env keeps /etc/default/mpc-auth-docker) and run systemd daemon-reload? [y/N]: " _ans < /dev/tty || true
         case "${_ans:-}" in
             [yY])
-                if _run_mpc_auth_systemd_install --no-env; then
-                    _maybe_prompt_restart_mpc_auth_container
-                fi
+                _run_mpc_auth_systemd_install --no-env || print_info "Skipped re-sync after installer issue. To update manually: sudo bash ${ins_script} --no-env"
                 ;;
             *)
                 print_info "Skipped re-sync. To update manually: sudo bash ${ins_script} --no-env"
-                _maybe_prompt_restart_mpc_auth_container
                 ;;
         esac
     else
         read -r -p "Install mpc-auth systemd helpers (mpc-auth-docker-restart, mpc-auth-docker-update@…; requires sudo)? [y/N]: " _ans < /dev/tty || true
         case "${_ans:-}" in
             [yY])
-                if _run_mpc_auth_systemd_install; then
-                    _maybe_prompt_restart_mpc_auth_container
-                fi
+                _run_mpc_auth_systemd_install || print_info "Install did not finish. Later: sudo bash ${ins_script}"
                 ;;
             *)
                 print_info "Skipped. Later: sudo bash ${ins_script}"
                 ;;
         esac
     fi
+    # Always offer restart when units exist (separate sudo from installer/re-sync; Enter skips).
+    _maybe_prompt_restart_mpc_auth_container
     echo ""
 }
 
