@@ -3949,7 +3949,7 @@ show_process_config_help() {
     echo "  --force-browser-https-certs     Allow regenerating webTLS/config/certs/browser.* when SAN/IP mismatches (default: leave existing files)"
     echo "  --enable-loopback-http          Enable SSH-tunnel loopback read HTTP (configs.yaml + docker-compose; non-interactive)"
     echo "  --disable-loopback-http         Disable loopback read HTTP (non-interactive)"
-    echo "  --no-systemd                    Skip optional mpc-auth Docker systemd installer prompts at end (see mpc-config/systemd/README.md)."
+    echo "  --no-systemd                    Skip optional mpc-auth Docker systemd installer prompts (after firewall; before Relayer check — see mpc-config/systemd/README.md)."
     echo "  --install-mpc-auth-systemd      Non-interactive: sudo-run systemd/install-mpc-auth-docker-systemd.sh (requires sudo; may prompt restart)."
     echo "  --help | -h | -help | help   Show this message (arguments above + relay/client behavior below)"
     echo ""
@@ -3959,6 +3959,8 @@ show_process_config_help() {
     echo "  UFW_OPEN_MANAGEMENT_PORT=1 — add ufw allow for ManagementAPIsPort (default: management port not opened in UFW)."
     echo "  PROCESS_CONFIG_SKIP_SYSTEMD=1 — skip optional mpc-auth systemd helper prompts."
     echo "  PROCESS_CONFIG_INSTALL_SYSTEMD=1 — same as --install-mpc-auth-systemd (non-interactive install)."
+    echo "  MPC_CONFIG_ROOT=/path/to/mpc-config — locate systemd/install-mpc-auth-docker-systemd.sh when the script runs"
+    echo "    from mpc-auth (or any tree that does not include mpc-config/systemd next to repo root)."
     echo ""
     echo "This script validates configuration and generates certificates."
     echo ""
@@ -4006,7 +4008,7 @@ show_process_config_help() {
     echo "  If UFW is inactive, you are prompted (via /dev/tty) to run sudo ufw enable, or enable manually."
     echo "  Use --no-firewall to skip (not recommended for production / financial nodes)."
     echo ""
-    echo "Optional mpc-auth Docker systemd helpers (Linux + systemd, end of run):"
+    echo "Optional mpc-auth Docker systemd helpers (Linux + systemd; after firewall, before Relayer API validation):"
     echo "  Prompts install or re-sync of mpc-config/systemd/ (daemon-reload) with [y/N] defaults No;"
     echo "  when mpc-auth units exist on the host, separately prompts to start mpc-auth-docker-restart.service:"
     echo "  Enter or n skips; y runs sudo systemctl start … (password prompt if needed). ⚠ container restart."
@@ -4284,14 +4286,34 @@ apply_process_config_firewall() {
     fi
 }
 
+# Locate systemd/install-mpc-auth-docker-systemd.sh: same repo, sibling mpc-config, or MPC_CONFIG_ROOT (see process_config --help).
+_process_config_resolve_mpc_auth_systemd_dir() {
+    local cand rp
+    if [ -n "${MPC_CONFIG_ROOT:-}" ]; then
+        cand="${MPC_CONFIG_ROOT%/}/systemd"
+        if [ -f "${cand}/install-mpc-auth-docker-systemd.sh" ]; then
+            rp=$(cd "${cand}" && pwd)
+            printf '%s\n' "$rp"
+            return 0
+        fi
+        print_warning "MPC_CONFIG_ROOT set but missing ${cand}/install-mpc-auth-docker-systemd.sh — searching default paths."
+    fi
+    for cand in "${REPO_ROOT}/systemd" "${REPO_ROOT}/../mpc-config/systemd"; do
+        [ -z "$cand" ] && continue
+        [ -f "${cand}/install-mpc-auth-docker-systemd.sh" ] || continue
+        rp=$(cd "${cand}" && pwd)
+        printf '%s\n' "$rp"
+        return 0
+    done
+    return 1
+}
+
 # Optional mpc-auth Docker systemd units (mpc-config/systemd/). See systemd/README.md.
 # Respects PROCESS_CONFIG_SKIP_SYSTEMD=1, PROCESS_CONFIG_INSTALL_SYSTEMD=1 (non-interactive install).
 _process_config_prompt_mpc_auth_systemd_helpers() {
     local skip_from_cli="$1"
     local force_install_cli="$2"
     local sd_root ins_script
-    sd_root="${REPO_ROOT}/systemd"
-    ins_script="${sd_root}/install-mpc-auth-docker-systemd.sh"
 
     case "${PROCESS_CONFIG_SKIP_SYSTEMD:-}" in
         1|true|TRUE|yes|YES) return 0 ;;
@@ -4300,9 +4322,14 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
         return 0
     fi
 
-    if [ ! -f "$ins_script" ]; then
-        print_warning "mpc-auth systemd installer not found (expected ${ins_script}) — skipping."
+    if ! sd_root="$(_process_config_resolve_mpc_auth_systemd_dir)"; then
+        print_warning "mpc-auth systemd installer not found (checked ${REPO_ROOT}/systemd, ${REPO_ROOT}/../mpc-config/systemd, \$MPC_CONFIG_ROOT/systemd) — skipping."
+        print_info "Clone mpc-config next to this repo or set MPC_CONFIG_ROOT. See mpc-config/systemd/README.md"
         return 0
+    fi
+    ins_script="${sd_root}/install-mpc-auth-docker-systemd.sh"
+    if [ ! -f "${REPO_ROOT}/systemd/install-mpc-auth-docker-systemd.sh" ]; then
+        print_info "Using systemd helper bundle: ${sd_root}"
     fi
     if ! command -v systemctl >/dev/null 2>&1; then
         print_info "systemctl not available — skipping optional mpc-auth systemd helpers."
@@ -4320,6 +4347,24 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
     case "${PROCESS_CONFIG_INSTALL_SYSTEMD:-}" in
         1|true|TRUE|yes|YES) force_install=true ;;
     esac
+
+    local __mpc_auth_line=""
+
+    _mpc_auth_can_prompt_interactive() {
+        { [ -r /dev/tty ] && [ -w /dev/tty ]; } || [ -t 0 ]
+    }
+
+    _read_interactive_systemd() {
+        local prompt="$1"
+        __mpc_auth_line=""
+        if { [ -r /dev/tty ] && [ -w /dev/tty ]; }; then
+            IFS= read -r -p "$prompt" __mpc_auth_line </dev/tty || true
+        elif [ -t 0 ]; then
+            IFS= read -r -p "$prompt" __mpc_auth_line || true
+        else
+            return 1
+        fi
+    }
 
     _mpc_auth_units_installed_on_host() {
         [ -f /etc/systemd/system/mpc-auth-docker-restart.service ] \
@@ -4344,14 +4389,15 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
         if ! _mpc_auth_units_installed_on_host; then
             return 0
         fi
-        if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+        if ! _mpc_auth_can_prompt_interactive; then
             return 0
         fi
         local _rs
         echo ""
         print_warning "This runs: sudo systemctl start mpc-auth-docker-restart.service → docker restart of the mpc-auth container."
         print_info "You can skip with Enter or n; answering y prompts for sudo (if needed)."
-        read -r -p "Start mpc-auth-docker-restart.service now? [y/N — Enter skips]: " _rs < /dev/tty || true
+        _read_interactive_systemd "Start mpc-auth-docker-restart.service now? [y/N — Enter skips]: " || true
+        _rs="${__mpc_auth_line}"
         case "${_rs:-}" in
             [yY])
                 # shellcheck disable=SC2024
@@ -4380,8 +4426,9 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
         return 0
     fi
 
-    if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
-        print_info "No /dev/tty — skipping mpc-auth systemd prompts. Install manually: sudo bash ${sd_root}/install-mpc-auth-docker-systemd.sh — or PROCESS_CONFIG_INSTALL_SYSTEMD=1 $0 ..."
+    if ! _mpc_auth_can_prompt_interactive; then
+        print_info "No interactive terminal (/dev/tty or stdin tty) — skipping mpc-auth systemd prompts. Install manually: sudo bash ${ins_script}"
+        print_info "Or set MPC_CONFIG_ROOT if the installer lives in another mpc-config clone."
         print_info "Docs: systemd/README.md"
         return 0
     fi
@@ -4392,7 +4439,8 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
     local _ans
     if _mpc_auth_units_installed_on_host; then
         print_info "mpc-auth systemd units are already installed under /etc/systemd/system/."
-        read -r -p "Re-copy unit files + scripts from this repo (--no-env keeps /etc/default/mpc-auth-docker) and run systemd daemon-reload? [y/N]: " _ans < /dev/tty || true
+        _read_interactive_systemd "Re-copy unit files + scripts from this repo (--no-env keeps /etc/default/mpc-auth-docker) and run systemd daemon-reload? [y/N]: " || true
+        _ans="${__mpc_auth_line}"
         case "${_ans:-}" in
             [yY])
                 _run_mpc_auth_systemd_install --no-env || print_info "Skipped re-sync after installer issue. To update manually: sudo bash ${ins_script} --no-env"
@@ -4402,7 +4450,8 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
                 ;;
         esac
     else
-        read -r -p "Install mpc-auth systemd helpers (mpc-auth-docker-restart, mpc-auth-docker-update@…; requires sudo)? [y/N]: " _ans < /dev/tty || true
+        _read_interactive_systemd "Install mpc-auth systemd helpers (mpc-auth-docker-restart, mpc-auth-docker-update@…; requires sudo)? [y/N]: " || true
+        _ans="${__mpc_auth_line}"
         case "${_ans:-}" in
             [yY])
                 _run_mpc_auth_systemd_install || print_info "Install did not finish. Later: sudo bash ${ins_script}"
@@ -4540,7 +4589,11 @@ main() {
 
     # Host firewall must run before Relayer validation — if validation exits 1, we still showed UFW status + enable prompt.
     apply_process_config_firewall "$CONFIG_FILE" "$SKIP_FIREWALL" "$IS_RELAY_NODE"
-    
+
+    # Optional mpc-auth Docker systemd installs/restarts (orthogonal to Relayer connectivity). Runs *before*
+    # validate_relayer_api_connection so Relayer/network failures cannot skip these prompts entirely.
+    _process_config_prompt_mpc_auth_systemd_helpers "$SKIP_SYSTEMD" "$INSTALL_MPC_AUTH_SYSTEMD"
+
     # Validate Relayer API connection (MANDATORY for relay before certificate generation; may exit 1 on failure)
     validate_relayer_api_connection "$CONFIG_FILE"
     
@@ -4828,8 +4881,6 @@ main() {
         print_info "Replace 'relay-node-user' with the SSH username on the relay node."
         echo ""
     fi
-
-    _process_config_prompt_mpc_auth_systemd_helpers "$SKIP_SYSTEMD" "$INSTALL_MPC_AUTH_SYSTEMD"
 }
 
 # Run main function (pass through CLI arguments)
