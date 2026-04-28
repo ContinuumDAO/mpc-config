@@ -10,6 +10,6 @@ if [[ -r /etc/default/mpc-auth-docker ]]; then
 	. /etc/default/mpc-auth-docker
 fi
 
-CONTAINER="${MPC_AUTH_CONTAINER_NAME:-mpc-auth}"
+CONTAINER="${MPC_AUTH_CONTAINER_NAME:-mpc-config_app_1}"
 
 exec docker restart "$CONTAINER"

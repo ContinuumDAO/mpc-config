@@ -4404,7 +4404,19 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
                 if sudo -n systemctl start mpc-auth-docker-restart.service 2>/dev/null || sudo systemctl start mpc-auth-docker-restart.service; then
                     print_success "Started mpc-auth-docker-restart.service (container restart)."
                 else
-                    print_warning "Could not start mpc-auth-docker-restart.service (sudo failed or denied?)."
+                    print_warning "mpc-auth-docker-restart.service did not succeed: systemd ran the unit, but the restart script exited with an error (this is usually not a sudo/password issue)."
+                    print_info "Common causes: no container matching MPC_AUTH_CONTAINER_NAME in /etc/default/mpc-auth-docker (default for this repo: mpc-config_app_1 from docker compose NAMES), Docker not running, or docker.sock permissions."
+                    print_info "Check: sudo systemctl status mpc-auth-docker-restart.service"
+                    print_info "Logs:  sudo journalctl -xeu mpc-auth-docker-restart.service"
+                    if command -v journalctl >/dev/null 2>&1; then
+                        local _jl=""
+                        _jl=$(sudo journalctl -u mpc-auth-docker-restart.service -n 15 --no-pager 2>/dev/null || true)
+                        if [ -n "${_jl}" ]; then
+                            echo ""
+                            print_info "Last journal lines:"
+                            printf '%s\n' "$_jl"
+                        fi
+                    fi
                 fi
                 ;;
             *)
