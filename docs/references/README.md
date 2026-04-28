@@ -26,4 +26,4 @@ Small CLIs live next to **`scripts/`** and **`recipes/`** at the **mpc-config** 
 
 | File | Description |
 |------|-------------|
-| **`./swagger.yaml`** | OpenAPI/Swagger schema for the management API. |
+| **`./swagger.yaml`** · **`./swagger.json`** | OpenAPI/Swagger schema for the management API. **Canonical copy lives in the mpc-auth repo:** run `python3 scripts/generate_management_swagger.py` there, then run **`./scripts/sync_swagger_from_mpc_auth.sh`** from the mpc-config repo root (or copy **`swagger.json`** / **`swagger.yaml`** into **`docs/references/`** and **`docs/`** yourself). |

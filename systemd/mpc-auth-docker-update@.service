@@ -1,0 +1,12 @@
+[Unit]
+Description=Stop mpc-auth, remove image, pull %i tag (mpc-auth-docker-update.sh)
+After=docker.socket network-online.target
+Wants=docker.socket
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/mpc-auth-docker
+# Adjust path after copying scripts (see systemd/README.md). %%i passes the instance (tag), e.g. latest or v1.0.
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-docker-update.sh %i
+
+RemainAfterExit=no

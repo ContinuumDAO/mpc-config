@@ -1763,7 +1763,7 @@
         },
         "/triggerSignRequestById": {
             "post": {
-                "description": "MPC node management API — see docs/API_IMPLEMENTATION.md (POST /triggerSignRequestById).",
+                "description": "Multi-agree: after threshold+1 agreements, triggers SIGNREQUESTCONFIRMSUCCESS and sign workers. Batch-only optional fields **messageHashes** / **messageRawBatch** (length N) update per-leg digests on the originator (fee bump); use empty **messageHashes[i]** to skip that leg. Canonical prose: **mpc-config** `docs/references/API_IMPLEMENTATION.md` § POST /triggerSignRequestById.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1788,8 +1788,7 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                            "$ref": "#/definitions/node.TriggerSignRequestByIdPost"
                         }
                     }
                 ]
@@ -2414,6 +2413,222 @@
                 ]
             }
         },
+        "/getMSQTTKey": {
+            "get": {
+                "description": "MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getMSQTTKey).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "MQTT broker CA (local filesystem)"
+                ],
+                "summary": "GET getMSQTTKey",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/postMSQTTKey": {
+            "post": {
+                "description": "MPC node management API — see docs/API_IMPLEMENTATION.md (POST /postMSQTTKey).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "MQTT broker CA (local filesystem)"
+                ],
+                "summary": "POST postMSQTTKey",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                        }
+                    }
+                ]
+            }
+        },
+        "/configUpdatePlan": {
+            "post": {
+                "description": "MPC node management API — see docs/API_IMPLEMENTATION.md (POST /configUpdatePlan).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "configs.yaml (local)"
+                ],
+                "summary": "POST configUpdatePlan",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                        }
+                    }
+                ]
+            }
+        },
+        "/configUpdateImplement": {
+            "post": {
+                "description": "MPC node management API — see docs/API_IMPLEMENTATION.md (POST /configUpdateImplement).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "configs.yaml (local)"
+                ],
+                "summary": "POST configUpdateImplement",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                        }
+                    }
+                ]
+            }
+        },
+        "/maintenance/requestRestartPrep": {
+            "post": {
+                "description": "MPC node management API — see docs/API_IMPLEMENTATION.md (POST /maintenance/requestRestartPrep).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "POST maintenance requestRestartPrep",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                        }
+                    }
+                ]
+            }
+        },
+        "/maintenance/restartGate": {
+            "get": {
+                "description": "MPC node management API — see docs/API_IMPLEMENTATION.md (GET /maintenance/restartGate).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "GET maintenance restartGate",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/updateMpcAuth": {
+            "post": {
+                "description": "MPC node management API — see docs/API_IMPLEMENTATION.md (POST /updateMpcAuth).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "POST updateMpcAuth",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                        }
+                    }
+                ]
+            }
+        },
         "/sendMessage": {
             "post": {
                 "description": "MPC node management API — see docs/API_IMPLEMENTATION.md (POST /sendMessage).",
@@ -2982,6 +3197,53 @@
                 "extraJSON": {
                     "description": "Arbitrary JSON string for node context (stored and returned in listSignRequests / getSignRequestById)",
                     "type": "string"
+                }
+            }
+        },
+        "node.TriggerSignRequestByIdPost": {
+            "type": "object",
+            "description": "POST /triggerSignRequestById. Full semantics: mpc-config docs/references/API_IMPLEMENTATION.md (POST /triggerSignRequestById).",
+            "properties": {
+                "requestId": {
+                    "type": "string",
+                    "description": "Sign request id"
+                },
+                "nonce": {
+                    "type": "integer",
+                    "description": "Management key nonce (see GET /getNodeMgtKeyNonce)"
+                },
+                "sig": {
+                    "type": "string",
+                    "description": "Management signature over the JSON body with sig set to empty"
+                },
+                "txParams": {
+                    "type": "object",
+                    "description": "Single-tx execute params, or batch index 0 when txParamsBatch omitted (see API_IMPLEMENTATION.md)"
+                },
+                "txParamsBatch": {
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    },
+                    "description": "Batch only: length N; merges per index with proposal_tx_params into execute_tx_params (mutually exclusive with txParams)"
+                },
+                "messageHash": {
+                    "type": "string",
+                    "description": "Single-tx: unsigned EVM tx signing hash (hex); local only, not propagated"
+                },
+                "messageHashes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Batch only: optional length-N digest list; replaces agreed hashes on originator; empty string at index i skips that leg; at least one non-empty required"
+                },
+                "messageRawBatch": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Batch only: optional; length must match messageHashes when both sent"
                 }
             }
         },

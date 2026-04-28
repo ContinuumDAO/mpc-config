@@ -91,6 +91,9 @@ BrokerQos: 1
 # Access API documentation at: http://localhost:8080/swagger/index.html
 ManagementAPIsPort: 8080
 
+# Optional: Docker Hub repository path (no tag) for POST /updateMpcAuth manifest digest (default: continuumdao/mpc-auth).
+# MpcAuthDockerRepo: continuumdao/mpc-auth
+
 # Optional: single CORS allow list for management HTTP only (same port as ManagementAPIsPort). Empty = permissive default.
 # Separate from BrowserHTTPS.AllowedOrigins (8443). Relayer/scanner/agents do not use CORS.
 # Example:

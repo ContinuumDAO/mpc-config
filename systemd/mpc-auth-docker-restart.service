@@ -1,0 +1,13 @@
+[Unit]
+Description=Restart mpc-auth Docker container (mpc-auth-docker.env)
+After=docker.socket network-online.target
+Wants=docker.socket
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/mpc-auth-docker
+# Adjust path after copying scripts (see systemd/README.md)
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-docker-restart.sh
+
+# Docker socket typically requires root; use docker group delegation if configured on your host.
+RemainAfterExit=no

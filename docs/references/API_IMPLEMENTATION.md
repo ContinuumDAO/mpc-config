@@ -119,6 +119,12 @@ KeyGen messaging is documented in `./API_KEYGEN_MESSAGING.md`. Response format a
 - `POST /deleteMessage` - Delete a message and all its replies (originator only) (mgt key required)
 - `POST /multiDeleteMessages` - Delete multiple messages (and their reply trees); originator-only per message; mgt key required
 
+### Maintenance (restart quiescence)
+Use these on the **same** `ManagementAPIsPort` listener as the rest of the management API (SSH tunnel forwards that port; **no separate listener**). `POST /maintenance/requestRestartPrep` requires a normal **management key** signature (`VerifyMgtKeySig`, same pattern as `POST /configUpdatePlan`). **`GET /maintenance/restartGate`** is read-only and exempt from JWT on the browser HTTPS / loopback listeners (for polling from scripts). MQTT-driven protocol continuation is **not** covered by the HTTP in-flight counter — see [Restart quiescence (maintenance)](#restart-quiescence-maintenance-detail).
+- `POST /maintenance/requestRestartPrep` — enter draining mode so new tracked mutations return `503` until `GET /maintenance/restartGate` reports `readyForProcessExit` (then restart the process from the host/docker).
+- `GET /maintenance/restartGate` — returns `draining`, `inFlight`, `readyForProcessExit`, and a hint list of tracked POST paths.
+- `POST /updateMpcAuth` — while **draining**, signed request with target **tag** (e.g. `v1.0` or `latest`); node queries **Docker Hub** for `registryDigest` (`sha256:…`) for `configs.yaml` **`MpcAuthDockerRepo`** (default `continuumdao/mpc-auth`). Response includes **`previousVersion`** / **`previousVersionDate`** (same as **`GET /version`** for the running binary) and **`newVersionRequested`** (= target image **tag**). Use **`registryDigest`** as **`MPC_AUTH_EXPECTED_DIGEST`** on the host before **`mpc-auth-docker-update.sh`** / systemd — the script verifies **`docker pull`** matches the digest before **`MPC_AUTH_POST_UPDATE_CMD`** (`docker compose up -d`).
+
 ### Pre-Signing
 - [`POST /presignRequest`](#post-presignrequest) - Create presign request (requires mgt key)
 - [`GET /listPresignRequests`](#get-listpresignrequests) - List presign requests
@@ -154,6 +160,21 @@ KeyGen messaging is documented in `./API_KEYGEN_MESSAGING.md`. Response format a
 - `POST /newSubGroupRequestAgree` - Agree to sub-group request (deprecated)
 
 ---
+
+<a id="restart-quiescence-maintenance-detail"></a>
+## Restart quiescence (maintenance)
+
+**Purpose:** Operators can request **draining** before restarting the mpc-auth container so that **HTTP-coordinated** MPC, signing, messaging, and config-update mutations are not started mid-flight. The node does **not** execute `docker compose restart` itself — you stop or restart the process from the host (or orchestration) once the gate says it is safe.
+
+**Same port as management API:** Maintenance routes are registered on **`Gin`** for **`ManagementAPIsPort`** (`configs.yaml` **`ManagementAPIsPort`**). An SSH tunnel forwards that port (e.g. `ssh -L 8080:127.0.0.1:8080 ...`). You do **not** need a second port or a second process unless you choose to split listeners for policy reasons (this implementation does not add one).
+
+**Signing:** `POST /maintenance/requestRestartPrep` accepts JSON `{"nonce": <int>, "sig": "<hex>"}`. The server verifies **`VerifyMgtKeySig`** over canonical JSON with **`sig` emptied** (same semantics as other management-signed POSTs). Verification uses **`configs.yaml` on disk** when present for **`NodeMgtKey`** and **`IgnoreMgtKeySigCheck`**, matching `POST /configUpdatePlan`.
+
+**Flow:** (1) Sign and `POST /maintenance/requestRestartPrep`. (2) Poll `GET /maintenance/restartGate` until **`readyForProcessExit`** is `true` (`draining` is `true` and **`inFlight`** is `0`). (3) Restart the container or process on the host. Tracked paths include group/subgroup agree flows, keyGen, presign, sign/multiSign and related agrees/triggers/status/shelve, **KeyGen messaging** (`sendMessage`, read/delete variants), and **`configUpdatePlan` / `configUpdateImplement`**.
+
+**MQTT caveat:** In-flight work that continues only over **MQTT** (without a matching management POST on this node) is **not** included in the HTTP ref-count. Pause clients or wait briefly if needed.
+
+**Docker image upgrade (tag digest):** `POST /updateMpcAuth` (management-signed JSON `{ nonce, sig, tag }`) may be called **only while draining** (`requestRestartPrep` already applied). The node resolves the image via **Docker Hub** (`registry-1.docker.io`) and returns **`registryDigest`** aligned with **`MpcAuthDockerRepo`** (optional in `configs.yaml`, default **`continuumdao/mpc-auth`**), plus **`previousVersion`** / **`previousVersionDate`** (matches **`GET /version`** for the **current** process) and **`newVersionRequested`** (= requested **image tag**; the app build inside the pulled image is known only after deploy). On the host, set **`MPC_AUTH_EXPECTED_DIGEST`** from the response or **`expectedEnvLine`**, then run **`systemd/mpc-auth-docker-update.sh`** (or `systemctl start …@tag`) so **`docker pull`** is checked against **`RepoDigests`** before **`docker compose up -d`**. The running container image is not changed by the API itself.
 
 <a id="endpoint-categories"></a>
 ## Endpoint Categories
@@ -509,6 +530,10 @@ Verify-only endpoint for Ed25519 management key ownership. Accepts `Nonce` and `
 Adds a new Ed25519 public key to the allowed set for management API auth. The request **must be signed with an existing Ed25519 management key** (config `PublicMgtKey` or a key previously added). Only a permitted machine can add another key. Use the first `PublicMgtKey` from config to add the next key.
 
 **Request body:** `newPublicKey` (64 hex), `nonce` (current nonce for the signer key from `GET /getPublicMgtKeyNonce` or `GET /getPublicMgtKeyNonce?publicKey=<signer_key>`), `sig` (Ed25519 signature, 128 hex, over the canonical JSON of the request body with `sig` set to empty string).
+
+**Response (success):** `{ "code": 0, "error": "", "data": null }` — same [`APIResponse`](#response-format) envelope as other management endpoints. There is no extra payload; treat `code === 0` as confirmation. To confirm the new key appears in the allow-list, call [`GET /getAllowedEd25519MgtKeys`](#get-getalloweded25519mgtkeys) or [`GET /getPublicMgtKey`](#get-getpublicmgtkey).
+
+**Response (failure):** `code` non-zero and `error` describes the reason (e.g. invalid or missing signature, nonce mismatch or already used, malformed or duplicate `newPublicKey`, signer not in the allowed set, or no Ed25519 management key configured). HTTP status may be `200` with `code`≠`0`, or `400` / `401` per server; always read `code` and `error` from the JSON body.
 
 **Example flow:** 1) Set `PublicMgtKey` in config (bootstrap key). 2) Get nonce: `GET /getPublicMgtKeyNonce`. 3) Build body `{"newPublicKey":"<64 hex>","nonce":<n>,"sig":""}`, sign the JSON string with your Ed25519 private key, set `sig` to the signature. 4) `POST /addManagementKey` with that body. The new key can then sign management requests and add further keys.
 
@@ -2691,9 +2716,9 @@ Gets a specific signing request by ID. Returns the same structure as each item i
   - **Single-tx:** one JSON **object** (`nonce`, `gasLimit`, `txType`, EIP-1559 or legacy fee fields).
   - **Batch** (multiple `messageHashes`): JSON **array** of **N** objects — one per batch index — in order. **Precedence per slot:** if the originator ran **`POST /triggerSignRequestById`** on **this** node, the merged **execute** snapshot (**`execute_tx_params`**) is returned when present; otherwise **`proposal_tx_params`** for that index; if neither exists for that index, the slot may be `null` or missing depending on stored data.
 
-Without **`tx_params=1`**, full sign request JSON includes propagated **`proposal_tx_params`** (and on the originator after trigger, local **`execute_tx_params`** / **`TxParams`** for execute snapshots — not propagated to peers).
+Without **`tx_params=1`**, full sign request JSON includes propagated **`proposal_tx_params`** (and on the originator after trigger, local **`execute_tx_params`** / **`TxParams`** for execute snapshots — not propagated to peers). On the **originator**, **`messageHashes`** / **`messageRawBatch`** on the sign request may be **updated** when trigger included optional **`messageHashes`** / **`messageRawBatch`** (fee bump or dropping a leg — see [triggerSignRequestById](#post-triggersignrequestbyid)); other nodes’ **`SIGNREQUEST`** documents may still show **proposal** digests — use **`GET /getSignResultById`** for the **SignResult** snapshot all signers used after confirm.
 
-**EVM Execute:** Callers should prefer **`?tx_params=1`** so automation gets the same nonce/gas/fees used for **`MessageHash`**. If **`data`** is **`null`**, proposal fields were not sent at **`multiSignRequest`** and trigger did not persist a merged snapshot — use **`--sign-request-file`** / compose output or trigger with **`txParams`** / **`txParamsBatch`** as documented under [triggerSignRequestById](#post-triggersignrequestbyid).
+**EVM Execute:** Callers should prefer **`?tx_params=1`** so automation gets the same nonce/gas/fees used for the signing digest (**`MessageHash`** or batch **`messageHashes`**). If **`data`** is **`null`**, proposal fields were not sent at **`multiSignRequest`** and trigger did not persist a merged snapshot — use **`--sign-request-file`** / compose output or trigger with **`txParams`** / **`txParamsBatch`** as documented under [triggerSignRequestById](#post-triggersignrequestbyid).
 
 **Example:**
 ```bash
@@ -2928,7 +2953,9 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequestsReady?pagenum=0&pagesize=10
 - **`txParams`**: one object — used for **single-tx**, or for **batch** merged **only at index 0** with **`proposal_tx_params[0]`** unless **`txParamsBatch`** is set (see below).
 - **`txParamsBatch`** (optional, **batch only**): array of length **N** = **`len(messageHashes)`**; each element merges with **`proposal_tx_params[i]`** into **`execute_tx_params[i]`** on this node. Do not send both **`txParams`** and **`txParamsBatch`** in the same request.
 
-**Automation note (this repo):** **`executeSignResult.py`**, **`mpc_event_listener.py`**, and the **continuumdao-node-app** agent guides assume **`POST /multiSignRequest`** carries **unsigned EVM transaction** material (**`msgRaw`** / **`messageRawBatch`** + **`txParams`** alignment). **`POST /triggerSignRequestById`** therefore includes **`txParams`** / **`txParamsBatch`** and **`messageHash`** as below. mpc-auth may still accept a **minimal** trigger body (management **`requestId`**, **`nonce`**, **`sig`** only) for **legacy** proposals that are not standard unsigned txs; that path is **not** used by the supported Python automation.
+**Batch digests (fee bump / raw refresh / skip a leg):** Optional **`messageHashes`** and **`messageRawBatch`** (each length **N**, same as the batch agreed at **`multiSignRequest`**) update the per-leg signing digests and optional raw tx bytes on the **originator** only. **`SIGNREQUESTCONFIRMSUCCESS`** carries the new list so all participating nodes run MPC against the same hashes. Use this when EIP-1559 / legacy fee fields change the unsigned tx (new **keccak** per leg). **Skipping a leg:** set **`messageHashes[i]`** to **`""`** (empty string); that index gets **no** signature slot (at least one index must remain non-empty). **`messageRawBatch`** must be sent with the **same length** as **`messageHashes`** when both are present. **`messageHashes`** / **`messageRawBatch`** are invalid on **single-tx** triggers.
+
+**Automation note (this repo):** **`executeSignResult.py`**, **`mpc_event_listener.py`**, and the **continuumdao-node-app** agent guides assume **`POST /multiSignRequest`** carries **unsigned EVM transaction** material (**`msgRaw`** / **`messageRawBatch`** + **`txParams`** alignment). **`POST /triggerSignRequestById`** therefore includes **`txParams`** / **`txParamsBatch`** and **`messageHash`** (and for batch, optionally **`messageHashes`** / **`messageRawBatch`**) as below. mpc-auth may still accept a **minimal** trigger body (management **`requestId`**, **`nonce`**, **`sig`** only) for **legacy** proposals that are not standard unsigned txs; that path is **not** used by the supported Python automation.
 
 After trigger, **`GET /getSignRequestById?tx_params=1`** returns the **merged** execute snapshot(s) when present; if the client already sent full **`proposalTxParams`** at **`multiSignRequest`**, **`?tx_params=1`** can still return usable params **before** trigger (proposal only).
 
@@ -2947,7 +2974,9 @@ Minimal body above is structurally valid. **For supported automation,** add `mes
 - `nonce`, `sig`: Management key signature over the JSON body with `sig` set to empty (same as other mgt-key endpoints).
 - `txParams` (**EVM**): Object with `nonce` (number), `gasLimit` (string), `txType` (`"eip1559"` or `"legacy"`), and for EIP-1559: `maxFeePerGas`, `maxPriorityFeePerGas` (strings); for legacy: `gasPrice` (string). **Local only** (not propagated). Merged with **`proposal_tx_params[0]`** into the Execute snapshot (**`TxParams`** for single-tx; index **0** for batch when **`txParamsBatch`** is omitted). Returned via **`GET ...?tx_params=1`** (single object or array index 0) after merge.
 - `txParamsBatch` (optional, **EVM**, **batch**): Array of **N** objects (same shape as `txParams`); merges per index with **`proposal_tx_params`** into **`execute_tx_params`**. Mutually exclusive with **`txParams`**.
-- `messageHash` (optional, **EVM** single-tx when the preimage is an **unsigned transaction**): The **transaction signing hash** (hex, typically 64 hex chars without `0x`) for the unsigned RLP-style tx. The backend updates the sign request's **`MessageHash`** on **this node only** before starting the sign worker. Not propagated. For **batch**, per-index hashes are the **`messageHashes`** stored on the sign request (trigger does not replace the whole batch with one hash).
+- `messageHash` (optional, **EVM** single-tx when the preimage is an **unsigned transaction**): The **transaction signing hash** (hex, typically 64 hex chars without `0x`) for the unsigned RLP-style tx. The backend updates the sign request's **`MessageHash`** on **this node only** before starting the sign worker. Not propagated. For **batch**, do not use this field for per-leg hashes — use **`messageHashes`** instead.
+- `messageHashes` (optional, **batch only**): Array of length **N** = agreed batch size. Replaces the **`messageHashes`** on the originator’s sign request and is embedded in **`SIGNREQUESTCONFIRMSUCCESS`** so every node signs the same digests. Each element is hex (same rules as at **`multiSignRequest`**) or **`""`** to **skip** MPC for that index. At least one element must be non-empty.
+- `messageRawBatch` (optional, **batch only**): Array of length **N**; must match **`messageHashes`** length when both are sent. Updates stored per-leg raw material (e.g. serialized unsigned txs) on the originator. If you only send **`messageHashes`**, stale **`messageRawBatch`** may be cleared when its length no longer matches (backend behavior); prefer sending both when execution tooling needs updated raws.
 
 **Response (triggered):**
 ```json
@@ -2992,7 +3021,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/triggerSignRequestById \
 - For **`executed`**, at most one successful update applies unless the current status is **`failed`** (single tx retry).
 
 **Status values:**
-- **`executed`**: Success. **Single tx:** send `transactionHash`. **Batch:** send `batchTransactionHashes` (array length = batch size; one hash per broadcast tx in order). Do not send a redundant `transactionHash` for batch when all hashes are in `batchTransactionHashes`.
+- **`executed`**: Success. **Single tx:** send `transactionHash`. **Batch:** send `batchTransactionHashes` (array length = batch size; one hash per broadcast tx in order). For batch indices **skipped** at trigger (**`messageHashes[i]`** was empty — no signature), **`batchTransactionHashes[i]`** may be **`""`**; every **signed** leg must have a non-empty tx hash. Do not send a redundant `transactionHash` for batch when all hashes are in `batchTransactionHashes`.
 - **`failed`**: **Single tx:** broadcast failed (or not attempted); omit `transactionHash` and `batchTransactionHashes`. **Batch partial:** send `batchTransactionHashes` with only the hashes that were broadcast successfully before stopping (length ≤ batch size).
 - **`shelved`**: Will not broadcast. Set `shelved: true` (or omit; backend sets true). No `transactionHash` / `batchTransactionHashes`.
 
