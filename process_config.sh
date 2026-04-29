@@ -3585,12 +3585,11 @@ PYINF
     print_info "Plain HTTP on 127.0.0.1 only — same JWT routes as Browser HTTPS; browser uses http://127.0.0.1 after ssh -L."
     print_info "This updates configs.yaml and docker-compose.yml automatically (no manual editing)."
     local _blr
-    read -r -p "Enable loopback HTTP for this node? [y/N]: " _blr < /dev/tty || true
-    if [[ "${_blr:-}" =~ ^[Yy]$ ]]; then
-        BROWSER_LOOPBACK_READ_HTTP_ENABLED=1
-    else
-        BROWSER_LOOPBACK_READ_HTTP_ENABLED=0
-    fi
+    read -r -p "Enable loopback HTTP for this node? [Y/n]: " _blr < /dev/tty || true
+    case "${_blr:-}" in
+        [nN]*) BROWSER_LOOPBACK_READ_HTTP_ENABLED=0 ;;
+        *) BROWSER_LOOPBACK_READ_HTTP_ENABLED=1 ;;
+    esac
 }
 
 # Copy CA certificate to remote nodes
@@ -3986,7 +3985,7 @@ show_process_config_help() {
     echo "  - Validates database connectivity (if PreSigningVerification is configured)"
     echo "  - Generates MQTT (mosquitto) certificates"
     echo "  - Enables Browser HTTPS: TLS cert in webTLS/config/certs, configs.yaml BrowserHTTPS, Docker 8443"
-    echo "  - Prompts for SSH tunnel loopback HTTP (or use --enable-loopback-http / ENABLE_BROWSER_LOOPBACK_READ_HTTP); updates configs.yaml and docker-compose.yml"
+    echo "  - Prompts for SSH tunnel loopback HTTP [Y/n] interactive default: enable (or use --enable-loopback-http / ENABLE_BROWSER_LOOPBACK_READ_HTTP); updates configs.yaml and docker-compose.yml"
     echo "  - Does not copy CA to client nodes by default (use --copy-certs for automatic SSH copy)"
     echo ""
     echo "On CLIENT NODES:"
