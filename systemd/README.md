@@ -51,10 +51,10 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 3. If an old image ref was recorded, runs `docker rmi --force` on it (ignore failure if already gone).
 4. Runs `docker pull "${MPC_AUTH_IMAGE}:${TAG}"`.
 5. If **`MPC_AUTH_EXPECTED_DIGEST`** (or **second CLI argument**) is set, compares **`docker image inspect … RepoDigests`** to that **`sha256:`** value; on mismatch exits **1** — **compose is skipped**.
-6. Compose after pull (**digest must pass first**):
+6. **Compose image tag:** templates often use **`image: continuumdao/mpc-auth:latest`**. The script pulls **`${MPC_AUTH_IMAGE}:${TAG}`** (e.g. **`v1.1.1`**). Before **`compose up`**, it runs **`docker tag`** so **`${MPC_AUTH_IMAGE}:latest`** (or **`MPC_AUTH_COMPOSE_IMAGE_REF`**) points at the verified pull; otherwise **`up --force-recreate`** would still run the previous **`latest`** layers. Set **`MPC_AUTH_SKIP_RETAG_LATEST=1`** to skip.
+7. Compose after pull (**digest must pass first**):
    - If **`MPC_AUTH_POST_UPDATE_CMD`** is **non-blank**, runs it verbatim.
-   - If **unset/blank**, requires **`MPC_AUTH_COMPOSE_WORKDIR`**, then runs **`docker compose up -d --force-recreate &lt;service&gt;`** (or **`docker-compose`** v1 equivalent) after **`cd`**, so the service container is always recreated even when step 2 skipped stop/rm.
-7. **`MPC_AUTH_COMPOSE_WORKDIR`** (and legacy alias **`MPC_AUTH_COMPOSE_DIR`**) **must** be a non-empty absolute path to the compose project when **`MPC_AUTH_POST_UPDATE_CMD`** is unset; **`MPC_AUTH_COMPOSE_SERVICE`** defaults to **`app`**.
+   - If **unset/blank**, requires **`MPC_AUTH_COMPOSE_WORKDIR`**, then runs **`docker compose up -d --force-recreate &lt;service&gt;`** (or **`docker-compose`** v1 equivalent) after **`cd`**, so the service container is always recreated even when step 2 skipped stop/rm. **`MPC_AUTH_COMPOSE_SERVICE`** defaults to **`app`**.
 
 For production upgrades, call **`POST /updateMpcAuth`** (while draining) with the target tag, then apply the digest on the host using **one** of [Run](#run) (script with 2nd argument is enough—no `/etc/default` edit).
 

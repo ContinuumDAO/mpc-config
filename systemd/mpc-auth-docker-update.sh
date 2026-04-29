@@ -150,6 +150,16 @@ else
 	echo "WARNING: no EXPECTED_DIGEST/MPC_AUTH_EXPECTED_DIGEST — skipping digest check (set from POST /updateMpcAuth registryDigest before production use)."
 fi
 
+# mpc-config compose defaults to image: ${REPO}:latest. We pull and verify ${REPO}:${TAG} (e.g. v1.1.1);
+# `docker compose up` does not switch the service to that tag unless we align local tags.
+retag_target="$(mpc_auth_trim "${MPC_AUTH_COMPOSE_IMAGE_REF:-${REPO}:latest}")"
+if [[ -n "$retag_target" && "$NEW_REF" != "$retag_target" ]] && docker image inspect "$NEW_REF" &>/dev/null; then
+	if [[ "$(mpc_auth_trim "${MPC_AUTH_SKIP_RETAG_LATEST:-0}")" != "1" ]]; then
+		echo "Pointing $(printf %q "$retag_target") at verified pull $(printf %q "$NEW_REF") (so compose recreates with this image)."
+		docker tag "$NEW_REF" "$retag_target"
+	fi
+fi
+
 # After a pull, always recreate the service container. Without this, if stop/rm missed the live
 # container (wrong MPC_AUTH_CONTAINER_NAME), plain `up -d` can no-op and mpc-auth never restarts
 # (draining stays true in the old process).
