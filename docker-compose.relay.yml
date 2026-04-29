@@ -1,5 +1,4 @@
 # Relay node: runs MQTT broker (mosquitto). Use this on the first node in configs.yaml nodeAddresses.
-version: '3.8'
 services:
   mongodb:
     image: mongo:6.0
@@ -38,11 +37,11 @@ services:
   app:
     image: continuumdao/mpc-auth:latest
     restart: always
+    # Paths for pending-update.json must match the bind mount below (see systemd/README.md).
     environment:
-      - GOLOG_FILE=logs/MPCAuthCore.log
-      - GOLOG_OUTPUT=file
-      # mpc-auth writes pending-update.json here after POST /updateMpcAuth (path must match bind mount; see systemd/README.md).
-      - MPC_AUTH_DOCKER_PENDING_UPDATE_FILE=/var/lib/mpc-auth-docker/pending-update.json
+      GOLOG_FILE: logs/MPCAuthCore.log
+      GOLOG_OUTPUT: file
+      MPC_AUTH_DOCKER_PENDING_UPDATE_FILE: /var/lib/mpc-auth-docker/pending-update.json
     ports:
       - "127.0.0.1:8080:8080" # Management API — localhost only; SSH tunnel for admin
       - "18080:18080" # Public discovery (PublicDiscoveryPort; DAO app NODE_DISCOVERY_PORT)
