@@ -55,6 +55,8 @@ services:
       mosquitto:
         condition: service_started
     volumes:
+      # Writable host dir: mpc-auth may write pending-update.json after POST /updateMpcAuth for systemd automation (see systemd/README.md).
+      - /var/lib/mpc-auth-docker:/var/lib/mpc-auth-docker
       - ./configs.yaml:/app/configs.yaml:ro
       - ./data/app/logs:/app/logs
       - ./mosquitto/config:/mosquitto/config

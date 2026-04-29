@@ -1,0 +1,10 @@
+[Unit]
+Description=Apply mpc-auth image update when POST /updateMpcAuth drops pending-update.json (automated host pull)
+After=docker.socket network-online.target
+Requires=docker.socket
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-apply-pending-update.sh
+RemainAfterExit=no

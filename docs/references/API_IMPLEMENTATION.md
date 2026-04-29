@@ -123,7 +123,7 @@ KeyGen messaging is documented in `./API_KEYGEN_MESSAGING.md`. Response format a
 Use these on the **same** `ManagementAPIsPort` listener as the rest of the management API (SSH tunnel forwards that port; **no separate listener**). `POST /maintenance/requestRestartPrep` requires a normal **management key** signature (`VerifyMgtKeySig`, same pattern as `POST /configUpdatePlan`). **`GET /maintenance/restartGate`** is read-only and exempt from JWT on the browser HTTPS / loopback listeners (for polling from scripts). MQTT-driven protocol continuation is **not** covered by the HTTP in-flight counter — see [Restart quiescence (maintenance)](#restart-quiescence-maintenance-detail).
 - `POST /maintenance/requestRestartPrep` — enter draining mode so new tracked mutations return `503` until `GET /maintenance/restartGate` reports `readyForProcessExit` (then restart the process from the host/docker).
 - `GET /maintenance/restartGate` — returns `draining`, `inFlight`, `readyForProcessExit`, and a hint list of tracked POST paths.
-- `POST /updateMpcAuth` — while **draining**, signed request with target **tag** (e.g. `latest`, `v1.0`, or another published tag); node queries **Docker Hub** for `registryDigest` (`sha256:…`) for `configs.yaml` **`MpcAuthDockerRepo`** (default `continuumdao/mpc-auth`). Response includes **`previousVersion`** / **`previousVersionDate`** (same as **`GET /version`** for the running binary) and **`newVersionRequested`** (= target image **tag**). Use **`registryDigest`** as **`MPC_AUTH_EXPECTED_DIGEST`** on the host before **`mpc-auth-docker-update.sh`** / systemd — the script verifies **`docker pull`** matches the digest before **`MPC_AUTH_POST_UPDATE_CMD`** (`docker compose up -d`).
+- `POST /updateMpcAuth` — while **draining**, signed request with target **tag** (e.g. `latest`, `v1.1`, or another published tag); node queries **Docker Hub** for **`registryDigest`** (`sha256:…`) for **`MpcAuthDockerRepo`**. Response includes **`previousVersion`** / **`previousVersionDate`** and **`newVersionRequested`**. The API does **not** run Docker on the host; apply the digest with **`mpc-auth-docker-update.sh TAG digest`** (no `/etc/default` edit required for one shot)—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host) and **`systemd/README.md`**.
 
 ### Pre-Signing
 - [`POST /presignRequest`](#post-presignrequest) - Create presign request (requires mgt key)
@@ -174,7 +174,27 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 
 **MQTT caveat:** In-flight work that continues only over **MQTT** (without a matching management POST on this node) is **not** included in the HTTP ref-count. Pause clients or wait briefly if needed.
 
-**Docker image upgrade (tag digest):** `POST /updateMpcAuth` (management-signed JSON `{ nonce, sig, tag }`) may be called **only while draining** (`requestRestartPrep` already applied). The node resolves the image via **Docker Hub** (`registry-1.docker.io`) and returns **`registryDigest`** aligned with **`MpcAuthDockerRepo`** (optional in `configs.yaml`, default **`continuumdao/mpc-auth`**), plus **`previousVersion`** / **`previousVersionDate`** (matches **`GET /version`** for the **current** process) and **`newVersionRequested`** (= requested **image tag**; the app build inside the pulled image is known only after deploy). On the host, set **`MPC_AUTH_EXPECTED_DIGEST`** from the response or **`expectedEnvLine`**, then run **`systemd/mpc-auth-docker-update.sh`** (or `systemctl start …@tag`) so **`docker pull`** is checked against **`RepoDigests`** before **`docker compose up -d`**. The running container image is not changed by the API itself.
+**Docker image upgrade (tag digest):** `POST /updateMpcAuth` (management-signed JSON `{ nonce, sig, tag }`) may be called **only while draining** (`requestRestartPrep` already applied). The node resolves the image via **Docker Hub** (`registry-1.docker.io`) and returns **`registryDigest`** aligned with **`MpcAuthDockerRepo`** (optional in `configs.yaml`, default **`continuumdao/mpc-auth`**), plus **`previousVersion`** / **`previousVersionDate`** (matches **`GET /version`** for the **current** process) and **`newVersionRequested`** (= requested **image tag**). The running container image is **not** changed by the API itself—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host).
+
+<a id="post-updatempc-auth-host"></a>
+##### Host apply (digest) — why SSH or a host helper is still involved
+
+The management API runs **inside** the mpc-auth container (or equivalent) and **cannot** invoke **`docker pull`** / **`docker compose`** on the Docker host unless you deliberately grant the container privileged access (e.g. mount **`/var/run/docker.sock`**) and accept the security implications. Typical deployments keep Docker on the host and expose only HTTP for management signatures.
+
+So **`registryDigest`** is returned **for verification** when **something with Docker access** runs the bundled update script. **You do not have to edit `/etc/default/mpc-auth-docker` for each upgrade.**
+
+**One-shot (recommended for copy-paste from the DAO app):**
+
+```bash
+sudo /usr/local/libexec/mpc-auth/mpc-auth-docker-update.sh "$TAG" "$REGISTRY_DIGEST"
+# Example: mpc-auth-docker-update.sh v1.1 sha256:216dbe264b1f9b8528dff053cb333958952251d3002a544e9261da06efa43aac
+```
+
+The script uses the **second argument** as **`MPC_AUTH_EXPECTED_DIGEST`** for that process (see **`systemd/mpc-auth-docker-update.sh`**).
+
+**Recommended automation (no Docker socket in the app container):** install **`mpc-config`** **`systemd/mpc-auth-docker-pending-update.path`** + bind-mount **`/var/lib/mpc-auth-docker`** into the container (**`docker-compose*.yml`** in mpc-config). Implement in **mpc-auth**, after **`POST /updateMpcAuth`** succeeds and returns **`registryDigest`**, write **`/var/lib/mpc-auth-docker/pending-update.json`** atomically (**write temp → `rename`**). **`systemd.path`** invokes **`mpc-auth-apply-pending-update.sh`**, which runs **`mpc-auth-docker-update.sh`** on the host. See **`mpc-config/systemd/README.md`** → *Fully automated upgrades*.
+
+**Alternatively — Docker socket (`/var/run/docker.sock`) in the container:** **`docker`** CLI/API from mpc-auth avoids the trigger file but gives the container **full Docker API access** vs the host — usually worse for security than **systemd.path**.
 
 <a id="endpoint-categories"></a>
 ## Endpoint Categories

@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for mpc-auth automated Docker image update trigger (pending-update.json)
+
+[Path]
+# Host path bind-mounted read-write into the mpc-auth container; mpc-auth atomically mv's JSON here after POST /updateMpcAuth.
+PathChanged=/var/lib/mpc-auth-docker/pending-update.json
+
+[Install]
+WantedBy=multi-user.target

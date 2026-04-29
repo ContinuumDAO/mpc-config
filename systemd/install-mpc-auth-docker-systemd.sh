@@ -44,6 +44,7 @@ mkdir -p "$LIBEXEC"
 install -m 0755 \
 	"$HERE/mpc-auth-docker-restart.sh" \
 	"$HERE/mpc-auth-docker-update.sh" \
+	"$HERE/mpc-auth-apply-pending-update.sh" \
 	"$LIBEXEC/"
 
 if [[ "$INSTALL_ENV" == true ]]; then
@@ -58,15 +59,26 @@ fi
 install -m 0644 \
 	"$HERE/mpc-auth-docker-restart.service" \
 	"$HERE/mpc-auth-docker-update@.service" \
+	"$HERE/mpc-auth-docker-pending-update.path" \
+	"$HERE/mpc-auth-docker-pending-update.service" \
 	"$UNIT_DIR/"
+
+mkdir -p /var/lib/mpc-auth-docker/applied
+chmod 0755 /var/lib/mpc-auth-docker /var/lib/mpc-auth-docker/applied || true
 
 systemctl daemon-reload
 
+systemctl enable mpc-auth-docker-pending-update.path
+systemctl restart mpc-auth-docker-pending-update.path || systemctl start mpc-auth-docker-pending-update.path
+
 echo
 echo "Installed:"
-echo "  $LIBEXEC/mpc-auth-docker-{restart,update}.sh"
+echo "  $LIBEXEC/mpc-auth-docker-{restart,update}.sh + mpc-auth-apply-pending-update.sh"
 [[ "$INSTALL_ENV" == true ]] && echo "  $DEFAULT_ENV"
 echo "  $UNIT_DIR/mpc-auth-docker-restart.service"
 echo "  $UNIT_DIR/mpc-auth-docker-update@.service"
+echo "  $UNIT_DIR/mpc-auth-docker-pending-update.{path,service} (auto image update — bind-mount /var/lib/mpc-auth-docker in compose)"
+echo "  $LIBEXEC/mpc-auth-apply-pending-update.sh"
 echo
 echo "Run: sudo systemctl start mpc-auth-docker-restart.service"
+echo "(Optional automation) mpc-auth-docker-pending-update.path watches /var/lib/mpc-auth-docker/pending-update.json — bind-mount that dir in compose."

@@ -1,6 +1,27 @@
 # systemd helpers: mpc-auth Docker restart and image update
 
-These units complement the mpc-auth **maintenance** HTTP API (`POST /maintenance/requestRestartPrep`, **`GET /maintenance/restartGate`**, **`POST /updateMpcAuth`** for registry digest). **`updateMpcAuth` does not invoke systemd**; copy **`registryDigest`** into **`/etc/default/mpc-auth-docker`** as **`MPC_AUTH_EXPECTED_DIGEST`**, then run the update unit on the Docker host.
+These units complement the mpc-auth **maintenance** HTTP API (`POST /maintenance/requestRestartPrep`, **`GET /maintenance/restartGate`**, **`POST /updateMpcAuth`** for registry digest).
+
+**Why the app does not upgrade Docker for you:** `POST /updateMpcAuth` runs **inside** the mpc-auth container. Pulling a new image requires the **host’s Docker socket** and often **root**. The API response includes **`registryDigest`** so your **host-side** update script can verify **`docker pull`**; the HTTP process does not invoke **`docker`** itself (least privilege).
+
+**You do not need to edit `/etc/default/mpc-auth-docker` on every upgrade.** The update script accepts **`registryDigest` as the second argument** (see [Run](#run)). Only persist **`MPC_AUTH_EXPECTED_DIGEST`** in `/etc/default` if you prefer **`systemctl start mpc-auth-docker-update@TAG.service`** alone (that unit does not pass digest on the command line—use **script** invocation for one-shot digests).
+
+## Fully automated upgrades (recommended)
+
+**Preferred:** **`systemd.path`** + **bind mount** — the mpc-auth process **never** holds the Docker socket. After a successful **`POST /updateMpcAuth`**, **mpc-auth** (code change in mpc-auth repo) writes one JSON file **atomically** to **`/var/lib/mpc-auth-docker/pending-update.json`** (same inode on host + container). **`mpc-auth-docker-pending-update.path`** starts **`mpc-auth-apply-pending-update.service`**, which **`mv`** claims the file and runs **`mpc-auth-docker-update.sh`** with **tag + digest**. Install enables the path unit; **`docker-compose*.yml`** mounts **`/var/lib/mpc-auth-docker:/var/lib/mpc-auth-docker`** (see templates in this repo).
+
+**Alternative — Docker socket (`/var/run/docker.sock`) in the app container:** the process can run **`docker pull`** itself. That grants **effective host-root-level control via the Docker API** (start privileged containers, mount host dirs, …). Avoid unless you accept that risk and shrink the attack surface elsewhere.
+
+JSON contract (written by mpc-auth):
+
+```json
+{"tag":"v1.1","registryDigest":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}
+```
+
+(Optionally **`newVersionRequested`** / **`registry_digest`** aliases are accepted by **`mpc-auth-apply-pending-update.sh`**.)
+
+
+**Fully hands-off** DAO flow = **implement the write + mount** above in **mpc-auth** + compose; see also [Host apply](../docs/references/API_IMPLEMENTATION.md#post-updatempc-auth-host).
 
 ### Where units go on Debian / Ubuntu
 
@@ -17,6 +38,9 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 | **`mpc-auth-docker.env.example`** | Same keys as **`mpc-auth-docker.env`**; keep in sync when changing conventions. |
 | **`mpc-auth-docker-restart.service`** | `Type=oneshot` wrapper around the restart script. |
 | **`mpc-auth-docker-update@.service`** | Template unit: instance **is the image tag**. Example: `systemctl start mpc-auth-docker-update@latest.service`. |
+| **`mpc-auth-docker-pending-update.path`** | Watches **`/var/lib/mpc-auth-docker/pending-update.json`**; starts apply service when mpc-auth writes the file (after **`POST /updateMpcAuth`**). |
+| **`mpc-auth-docker-pending-update.service`** | Oneshot: runs **`mpc-auth-apply-pending-update.sh`** (parse JSON → **`mpc-auth-docker-update.sh`**). |
+| **`mpc-auth-apply-pending-update.sh`** | Parses pending JSON (**`tag`** + **`registryDigest`**) then delegates to **`mpc-auth-docker-update.sh`**. |
 
 ### Update script behavior
 
@@ -30,7 +54,7 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
    - If **unset/blank**, runs **`docker compose up -d &lt;service&gt;`** when the Compose v2 plugin exists, **`docker-compose`** when only v1 exists, after optional **`cd MPC_AUTH_COMPOSE_WORKDIR`**.
 7. **`MPC_AUTH_COMPOSE_WORKDIR`** (and legacy alias **`MPC_AUTH_COMPOSE_DIR`**) must point at the compose project when using the automatic compose path; **`MPC_AUTH_COMPOSE_SERVICE`** defaults to **`app`**.
 
-For production upgrades, call **`POST /updateMpcAuth`** (while draining) with the target tag, then paste **`Data.registryDigest`** into **`MPC_AUTH_EXPECTED_DIGEST`** before **`systemctl start mpc-auth-docker-update@…`**.
+For production upgrades, call **`POST /updateMpcAuth`** (while draining) with the target tag, then apply the digest on the host using **one** of [Run](#run) (script with 2nd argument is enough—no `/etc/default` edit).
 
 ## Install (typical)
 
@@ -57,33 +81,43 @@ Manual install (same result):
 
 ```bash
 sudo mkdir -p /usr/local/libexec/mpc-auth
-sudo install -m 0755 mpc-auth-docker-restart.sh mpc-auth-docker-update.sh /usr/local/libexec/mpc-auth/
+sudo install -m 0755 mpc-auth-docker-restart.sh mpc-auth-docker-update.sh mpc-auth-apply-pending-update.sh /usr/local/libexec/mpc-auth/
 sudo cp mpc-auth-docker.env /etc/default/mpc-auth-docker
 sudoedit /etc/default/mpc-auth-docker   # tweak MPC_AUTH_CONTAINER_NAME / MPC_AUTH_IMAGE if your `docker ps` NAMES differ
 
-sudo cp mpc-auth-docker-restart.service mpc-auth-docker-update@.service /etc/systemd/system/
+sudo cp mpc-auth-docker-restart.service mpc-auth-docker-update@.service mpc-auth-docker-pending-update.path mpc-auth-docker-pending-update.service /etc/systemd/system/
+sudo mkdir -p /var/lib/mpc-auth-docker/applied && sudo chmod 0755 /var/lib/mpc-auth-docker /var/lib/mpc-auth-docker/applied
 sudo systemctl daemon-reload
+sudo systemctl enable --now mpc-auth-docker-pending-update.path
 ```
 
 ### Run
 
+**Preferred (digest from API, no `/etc/default` edit):** pass **`registryDigest`** as the **second argument** (tag = first arg, same tag you sent to **`POST /updateMpcAuth`**):
+
 ```bash
-# 1) Drain (API), 2) POST /updateMpcAuth { tag } → copy Data.registryDigest to /etc/default:
-#    MPC_AUTH_EXPECTED_DIGEST=sha256:...
-# 3) Then use the **same tag** as the API (compose default here is latest):
+sudo /usr/local/libexec/mpc-auth/mpc-auth-docker-update.sh v1.1 sha256:216dbe264b1f9b8528dff053cb333958952251d3002a544e9261da06efa43aac
+```
+
+Alternative (same effect, env for one process only):
+
+```bash
+sudo env MPC_AUTH_EXPECTED_DIGEST='sha256:216dbe264b1f9b8528dff053cb333958952251d3002a544e9261da06efa43aac' \
+  /usr/local/libexec/mpc-auth/mpc-auth-docker-update.sh v1.1
+```
+
+**Via systemd template** (digest must be in **`/etc/default/mpc-auth-docker`** as **`MPC_AUTH_EXPECTED_DIGEST=…`**, or omit digest and accept the script warning):
+
+```bash
+# 1) Drain (API), 2) POST /updateMpcAuth { tag } → optional: set digest in /etc/default OR use direct script invocation above
 sudo systemctl start 'mpc-auth-docker-update@latest.service'
 
 # Simple restart (same image) after maintenance gate — no registry pull:
 sudo systemctl start mpc-auth-docker-restart.service
 
-# Update without API digest — script warns (avoid in prod); same systemd unit, leave digest unset:
-sudo systemctl start 'mpc-auth-docker-update@latest.service'
+# Update without digest verification — script warns; avoid in prod:
+sudo systemctl start 'mpc-auth-docker-update@v1.1.service'
 ```
-
-Invoke the update unit with the **same** tag passed to **`POST /updateMpcAuth`**. Alternatively run the script directly:
-
-`/usr/local/libexec/mpc-auth/mpc-auth-docker-update.sh latest sha256:…`
-
 ### Troubleshooting restart failures
 
 If **`systemctl start mpc-auth-docker-restart.service`** fails but **`sudo docker ps`** shows your app container:
