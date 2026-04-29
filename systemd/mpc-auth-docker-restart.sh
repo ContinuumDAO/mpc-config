@@ -13,7 +13,7 @@ if [[ -r /etc/default/mpc-auth-docker ]]; then
 	. /etc/default/mpc-auth-docker
 fi
 
-CONTAINER="${MPC_AUTH_CONTAINER_NAME:-mpc-config_app_1}"
+CONTAINER="${MPC_AUTH_CONTAINER_NAME:-mpc-config-app-1}"
 
 if ! docker ps >/dev/null 2>&1; then
 	echo "mpc-auth-docker-restart: cannot talk to Docker (is the daemon running?)" >&2

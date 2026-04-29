@@ -36,7 +36,7 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 | **`install-mpc-auth-docker-systemd.sh`** | **`sudo ./install-mpc-auth-docker-systemd.sh`** — installs scripts under **`/usr/local/libexec/mpc-auth/`**, **`mpc-auth-docker.env`** as **`/etc/default/mpc-auth-docker`**, **`*.service`** under **`/etc/systemd/system/`**, then **`systemctl daemon-reload`**. `--no-env` skips env file; **`--no-env-backup`** overwrites env without a **`.bak`**. |
 | **`mpc-auth-docker-restart.sh`** | **`docker restart`** on **`MPC_AUTH_CONTAINER_NAME`**; if that container does not exist, restarts the **only** **`docker ps -a`** row whose **`Image`** matches **`*mpc-auth*`** (helps when Compose project prefix differs); if several match or none, exits **1** (set **`MPC_AUTH_CONTAINER_NAME`** or **`MPC_AUTH_RESTART_STRICT=1`** to force exactly the configured name only). |
 | **`mpc-auth-docker-update.sh`** | Stop/remove container (if **`MPC_AUTH_CONTAINER_NAME`** matches), `docker rmi --force` previous image ref, `docker pull`, **digest check** ( **`MPC_AUTH_EXPECTED_DIGEST`** or 2nd CLI arg), then **compose**: if **`MPC_AUTH_POST_UPDATE_CMD`** is **non-blank**, runs that; **otherwise** requires **`MPC_AUTH_COMPOSE_WORKDIR`**, then runs **`docker compose`** / **`docker-compose`** with **`cd`** into that directory and **`up -d --force-recreate MPC_AUTH_COMPOSE_SERVICE`** (default **`app`**) so the service process actually restarts. |
-| **`mpc-auth-docker.env`** | Default container name **`mpc-config_app_1`** (Compose v2 naming for project **`mpc-config`**, service **`app`**); copy to `/etc/default/mpc-auth-docker`. |
+| **`mpc-auth-docker.env`** | Default **`MPC_AUTH_CONTAINER_NAME=mpc-config-app-1`** (typical Compose v2 name when the project directory is **`mpc-config`** and service is **`app`**); copy to `/etc/default/mpc-auth-docker`. |
 | **`mpc-auth-docker.env.example`** | Same keys as **`mpc-auth-docker.env`**; keep in sync when changing conventions. |
 | **`mpc-auth-docker-restart.service`** | `Type=oneshot` wrapper around the restart script. |
 | **`mpc-auth-docker-update@.service`** | Template unit: instance **is the image tag**. Example: `systemctl start mpc-auth-docker-update@latest.service`. |
@@ -67,9 +67,25 @@ After MQTT/Browser HTTPS steps complete, **`./process_config.sh`** may offer (**
 - **Fresh host:** install units + **`/etc/default/mpc-auth-docker`** via **`systemd/install-mpc-auth-docker-systemd.sh`** (requires **`sudo`**).
 - **Already installed:** re-copy scripts + **`*.service`** with **`--no-env`** (keeps **`/etc/default`**) then **`daemon-reload`**, **[Y/n]** default **Yes**.
 - **Every run:** if **`/etc/default/mpc-auth-docker`** exists, **`MPC_AUTH_COMPOSE_WORKDIR`** is set to the **absolute path of this mpc-config directory** (so moving/recloning the repo and re-running **`process_config.sh`** updates the path for **`mpc-auth-docker-pending-update`** / compose).
+- **Every run (unless `--no-systemd`):** if **`mpc-auth-docker-restart.service`** or **`mpc-auth-docker-pending-update.service`** is already under **`/etc/systemd/system/`**, **`process_config.sh`** runs **`install-mpc-auth-docker-systemd.sh --no-env`** so **`/usr/local/libexec/mpc-auth/*.sh`** and unit files match the repo (**`git pull` alone does not update those copies**).
 - **Optional:** **`systemctl start mpc-auth-docker-restart.service`** (**restarts mpc-auth container**) **[Y/n]** default **Yes**.
 
 Skip prompts: **`--no-systemd`** or **`PROCESS_CONFIG_SKIP_SYSTEMD=1`**. Non-interactive install: **`--install-mpc-auth-systemd`** or **`PROCESS_CONFIG_INSTALL_SYSTEMD=1`**.
+
+### After `git pull` (repo up to date ≠ host scripts up to date)
+
+**`systemd` runs the installed files under `/usr/local/libexec/mpc-auth/`**, not the copies next to your clone in **`~/mpc-config/systemd/`**. Pulling newer **`mpc-config`** does not replace those by itself.
+
+**`./process_config.sh`** (without **`--no-systemd`**) now runs **`install-mpc-auth-docker-systemd.sh --no-env`** automatically when **`mpc-auth-docker-restart.service`** or **`mpc-auth-docker-pending-update.service`** is already installed — so **`git pull` → `process_config.sh`** refreshes libexec and unit files (**`/etc/default/mpc-auth-docker`** is preserved).
+
+Manual one-liner if you only want scripts:
+
+```bash
+cd /path/to/mpc-config/systemd
+sudo ./install-mpc-auth-docker-systemd.sh --no-env
+```
+
+**`--no-env`** keeps your existing **`/etc/default/mpc-auth-docker`**. Re-run **`./process_config.sh`** from that clone if you rely on it syncing **`MPC_AUTH_COMPOSE_WORKDIR`**, or set **`MPC_AUTH_COMPOSE_WORKDIR`** and **`MPC_AUTH_CONTAINER_NAME`** manually to match **`docker ps`**.
 
 ### Manual
 
@@ -125,7 +141,7 @@ sudo systemctl start 'mpc-auth-docker-update@v1.1.service'
 
 If **`systemctl start mpc-auth-docker-restart.service`** fails but **`sudo docker ps`** shows your app container:
 
-1. **`docker ps` NAMES** must equal **`MPC_AUTH_CONTAINER_NAME`** in **`/etc/default/mpc-auth-docker`**, unless the restart script finds a **single** container whose **Image** column contains **`mpc-auth`** — then it uses that automatically (Compose project prefixes differ by clone path; e.g. **`otherdir_app_1`** vs **`mpc-config_app_1`**). If **more than one** **`mpc-auth`** image container exists, set **`MPC_AUTH_CONTAINER_NAME`** explicitly.
+1. **`docker ps` NAMES** must equal **`MPC_AUTH_CONTAINER_NAME`** in **`/etc/default/mpc-auth-docker`**, unless the restart script finds a **single** container whose **Image** column contains **`mpc-auth`** — then it uses that automatically (Compose project prefixes differ by clone path; e.g. **`otherdir-app-1`** vs **`mpc-config-app-1`**). If **more than one** **`mpc-auth`** image container exists, set **`MPC_AUTH_CONTAINER_NAME`** explicitly.
 2. **`MPC_AUTH_RESTART_STRICT=1`** in **`/etc/default/mpc-auth-docker`** disables that auto-pick and always uses **`MPC_AUTH_CONTAINER_NAME`** only.
 3. Re-sync defaults: **`sudo nano /etc/default/mpc-auth-docker`**, set **`MPC_AUTH_CONTAINER_NAME`** to your **`NAMES`** column exactly, **or** re-run **`install-mpc-auth-docker-systemd.sh`** **without** **`--no-env`** after pulling this repo so the bundled env replaces the old file (**back up** first).
 4. After changing the script under **`/usr/local/libexec/mpc-auth/`**, ensure you copied the updated **`mpc-auth-docker-restart.sh`** from this repo (install script or **`sudo install -m 0755 ...`**).

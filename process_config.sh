@@ -4009,7 +4009,10 @@ show_process_config_help() {
     echo ""
     echo "Optional mpc-auth Docker systemd helpers (Linux + systemd; after firewall, before Relayer API validation):"
     echo "  Prompts install or re-sync of mpc-config/systemd/ (daemon-reload) with [Y/n] default Yes;"
-    echo "  when mpc-auth units exist on the host, separately prompts to start mpc-auth-docker-restart.service:"
+    echo "  After prompts, if units are on the host, automatically runs install-mpc-auth-docker-systemd.sh --no-env"
+    echo "  so /usr/local/libexec/mpc-auth/*.sh matches this repo (git pull does not update libexec otherwise)."
+    echo "  Skipped with --no-systemd or PROCESS_CONFIG_SKIP_SYSTEMD=1."
+    echo "  When mpc-auth units exist on the host, also prompts to start mpc-auth-docker-restart.service:"
     echo "  Default Yes (Enter or y runs sudo systemctl start …); n skips. ⚠ container restart."
     echo "  See systemd/README.md."
     echo ""
@@ -4362,6 +4365,44 @@ _process_config_resolve_mpc_auth_systemd_dir() {
     return 1
 }
 
+# systemd units run /usr/local/libexec/mpc-auth/*.sh — not the copies in this repo. After `git pull`, re-install
+# with --no-env so host scripts and unit files match the checkout while preserving /etc/default/mpc-auth-docker.
+_process_config_sync_mpc_auth_libexec_from_repo() {
+    local skip_from_cli="$1"
+    case "${PROCESS_CONFIG_SKIP_SYSTEMD:-}" in
+        1|true|TRUE|yes|YES) return 0 ;;
+    esac
+    if [ "$skip_from_cli" = "true" ]; then
+        return 0
+    fi
+    if [ ! -d /etc/systemd/system ]; then
+        return 0
+    fi
+    if [ ! -f /etc/systemd/system/mpc-auth-docker-restart.service ] && [ ! -f /etc/systemd/system/mpc-auth-docker-pending-update.service ]; then
+        return 0
+    fi
+    local sd_root ins_script
+    if ! sd_root="$(_process_config_resolve_mpc_auth_systemd_dir)"; then
+        return 0
+    fi
+    ins_script="${sd_root}/install-mpc-auth-docker-systemd.sh"
+    if [ ! -f "$ins_script" ]; then
+        return 0
+    fi
+    print_step "Refreshing mpc-auth host scripts (/usr/local/libexec/mpc-auth/) from this repo"
+    print_info "Running: sudo bash install-mpc-auth-docker-systemd.sh --no-env (preserves /etc/default/mpc-auth-docker)."
+    # shellcheck disable=SC2024
+    if sudo -n true 2>/dev/null || sudo true; then
+        if sudo bash "$ins_script" --no-env; then
+            print_success "Host mpc-auth libexec scripts and systemd units updated from ${sd_root}."
+        else
+            print_warning "install-mpc-auth-docker-systemd.sh --no-env failed. Run manually: sudo bash ${ins_script} --no-env"
+        fi
+    else
+        print_warning "sudo not available here — after git pull run: sudo bash ${ins_script} --no-env"
+    fi
+}
+
 # Optional mpc-auth Docker systemd units (mpc-config/systemd/). See systemd/README.md.
 # Respects PROCESS_CONFIG_SKIP_SYSTEMD=1, PROCESS_CONFIG_INSTALL_SYSTEMD=1 (non-interactive install).
 _process_config_prompt_mpc_auth_systemd_helpers() {
@@ -4462,7 +4503,7 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
                     print_success "Started mpc-auth-docker-restart.service (container restart)."
                 else
                     print_warning "mpc-auth-docker-restart.service did not succeed: systemd ran the unit, but the restart script exited with an error (this is usually not a sudo/password issue)."
-                    print_info "Common causes: no container matching MPC_AUTH_CONTAINER_NAME in /etc/default/mpc-auth-docker (default for this repo: mpc-config_app_1 from docker compose NAMES), Docker not running, or docker.sock permissions."
+                    print_info "Common causes: no container matching MPC_AUTH_CONTAINER_NAME in /etc/default/mpc-auth-docker (Compose v2 default for this repo is often mpc-config-app-1; confirm with docker ps NAMES), Docker not running, or docker.sock permissions."
                     print_info "Check: sudo systemctl status mpc-auth-docker-restart.service"
                     print_info "Logs:  sudo journalctl -xeu mpc-auth-docker-restart.service"
                     if command -v journalctl >/dev/null 2>&1; then
@@ -4660,6 +4701,7 @@ main() {
     # validate_relayer_api_connection so Relayer/network failures cannot skip these prompts entirely.
     _process_config_prompt_mpc_auth_systemd_helpers "$SKIP_SYSTEMD" "$INSTALL_MPC_AUTH_SYSTEMD"
     _process_config_sync_mpc_auth_docker_compose_workdir
+    _process_config_sync_mpc_auth_libexec_from_repo "$SKIP_SYSTEMD"
 
     # Validate Relayer API connection (MANDATORY for relay before certificate generation; may exit 1 on failure)
     validate_relayer_api_connection "$CONFIG_FILE"
