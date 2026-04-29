@@ -18,7 +18,7 @@ JSON contract (written by mpc-auth):
 {"tag":"v1.1","registryDigest":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}
 ```
 
-**Optional fields:** **`restartOnly`** (boolean) — omit **`registryDigest`** when true; host skips pull/rmi and restarts or recreates only. **`forceRecreate`** (boolean) — run **`docker compose up -d --force-recreate`** for the configured service (full update or restart-only). The apply script exports **`MPC_AUTH_PENDING_RESTART_ONLY`** and **`MPC_AUTH_PENDING_FORCE_RECREATE`** as **`0`** or **`1`** before **`mpc-auth-docker-update.sh`**.
+**Optional fields:** **`restartOnly`** (boolean) — omit **`registryDigest`** when true; host skips pull/rmi and restarts or recreates only. **`forceRecreate`** (boolean) — run **`docker compose up -d --no-deps --force-recreate`** for the configured service (**`app`**, not Mongo/MQTT dependents). The apply script exports **`MPC_AUTH_PENDING_RESTART_ONLY`** and **`MPC_AUTH_PENDING_FORCE_RECREATE`** as **`0`** or **`1`** before **`mpc-auth-docker-update.sh`**.
 
 (Optionally **`newVersionRequested`** / **`registry_digest`** aliases are accepted by **`mpc-auth-apply-pending-update.sh`**.)
 
@@ -35,7 +35,7 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 |------|---------|
 | **`install-mpc-auth-docker-systemd.sh`** | **`sudo ./install-mpc-auth-docker-systemd.sh`** — installs scripts under **`/usr/local/libexec/mpc-auth/`**, **`mpc-auth-docker.env`** as **`/etc/default/mpc-auth-docker`**, **`*.service`** under **`/etc/systemd/system/`**, then **`systemctl daemon-reload`**. `--no-env` skips env file; **`--no-env-backup`** overwrites env without a **`.bak`**. |
 | **`mpc-auth-docker-restart.sh`** | **`docker restart`** on **`MPC_AUTH_CONTAINER_NAME`**; if that container does not exist, restarts the **only** **`docker ps -a`** row whose **`Image`** matches **`*mpc-auth*`** (helps when Compose project prefix differs); if several match or none, exits **1** (set **`MPC_AUTH_CONTAINER_NAME`** or **`MPC_AUTH_RESTART_STRICT=1`** to force exactly the configured name only). |
-| **`mpc-auth-docker-update.sh`** | Stop/remove container (if **`MPC_AUTH_CONTAINER_NAME`** matches), `docker rmi --force` previous image ref, `docker pull`, **digest check** ( **`MPC_AUTH_EXPECTED_DIGEST`** or 2nd CLI arg), then **compose**: if **`MPC_AUTH_POST_UPDATE_CMD`** is **non-blank**, runs that; **otherwise** requires **`MPC_AUTH_COMPOSE_WORKDIR`**, then runs **`docker compose`** / **`docker-compose`** with **`cd`** into that directory and **`up -d --force-recreate MPC_AUTH_COMPOSE_SERVICE`** (default **`app`**) so the service process actually restarts. |
+| **`mpc-auth-docker-update.sh`** | Stop/remove container (if **`MPC_AUTH_CONTAINER_NAME`** matches), `docker rmi --force` previous image ref, `docker pull`, **digest check** ( **`MPC_AUTH_EXPECTED_DIGEST`** or 2nd CLI arg), then **compose**: if **`MPC_AUTH_POST_UPDATE_CMD`** is **non-blank**, runs that; **otherwise** requires **`MPC_AUTH_COMPOSE_WORKDIR`**, then runs **`docker compose`** / **`docker-compose`** with **`cd`** into that directory and **`up -d --no-deps --force-recreate MPC_AUTH_COMPOSE_SERVICE`** (default **`app`**) so only mpc-auth is recreated — **MongoDB / Mosquitto are not touched.** |
 | **`mpc-auth-docker.env`** | Default **`MPC_AUTH_CONTAINER_NAME=mpc-config-app-1`** (typical Compose v2 name when the project directory is **`mpc-config`** and service is **`app`**); copy to `/etc/default/mpc-auth-docker`. |
 | **`mpc-auth-docker.env.example`** | Same keys as **`mpc-auth-docker.env`**; keep in sync when changing conventions. |
 | **`mpc-auth-docker-restart.service`** | `Type=oneshot` wrapper around the restart script. |
@@ -47,14 +47,16 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 ### Update script behavior
 
 1. Reads optional `/etc/default/mpc-auth-docker` (`MPC_AUTH_CONTAINER_NAME`, **`MPC_AUTH_EXPECTED_DIGEST`**, `MPC_AUTH_POST_UPDATE_CMD`, …).
-2. If the named container exists, records `docker inspect … .Config.Image`, then `docker stop` and `docker rm`. If **`MPC_AUTH_CONTAINER_NAME`** does not match the live container, a **warning** is printed and stop/rm is skipped — post-pull compose still runs with **`--force-recreate`** so the Compose service is replaced and the process actually restarts.
+2. If the named container exists, records `docker inspect … .Config.Image`, then `docker stop` and `docker rm`. If **`MPC_AUTH_CONTAINER_NAME`** does not match the live container, a **warning** is printed and stop/rm is skipped — post-pull compose still runs **`up -d --no-deps --force-recreate`** so only the app service is replaced and the process actually restarts.
 3. If an old image ref was recorded, runs `docker rmi --force` on it (ignore failure if already gone).
 4. Runs `docker pull "${MPC_AUTH_IMAGE}:${TAG}"`.
 5. If **`MPC_AUTH_EXPECTED_DIGEST`** (or **second CLI argument**) is set, compares **`docker image inspect … RepoDigests`** to that **`sha256:`** value; on mismatch exits **1** — **compose is skipped**.
 6. **Compose image tag:** templates often use **`image: continuumdao/mpc-auth:latest`**. The script pulls **`${MPC_AUTH_IMAGE}:${TAG}`** (e.g. **`v1.1.1`**). Before **`compose up`**, it runs **`docker tag`** so **`${MPC_AUTH_IMAGE}:latest`** (or **`MPC_AUTH_COMPOSE_IMAGE_REF`**) points at the verified pull; otherwise **`up --force-recreate`** would still run the previous **`latest`** layers. Set **`MPC_AUTH_SKIP_RETAG_LATEST=1`** to skip.
 7. Compose after pull (**digest must pass first**):
-   - If **`MPC_AUTH_POST_UPDATE_CMD`** is **non-blank**, runs it verbatim.
-   - If **unset/blank**, requires **`MPC_AUTH_COMPOSE_WORKDIR`**, then runs **`docker compose up -d --force-recreate &lt;service&gt;`** (or **`docker-compose`** v1 equivalent) after **`cd`**, so the service container is always recreated even when step 2 skipped stop/rm. **`MPC_AUTH_COMPOSE_SERVICE`** defaults to **`app`**.
+   - If **`MPC_AUTH_POST_UPDATE_CMD`** is **non-blank**, runs it verbatim (non-zero exit fails the unit).
+   - If **unset/blank**, requires **`MPC_AUTH_COMPOSE_WORKDIR`**, then runs **`docker compose up -d --no-deps --force-recreate &lt;service&gt;`** (or **`docker-compose`** v1 equivalent) after **`cd`**, so the service container is always recreated even when step 2 skipped stop/rm — **without recreating dependency services** (avoids accidental Mongo teardown). **`MPC_AUTH_COMPOSE_SERVICE`** defaults to **`app`**.
+
+**Docker Compose v2 vs legacy `docker-compose` v1:** Prefer the **`docker compose`** plugin (v2). Distro **`docker-compose`** 1.29.x often hits **`KeyError: 'ContainerConfig'`** on modern Docker engines when recreating containers with images that lack the legacy field — install [Compose v2](https://docs.docker.com/compose/install/linux/) on the host if you see that traceback.
 
 For production upgrades, call **`POST /updateMpcAuth`** (while draining) with the target tag, then apply the digest on the host using **one** of [Run](#run) (script with 2nd argument is enough—no `/etc/default` edit).
 

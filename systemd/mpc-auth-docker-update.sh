@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# (A) Full update: stop mpc-auth container, rmi old ref, pull, digest verify, compose up -d --force-recreate.
-# (B) Restart-only: no pull — docker compose restart, or compose up -d --force-recreate when
+# (A) Full update: stop mpc-auth container, rmi old ref, pull, digest verify, compose up -d --no-deps --force-recreate (app only).
+# (B) Restart-only: no pull — docker compose restart, or compose up -d --no-deps --force-recreate when
 #     MPC_AUTH_PENDING_FORCE_RECREATE=1 (set from pending-update.json by mpc-auth-apply-pending-update.sh).
 #
 # TAG: first CLI arg (Docker tag / systemd template instance); default latest.
@@ -60,37 +60,58 @@ mpc_auth_run_restart_or_recreate() {
 	explicit="$(mpc_auth_trim "${MPC_AUTH_POST_UPDATE_CMD:-}")"
 	if [[ -n "$explicit" ]]; then
 		echo "Running MPC_AUTH_POST_UPDATE_CMD (restart-only context): $explicit"
-		env TAG="$TAG" MPC_AUTH_CONTAINER_NAME="$CONTAINER" MPC_AUTH_IMAGE="$REPO" MPC_AUTH_EXPECTED_DIGEST="${EXPECTED_DIGEST:-}" \
-			MPC_AUTH_PENDING_RESTART_ONLY="${RESTART_ONLY}" MPC_AUTH_PENDING_FORCE_RECREATE="${FORCE_RECREATE}" bash -lc "$explicit"
+		if ! env TAG="$TAG" MPC_AUTH_CONTAINER_NAME="$CONTAINER" MPC_AUTH_IMAGE="$REPO" MPC_AUTH_EXPECTED_DIGEST="${EXPECTED_DIGEST:-}" \
+			MPC_AUTH_PENDING_RESTART_ONLY="${RESTART_ONLY}" MPC_AUTH_PENDING_FORCE_RECREATE="${FORCE_RECREATE}" bash -lc "$explicit"; then
+			echo "error: MPC_AUTH_POST_UPDATE_CMD exited with an error." >&2
+			return 1
+		fi
 		return 0
 	fi
+	# --no-deps: only recreate/restart the app service — never touch mongodb/mosquitto (avoids v1 compose
+	# trying to recreate dependencies and corrupting volume state).
 	if docker compose version &>/dev/null 2>&1; then
 		mpc_auth_require_compose_workdir
 		workdir="$(mpc_auth_compose_workdir_resolve)"
 		if [[ "$FORCE_RECREATE" == "1" ]]; then
-			echo "Running: cd $(printf %q "$workdir") && docker compose up -d --force-recreate $(printf %q "$svc")"
-			(cd "$workdir" && docker compose up -d --force-recreate "$svc")
+			echo "Running: cd $(printf %q "$workdir") && docker compose up -d --no-deps --force-recreate $(printf %q "$svc")"
+			if ! (cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc"); then
+				echo "error: docker compose up failed." >&2
+				return 1
+			fi
 		else
 			echo "Running: cd $(printf %q "$workdir") && docker compose restart $(printf %q "$svc")"
-			(cd "$workdir" && docker compose restart "$svc")
+			if ! (cd "$workdir" && docker compose restart "$svc"); then
+				echo "error: docker compose restart failed." >&2
+				return 1
+			fi
 		fi
 		return 0
 	fi
 	if command -v docker-compose &>/dev/null 2>&1; then
+		echo "WARNING: using legacy docker-compose (v1). Prefer Docker Compose v2: \`docker compose\` plugin — v1 often breaks on modern Docker (e.g. KeyError 'ContainerConfig') and may recreate dependency services without --no-deps." >&2
 		mpc_auth_require_compose_workdir
 		workdir="$(mpc_auth_compose_workdir_resolve)"
 		if [[ "$FORCE_RECREATE" == "1" ]]; then
-			echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --force-recreate $(printf %q "$svc")"
-			(cd "$workdir" && docker-compose up -d --force-recreate "$svc")
+			echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --no-deps --force-recreate $(printf %q "$svc")"
+			if ! (cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc"); then
+				echo "error: docker-compose up failed." >&2
+				return 1
+			fi
 		else
 			echo "Running: cd $(printf %q "$workdir") && docker-compose restart $(printf %q "$svc")"
-			(cd "$workdir" && docker-compose restart "$svc")
+			if ! (cd "$workdir" && docker-compose restart "$svc"); then
+				echo "error: docker-compose restart failed." >&2
+				return 1
+			fi
 		fi
 		return 0
 	fi
 	if docker container inspect "$CONTAINER" &>/dev/null; then
 		echo "No docker compose — falling back to: docker restart $(printf %q "$CONTAINER")"
-		docker restart "$CONTAINER"
+		if ! docker restart "$CONTAINER"; then
+			echo "error: docker restart failed." >&2
+			return 1
+		fi
 		return 0
 	fi
 	echo "error: restart-only mode but no compose and container $(printf %q "$CONTAINER") not found." >&2
@@ -113,7 +134,7 @@ if docker container inspect "$CONTAINER" &>/dev/null; then
 	docker rm "$CONTAINER"
 else
 	echo "WARNING: container $(printf %q "$CONTAINER") not found — stop/rm skipped. If this name does not match your Compose service," >&2
-	echo "  set MPC_AUTH_CONTAINER_NAME in /etc/default/mpc-auth-docker. Post-pull compose still runs with --force-recreate." >&2
+	echo "  set MPC_AUTH_CONTAINER_NAME in /etc/default/mpc-auth-docker. Post-pull compose still runs up -d --no-deps --force-recreate for the app service only." >&2
 fi
 
 if [[ -n "$OLD_IMAGE" ]]; then
@@ -170,13 +191,20 @@ mpc_auth_run_default_compose_up() {
 	svc="$(mpc_auth_trim "${MPC_AUTH_COMPOSE_SERVICE:-app}")"
 	[[ -z "$svc" ]] && svc="app"
 	if docker compose version &>/dev/null 2>&1; then
-		echo "Running: cd $(printf %q "$workdir") && docker compose up -d --force-recreate $(printf %q "$svc")"
-		(cd "$workdir" && docker compose up -d --force-recreate "$svc")
+		echo "Running: cd $(printf %q "$workdir") && docker compose up -d --no-deps --force-recreate $(printf %q "$svc")"
+		if ! (cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc"); then
+			echo "error: docker compose up failed." >&2
+			return 1
+		fi
 		return 0
 	fi
 	if command -v docker-compose &>/dev/null 2>&1; then
-		echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --force-recreate $(printf %q "$svc")"
-		(cd "$workdir" && docker-compose up -d --force-recreate "$svc")
+		echo "WARNING: using legacy docker-compose (v1). Install the \`docker compose\` v2 plugin; v1 often fails on modern Docker with KeyError 'ContainerConfig'." >&2
+		echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --no-deps --force-recreate $(printf %q "$svc")"
+		if ! (cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc"); then
+			echo "error: docker-compose up failed." >&2
+			return 1
+		fi
 		return 0
 	fi
 	return 1
@@ -185,7 +213,10 @@ mpc_auth_run_default_compose_up() {
 explicit="$(mpc_auth_trim "${MPC_AUTH_POST_UPDATE_CMD:-}")"
 if [[ -n "$explicit" ]]; then
 	echo "Running MPC_AUTH_POST_UPDATE_CMD: $explicit"
-	env TAG="$TAG" MPC_AUTH_CONTAINER_NAME="$CONTAINER" MPC_AUTH_IMAGE="$REPO" MPC_AUTH_EXPECTED_DIGEST="${EXPECTED_DIGEST:-}" bash -lc "$explicit"
+	if ! env TAG="$TAG" MPC_AUTH_CONTAINER_NAME="$CONTAINER" MPC_AUTH_IMAGE="$REPO" MPC_AUTH_EXPECTED_DIGEST="${EXPECTED_DIGEST:-}" bash -lc "$explicit"; then
+		echo "error: MPC_AUTH_POST_UPDATE_CMD exited with an error." >&2
+		exit 1
+	fi
 elif mpc_auth_run_default_compose_up; then
 	:
 else
