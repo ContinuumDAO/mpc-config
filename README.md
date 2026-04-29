@@ -66,9 +66,11 @@ This starts:
 - **Mosquitto** - MQTT broker (port 8883 for TLS) BUT ONLY on the RELAY node. The other nodes are clients.
 - **mpc-auth** - MPC node: HTTP management API on **:8080** (`ManagementAPIsPort`); optional **Browser HTTPS** (TLS 1.3) on a separate port when `BrowserHTTPS` is enabled in `configs.yaml` (browser-facing API with JWT on GET; see comments in `configs.yaml`)
 
-The generated **`docker-compose.yml`** pulls the Docker image from the registry: `continuumdao/mpc-auth:v1.0`
+The generated **`docker-compose.yml`** pulls the Docker image from the registry: `continuumdao/mpc-auth:latest`
 
-**Note:** The default configuration uses version `v1.0`. To use a different version, edit **`docker-compose.relay.yml`** or **`docker-compose.client.yml`** (then run **`./process_config.sh`** again so **`docker-compose.yml`** is regenerated), or edit the generated **`docker-compose.yml`** directly and change the image tag (e.g., `continuumdao/mpc-auth:v1.1`).
+**Release vs. image tag:** `latest` chooses which container image to run. The **application semver** your node reports ( **`GET /version`** → **`data.version`**, e.g. **`v1.1`**) comes from the mpc-auth binary **built inside that image**, not from the Docker tag string. After upgrading with **`docker compose pull`** / **`docker compose up -d`**, confirm the running release with **`GET /version`** (management or public discovery port, per deployment).
+
+**Note:** The default configuration uses **`latest`**. To pin a specific semver tag (for example **`v1.1`**) instead, edit **`docker-compose.relay.yml`** or **`docker-compose.client.yml`** (then run **`./process_config.sh`** again so **`docker-compose.yml`** is regenerated), or edit the generated **`docker-compose.yml`** directly.
 
 ## Documentation
 
@@ -564,13 +566,13 @@ docker-compose up -d
 The docker-compose files include:
 - **mongodb**: Local MongoDB instance (port 27017, **127.0.0.1** only)
 - **mosquitto**: MQTT broker (automatically configured from `mosquitto/config/mosquitto.conf` - port 8883 for TLS by default)
-- **app**: The mpc-auth node — pulls Docker image **`continuumdao/mpc-auth:v1.0`** (rebuild/push when upgrading node code)
+- **app**: The mpc-auth node — pulls Docker image **`continuumdao/mpc-auth:latest`** (rebuild/push when upgrading node code). **`GET /version`** (management or discovery port) returns the **application semver** (e.g. **`v1.1`**) embedded in the binary for that image — not the literal string **`latest`**.
   - **`127.0.0.1:8080:8080`** — management API (**localhost on the host** only; use **SSH tunnel** for remote `curl` / Swagger)
   - **`18080`** — public discovery (`PublicDiscoveryPort`): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /health`**, **`GET /getNodeKey`**, **`GET /getConfiguredNodeKeys`** (no JWT on this port)
   - **`18081`** — scanner/relayer HTTP when **`ScannerRelayerPort`** is set in `configs.yaml` (e.g. **`POST /signRequest`**)
   - **`8443`** — Browser HTTPS (DAO app; JWT on GET per `BrowserHTTPS` in `configs.yaml`)
 
-**Note:** The default configuration uses image tag **`v1.0`**. If you encounter an error that the image is not found, see the Troubleshooting section below.
+**Note:** The default configuration uses image tag **`latest`**. If you encounter an error that the image is not found, see the Troubleshooting section below.
 
 #### Management API exposure (`ManagementAPIsPort`, default 8080)
 
@@ -842,23 +844,22 @@ Use **`docker compose`** everywhere this README shows **`docker-compose`** (e.g.
 
 ### Docker Image Not Found
 
-If you see the error `manifest for continuumdao/mpc-auth:v1.0 not found: manifest unknown`:
+If you see an error such as `manifest for continuumdao/mpc-auth:latest not found: manifest unknown` (or similar for another tag):
 
-**This means the Docker image version isn't available in the registry.**
+**This means the Docker image tag isn't available in the registry (or the tag name is wrong).**
 
-**Solution 1: Use a Different Version (Recommended)**
+**Solution 1: Pin a Tagged Release (Recommended)**
 
-Check what versions are available and update **`docker-compose.relay.yml`** / **`docker-compose.client.yml`** (then re-run **`./process_config.sh`**) or the generated **`docker-compose.yml`**:
+Check what tags are published and update **`docker-compose.relay.yml`** / **`docker-compose.client.yml`** (then re-run **`./process_config.sh`**) or the generated **`docker-compose.yml`**:
 
 ```bash
-# Try pulling a different version
-docker pull continuumdao/mpc-auth:v1.1  # Or another version
+docker pull continuumdao/mpc-auth:v1.1  # Or another tag published by the project
 ```
 
-Then update the compose file to use the available version:
+Then update the compose file to use an available tag:
 ```yaml
 app:
-  image: continuumdao/mpc-auth:v1.1  # Replace with available version
+  image: continuumdao/mpc-auth:v1.1  # Replace with available tag from the registry
 ```
 
 **Solution 2: Check Docker Registry Access**
@@ -866,8 +867,8 @@ app:
 If the image should be available, verify you can access the registry:
 
 ```bash
-# Test pulling the image directly
-docker pull continuumdao/mpc-auth:v1.0
+# Test pulling the image directly (default in this repo: latest)
+docker pull continuumdao/mpc-auth:latest
 
 # If it's a private registry, you may need to log in first
 docker login

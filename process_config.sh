@@ -4009,9 +4009,9 @@ show_process_config_help() {
     echo "  Use --no-firewall to skip (not recommended for production / financial nodes)."
     echo ""
     echo "Optional mpc-auth Docker systemd helpers (Linux + systemd; after firewall, before Relayer API validation):"
-    echo "  Prompts install or re-sync of mpc-config/systemd/ (daemon-reload) with [y/N] defaults No;"
+    echo "  Prompts install or re-sync of mpc-config/systemd/ (daemon-reload) with [Y/n] default Yes;"
     echo "  when mpc-auth units exist on the host, separately prompts to start mpc-auth-docker-restart.service:"
-    echo "  Enter or n skips; y runs sudo systemctl start … (password prompt if needed). ⚠ container restart."
+    echo "  Default Yes (Enter or y runs sudo systemctl start …); n skips. ⚠ container restart."
     echo "  See systemd/README.md."
     echo ""
 }
@@ -4395,11 +4395,14 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
         local _rs
         echo ""
         print_warning "This runs: sudo systemctl start mpc-auth-docker-restart.service → docker restart of the mpc-auth container."
-        print_info "You can skip with Enter or n; answering y prompts for sudo (if needed)."
-        _read_interactive_systemd "Start mpc-auth-docker-restart.service now? [y/N — Enter skips]: " || true
+        print_info "Default is Yes — Enter confirms (sudo may prompt for a password); type n or N to skip."
+        _read_interactive_systemd "Start mpc-auth-docker-restart.service now? [Y/n]: " || true
         _rs="${__mpc_auth_line}"
         case "${_rs:-}" in
-            [yY])
+            [nN])
+                print_info "Skipped. Later: sudo systemctl start mpc-auth-docker-restart.service"
+                ;;
+            *)
                 # shellcheck disable=SC2024
                 if sudo -n systemctl start mpc-auth-docker-restart.service 2>/dev/null || sudo systemctl start mpc-auth-docker-restart.service; then
                     print_success "Started mpc-auth-docker-restart.service (container restart)."
@@ -4418,9 +4421,6 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
                         fi
                     fi
                 fi
-                ;;
-            *)
-                print_info "Skipped. Later: sudo systemctl start mpc-auth-docker-restart.service"
                 ;;
         esac
     }
@@ -4451,29 +4451,29 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
     local _ans
     if _mpc_auth_units_installed_on_host; then
         print_info "mpc-auth systemd units are already installed under /etc/systemd/system/."
-        _read_interactive_systemd "Re-copy unit files + scripts from this repo (--no-env keeps /etc/default/mpc-auth-docker) and run systemd daemon-reload? [y/N]: " || true
+        _read_interactive_systemd "Re-copy unit files + scripts from this repo (--no-env keeps /etc/default/mpc-auth-docker) and run systemd daemon-reload? [Y/n]: " || true
         _ans="${__mpc_auth_line}"
         case "${_ans:-}" in
-            [yY])
-                _run_mpc_auth_systemd_install --no-env || print_info "Skipped re-sync after installer issue. To update manually: sudo bash ${ins_script} --no-env"
+            [nN])
+                print_info "Skipped re-sync. To update manually: sudo bash ${ins_script} --no-env"
                 ;;
             *)
-                print_info "Skipped re-sync. To update manually: sudo bash ${ins_script} --no-env"
+                _run_mpc_auth_systemd_install --no-env || print_info "Skipped re-sync after installer issue. To update manually: sudo bash ${ins_script} --no-env"
                 ;;
         esac
     else
-        _read_interactive_systemd "Install mpc-auth systemd helpers (mpc-auth-docker-restart, mpc-auth-docker-update@…; requires sudo)? [y/N]: " || true
+        _read_interactive_systemd "Install mpc-auth systemd helpers (mpc-auth-docker-restart, mpc-auth-docker-update@…; requires sudo)? [Y/n]: " || true
         _ans="${__mpc_auth_line}"
         case "${_ans:-}" in
-            [yY])
-                _run_mpc_auth_systemd_install || print_info "Install did not finish. Later: sudo bash ${ins_script}"
+            [nN])
+                print_info "Skipped. Later: sudo bash ${ins_script}"
                 ;;
             *)
-                print_info "Skipped. Later: sudo bash ${ins_script}"
+                _run_mpc_auth_systemd_install || print_info "Install did not finish. Later: sudo bash ${ins_script}"
                 ;;
         esac
     fi
-    # Always offer restart when units exist (separate sudo from installer/re-sync; Enter skips).
+    # Always offer restart when units exist ([Y/n]; n skips separately from installer/re-sync).
     _maybe_prompt_restart_mpc_auth_container
     echo ""
 }

@@ -93,7 +93,12 @@ ManagementAPIsPort: 8080
 
 # Optional: Docker Hub repository path (no tag) for POST /updateMpcAuth manifest digest (default: continuumdao/mpc-auth).
 # MpcAuthDockerRepo: continuumdao/mpc-auth
-
+#
+# Note: Compose may pull continuumdao/mpc-auth:latest — GET /version returns Data.version as the application semver (e.g. v1.1)
+# baked into that image at build time, not the Docker tag string.
+#
+# Note: Compose may pull continuumdao/mpc-auth:latest — GET /version still returns Data.version as the application semver (e.g. v1.1)
+# baked into that image at build time, which is not the Docker tag string.
 # Optional: single CORS allow list for management HTTP only (same port as ManagementAPIsPort). Empty = permissive default.
 # Separate from BrowserHTTPS.AllowedOrigins (8443). Relayer/scanner/agents do not use CORS.
 # Example:

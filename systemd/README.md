@@ -16,7 +16,7 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 | **`mpc-auth-docker.env`** | Default container name **`mpc-config_app_1`** (Compose v2 naming for project **`mpc-config`**, service **`app`**); copy to `/etc/default/mpc-auth-docker`. |
 | **`mpc-auth-docker.env.example`** | Same keys as **`mpc-auth-docker.env`**; keep in sync when changing conventions. |
 | **`mpc-auth-docker-restart.service`** | `Type=oneshot` wrapper around the restart script. |
-| **`mpc-auth-docker-update@.service`** | Template unit: instance **is the image tag**. Example: `systemctl start mpc-auth-docker-update@v1.0.service`. |
+| **`mpc-auth-docker-update@.service`** | Template unit: instance **is the image tag**. Example: `systemctl start mpc-auth-docker-update@latest.service`. |
 
 ### Update script behavior
 
@@ -36,11 +36,11 @@ For production upgrades, call **`POST /updateMpcAuth`** (while draining) with th
 
 ### Via `process_config.sh` (optional)
 
-After MQTT/Browser HTTPS steps complete, **`./process_config.sh`** may offer (defaults **No**):
+After MQTT/Browser HTTPS steps complete, **`./process_config.sh`** may offer (**[Y/n]**, default **Yes**):
 
 - **Fresh host:** install units + **`/etc/default/mpc-auth-docker`** via **`systemd/install-mpc-auth-docker-systemd.sh`** (requires **`sudo`**).
-- **Already installed:** re-copy scripts + **`*.service`** with **`--no-env`** (keeps **`/etc/default`**) then **`daemon-reload`**, **[y/N]** default **No**.
-- **Optional:** **`systemctl start mpc-auth-docker-restart.service`** (**restarts mpc-auth container**) **[y/N]** default **No**.
+- **Already installed:** re-copy scripts + **`*.service`** with **`--no-env`** (keeps **`/etc/default`**) then **`daemon-reload`**, **[Y/n]** default **Yes**.
+- **Optional:** **`systemctl start mpc-auth-docker-restart.service`** (**restarts mpc-auth container**) **[Y/n]** default **Yes**.
 
 Skip prompts: **`--no-systemd`** or **`PROCESS_CONFIG_SKIP_SYSTEMD=1`**. Non-interactive install: **`--install-mpc-auth-systemd`** or **`PROCESS_CONFIG_INSTALL_SYSTEMD=1`**.
 
@@ -70,19 +70,19 @@ sudo systemctl daemon-reload
 ```bash
 # 1) Drain (API), 2) POST /updateMpcAuth { tag } → copy Data.registryDigest to /etc/default:
 #    MPC_AUTH_EXPECTED_DIGEST=sha256:...
-# 3) Then (example tag v1.0):
-sudo systemctl start 'mpc-auth-docker-update@v1.0.service'
+# 3) Then use the **same tag** as the API (compose default here is latest):
+sudo systemctl start 'mpc-auth-docker-update@latest.service'
 
 # Simple restart (same image) after maintenance gate — no registry pull:
 sudo systemctl start mpc-auth-docker-restart.service
 
-# Update without API digest (warns; skips check) — avoid in production:
+# Update without API digest — script warns (avoid in prod); same systemd unit, leave digest unset:
 sudo systemctl start 'mpc-auth-docker-update@latest.service'
 ```
 
 Invoke the update unit with the **same** tag passed to **`POST /updateMpcAuth`**. Alternatively run the script directly:
 
-`/usr/local/libexec/mpc-auth/mpc-auth-docker-update.sh v1.0 sha256:…`
+`/usr/local/libexec/mpc-auth/mpc-auth-docker-update.sh latest sha256:…`
 
 ### Troubleshooting restart failures
 

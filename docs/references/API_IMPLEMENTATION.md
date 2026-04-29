@@ -123,7 +123,7 @@ KeyGen messaging is documented in `./API_KEYGEN_MESSAGING.md`. Response format a
 Use these on the **same** `ManagementAPIsPort` listener as the rest of the management API (SSH tunnel forwards that port; **no separate listener**). `POST /maintenance/requestRestartPrep` requires a normal **management key** signature (`VerifyMgtKeySig`, same pattern as `POST /configUpdatePlan`). **`GET /maintenance/restartGate`** is read-only and exempt from JWT on the browser HTTPS / loopback listeners (for polling from scripts). MQTT-driven protocol continuation is **not** covered by the HTTP in-flight counter — see [Restart quiescence (maintenance)](#restart-quiescence-maintenance-detail).
 - `POST /maintenance/requestRestartPrep` — enter draining mode so new tracked mutations return `503` until `GET /maintenance/restartGate` reports `readyForProcessExit` (then restart the process from the host/docker).
 - `GET /maintenance/restartGate` — returns `draining`, `inFlight`, `readyForProcessExit`, and a hint list of tracked POST paths.
-- `POST /updateMpcAuth` — while **draining**, signed request with target **tag** (e.g. `v1.0` or `latest`); node queries **Docker Hub** for `registryDigest` (`sha256:…`) for `configs.yaml` **`MpcAuthDockerRepo`** (default `continuumdao/mpc-auth`). Response includes **`previousVersion`** / **`previousVersionDate`** (same as **`GET /version`** for the running binary) and **`newVersionRequested`** (= target image **tag**). Use **`registryDigest`** as **`MPC_AUTH_EXPECTED_DIGEST`** on the host before **`mpc-auth-docker-update.sh`** / systemd — the script verifies **`docker pull`** matches the digest before **`MPC_AUTH_POST_UPDATE_CMD`** (`docker compose up -d`).
+- `POST /updateMpcAuth` — while **draining**, signed request with target **tag** (e.g. `latest`, `v1.0`, or another published tag); node queries **Docker Hub** for `registryDigest` (`sha256:…`) for `configs.yaml` **`MpcAuthDockerRepo`** (default `continuumdao/mpc-auth`). Response includes **`previousVersion`** / **`previousVersionDate`** (same as **`GET /version`** for the running binary) and **`newVersionRequested`** (= target image **tag**). Use **`registryDigest`** as **`MPC_AUTH_EXPECTED_DIGEST`** on the host before **`mpc-auth-docker-update.sh`** / systemd — the script verifies **`docker pull`** matches the digest before **`MPC_AUTH_POST_UPDATE_CMD`** (`docker compose up -d`).
 
 ### Pre-Signing
 - [`POST /presignRequest`](#post-presignrequest) - Create presign request (requires mgt key)
@@ -183,7 +183,9 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 
 <a id="get-version"></a>
 #### `GET /version`
-Returns the current node version and the date it was changed.
+Returns the current **application release** version (semver string) and the date it was set for that release.
+
+**Docker tag vs. `data.version`:** Your compose file may pull **`continuumdao/mpc-auth:latest`** (or any other registry tag). That tag only selects **which image** to run. The **`version`** field here is **not** the Docker tag: it is the **mpc-auth build version** compiled into the binary when that image was produced (e.g. **`v1.1`**). So after **`docker compose pull`** and **`docker compose up -d`**, use **`GET /version`** on the management or public discovery port (per your deployment) to read the **semver of the running app**. Official **`latest`** builds should still embed a normal semver in the binary (so operators see **`v1.1`** in **`data.version`** even though the image reference is **`…:latest`**).
 
 Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is split from **ManagementAPIsPort**. **Not** registered on **Browser HTTPS** (**8443**); use discovery or management URL (no JWT for this route).
 
@@ -193,16 +195,15 @@ Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is sp
   "code": 0,
   "error": "",
   "data": {
-    "version": "v1.0",
+    "version": "v1.1",
     "versionDate": "2024-01-15"
   }
 }
 ```
 
 **Field Descriptions:**
-- `version`: The current node version string (e.g., "v1.12")
+- `version`: The current node **application** version string (e.g. **`v1.12`**) — from the running binary, not necessarily the Docker image tag (`latest`, `v1.0`, etc.).
 - `versionDate`: The date when this version was set/changed (ISO 8601 date format, e.g., "2024-01-15")
-```
 
 <a id="get-getmachineinfo"></a>
 #### `GET /getMachineInfo`

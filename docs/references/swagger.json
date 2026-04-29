@@ -9,7 +9,7 @@
     "paths": {
         "/version": {
             "get": {
-                "description": "get node version",
+                "description": "Application release semver in Data (e.g. v1.1) comes from the mpc-auth binary built into the image, not from the Docker image tag (e.g. continuumdao/mpc-auth:latest still reports a semver via Data.version).",
                 "consumes": [
                     "application/json"
                 ],
@@ -19,7 +19,7 @@
                 "tags": [
                     "Node Related Info"
                 ],
-                "summary": "get node version",
+                "summary": "get application version (semver; not Docker tag)",
                 "responses": {
                     "200": {
                         "description": "OK",

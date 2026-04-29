@@ -36,7 +36,7 @@ services:
       timeout: 5s
       retries: 5
   app:
-    image: continuumdao/mpc-auth:v1.0
+    image: continuumdao/mpc-auth:latest
     restart: always
     environment:
       - GOLOG_FILE=logs/MPCAuthCore.log
