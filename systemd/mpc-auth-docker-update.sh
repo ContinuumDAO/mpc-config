@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# (A) Full update: stop mpc-auth container, rmi old ref, pull, digest verify, compose up.
+# (A) Full update: stop mpc-auth container, rmi old ref, pull, digest verify, compose up -d --force-recreate.
 # (B) Restart-only: no pull — docker compose restart, or compose up -d --force-recreate when
 #     MPC_AUTH_PENDING_FORCE_RECREATE=1 (set from pending-update.json by mpc-auth-apply-pending-update.sh).
 #
@@ -33,9 +33,28 @@ mpc_auth_trim() {
 RESTART_ONLY="$(mpc_auth_trim "${MPC_AUTH_PENDING_RESTART_ONLY:-0}")"
 FORCE_RECREATE="$(mpc_auth_trim "${MPC_AUTH_PENDING_FORCE_RECREATE:-0}")"
 
+# systemd oneshots often have WorkingDirectory=/; never run "docker compose" from cwd without an explicit project dir.
+mpc_auth_compose_workdir_resolve() {
+	printf '%s' "$(mpc_auth_trim "${MPC_AUTH_COMPOSE_WORKDIR:-${MPC_AUTH_COMPOSE_DIR:-}}")"
+}
+
+mpc_auth_require_compose_workdir() {
+	local w
+	w="$(mpc_auth_compose_workdir_resolve)"
+	if [[ -z "$w" ]]; then
+		echo "error: set MPC_AUTH_COMPOSE_WORKDIR (or MPC_AUTH_COMPOSE_DIR) in /etc/default/mpc-auth-docker to the directory containing docker-compose.yml." >&2
+		echo "  systemd runs this script with a non-project cwd; compose must not run without an absolute workdir." >&2
+		echo "  Or set MPC_AUTH_POST_UPDATE_CMD to a full command (e.g. cd /path/to/mpc-config && docker compose up -d app)." >&2
+		exit 1
+	fi
+	if [[ ! -d "$w" ]]; then
+		echo "error: MPC_AUTH_COMPOSE_WORKDIR is not a directory: $w" >&2
+		exit 1
+	fi
+}
+
 mpc_auth_run_restart_or_recreate() {
 	local workdir svc explicit
-	workdir="$(mpc_auth_trim "${MPC_AUTH_COMPOSE_WORKDIR:-${MPC_AUTH_COMPOSE_DIR:-}}")"
 	svc="$(mpc_auth_trim "${MPC_AUTH_COMPOSE_SERVICE:-app}")"
 	[[ -z "$svc" ]] && svc="app"
 	explicit="$(mpc_auth_trim "${MPC_AUTH_POST_UPDATE_CMD:-}")"
@@ -46,46 +65,26 @@ mpc_auth_run_restart_or_recreate() {
 		return 0
 	fi
 	if docker compose version &>/dev/null 2>&1; then
+		mpc_auth_require_compose_workdir
+		workdir="$(mpc_auth_compose_workdir_resolve)"
 		if [[ "$FORCE_RECREATE" == "1" ]]; then
-			if [[ -n "$workdir" ]]; then
-				echo "Running: cd $(printf %q "$workdir") && docker compose up -d --force-recreate $(printf %q "$svc")"
-				(cd "$workdir" && docker compose up -d --force-recreate "$svc")
-			else
-				echo "WARNING: MPC_AUTH_COMPOSE_WORKDIR unset — running docker compose from cwd ($(pwd))." >&2
-				echo "Running: docker compose up -d --force-recreate $(printf %q "$svc")"
-				docker compose up -d --force-recreate "$svc"
-			fi
+			echo "Running: cd $(printf %q "$workdir") && docker compose up -d --force-recreate $(printf %q "$svc")"
+			(cd "$workdir" && docker compose up -d --force-recreate "$svc")
 		else
-			if [[ -n "$workdir" ]]; then
-				echo "Running: cd $(printf %q "$workdir") && docker compose restart $(printf %q "$svc")"
-				(cd "$workdir" && docker compose restart "$svc")
-			else
-				echo "WARNING: MPC_AUTH_COMPOSE_WORKDIR unset — running docker compose from cwd ($(pwd))." >&2
-				echo "Running: docker compose restart $(printf %q "$svc")"
-				docker compose restart "$svc"
-			fi
+			echo "Running: cd $(printf %q "$workdir") && docker compose restart $(printf %q "$svc")"
+			(cd "$workdir" && docker compose restart "$svc")
 		fi
 		return 0
 	fi
 	if command -v docker-compose &>/dev/null 2>&1; then
+		mpc_auth_require_compose_workdir
+		workdir="$(mpc_auth_compose_workdir_resolve)"
 		if [[ "$FORCE_RECREATE" == "1" ]]; then
-			if [[ -n "$workdir" ]]; then
-				echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --force-recreate $(printf %q "$svc")"
-				(cd "$workdir" && docker-compose up -d --force-recreate "$svc")
-			else
-				echo "WARNING: MPC_AUTH_COMPOSE_WORKDIR unset — running docker-compose from cwd ($(pwd))." >&2
-				echo "Running: docker-compose up -d --force-recreate $(printf %q "$svc")"
-				docker-compose up -d --force-recreate "$svc"
-			fi
+			echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --force-recreate $(printf %q "$svc")"
+			(cd "$workdir" && docker-compose up -d --force-recreate "$svc")
 		else
-			if [[ -n "$workdir" ]]; then
-				echo "Running: cd $(printf %q "$workdir") && docker-compose restart $(printf %q "$svc")"
-				(cd "$workdir" && docker-compose restart "$svc")
-			else
-				echo "WARNING: MPC_AUTH_COMPOSE_WORKDIR unset — running docker-compose from cwd ($(pwd))." >&2
-				echo "Running: docker-compose restart $(printf %q "$svc")"
-				docker-compose restart "$svc"
-			fi
+			echo "Running: cd $(printf %q "$workdir") && docker-compose restart $(printf %q "$svc")"
+			(cd "$workdir" && docker-compose restart "$svc")
 		fi
 		return 0
 	fi
@@ -112,6 +111,9 @@ if docker container inspect "$CONTAINER" &>/dev/null; then
 	docker stop "$CONTAINER"
 	echo "Removing container $CONTAINER"
 	docker rm "$CONTAINER"
+else
+	echo "WARNING: container $(printf %q "$CONTAINER") not found — stop/rm skipped. If this name does not match your Compose service," >&2
+	echo "  set MPC_AUTH_CONTAINER_NAME in /etc/default/mpc-auth-docker. Post-pull compose still runs with --force-recreate." >&2
 fi
 
 if [[ -n "$OLD_IMAGE" ]]; then
@@ -148,51 +150,23 @@ else
 	echo "WARNING: no EXPECTED_DIGEST/MPC_AUTH_EXPECTED_DIGEST — skipping digest check (set from POST /updateMpcAuth registryDigest before production use)."
 fi
 
+# After a pull, always recreate the service container. Without this, if stop/rm missed the live
+# container (wrong MPC_AUTH_CONTAINER_NAME), plain `up -d` can no-op and mpc-auth never restarts
+# (draining stays true in the old process).
 mpc_auth_run_default_compose_up() {
 	local workdir svc
-	workdir="$(mpc_auth_trim "${MPC_AUTH_COMPOSE_WORKDIR:-${MPC_AUTH_COMPOSE_DIR:-}}")"
+	mpc_auth_require_compose_workdir
+	workdir="$(mpc_auth_compose_workdir_resolve)"
 	svc="$(mpc_auth_trim "${MPC_AUTH_COMPOSE_SERVICE:-app}")"
 	[[ -z "$svc" ]] && svc="app"
 	if docker compose version &>/dev/null 2>&1; then
-		if [[ -n "$workdir" ]]; then
-			if [[ "$FORCE_RECREATE" == "1" ]]; then
-				echo "Running: cd $(printf %q "$workdir") && docker compose up -d --force-recreate $(printf %q "$svc")"
-				(cd "$workdir" && docker compose up -d --force-recreate "$svc")
-			else
-				echo "Running: cd $(printf %q "$workdir") && docker compose up -d $(printf %q "$svc")"
-				(cd "$workdir" && docker compose up -d "$svc")
-			fi
-		else
-			echo "WARNING: MPC_AUTH_COMPOSE_WORKDIR unset — running docker compose from cwd ($(pwd))." >&2
-			if [[ "$FORCE_RECREATE" == "1" ]]; then
-				echo "Running: docker compose up -d --force-recreate $(printf %q "$svc")"
-				docker compose up -d --force-recreate "$svc"
-			else
-				echo "Running: docker compose up -d $(printf %q "$svc")"
-				docker compose up -d "$svc"
-			fi
-		fi
+		echo "Running: cd $(printf %q "$workdir") && docker compose up -d --force-recreate $(printf %q "$svc")"
+		(cd "$workdir" && docker compose up -d --force-recreate "$svc")
 		return 0
 	fi
 	if command -v docker-compose &>/dev/null 2>&1; then
-		if [[ -n "$workdir" ]]; then
-			if [[ "$FORCE_RECREATE" == "1" ]]; then
-				echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --force-recreate $(printf %q "$svc")"
-				(cd "$workdir" && docker-compose up -d --force-recreate "$svc")
-			else
-				echo "Running: cd $(printf %q "$workdir") && docker-compose up -d $(printf %q "$svc")"
-				(cd "$workdir" && docker-compose up -d "$svc")
-			fi
-		else
-			echo "WARNING: MPC_AUTH_COMPOSE_WORKDIR unset — running docker-compose from cwd ($(pwd))." >&2
-			if [[ "$FORCE_RECREATE" == "1" ]]; then
-				echo "Running: docker-compose up -d --force-recreate $(printf %q "$svc")"
-				docker-compose up -d --force-recreate "$svc"
-			else
-				echo "Running: docker-compose up -d $(printf %q "$svc")"
-				docker-compose up -d "$svc"
-			fi
-		fi
+		echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --force-recreate $(printf %q "$svc")"
+		(cd "$workdir" && docker-compose up -d --force-recreate "$svc")
 		return 0
 	fi
 	return 1
@@ -205,7 +179,8 @@ if [[ -n "$explicit" ]]; then
 elif mpc_auth_run_default_compose_up; then
 	:
 else
-	echo "Note: skipping post-pull compose — MPC_AUTH_POST_UPDATE_CMD unset and neither 'docker compose' nor docker-compose is available." >&2
+	echo "error: MPC_AUTH_POST_UPDATE_CMD unset and neither 'docker compose' nor docker-compose is available; cannot bring stack up." >&2
+	exit 1
 fi
 
 echo "Update complete for $NEW_REF."

@@ -4285,6 +4285,61 @@ apply_process_config_firewall() {
     fi
 }
 
+# If /etc/default/mpc-auth-docker exists (host has mpc-auth docker systemd helpers), keep
+# MPC_AUTH_COMPOSE_WORKDIR aligned with this mpc-config checkout so pending-update automation can find compose
+# after the operator moves or reclones the repo (systemd oneshots have no project cwd).
+_process_config_sync_mpc_auth_docker_compose_workdir() {
+    local cfg abs
+    cfg=/etc/default/mpc-auth-docker
+    [ -f "$cfg" ] || return 0
+    # mpc-config checkout (moved/cloned); skip if this isn't a compose project root (e.g. mpc-auth console/ flow).
+    if [ ! -f "${REPO_ROOT}/docker-compose.yml" ] && [ ! -f "${REPO_ROOT}/docker-compose.relay.yml" ] && [ ! -f "${REPO_ROOT}/docker-compose.client.yml" ]; then
+        return 0
+    fi
+    abs="$(cd "${REPO_ROOT}" && pwd)"
+    if ! command -v python3 >/dev/null 2>&1; then
+        print_warning "python3 not found — set MPC_AUTH_COMPOSE_WORKDIR manually in ${cfg}: ${abs}"
+        return 0
+    fi
+    if ! sudo -n true 2>/dev/null && ! sudo true; then
+        print_warning "sudo required to update MPC_AUTH_COMPOSE_WORKDIR in ${cfg} — set manually: MPC_AUTH_COMPOSE_WORKDIR=${abs}"
+        return 0
+    fi
+    # shellcheck disable=SC2310
+    if sudo env MPC_AUTH_DOCKER_ENV_PATH="$cfg" MPC_AUTH_COMPOSE_ABS="$abs" python3 <<'PY'
+import os
+import pathlib
+path = pathlib.Path(os.environ["MPC_AUTH_DOCKER_ENV_PATH"])
+abs_val = os.environ["MPC_AUTH_COMPOSE_ABS"]
+text = path.read_text(encoding="utf-8", errors="replace")
+lines = text.splitlines(keepends=True)
+key = "MPC_AUTH_COMPOSE_WORKDIR"
+out = []
+replaced = False
+for line in lines:
+    if line.lstrip().startswith(key + "="):
+        if line.endswith("\r\n"):
+            out.append(key + "=" + abs_val + "\r\n")
+        elif line.endswith("\n"):
+            out.append(key + "=" + abs_val + "\n")
+        else:
+            out.append(key + "=" + abs_val)
+        replaced = True
+    else:
+        out.append(line)
+if not replaced:
+    if out and not (out[-1].endswith("\n") or out[-1].endswith("\r\n")):
+        out.append("\n")
+    out.append(key + "=" + abs_val + "\n")
+path.write_text("".join(out), encoding="utf-8")
+PY
+    then
+        print_success "Synced MPC_AUTH_COMPOSE_WORKDIR in ${cfg} → ${abs}"
+    else
+        print_warning "Could not write ${cfg} — set MPC_AUTH_COMPOSE_WORKDIR=${abs} manually."
+    fi
+}
+
 # Locate systemd/install-mpc-auth-docker-systemd.sh: same repo, sibling mpc-config, or MPC_CONFIG_ROOT (see process_config --help).
 _process_config_resolve_mpc_auth_systemd_dir() {
     local cand rp
@@ -4604,6 +4659,7 @@ main() {
     # Optional mpc-auth Docker systemd installs/restarts (orthogonal to Relayer connectivity). Runs *before*
     # validate_relayer_api_connection so Relayer/network failures cannot skip these prompts entirely.
     _process_config_prompt_mpc_auth_systemd_helpers "$SKIP_SYSTEMD" "$INSTALL_MPC_AUTH_SYSTEMD"
+    _process_config_sync_mpc_auth_docker_compose_workdir
 
     # Validate Relayer API connection (MANDATORY for relay before certificate generation; may exit 1 on failure)
     validate_relayer_api_connection "$CONFIG_FILE"
