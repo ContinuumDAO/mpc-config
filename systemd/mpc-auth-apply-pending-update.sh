@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Consume mpc-auth-docker pending-update JSON written by mpc-auth POST /updateMpcAuth (host path bind-mounted).
 # Runs mpc-auth-docker-update.sh TAG DIGEST on the Docker host via systemd.path → this oneshot.
+#
+# pending-update.json may include restartOnly and forceRecreate; they are exported for mpc-auth-docker-update.sh.
 
 set -euo pipefail
 
@@ -26,7 +28,7 @@ _stamp() {
 }
 
 abort_bad_json() {
-	echo "mpc-auth-apply-pending-update: invalid JSON — need tag + registryDigest" >&2
+	echo "mpc-auth-apply-pending-update: invalid JSON — need non-empty tag; registryDigest required unless restartOnly" >&2
 	mv -f "$PROCESSING" "${DONE_DIR}/failed-$(_stamp).bad.json" || true
 	exit 1
 }
@@ -37,7 +39,9 @@ run_update() {
 		mv -f "$PROCESSING" "${DONE_DIR}/failed-$(_stamp).noscript.json" || true
 		exit 1
 	fi
-	echo "mpc-auth-apply-pending-update: applying tag=${_TAG:?} digest=${_DIG:?}"
+	echo "mpc-auth-apply-pending-update: applying tag=${_TAG:?} digest=${_DIG:-"(empty)"} restartOnly=${_RESTART_ONLY} forceRecreate=${_FORCE_RECREATE}"
+	export MPC_AUTH_PENDING_RESTART_ONLY="${_RESTART_ONLY}"
+	export MPC_AUTH_PENDING_FORCE_RECREATE="${_FORCE_RECREATE}"
 	if "$UPDATE_SCRIPT" "$_TAG" "$_DIG"; then
 		mv -f "$PROCESSING" "${DONE_DIR}/ok-$(_stamp).json" || rm -f "$PROCESSING"
 		exit 0
@@ -65,7 +69,11 @@ if dig and not dig.startswith("sha256:"):
     xs = "".join(c for c in dig.lower() if c in "0123456789abcdef")
     if len(xs) == 64:
         dig = "sha256:" + xs
-sys.stdout.write(tag + "\n" + dig + "\n")
+restart_only = bool(d.get("restartOnly") or d.get("restart_only"))
+force_recreate = bool(d.get("forceRecreate") or d.get("force_recreate"))
+ro = "1" if restart_only else "0"
+fr = "1" if force_recreate else "0"
+sys.stdout.write(tag + "\n" + dig + "\n" + ro + "\n" + fr + "\n")
 PY
 }
 
@@ -74,13 +82,19 @@ if ! mapfile -t _lines < <(_py_parse); then
 	abort_bad_json
 fi
 
-if [[ "${#_lines[@]}" -lt 2 ]]; then
+if [[ "${#_lines[@]}" -lt 4 ]]; then
 	abort_bad_json
 fi
 
 _TAG="${_lines[0]}"
 _DIG="${_lines[1]}"
-if [[ -z "${_TAG:-}" || -z "${_DIG:-}" ]]; then
+_RESTART_ONLY="${_lines[2]}"
+_FORCE_RECREATE="${_lines[3]}"
+
+if [[ -z "${_TAG:-}" ]]; then
+	abort_bad_json
+fi
+if [[ "${_RESTART_ONLY}" != "1" && -z "${_DIG:-}" ]]; then
 	abort_bad_json
 fi
 

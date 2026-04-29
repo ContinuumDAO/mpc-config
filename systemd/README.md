@@ -8,7 +8,7 @@ These units complement the mpc-auth **maintenance** HTTP API (`POST /maintenance
 
 ## Fully automated upgrades (recommended)
 
-**Preferred:** **`systemd.path`** + **bind mount** — the mpc-auth process **never** holds the Docker socket. After a successful **`POST /updateMpcAuth`**, **mpc-auth** (code change in mpc-auth repo) writes one JSON file **atomically** to **`/var/lib/mpc-auth-docker/pending-update.json`** (same inode on host + container). **`mpc-auth-docker-pending-update.path`** starts **`mpc-auth-apply-pending-update.service`**, which **`mv`** claims the file and runs **`mpc-auth-docker-update.sh`** with **tag + digest**. Install enables the path unit; **`docker-compose*.yml`** mounts **`/var/lib/mpc-auth-docker:/var/lib/mpc-auth-docker`** (see templates in this repo).
+**Preferred:** **`systemd.path`** + **bind mount** — the mpc-auth process **never** holds the Docker socket. After a successful **`POST /updateMpcAuth`**, **mpc-auth** writes one JSON file **atomically** to **`/var/lib/mpc-auth-docker/pending-update.json`** (same inode on host + container). **`mpc-auth-docker-pending-update.path`** starts **`mpc-auth-apply-pending-update.service`**, which **`mv`** claims the file, sets **`MPC_AUTH_PENDING_RESTART_ONLY`** / **`MPC_AUTH_PENDING_FORCE_RECREATE`** from the JSON, and runs **`mpc-auth-docker-update.sh`** with **tag** and **digest** (digest may be empty when **`restartOnly`** is true). Install enables the path unit; **`docker-compose*.yml`** mounts **`/var/lib/mpc-auth-docker:/var/lib/mpc-auth-docker`** (see templates in this repo).
 
 **Alternative — Docker socket (`/var/run/docker.sock`) in the app container:** the process can run **`docker pull`** itself. That grants **effective host-root-level control via the Docker API** (start privileged containers, mount host dirs, …). Avoid unless you accept that risk and shrink the attack surface elsewhere.
 
@@ -17,6 +17,8 @@ JSON contract (written by mpc-auth):
 ```json
 {"tag":"v1.1","registryDigest":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}
 ```
+
+**Optional fields:** **`restartOnly`** (boolean) — omit **`registryDigest`** when true; host skips pull/rmi and restarts or recreates only. **`forceRecreate`** (boolean) — run **`docker compose up -d --force-recreate`** for the configured service (full update or restart-only). The apply script exports **`MPC_AUTH_PENDING_RESTART_ONLY`** and **`MPC_AUTH_PENDING_FORCE_RECREATE`** as **`0`** or **`1`** before **`mpc-auth-docker-update.sh`**.
 
 (Optionally **`newVersionRequested`** / **`registry_digest`** aliases are accepted by **`mpc-auth-apply-pending-update.sh`**.)
 
@@ -40,7 +42,7 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 | **`mpc-auth-docker-update@.service`** | Template unit: instance **is the image tag**. Example: `systemctl start mpc-auth-docker-update@latest.service`. |
 | **`mpc-auth-docker-pending-update.path`** | Watches **`/var/lib/mpc-auth-docker/pending-update.json`**; starts apply service when mpc-auth writes the file (after **`POST /updateMpcAuth`**). |
 | **`mpc-auth-docker-pending-update.service`** | Oneshot: runs **`mpc-auth-apply-pending-update.sh`** (parse JSON → **`mpc-auth-docker-update.sh`**). |
-| **`mpc-auth-apply-pending-update.sh`** | Parses pending JSON (**`tag`** + **`registryDigest`**) then delegates to **`mpc-auth-docker-update.sh`**. |
+| **`mpc-auth-apply-pending-update.sh`** | Parses pending JSON (**`tag`**, **`registryDigest`** unless **`restartOnly`**, **`restartOnly`**, **`forceRecreate`**) then delegates to **`mpc-auth-docker-update.sh`**. |
 
 ### Update script behavior
 
