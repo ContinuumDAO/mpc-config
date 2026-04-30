@@ -38,9 +38,14 @@ All API requests are logged using the node's logger with the format:
 Client: <IP> Called API: <package>.<function>
 ```
 
+<a id="browser-https-and-loopback-http-jwt"></a>
+### Browser HTTPS and loopback HTTP (JWT)
+
+When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on **`GET`** requests. **`POST`** is not JWT-gated on that listener; use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same **`GET`** rules when Browser HTTPS is configured.
+
 ## Quick Reference: All Endpoints
 
-Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) below. Use the links to go to a specific endpoint.
+Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) below. Maintenance and host apply helpers: [Restart quiescence](#restart-quiescence-maintenance-detail).
 
 ### Node Information
 - [`GET /version`](#get-version) - Get node version
@@ -60,6 +65,10 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getPreSigningVerificationStatus`](#get-getpresigningverificationstatus) - Get presigning verification status
 - [`GET /getClientSigStatus`](#get-getclientsigstatus) - Get client signature check status (IgnoreClientSigCheck)
 - [`GET /getSubscriptions`](#get-getsubscriptions) - Get MQTT subscriptions
+- [`GET /getMSQTTKey`](#get-getmqttkey) - Get MQTT broker TLS CA PEM (`path`, `caCertPem`)
+- [`POST /postMSQTTKey`](#post-postmqttkey) - Write MQTT broker TLS CA PEM (management key signed)
+- [`POST /configUpdatePlan`](#post-configupdateplan) - Plan staged `configs.yaml` update
+- [`POST /configUpdateImplement`](#post-configupdateimplement) - Apply planned `configs.yaml` (management key signed)
 - [`GET /health`](#get-health) - Get comprehensive health status
 - [`GET /connectivityHealth`](#get-connectivityhealth) - Get connectivity health for nodes
 - [`GET /getLogs`](#get-getlogs) - Get log entries
@@ -906,6 +915,85 @@ Returns information about all current MQTT topic subscriptions.
   ]
 }
 ```
+
+**Example:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSubscriptions"
+```
+
+<a id="get-getmqttkey"></a>
+#### `GET /getMSQTTKey`
+
+Returns the MQTT broker TLS CA certificate as PEM text.
+
+**`data`:** `{ "path", "caCertPem" }`. **Error** if the file is missing.
+
+**Resolved `path` (in order):** env **`MQTT_BROKER_CA_HOST_PATH`**; **`MQTTTLS.CAFile`** from merged config (including **`MQTT_TLS_CA_FILE`**); else **`mosquitto/config/certs/ca.crt`** relative to the process working directory.
+
+**JWT:** On Browser HTTPS / loopback read listeners, **`GET`** requires a bearer token—see [Browser HTTPS and loopback HTTP (JWT)](#browser-https-and-loopback-http-jwt). Plain **`ManagementAPIsPort`** does not apply JWT to this route.
+
+**Response (`code === 0`):**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": {
+    "path": "/mosquitto/config/certs/ca.crt",
+    "caCertPem": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n"
+  }
+}
+```
+
+**Examples:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getMSQTTKey"
+curl -H "Authorization: Bearer <JWT>" "https://localhost:8443/getMSQTTKey"
+```
+
+<a id="post-postmqttkey"></a>
+#### `POST /postMSQTTKey`
+
+**Auth:** Management key (`clientSig`), same family as **`POST /postChainDetails`**. **`signedMessage`** must equal **`caCertPem`** (trimmed). **`caCertPem`:** valid X.509 **CERTIFICATE** PEM, max **512 KiB**.
+
+**`data` on success:** `{ "path", "message" }` (e.g. `"MQTT broker CA PEM written"`). Write is atomic; parent directories may be created. Service reload is **not** automatic.
+
+**Example JSON body:**
+
+```json
+{
+  "nonce": 0,
+  "caCertPem": "-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\n",
+  "signedMessage": "-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\n",
+  "clientSig": "0x... or 128-hex Ed25519"
+}
+```
+
+**Example:**
+```bash
+curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postMSQTTKey" \
+  -H "Content-Type: application/json" \
+  -d '{"nonce":0,"caCertPem":"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n","signedMessage":"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n","clientSig":"..."}'
+```
+
+<a id="post-configupdateplan"></a>
+#### `POST /configUpdatePlan`
+
+**Auth:** `VerifyMgtKeySig` over canonical JSON with **`sig`** cleared (same pattern as **`POST /newGroupRequest`**).
+
+**Body:** `nonce`, `sig`; optional `nodeMgtKey`; optional `publicMgtKey` **only** when **`PublicMgtKey`** is still empty in **`configs.yaml`** (bootstrap); `MSQTTRelayIP`; `nodeAddresses` (string array); optional `managementHttpPort` (defaults to current **`ManagementAPIsPort`**). If **`MSQTTRelayIP`** is set, relay must be the first peer; the plan derives group URLs and **`mqttBroker`**.
+
+**Response `data`:** `plannedYaml`, `planTempPath`, **`plannedShaMessage`** (use as **`signedMessage`** for implement), `preview`, and signing hints in **`preview.implementSignSteps`** (e.g. optional rotation sigs). **Cannot** replace an existing bootstrap **`PublicMgtKey`** via this endpoint—use **`POST /addManagementKey`**. Merged YAML may drop or rewrite inline comments.
+
+**Note:** If **`configs.yaml`** is missing or empty, the server may seed it from built-in templates before verifying the plan signature.
+
+<a id="post-configupdateimplement"></a>
+#### `POST /configUpdateImplement`
+
+**Auth:** **`clientSig`** over **`signedMessage`**, where **`signedMessage`** must equal **`plannedShaMessage`** from **`configUpdatePlan`**.
+
+**Body:** `plannedYaml` (**exact** string from the plan), `nonce`, `clientSig`, `signedMessage`; optional **`rotationNodeMgtKeyClientSig`** / **`rotationPublicMgtKeyClientSig`** when the plan changes **`NodeMgtKey`** or adds the first **`PublicMgtKey`**. Verification uses on-disk **`configs.yaml`** for keys before applying the merge.
+
+**Response:** Successful merge; **`composeWarning`** may be present if a best-effort compose refresh step failed. **Restart** the process so in-memory config matches the file.
 
 <a id="get-health"></a>
 #### `GET /health` ⭐ **NEW**
