@@ -975,25 +975,115 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postMSQTTKey" \
   -d '{"nonce":0,"caCertPem":"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n","signedMessage":"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n","clientSig":"..."}'
 ```
 
+**Why `configUpdatePlan` and `configUpdateImplement`?** mpc-auth uses two steps on purpose:
+
+1. **Preview before write** — The plan returns **`plannedYaml`** and **`preview`** but does **not** merge into **`configs.yaml`**. Review derived **`mqttBroker`**, peer URLs, and **`implementSignSteps`**; abandon if incorrect.
+2. **Sign a short binding** — Implement signs **`plannedShaMessage`** (`configUpdateImplement|` + SHA-256 of **`plannedYaml`**), binding the approval to exact bytes without signing a large YAML file in a wallet.
+3. **Current keys vs. rotation** — The plan uses **existing** management keys. **Implement** verifies **`clientSig`** against **on-disk** keys, then **`rotationNodeMgtKeyClientSig`** / **`rotationPublicMgtKeyClientSig`** when a **new** **`NodeMgtKey`** or first **`PublicMgtKey`** appears in the plan.
+4. **Apply boundary** — Backup, merge, and optional compose run only on successful **implement**.
+
 <a id="post-configupdateplan"></a>
 #### `POST /configUpdatePlan`
 
-**Auth:** `VerifyMgtKeySig` over canonical JSON with **`sig`** cleared (same pattern as **`POST /newGroupRequest`**).
+**Auth:** `VerifyMgtKeySig` over the **canonical JSON** of the request body with **`sig` set to the empty string** (then compare to **`sig`** in the body)—same pattern as **`POST /newGroupRequest`**. Uses **`configs.yaml` on disk** for **`NodeMgtKey`** / allowed Ed25519 keys when **`IgnoreMgtKeySigCheck`** is false.
 
-**Body:** `nonce`, `sig`; optional `nodeMgtKey`; optional `publicMgtKey` **only** when **`PublicMgtKey`** is still empty in **`configs.yaml`** (bootstrap); `MSQTTRelayIP`; `nodeAddresses` (string array); optional `managementHttpPort` (defaults to current **`ManagementAPIsPort`**). If **`MSQTTRelayIP`** is set, relay must be the first peer; the plan derives group URLs and **`mqttBroker`**.
+**Body (mpc-auth `ConfigUpdatePlanPost`):**
 
-**Response `data`:** `plannedYaml`, `planTempPath`, **`plannedShaMessage`** (use as **`signedMessage`** for implement), `preview`, and signing hints in **`preview.implementSignSteps`** (e.g. optional rotation sigs). **Cannot** replace an existing bootstrap **`PublicMgtKey`** via this endpoint—use **`POST /addManagementKey`**. Merged YAML may drop or rewrite inline comments.
+| Field | Role |
+|-------|------|
+| `nonce`, `sig` | Required for signed requests (unless sig check ignored). |
+| `nodeMgtKey` | Optional. New Ethereum **`NodeMgtKey`** (checksum address). |
+| `publicMgtKey` | Optional **only if** `PublicMgtKey` is **currently empty** in `configs.yaml` (first bootstrap). Otherwise use **`POST /addManagementKey`**. Value: 64-hex Ed25519 public key or `ssh-ed25519` line. |
+| `MSQTTRelayIP` | Required when **`nodeAddresses`** is non-empty. Must be the **relay** host (same as the **first** entry in `nodeAddresses` after ordering). |
+| `nodeAddresses` | Optional string array of peer **public** hostnames/IPs (order: relay first). Forbidden: doc-example IPs **203.0.113.10–12**, loopback/private per server validation. |
+| `managementHttpPort` | Optional; default = current **`ManagementAPIsPort`** (or 8080). Used in generated `http://host:port` management URLs. |
 
-**Note:** If **`configs.yaml`** is missing or empty, the server may seed it from built-in templates before verifying the plan signature.
+**Validation:** At least one of `nodeMgtKey`, `publicMgtKey`, `MSQTTRelayIP`, `nodeAddresses`, or `managementHttpPort` must be set. **`MSQTTRelayIP` is required whenever `nodeAddresses` is non-empty.**
+
+**What the plan changes in YAML:**
+
+- **`nodeMgtKey`** → top-level `NodeMgtKey`.
+- **`publicMgtKey`** → top-level `PublicMgtKey` (bootstrap only).
+- **`MSQTTRelayIP` + `nodeAddresses`** → **`MPCGroups[0].nodeAddresses`**: map `node001_key` … `node00N_key` → `http://<host>:<managementHttpPort>` (relay = first host), and **`MPCGroups[0].mqttBroker`** → `ssl://<first-host>:8883` (TLS MQTT to relay). This is the **configured peers** list; **`GET /getConfiguredNodeKeys`** probes those URLs (plus **`getNodeKey`** on discovery/management ports)—it does **not** have its own POST; change peers via this plan.
+
+**Response `data`:** `configsPath`, `planTempPath`, **`plannedYaml`** (full YAML text), **`plannedShaMessage`** = `configUpdateImplement\|<sha256-hex-of-plannedYaml>`, **`preview`** (human-readable diff hints, `mqttBrokerRelay`, `nodeAddressUrlsOrdered`, **`implementSignSteps`**, etc.).
+
+**Examples (plan body only—fill `sig` with your wallet/tool):**
+
+**Example 1 — Change `NodeMgtKey`:** implement will require **`rotationNodeMgtKeyClientSig`** from the **new** Ethereum address over **`plannedShaMessage`**.
+
+```json
+{
+  "nonce": 1,
+  "sig": "0x…",
+  "nodeMgtKey": "0xYourNewManagementAddress…"
+}
+```
+
+**Example 2 — Set bootstrap `PublicMgtKey`** (only when it is still empty in `configs.yaml`); implement requires **`rotationPublicMgtKeyClientSig`** from that Ed25519 key.
+
+```json
+{
+  "nonce": 2,
+  "sig": "0x…",
+  "publicMgtKey": "<64-hex-ed25519-public>"
+}
+```
+
+**Example 3 — Relay, peer management URLs, and MQTT broker:** there is no separate `mqttBroker` field in the POST; the server sets **`MPCGroups[0].mqttBroker`** to `ssl://<first-host>:8883` when you pass **`MSQTTRelayIP`** and **`nodeAddresses`** (relay first).
+
+```json
+{
+  "nonce": 3,
+  "sig": "0x…",
+  "MSQTTRelayIP": "198.51.100.10",
+  "nodeAddresses": [
+    "198.51.100.10",
+    "198.51.100.11",
+    "198.51.100.12"
+  ],
+  "managementHttpPort": 8080
+}
+```
+
+**Example 4 — Combined:** one plan can include **`nodeMgtKey`** and topology fields; call **`configUpdateImplement`** once, supplying every extra signature listed in **`preview.implementSignSteps`**.
+
+```json
+{
+  "nonce": 4,
+  "sig": "0x…",
+  "nodeMgtKey": "0x…",
+  "MSQTTRelayIP": "198.51.100.10",
+  "nodeAddresses": ["198.51.100.10", "198.51.100.11"],
+  "managementHttpPort": 8080
+}
+```
+
+**Note:** If `configs.yaml` is missing or empty, the server may seed it from a relay/client template **before** verifying the plan signature, then merge your fields.
 
 <a id="post-configupdateimplement"></a>
 #### `POST /configUpdateImplement`
 
-**Auth:** **`clientSig`** over **`signedMessage`**, where **`signedMessage`** must equal **`plannedShaMessage`** from **`configUpdatePlan`**.
+**Auth:** **`clientSig`** is a management signature over **`signedMessage`**, where **`signedMessage` must exactly equal `data.plannedShaMessage`** from the plan response (i.e. prefix **`configUpdateImplement|`** + **64-hex SHA-256** of the **`plannedYaml`** bytes). Verification uses **on-disk** **`NodeMgtKey`** / Ed25519 allow list **before** apply. Include **`rotationNodeMgtKeyClientSig`** / **`rotationPublicMgtKeyClientSig`** when the plan changes **`NodeMgtKey`** or adds the first **`PublicMgtKey`** (see **`preview.implementSignSteps`**).
 
-**Body:** `plannedYaml` (**exact** string from the plan), `nonce`, `clientSig`, `signedMessage`; optional **`rotationNodeMgtKeyClientSig`** / **`rotationPublicMgtKeyClientSig`** when the plan changes **`NodeMgtKey`** or adds the first **`PublicMgtKey`**. Verification uses on-disk **`configs.yaml`** for keys before applying the merge.
+**Body:** `plannedYaml` (**exact** string from **`configUpdatePlan`**), `nonce`, `clientSig`, `signedMessage`; optional rotation fields as required.
 
-**Response:** Successful merge; **`composeWarning`** may be present if a best-effort compose refresh step failed. **Restart** the process so in-memory config matches the file.
+**Example:**
+
+```json
+{
+  "plannedYaml": "NodeMgtKey: …\nMPCGroups:\n  - …\n",
+  "nonce": 10,
+  "clientSig": "0x… or 128-hex-ed25519",
+  "signedMessage": "configUpdateImplement|<copy data.plannedShaMessage from plan response>",
+  "rotationNodeMgtKeyClientSig": "0x…",
+  "rotationPublicMgtKeyClientSig": "…"
+}
+```
+
+(Omit unused `rotation*` fields. Replace `signedMessage` with the real **`plannedShaMessage`** from your plan response.)
+
+**Response:** Successful merge; **`composeWarning`** may be present. **Restart** the process so in-memory config matches the file.
 
 <a id="get-health"></a>
 #### `GET /health` ⭐ **NEW**
