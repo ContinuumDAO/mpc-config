@@ -571,6 +571,8 @@ The docker-compose files include:
   - **`18080`** — public discovery (`PublicDiscoveryPort`): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /health`**, **`GET /getNodeKey`**, **`GET /getConfiguredNodeKeys`** (no JWT on this port)
   - **`18081`** — scanner/relayer HTTP when **`ScannerRelayerPort`** is set in `configs.yaml` (e.g. **`POST /signRequest`**)
   - **`8443`** — Browser HTTPS (DAO app; JWT on GET per `BrowserHTTPS` in `configs.yaml`)
+  - **`./configs.yaml:/app/configs.yaml`** — mounted **writable** so management **`POST /configUpdateImplement`** can merge peer/config updates onto disk (read-only mounts block merges).
+  - **`console/apply_planned_configs_ruamel.py`** — bind-mounted over **`/app/console/apply_planned_configs_ruamel.py`** in the container. This mpc-config copy uses rename-or-copy when installing merged YAML so Docker bind mounts do not raise **`EBUSY`** on **`configs.yaml.tmp` → `configs.yaml`**.
 
 **Note:** The default configuration uses image tag **`latest`**. If you encounter an error that the image is not found, see the Troubleshooting section below.
 
