@@ -1,6 +1,6 @@
 # systemd helpers: mpc-auth Docker restart and image update
 
-These units complement the mpc-auth **maintenance** HTTP API (`POST /maintenance/requestRestartPrep`, **`GET /maintenance/restartGate`**, **`POST /updateMpcAuth`** for registry digest).
+These units complement the mpc-auth **maintenance** HTTP API (`POST /maintenance/requestRestartPrep`, **`GET /maintenance/restartGate`**, **`POST /updateMpcAuth`** for registry digest, **`POST /reboot`** for a host reboot trigger).
 
 **Why the app does not upgrade Docker for you:** `POST /updateMpcAuth` runs **inside** the mpc-auth container. Pulling a new image requires the **host’s Docker socket** and often **root**. The API response includes **`registryDigest`** so your **host-side** update script can verify **`docker pull`**; the HTTP process does not invoke **`docker`** itself (least privilege).
 
@@ -12,6 +12,10 @@ These units complement the mpc-auth **maintenance** HTTP API (`POST /maintenance
 
 **Alternative — Docker socket (`/var/run/docker.sock`) in the app container:** the process can run **`docker pull`** itself. That grants **effective host-root-level control via the Docker API** (start privileged containers, mount host dirs, …). Avoid unless you accept that risk and shrink the attack surface elsewhere.
 
+**Host reboot:** After a successful signed **`POST /reboot`** (while draining), mpc-auth can write **`pending-reboot.json`** to the same bind-mounted directory. **`mpc-auth-docker-pending-reboot.path`** starts **`mpc-auth-apply-pending-reboot.sh`**, which validates JSON and invokes **`systemctl reboot`** only (**no `shutdown(8)` fallback** — non-systemd or broken **`systemctl`** installs must reboot manually).
+
+**Non-interactive reboot / “are you sure?” prompts:** The oneshot runs **without a controlling terminal** (**`StandardInput=null`**), so nothing in this path can answer interactive questions. Maintainer scripts during shutdown often respect **`DEBIAN_FRONTEND=noninteractive`** (set in the unit). Desktop sessions can register **logind inhibitors** that delay reboot; the script tries **`systemctl reboot --check-inhibitors=no`** first (systemd **247+**), then plain **`systemctl reboot`** if that option is unknown. If a reboot still does not occur, inspect **`systemd-inhibit --list`**, **`journalctl -u mpc-auth-docker-pending-reboot.service`**, and Polkit rules for **`org.freedesktop.login1.reboot`** — the fix belongs on the host, not in the container API.
+
 JSON contract (written by mpc-auth):
 
 ```json
@@ -22,8 +26,11 @@ JSON contract (written by mpc-auth):
 
 (Optionally **`newVersionRequested`** / **`registry_digest`** aliases are accepted by **`mpc-auth-apply-pending-update.sh`**.)
 
+**Reboot trigger JSON** (written by mpc-auth for **`pending-reboot.json`**):
 
-**Fully hands-off** DAO flow = **implement the write + mount** above in **mpc-auth** + compose; see also [Host apply](../docs/references/API_IMPLEMENTATION.md#post-updatempc-auth-host).
+```json
+{"kind":"hostReboot","requestedAt":"2026-04-30T12:00:00.123456789Z"}
+```
 
 ### Where units go on Debian / Ubuntu
 
@@ -43,6 +50,9 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 | **`mpc-auth-docker-pending-update.path`** | Watches **`/var/lib/mpc-auth-docker/pending-update.json`**; starts apply service when mpc-auth writes the file (after **`POST /updateMpcAuth`**). |
 | **`mpc-auth-docker-pending-update.service`** | Oneshot: runs **`mpc-auth-apply-pending-update.sh`** (parse JSON → **`mpc-auth-docker-update.sh`**). |
 | **`mpc-auth-apply-pending-update.sh`** | Parses pending JSON (**`tag`**, **`registryDigest`** unless **`restartOnly`**, **`restartOnly`**, **`forceRecreate`**) then delegates to **`mpc-auth-docker-update.sh`**. |
+| **`mpc-auth-docker-pending-reboot.path`** | Watches **`/var/lib/mpc-auth-docker/pending-reboot.json`**; starts apply service when mpc-auth writes the file (after **`POST /reboot`**). |
+| **`mpc-auth-docker-pending-reboot.service`** | Oneshot: runs **`mpc-auth-apply-pending-reboot.sh`** → host **`systemctl reboot`**. |
+| **`mpc-auth-apply-pending-reboot.sh`** | Claims **`pending-reboot.json`**, archives to **`applied/`**, runs **`systemctl reboot`** (with inhibitor bypass when supported). |
 
 ### Update script behavior
 
@@ -69,7 +79,7 @@ After MQTT/Browser HTTPS steps complete, **`./process_config.sh`** may offer (**
 - **Fresh host:** install units + **`/etc/default/mpc-auth-docker`** via **`systemd/install-mpc-auth-docker-systemd.sh`** (requires **`sudo`**).
 - **Already installed:** re-copy scripts + **`*.service`** with **`--no-env`** (keeps **`/etc/default`**) then **`daemon-reload`**, **[Y/n]** default **Yes**.
 - **Every run:** if **`/etc/default/mpc-auth-docker`** exists, **`MPC_AUTH_COMPOSE_WORKDIR`** is set to the **absolute path of this mpc-config directory** (so moving/recloning the repo and re-running **`process_config.sh`** updates the path for **`mpc-auth-docker-pending-update`** / compose).
-- **Every run (unless `--no-systemd`):** if **`mpc-auth-docker-restart.service`** or **`mpc-auth-docker-pending-update.service`** is already under **`/etc/systemd/system/`**, **`process_config.sh`** runs **`install-mpc-auth-docker-systemd.sh --no-env`** so **`/usr/local/libexec/mpc-auth/*.sh`** and unit files match the repo (**`git pull` alone does not update those copies**).
+- **Every run (unless `--no-systemd`):** if **`mpc-auth-docker-restart.service`** or **`mpc-auth-docker-pending-update.service`** or **`mpc-auth-docker-pending-reboot.service`** is already under **`/etc/systemd/system/`**, **`process_config.sh`** runs **`install-mpc-auth-docker-systemd.sh --no-env`** so **`/usr/local/libexec/mpc-auth/*.sh`** and unit files match the repo (**`git pull` alone does not update those copies**).
 - **Optional:** **`systemctl start mpc-auth-docker-restart.service`** (**restarts mpc-auth container**) **[Y/n]** default **Yes**.
 
 Skip prompts: **`--no-systemd`** or **`PROCESS_CONFIG_SKIP_SYSTEMD=1`**. Non-interactive install: **`--install-mpc-auth-systemd`** or **`PROCESS_CONFIG_INSTALL_SYSTEMD=1`**.
@@ -78,7 +88,7 @@ Skip prompts: **`--no-systemd`** or **`PROCESS_CONFIG_SKIP_SYSTEMD=1`**. Non-int
 
 **`systemd` runs the installed files under `/usr/local/libexec/mpc-auth/`**, not the copies next to your clone in **`~/mpc-config/systemd/`**. Pulling newer **`mpc-config`** does not replace those by itself.
 
-**`./process_config.sh`** (without **`--no-systemd`**) now runs **`install-mpc-auth-docker-systemd.sh --no-env`** automatically when **`mpc-auth-docker-restart.service`** or **`mpc-auth-docker-pending-update.service`** is already installed — so **`git pull` → `process_config.sh`** refreshes libexec and unit files (**`/etc/default/mpc-auth-docker`** is preserved).
+**`./process_config.sh`** (without **`--no-systemd`**) now runs **`install-mpc-auth-docker-systemd.sh --no-env`** automatically when **`mpc-auth-docker-restart.service`**, **`mpc-auth-docker-pending-update.service`**, or **`mpc-auth-docker-pending-reboot.service`** is already installed — so **`git pull` → `process_config.sh`** refreshes libexec and unit files (**`/etc/default/mpc-auth-docker`** is preserved).
 
 Manual one-liner if you only want scripts:
 
@@ -102,14 +112,15 @@ Manual install (same result):
 
 ```bash
 sudo mkdir -p /usr/local/libexec/mpc-auth
-sudo install -m 0755 mpc-auth-docker-restart.sh mpc-auth-docker-update.sh mpc-auth-apply-pending-update.sh /usr/local/libexec/mpc-auth/
+sudo install -m 0755 mpc-auth-docker-restart.sh mpc-auth-docker-update.sh mpc-auth-apply-pending-update.sh mpc-auth-apply-pending-reboot.sh /usr/local/libexec/mpc-auth/
 sudo cp mpc-auth-docker.env /etc/default/mpc-auth-docker
 sudoedit /etc/default/mpc-auth-docker   # tweak MPC_AUTH_CONTAINER_NAME / MPC_AUTH_IMAGE if your `docker ps` NAMES differ
 
-sudo cp mpc-auth-docker-restart.service mpc-auth-docker-update@.service mpc-auth-docker-pending-update.path mpc-auth-docker-pending-update.service /etc/systemd/system/
+sudo cp mpc-auth-docker-restart.service mpc-auth-docker-update@.service mpc-auth-docker-pending-update.path mpc-auth-docker-pending-update.service mpc-auth-docker-pending-reboot.path mpc-auth-docker-pending-reboot.service /etc/systemd/system/
 sudo mkdir -p /var/lib/mpc-auth-docker/applied && sudo chmod 0755 /var/lib/mpc-auth-docker /var/lib/mpc-auth-docker/applied
 sudo systemctl daemon-reload
 sudo systemctl enable --now mpc-auth-docker-pending-update.path
+sudo systemctl enable --now mpc-auth-docker-pending-reboot.path
 ```
 
 ### Run

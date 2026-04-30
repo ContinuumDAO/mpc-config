@@ -110,20 +110,21 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 
 ### KeyGen Messaging
 KeyGen messaging is documented in `./API_KEYGEN_MESSAGING.md`. Response format and conventions follow this document (`./API_IMPLEMENTATION.md`). **sendMessage, markMessageRead, multiMarkMessagesRead, deleteMessage, and multiDeleteMessages require a management key signature** (MetaMask or Ed25519, depending on the client key in the keyGen); see API_KEYGEN_MESSAGING.md for Nonce/Sig and getMessageToSign / getNodeMgtKeyNonce / getAllowedEd25519MgtKeys. For **Open Claw** (or similar), a poll-and-mark-read helper that uses `listMessages` + `multiMarkMessagesRead` is `$MPA_PATH/scripts/keygen_messaging_agent_poll.py`; scheduling and env are described in `../skill/SKILL.md` (**KeyGen inbox poll**). Ed25519 management signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`.
-- `POST /sendMessage` - Send a message (top-level or reply) in a keyGen channel (mgt key required)
-- `GET /listMessages` - List messages (with unread, time range, top_level, pagination)
-- `GET /getMessageById` - Get a single message by id
-- `GET /getMessageThread` - Get a top-level message and its reply tree (nested, max depth 3)
-- `POST /markMessageRead` - Mark a message as read (add read receipt) (mgt key required)
-- `POST /multiMarkMessagesRead` - Mark multiple messages as read (list of message ids) (mgt key required)
-- `POST /deleteMessage` - Delete a message and all its replies (originator only) (mgt key required)
-- `POST /multiDeleteMessages` - Delete multiple messages (and their reply trees); originator-only per message; mgt key required
+- [`POST /sendMessage`](#post-sendmessage) - Send a message (top-level or reply) in a keyGen channel (mgt key required)
+- [`GET /listMessages`](#get-listmessages) - List messages (with unread, time range, top_level, pagination)
+- [`GET /getMessageById`](#get-getmessagebyid) - Get a single message by id
+- [`GET /getMessageThread`](#get-getmessagethread) - Get a top-level message and its reply tree (nested, max depth 3)
+- [`POST /markMessageRead`](#post-markmessageread) - Mark a message as read (add read receipt) (mgt key required)
+- [`POST /multiMarkMessagesRead`](#post-multimarkmessagesread) - Mark multiple messages as read (list of message ids) (mgt key required)
+- [`POST /deleteMessage`](#post-deletemessage) - Delete a message and all its replies (originator only) (mgt key required)
+- [`POST /multiDeleteMessages`](#post-multideletemessages) - Delete multiple messages (and their reply trees); originator-only per message; mgt key required
 
 ### Maintenance (restart quiescence)
 Use these on the **same** `ManagementAPIsPort` listener as the rest of the management API (SSH tunnel forwards that port; **no separate listener**). `POST /maintenance/requestRestartPrep` requires a normal **management key** signature (`VerifyMgtKeySig`, same pattern as `POST /configUpdatePlan`). **`GET /maintenance/restartGate`** is read-only and exempt from JWT on the browser HTTPS / loopback listeners (for polling from scripts). MQTT-driven protocol continuation is **not** covered by the HTTP in-flight counter — see [Restart quiescence (maintenance)](#restart-quiescence-maintenance-detail).
-- `POST /maintenance/requestRestartPrep` — enter draining mode so new tracked mutations return `503` until `GET /maintenance/restartGate` reports `readyForProcessExit` (then restart the process from the host/docker).
-- `GET /maintenance/restartGate` — returns `draining`, `inFlight`, `readyForProcessExit`, and a hint list of tracked POST paths.
-- `POST /updateMpcAuth` — while **draining**, signed request with target **tag** (e.g. `latest`, `v1.1`, or another published tag); node queries **Docker Hub** for **`registryDigest`** (`sha256:…`) for **`MpcAuthDockerRepo`**. Response includes **`previousVersion`** / **`previousVersionDate`** and **`newVersionRequested`**. The API does **not** run Docker on the host; apply the digest with **`mpc-auth-docker-update.sh TAG digest`** (no `/etc/default` edit required for one shot)—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host) and **`systemd/README.md`**.
+- [`POST /maintenance/requestRestartPrep`](#post-maintenance-requestrestartprep) — enter draining mode so new tracked mutations return `503` until `GET /maintenance/restartGate` reports `readyForProcessExit` (then restart the process from the host/docker).
+- [`GET /maintenance/restartGate`](#get-maintenance-restartgate) — returns `draining`, `inFlight`, `readyForProcessExit`, and a hint list of tracked POST paths.
+- [`POST /reboot`](#post-reboot) — while **draining**, signed `{"nonce", "sig"}`; writes **`pending-reboot.json`** for **`mpc-auth-docker-pending-reboot.path`** when **`MPC_AUTH_PENDING_REBOOT_FILE`** / **`MpcAuthPendingRebootPath`** is set (same bind mount as pending Docker updates); host runs **`systemctl reboot`**. See **`systemd/README.md`**.
+- [`POST /updateMpcAuth`](#post-updatempcauth) — while **draining**, signed request with target **tag** (e.g. `latest`, `v1.1`, or another published tag); node queries **Docker Hub** for **`registryDigest`** (`sha256:…`) for **`MpcAuthDockerRepo`**. Response includes **`previousVersion`** / **`previousVersionDate`** and **`newVersionRequested`**. The API does **not** run Docker on the host; apply the digest with **`mpc-auth-docker-update.sh TAG digest`** (no `/etc/default` edit required for one shot)—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host) and **`systemd/README.md`**.
 
 ### Pre-Signing
 - [`POST /presignRequest`](#post-presignrequest) - Create presign request (requires mgt key)
@@ -168,11 +169,27 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 
 **Same port as management API:** Maintenance routes are registered on **`Gin`** for **`ManagementAPIsPort`** (`configs.yaml` **`ManagementAPIsPort`**). An SSH tunnel forwards that port (e.g. `ssh -L 8080:127.0.0.1:8080 ...`). You do **not** need a second port or a second process unless you choose to split listeners for policy reasons (this implementation does not add one).
 
+<a id="post-maintenance-requestrestartprep"></a>
+#### `POST /maintenance/requestRestartPrep`
+
 **Signing:** `POST /maintenance/requestRestartPrep` accepts JSON `{"nonce": <int>, "sig": "<hex>"}`. The server verifies **`VerifyMgtKeySig`** over canonical JSON with **`sig` emptied** (same semantics as other management-signed POSTs). Verification uses **`configs.yaml` on disk** when present for **`NodeMgtKey`** and **`IgnoreMgtKeySigCheck`**, matching `POST /configUpdatePlan`.
+
+<a id="get-maintenance-restartgate"></a>
+#### `GET /maintenance/restartGate`
+
+Returns **`draining`**, **`inFlight`**, **`readyForProcessExit`**, and a hint list of tracked POST paths. Read-only; exempt from JWT on the browser HTTPS / loopback listeners where configured (for polling from scripts).
 
 **Flow:** (1) Sign and `POST /maintenance/requestRestartPrep`. (2) Poll `GET /maintenance/restartGate` until **`readyForProcessExit`** is `true` (`draining` is `true` and **`inFlight`** is `0`). (3) Restart the container or process on the host. Tracked paths include group/subgroup agree flows, keyGen, presign, sign/multiSign and related agrees/triggers/status/shelve, **KeyGen messaging** (`sendMessage`, read/delete variants), and **`configUpdatePlan` / `configUpdateImplement`**.
 
 **MQTT caveat:** In-flight work that continues only over **MQTT** (without a matching management POST on this node) is **not** included in the HTTP ref-count. Pause clients or wait briefly if needed.
+
+<a id="post-reboot"></a>
+#### `POST /reboot`
+
+**Host reboot trigger:** Management-signed JSON `{"nonce": <int>, "sig": "<hex>"}` (canonical body with **`sig`** cleared for verification), **only while draining** (same precondition as **`POST /updateMpcAuth`**). The API does not reboot the machine itself. When **`MpcAuthPendingRebootPath`** in **`configs.yaml`** or **`MPC_AUTH_PENDING_REBOOT_FILE`** in the environment points at a host path bind-mounted read-write (same directory as **`pending-update.json`** is typical), mpc-auth writes **`pending-reboot.json`** atomically; **`mpc-config`** **`mpc-auth-docker-pending-reboot.path`** starts **`mpc-auth-apply-pending-reboot.sh`**, which archives the request and runs **`systemctl reboot`** on systemd hosts only (no legacy **`shutdown`** path; see **`systemd/README.md`** for inhibitors and non-interactive behavior).
+
+<a id="post-updatempcauth"></a>
+#### `POST /updateMpcAuth`
 
 **Docker image upgrade (tag digest):** `POST /updateMpcAuth` (management-signed JSON `{ nonce, sig, tag }`) may be called **only while draining** (`requestRestartPrep` already applied). The node resolves the image via **Docker Hub** (`registry-1.docker.io`) and returns **`registryDigest`** aligned with **`MpcAuthDockerRepo`** (optional in `configs.yaml`, default **`continuumdao/mpc-auth`**), plus **`previousVersion`** / **`previousVersionDate`** (matches **`GET /version`** for the **current** process) and **`newVersionRequested`** (= requested **image tag**). The running container image is **not** changed by the API itself—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host).
 
@@ -2286,6 +2303,42 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getAllGroupIds"
 - Verify that `keylist` is populated for all keyGens
 - Debug missing keyList issues
 - Monitor key generation across all groups
+
+### 6a. KeyGen Messaging
+
+Per-keyGen channels for nodes in that key’s **`KeyList`**. Full request bodies, query parameters, and error codes: [`API_KEYGEN_MESSAGING.md`](./API_KEYGEN_MESSAGING.md).
+
+<a id="post-sendmessage"></a>
+#### `POST /sendMessage`
+Creates a message (top-level or reply). **Requires management key signature.** See [`API_KEYGEN_MESSAGING.md` → `POST /sendMessage`](./API_KEYGEN_MESSAGING.md#post-sendmessage).
+
+<a id="get-listmessages"></a>
+#### `GET /listMessages`
+Lists messages with filters and pagination. See [`API_KEYGEN_MESSAGING.md` → `GET /listMessages`](./API_KEYGEN_MESSAGING.md#get-listmessages).
+
+<a id="get-getmessagebyid"></a>
+#### `GET /getMessageById`
+Returns one message by id. See [`API_KEYGEN_MESSAGING.md` → `GET /getMessageById`](./API_KEYGEN_MESSAGING.md#get-getmessagebyid).
+
+<a id="get-getmessagethread"></a>
+#### `GET /getMessageThread`
+Returns a top-level message and nested replies (max depth 3). See [`API_KEYGEN_MESSAGING.md` → `GET /getMessageThread`](./API_KEYGEN_MESSAGING.md#get-getmessagethread).
+
+<a id="post-markmessageread"></a>
+#### `POST /markMessageRead`
+Adds a read receipt for the calling node. **Requires management key signature.** See [`API_KEYGEN_MESSAGING.md` → `POST /markMessageRead`](./API_KEYGEN_MESSAGING.md#post-markmessageread).
+
+<a id="post-multimarkmessagesread"></a>
+#### `POST /multiMarkMessagesRead`
+Marks multiple messages read in one request. **Requires management key signature.** See [`API_KEYGEN_MESSAGING.md` → `POST /multiMarkMessagesRead`](./API_KEYGEN_MESSAGING.md#post-multimarkmessagesread).
+
+<a id="post-deletemessage"></a>
+#### `POST /deleteMessage`
+Deletes a message and its reply tree; originator only. **Requires management key signature.** See [`API_KEYGEN_MESSAGING.md` → `POST /deleteMessage`](./API_KEYGEN_MESSAGING.md#post-deletemessage).
+
+<a id="post-multideletemessages"></a>
+#### `POST /multiDeleteMessages`
+Deletes multiple messages (and trees); originator-only per message. **Requires management key signature.** See [`API_KEYGEN_MESSAGING.md` → `POST /multiDeleteMessages`](./API_KEYGEN_MESSAGING.md#post-multideletemessages).
 
 ### 7. Pre-Signing
 

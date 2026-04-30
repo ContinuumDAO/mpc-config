@@ -45,6 +45,7 @@ install -m 0755 \
 	"$HERE/mpc-auth-docker-restart.sh" \
 	"$HERE/mpc-auth-docker-update.sh" \
 	"$HERE/mpc-auth-apply-pending-update.sh" \
+	"$HERE/mpc-auth-apply-pending-reboot.sh" \
 	"$LIBEXEC/"
 
 if [[ "$INSTALL_ENV" == true ]]; then
@@ -61,6 +62,8 @@ install -m 0644 \
 	"$HERE/mpc-auth-docker-update@.service" \
 	"$HERE/mpc-auth-docker-pending-update.path" \
 	"$HERE/mpc-auth-docker-pending-update.service" \
+	"$HERE/mpc-auth-docker-pending-reboot.path" \
+	"$HERE/mpc-auth-docker-pending-reboot.service" \
 	"$UNIT_DIR/"
 
 mkdir -p /var/lib/mpc-auth-docker/applied
@@ -71,14 +74,20 @@ systemctl daemon-reload
 systemctl enable mpc-auth-docker-pending-update.path
 systemctl restart mpc-auth-docker-pending-update.path || systemctl start mpc-auth-docker-pending-update.path
 
+systemctl enable mpc-auth-docker-pending-reboot.path
+systemctl restart mpc-auth-docker-pending-reboot.path || systemctl start mpc-auth-docker-pending-reboot.path
+
 echo
 echo "Installed:"
-echo "  $LIBEXEC/mpc-auth-docker-{restart,update}.sh + mpc-auth-apply-pending-update.sh"
+echo "  $LIBEXEC/mpc-auth-docker-{restart,update}.sh + mpc-auth-apply-pending-{update,reboot}.sh"
 [[ "$INSTALL_ENV" == true ]] && echo "  $DEFAULT_ENV"
 echo "  $UNIT_DIR/mpc-auth-docker-restart.service"
 echo "  $UNIT_DIR/mpc-auth-docker-update@.service"
 echo "  $UNIT_DIR/mpc-auth-docker-pending-update.{path,service} (auto image update — bind-mount /var/lib/mpc-auth-docker in compose)"
+echo "  $UNIT_DIR/mpc-auth-docker-pending-reboot.{path,service} (POST mpc-auth /reboot — host reboot)"
 echo "  $LIBEXEC/mpc-auth-apply-pending-update.sh"
+echo "  $LIBEXEC/mpc-auth-apply-pending-reboot.sh"
 echo
 echo "Run: sudo systemctl start mpc-auth-docker-restart.service"
 echo "(Optional automation) mpc-auth-docker-pending-update.path watches /var/lib/mpc-auth-docker/pending-update.json — bind-mount that dir in compose."
+echo "(Optional) mpc-auth-docker-pending-reboot.path watches pending-reboot.json after POST /reboot (same bind mount; set MPC_AUTH_PENDING_REBOOT_FILE in compose)."

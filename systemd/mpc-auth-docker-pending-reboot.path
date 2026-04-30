@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch for mpc-auth host reboot trigger (pending-reboot.json)
+
+[Path]
+PathChanged=/var/lib/mpc-auth-docker/pending-reboot.json
+
+[Install]
+WantedBy=multi-user.target

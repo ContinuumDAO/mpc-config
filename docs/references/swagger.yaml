@@ -7,15 +7,14 @@ info:
 paths:
   /version:
     get:
-      description: |-
-        Application release semver in Data (e.g. v1.1) comes from the mpc-auth binary built into the image, not from the Docker image tag (e.g. continuumdao/mpc-auth:latest still reports a semver via Data.version).
+      description: get node version
       consumes:
       - application/json
       produces:
       - application/json
       tags:
       - Node Related Info
-      summary: get application version (semver; not Docker tag)
+      summary: get node version
       responses:
         '200':
           description: OK
@@ -1701,6 +1700,28 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/node.APIResponse'
+  /reboot:
+    post:
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /reboot).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Management API
+      summary: POST reboot
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /updateMpcAuth:
     post:
       description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /updateMpcAuth).

@@ -19,11 +19,12 @@ services:
   app:
     image: continuumdao/mpc-auth:latest
     restart: always
-    # Paths for pending-update.json must match the bind mount below (see systemd/README.md).
+    # Paths for pending-update.json / pending-reboot.json must match the bind mount below (see systemd/README.md).
     environment:
       GOLOG_FILE: logs/MPCAuthCore.log
       GOLOG_OUTPUT: file
       MPC_AUTH_DOCKER_PENDING_UPDATE_FILE: /var/lib/mpc-auth-docker/pending-update.json
+      MPC_AUTH_PENDING_REBOOT_FILE: /var/lib/mpc-auth-docker/pending-reboot.json
     ports:
       - "127.0.0.1:8080:8080" # Management API — localhost only; SSH tunnel for admin
       - "18080:18080" # Public discovery (PublicDiscoveryPort; DAO app NODE_DISCOVERY_PORT)
@@ -36,7 +37,7 @@ services:
       mongodb:
         condition: service_healthy
     volumes:
-      # Writable host dir: mpc-auth may write pending-update.json after POST /updateMpcAuth for systemd automation (see systemd/README.md).
+      # Writable host dir: mpc-auth may write pending-update.json / pending-reboot.json for systemd automation (see systemd/README.md).
       - /var/lib/mpc-auth-docker:/var/lib/mpc-auth-docker
       - ./configs.yaml:/app/configs.yaml:ro
       - ./data/app/logs:/app/logs

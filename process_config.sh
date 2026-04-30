@@ -4378,7 +4378,7 @@ _process_config_sync_mpc_auth_libexec_from_repo() {
     if [ ! -d /etc/systemd/system ]; then
         return 0
     fi
-    if [ ! -f /etc/systemd/system/mpc-auth-docker-restart.service ] && [ ! -f /etc/systemd/system/mpc-auth-docker-pending-update.service ]; then
+    if [ ! -f /etc/systemd/system/mpc-auth-docker-restart.service ] && [ ! -f /etc/systemd/system/mpc-auth-docker-pending-update.service ] && [ ! -f /etc/systemd/system/mpc-auth-docker-pending-reboot.service ]; then
         return 0
     fi
     local sd_root ins_script

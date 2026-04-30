@@ -1,0 +1,13 @@
+[Unit]
+Description=Reboot host when mpc-auth POST /reboot drops pending-reboot.json
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/mpc-auth-docker
+# No TTY: never block on stdin prompts from this service's context.
+StandardInput=null
+# Package maintainer scripts hooked into shutdown sometimes honor this.
+Environment=DEBIAN_FRONTEND=noninteractive
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-apply-pending-reboot.sh
+RemainAfterExit=no
