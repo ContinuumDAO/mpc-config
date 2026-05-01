@@ -4216,7 +4216,62 @@ print(f"{mgt}|{pub}|{bh_fw}|{sr}")
 PYFWPORTS
 }
 
-# Apply baseline ufw allow rules for mpc-auth (does not enable ufw unless user confirms interactively).
+# Enable UFW before config processing / firewall rules (--no-firewall skips entirely).
+ensure_ufw_active_early() {
+    local skip_firewall="$1"
+
+    if [ "$skip_firewall" = "true" ]; then
+        return 0
+    fi
+
+    print_step "UFW: ensure firewall is active (use --no-firewall to skip)"
+
+    if ! command -v ufw >/dev/null 2>&1; then
+        print_error "ufw is not installed. Install with: sudo apt install ufw"
+        exit 1
+    fi
+
+    local ufw_full ufw_state
+    ufw_full=$(sudo ufw status 2>&1) || {
+        print_error "sudo ufw status failed. Ensure sudo works."
+        exit 1
+    }
+    ufw_state=$(printf '%s\n' "$ufw_full" | head -1)
+    print_info "UFW: ${ufw_state:-<no output>}"
+
+    if echo "$ufw_state" | grep -qiE '^Status:[[:space:]]+active([[:space:]]|$)'; then
+        print_info "UFW is already active."
+        return 0
+    fi
+
+    print_info "UFW is inactive — allowing SSH (OpenSSH or 22/tcp), then enabling."
+    if sudo ufw allow OpenSSH 2>/dev/null; then
+        :
+    elif sudo ufw allow 22/tcp 2>/dev/null; then
+        :
+    else
+        print_error "Failed to add a UFW rule for SSH before enable (tried OpenSSH and 22/tcp)."
+        exit 1
+    fi
+
+    if ! sudo ufw --force enable; then
+        print_error "sudo ufw --force enable failed."
+        exit 1
+    fi
+
+    ufw_full=$(sudo ufw status 2>&1) || {
+        print_error "sudo ufw status failed after enable."
+        exit 1
+    }
+    ufw_state=$(printf '%s\n' "$ufw_full" | head -1)
+    if ! echo "$ufw_state" | grep -qiE '^Status:[[:space:]]+active([[:space:]]|$)'; then
+        print_error "UFW is not active after enable. Output: ${ufw_state:-$ufw_full}"
+        exit 1
+    fi
+    print_success "UFW is active (SSH allowed for remote admin)."
+}
+
+# Apply baseline ufw allow rules for mpc-auth. UFW must be installed and already active (see ensure_ufw_active_early).
 # See docs/internal/PROCESS_CONFIG_FIREWALL.md
 apply_process_config_firewall() {
     local config_file="$1"
@@ -4266,12 +4321,8 @@ apply_process_config_firewall() {
     fi
 
     if ! command -v ufw >/dev/null 2>&1; then
-        print_warning "ufw is not installed. Install with: sudo apt install ufw"
-        print_info "Or configure nftables / cloud SGs. Baseline inbound to consider: 22 (SSH), $bh_port (Browser HTTPS), $pub_port (discovery); management $mgt_port only if UFW_OPEN_MANAGEMENT_PORT=1."
-        if [ "$is_relay" = "true" ]; then
-            print_info "Relay: also 8883/tcp (MQTT TLS to broker from peer nodes)."
-        fi
-        return 0
+        print_error "ufw is not installed (expected active UFW). Install with: sudo apt install ufw"
+        exit 1
     fi
 
     local ufw_state ufw_full
@@ -4349,34 +4400,16 @@ apply_process_config_firewall() {
     print_info "UFW rules added (or already present). UFW status:"
     sudo ufw status numbered 2>/dev/null || true
 
-    if echo "$ufw_state" | grep -qiE "inactive|disabled"; then
-        print_warning "UFW is still inactive — the host will not filter inbound traffic until you run: sudo ufw enable"
-        # Read from /dev/tty (not stdin) so the prompt appears when stdin is redirected or not a TTY.
-        if [ -r /dev/tty ] && [ -w /dev/tty ]; then
-            case "${PROCESS_CONFIG_NONINTERACTIVE:-0}" in
-                1|true|TRUE|yes|YES)
-                    print_info "PROCESS_CONFIG_NONINTERACTIVE: not enabling UFW automatically; when ready: sudo ufw enable"
-                    ;;
-                *)
-                    read -r -p "Enable UFW now? This may disrupt SSH if port 22 is wrong. [y/N]: " _ufw_en < /dev/tty || true
-                    if [[ "${_ufw_en:-}" =~ ^[Yy]$ ]]; then
-                        sudo ufw --force enable && print_success "UFW enabled" || print_error "ufw enable failed"
-                    else
-                        print_info "Skipped. When ready: sudo ufw enable"
-                    fi
-                    ;;
-            esac
-        else
-            print_info "No controlling terminal (/dev/tty) — run manually when ready: sudo ufw enable"
-        fi
-    else
-        # Match "Status: active" but not "inactive" ("inactive" contains substring "active").
-        if echo "$ufw_state" | grep -qiE '^Status:[[:space:]]+active([[:space:]]|$)'; then
-            print_info "UFW is already active — inbound rules apply."
-        else
-            print_warning "UFW status unclear: ${ufw_state:-unknown}. If rules should apply, run: sudo ufw status && sudo ufw enable"
-        fi
+    ufw_full=$(sudo ufw status 2>&1) || {
+        print_error "Could not read UFW status after applying rules."
+        exit 1
+    }
+    ufw_state=$(printf '%s\n' "$ufw_full" | head -1)
+    if ! echo "$ufw_state" | grep -qiE '^Status:[[:space:]]+active([[:space:]]|$)'; then
+        print_error "UFW is not active after applying rules (expected active). Status: ${ufw_state:-$ufw_full}"
+        exit 1
     fi
+    print_info "UFW active — inbound mpc-auth rules apply."
 }
 
 # If /etc/default/mpc-auth-docker exists (host has mpc-auth docker systemd helpers), keep
@@ -4763,7 +4796,8 @@ main() {
     
     # Check sudo access early (needed for client nodes to create /mosquitto/config/certs)
     check_sudo_access
-    
+    ensure_ufw_active_early "$SKIP_FIREWALL"
+
     # Validate configuration
     validate_no_default_ips "$CONFIG_FILE"
     validate_external_ips_only "$CONFIG_FILE"
@@ -4791,7 +4825,7 @@ main() {
 
     prompt_relayer_api_url_if_missing "$CONFIG_FILE" || exit 1
 
-    # Host firewall must run before Relayer validation — if validation exits 1, we still showed UFW status + enable prompt.
+    # Host firewall must run before Relayer validation (UFW already enforced active earlier unless --no-firewall).
     apply_process_config_firewall "$CONFIG_FILE" "$SKIP_FIREWALL" "$IS_RELAY_NODE"
 
     # Optional mpc-auth Docker systemd installs/restarts (orthogonal to Relayer connectivity). Runs *before*
