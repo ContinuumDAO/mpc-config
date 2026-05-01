@@ -1341,6 +1341,35 @@ get_local_ips() {
     printf '%s\n' "${ips[@]}" | sort -u
 }
 
+# This machine's public IPv4 as seen on the internet (NAT / router: local interfaces are often 10/172.16/192.168).
+# Used to match configs that list external IPs in nodeAddresses. Empty if lookup fails.
+# Set SKIP_EXTERNAL_IP_LOOKUP=1 to disable (air-gapped / no outbound HTTPS).
+get_external_ipv4_via_http() {
+    if [ "${SKIP_EXTERNAL_IP_LOOKUP:-}" = "1" ]; then
+        return 1
+    fi
+    local url ip
+    for url in \
+        "https://ipinfo.io/ip" \
+        "https://api.ipify.org" \
+        "https://ifconfig.me/ip"; do
+        ip=""
+        if command -v curl &>/dev/null; then
+            ip=$(curl -fsS --connect-timeout 3 --max-time 10 "$url" 2>/dev/null || true)
+        elif command -v wget &>/dev/null; then
+            ip=$(wget -qO- --timeout=10 "$url" 2>/dev/null || true)
+        else
+            return 1
+        fi
+        ip=$(printf '%s' "$ip" | tr -d '\r' | head -n1 | tr -d '[:space:]')
+        if echo "$ip" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
+            echo "$ip"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Check if IP matches (handles hostname resolution)
 ip_matches() {
     local ip1="$1"
@@ -2585,6 +2614,24 @@ validate_node_ip() {
             fi
         done
     done
+
+    # Behind NAT, nodeAddresses usually list the router's public IP while hostname -I is private — retry with HTTP "what is my IP".
+    if [ "$found_match" != true ]; then
+        local ext_ip
+        ext_ip=$(get_external_ipv4_via_http) || true
+        if [ -n "$ext_ip" ]; then
+            print_info "No match on local interface addresses; trying public IP from HTTPS lookup: $ext_ip" >&2
+            for node_addr in "${node_addresses[@]}"; do
+                local node_ip=$(extract_ip_from_url "$node_addr")
+                if ip_matches "$ext_ip" "$node_ip"; then
+                    found_match=true
+                    matched_node_ip="$node_ip"
+                    local_ips+=("$ext_ip")
+                    break
+                fi
+            done
+        fi
+    fi
     
     if [ "$found_match" != true ]; then
         print_error "Current node IP address is NOT in the MPC group nodeAddresses list"
@@ -2599,7 +2646,8 @@ validate_node_ip() {
         print_info "This script should only be run on a node that is part of the MPC group."
         print_info "Please ensure:"
         echo "  1. You are running this on a node listed in configs.yaml nodeAddresses"
-        echo "  2. The node's IP address or hostname matches one of the entries (any position; first may be ${NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4} until the relay is set)"
+        echo "  2. The node's public IP or hostname matches one of the entries (any position; first may be ${NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4} until the relay is set). Behind NAT, entries should be the external address; the script uses HTTPS (ipinfo.io/ip and fallbacks) when local interfaces do not match."
+        echo "  3. Outbound HTTPS must be allowed for that lookup unless nodeAddresses use hostnames that resolve from this host; air-gapped: SKIP_EXTERNAL_IP_LOOKUP=1 and use resolvable hostnames."
         exit 1
     fi
     print_success "Node IP validation passed" >&2
@@ -2713,8 +2761,8 @@ except Exception:
 # Check if running as root (usually not needed)
 check_root() {
     if [ "$EUID" -eq 0 ]; then
-        print_warning "Running as root - this is usually not necessary"
-        print_info "The script can typically be run as a regular user if you own the directory"
+        print_warning "Running as root — a normal user with sudo is usually enough; the script invokes sudo for UFW (unless --no-firewall) and some paths."
+        print_info "Running the entire script as root is only needed in constrained environments."
         case "${PROCESS_CONFIG_NONINTERACTIVE:-0}" in
             1|true|TRUE|yes|YES)
                 print_info "PROCESS_CONFIG_NONINTERACTIVE: continuing as root."
@@ -2738,7 +2786,7 @@ check_root() {
     fi
 }
 
-# Check if user has sudo access (required for client nodes to create /mosquitto/config/certs)
+# Check if user has sudo access (UFW by default, TLS dirs under root-owned paths, optional systemd helpers).
 check_sudo_access() {
     # If running as root, sudo is not needed
     if [ "$EUID" -eq 0 ]; then
@@ -2748,9 +2796,9 @@ check_sudo_access() {
     # Check if sudo command exists
     if ! command -v sudo &> /dev/null; then
         print_error "sudo command not found"
-        print_error "This script requires sudo access to create the certificate directory on client nodes."
+        print_error "This script uses sudo for the host firewall (UFW) by default and sometimes for TLS directories."
         echo ""
-        print_info "Please install sudo or run this script as root."
+        print_info "Please install sudo or run this script as root. Use --no-firewall if you manage the host firewall yourself."
         echo ""
         print_info "To install sudo:"
         echo "  Ubuntu/Debian: sudo is usually pre-installed"
@@ -2763,12 +2811,14 @@ check_sudo_access() {
     # Use a simple command that requires sudo and doesn't change anything
     if ! sudo -n true 2>/dev/null && ! sudo -v 2>/dev/null; then
         print_error "Cannot use sudo - access denied or password required"
-        print_error "This script requires sudo access to create the certificate directory on client nodes."
+        print_error "This script uses sudo for UFW (unless --no-firewall) and for paths that are not user-writable."
         echo ""
         print_info "Please ensure:"
         echo "  1. Your user has sudo privileges"
         echo "  2. You can run 'sudo -v' successfully"
         echo "  3. Or run this script as root"
+        echo ""
+        print_info "To skip the UFW step (not recommended for production):  $0 --no-firewall"
         echo ""
         print_info "To check sudo access, try: sudo whoami"
         print_info "If prompted for a password, enter it when the script requests sudo access."
@@ -2779,10 +2829,25 @@ check_sudo_access() {
     return 0
 }
 
+# Run check_sudo_access at most once per invocation (UFW, cert dirs, etc.).
+_PROCESS_CONFIG_SUDO_VERIFIED=0
+require_sudo_capable() {
+    if [ "$EUID" -eq 0 ] || [ "$_PROCESS_CONFIG_SUDO_VERIFIED" = "1" ]; then
+        return 0
+    fi
+    check_sudo_access
+    _PROCESS_CONFIG_SUDO_VERIFIED=1
+}
+
 # Check if certificate directory exists and is writable (call only when generating MQTT TLS certs).
 check_cert_dir() {
     local _cert_parent
     _cert_parent=$(dirname "$CERT_DIR")
+    if [ "$EUID" -ne 0 ]; then
+        if { [ -d "$CERT_DIR" ] && [ ! -w "$CERT_DIR" ]; } || { [ ! -d "$CERT_DIR" ] && [ ! -w "$_cert_parent" ]; }; then
+            require_sudo_capable
+        fi
+    fi
     if [ ! -d "$_cert_parent" ]; then
         print_error "Certificate directory parent does not exist: $_cert_parent"
         exit 1
@@ -3188,9 +3253,10 @@ display_summary() {
     print_warning "IMPORTANT: Keep the private keys ($CA_KEY, $SERVER_KEY) secure and private!"
     print_warning "           Only share the CA certificate ($CA_CRT) with nodes in your group."
     echo ""
-    print_info "Note: This script typically does NOT need to be run as root/sudo."
-    print_info "      Only use sudo if the directory is owned by another user (e.g., mosquitto service)."
-    print_info ""
+    print_info "How to run: as a normal user in a tree you can write to. The script calls sudo when required:"
+    print_info "  default UFW (see Host firewall in --help), MQTT/webTLS paths owned by root, optional systemd steps."
+    print_info "  Use --no-firewall if you manage the host firewall yourself (sudo may still be needed for cert paths)."
+    print_info "  Avoid sudo ./process_config.sh unless you intend everything to run as root (see warning above)."
     print_info "Script location: console/process_config.sh"
     print_info "Certificate location: mosquitto/config/certs/"
 }
@@ -3790,6 +3856,18 @@ get_browser_https_node_ip() {
             fi
         done
     done
+    local ext_ip
+    ext_ip=$(get_external_ipv4_via_http) || true
+    if [ -n "$ext_ip" ]; then
+        for node_addr in "${node_addresses[@]}"; do
+            local node_ip
+            node_ip=$(extract_ip_from_url "$node_addr")
+            if [ -n "$node_ip" ] && ip_matches "$ext_ip" "$node_ip"; then
+                echo "$node_ip"
+                return 0
+            fi
+        done
+    fi
     return 1
 }
 
@@ -3806,6 +3884,7 @@ setup_browser_https() {
     print_info "Using public IP from configs for certificate SAN: $browser_ip"
 
     if ! mkdir -p "$WEB_TLS_HOST_DIR" 2>/dev/null; then
+        require_sudo_capable
         if sudo mkdir -p "$WEB_TLS_HOST_DIR" 2>/dev/null; then
             sudo chown "$(whoami):$(whoami)" "$WEB_TLS_HOST_DIR" 2>/dev/null || true
         else
@@ -4083,7 +4162,8 @@ show_process_config_help() {
     echo "      in configs.yaml (obtain from the DAO)."
     echo ""
     echo "Host firewall:"
-    echo "  By default this script runs a host firewall step (ufw when available): allow SSH (22),"
+    echo "  By default this script runs a host firewall step (ufw when available), which requires sudo for ufw status/rules."
+    echo "  Rules: allow SSH (22),"
     echo "  Browser HTTPS (8443), PublicDiscoveryPort (18080), ScannerRelayerPort (18081 if set),"
     echo "  ManagementAPIsPort (8080), relay MQTT (8883). ScannerRelayerPort uses *scoped* UFW rules when"
     echo "  PreSigningVerification.RelayerAPIURL and/or ScannerAPIURLs resolve to IPv4 (see configs.yaml)."
@@ -4224,6 +4304,8 @@ ensure_ufw_active_early() {
         return 0
     fi
 
+    require_sudo_capable
+
     print_step "UFW: ensure firewall is active (use --no-firewall to skip)"
 
     if ! command -v ufw >/dev/null 2>&1; then
@@ -4284,6 +4366,8 @@ apply_process_config_firewall() {
         print_info "See: docs/internal/PROCESS_CONFIG_FIREWALL.md"
         return 0
     fi
+
+    require_sudo_capable
 
     print_step "Host firewall (recommended for financial / MPC nodes)"
 
@@ -4794,8 +4878,6 @@ main() {
     check_root
     check_openssl
     
-    # Check sudo access early (needed for client nodes to create /mosquitto/config/certs)
-    check_sudo_access
     ensure_ufw_active_early "$SKIP_FIREWALL"
 
     # Validate configuration
