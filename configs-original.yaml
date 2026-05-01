@@ -370,10 +370,8 @@ MPCGroups:
     # CRITICAL - Order must be the SAME on all nodes: The first entry is the relay node (runs MQTT broker).
     # process_config.sh uses this order to enable mosquitto only on the first node and disable it on others.
     # If order differs between nodes, the wrong node may start mosquitto.
-    nodeAddresses:
-      node1_key: "http://203.0.113.10:8081"
-      node2_key: "http://203.0.113.11:8081"
-      node3_key: "http://203.0.113.12:8081"
+    # Template ships empty — fill with scripts/provision-node.sh and/or process_config.sh (set http://HOST:port per peer).
+    nodeAddresses: {}
 
     # Optional: MQTT broker address for this group
     # If not provided, will be automatically derived from the first node's address

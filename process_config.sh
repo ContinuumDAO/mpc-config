@@ -1229,6 +1229,12 @@ validate_external_ips_only() {
     if [ ! -f "$config_file" ]; then
         return 0  # Skip if config not found
     fi
+
+    # Deferred relay (0.0.0.0 first): peers may be private/LAN until the real relay IP is set (provision / NAT).
+    if first_node_address_is_relay_placeholder "$config_file"; then
+        print_info "First nodeAddresses host is ${NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4} (relay placeholder) — skipping public-IP-only validation for peer entries."
+        return 0
+    fi
     
     print_step "Validating that all node addresses are external IPs..."
     
@@ -1889,8 +1895,8 @@ prompt_fill_empty_node_addresses() {
     fi
     
     echo ""
-    print_step "nodeAddresses is empty or still the default example IPs — enter each node's public IP or hostname"
-    print_info "Replace 203.0.113.10 / .11 / .12 (documentation examples) with your real public IPs or hostnames."
+    print_step "nodeAddresses is empty — enter each node's public IP or hostname (or documentation examples to replace)"
+    print_info "The template ships with an empty nodeAddresses map; add at least one peer before typing finished (first = relay when using a real relay IP)."
     print_info "The first address you enter is the RELAY NODE (runs the MQTT broker). Use the SAME order on every machine's configs.yaml."
     print_info "Port :${MPC_NODE_HTTP_PORT} is added automatically (http://...:${MPC_NODE_HTTP_PORT})."
     print_info "If your API listens on a different port, set MPC_NODE_HTTP_PORT at the top of this script (or edit configs.yaml afterward)."
@@ -2510,9 +2516,10 @@ validate_node_ip() {
     local config_file="$1"
     
     if [ ! -f "$config_file" ]; then
-        print_warning "Could not find configs.yaml - skipping IP validation"
-        print_info "Expected locations: console/configs.yaml or configs.yaml"
-        return 0  # Don't fail if config not found
+        print_warning "Could not find configs.yaml - skipping IP validation" >&2
+        print_info "Expected locations: console/configs.yaml or configs.yaml" >&2
+        echo "false"
+        return 0
     fi
     
     print_step "Validating node IP against MPC group configuration..." >&2
@@ -2524,7 +2531,8 @@ validate_node_ip() {
     done < <(parse_node_addresses_from_yaml "$config_file")
     
     if [ ${#node_addresses[@]} -eq 0 ]; then
-        print_warning "No node addresses found in configs.yaml - skipping IP validation"
+        print_warning "No node addresses found in configs.yaml - skipping IP validation" >&2
+        echo "false"
         return 0
     fi
     
@@ -2547,7 +2555,8 @@ validate_node_ip() {
     done < <(get_local_ips)
     
     if [ ${#local_ips[@]} -eq 0 ]; then
-        print_warning "Could not determine local IP addresses - skipping validation"
+        print_warning "Could not determine local IP addresses - skipping validation" >&2
+        echo "false"
         return 0
     fi
     
