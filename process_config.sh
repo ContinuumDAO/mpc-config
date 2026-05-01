@@ -2190,6 +2190,11 @@ prompt_configure_management_keys() {
         print_error "At least one of NodeMgtKey or PublicMgtKey must be set. Edit configs.yaml or run this script interactively."
         return 1
     fi
+
+    # Valid key(s) already in configs.yaml (e.g. provision-node.sh) — do not prompt for optional second key.
+    if verify_at_least_one_management_key "$config_file"; then
+        return 0
+    fi
     
     local set_node="" set_pub=""
     local nk_empty pk_empty
@@ -2690,7 +2695,22 @@ check_root() {
     if [ "$EUID" -eq 0 ]; then
         print_warning "Running as root - this is usually not necessary"
         print_info "The script can typically be run as a regular user if you own the directory"
-        read -p "Continue anyway? (yes/no): " continue_root
+        case "${PROCESS_CONFIG_NONINTERACTIVE:-0}" in
+            1|true|TRUE|yes|YES)
+                print_info "PROCESS_CONFIG_NONINTERACTIVE: continuing as root."
+                return 0
+                ;;
+        esac
+        if [ ! -t 0 ] && [ ! -r /dev/tty ]; then
+            print_info "No TTY: continuing as root."
+            return 0
+        fi
+        local continue_root=""
+        if [ -r /dev/tty ] && [ -w /dev/tty ]; then
+            read -r -p "Continue anyway? (yes/no): " continue_root < /dev/tty || true
+        else
+            read -r -p "Continue anyway? (yes/no): " continue_root || true
+        fi
         if [ "$continue_root" != "yes" ] && [ "$continue_root" != "y" ]; then
             print_info "Exiting. Please run as a regular user if you own the mosquitto/config directory"
             exit 0
@@ -2807,7 +2827,16 @@ confirm_overwrite_mqtt_certs() {
         return 1
     fi
     print_warning "Regeneration requested — existing Mosquitto (MQTT) TLS files will be replaced if you confirm."
-    read -r -p "Overwrite these Mosquitto (MQTT) TLS files? (yes/no): " overwrite
+    local overwrite=""
+    case "${PROCESS_CONFIG_NONINTERACTIVE:-0}" in
+        1|true|TRUE|yes|YES)
+            overwrite="yes"
+            print_info "PROCESS_CONFIG_NONINTERACTIVE: confirming Mosquitto TLS overwrite."
+            ;;
+        *)
+            read -r -p "Overwrite these Mosquitto (MQTT) TLS files? (yes/no): " overwrite
+            ;;
+    esac
     if [ "$overwrite" != "yes" ] && [ "$overwrite" != "y" ]; then
         return 1
     fi
@@ -3990,6 +4019,7 @@ show_process_config_help() {
     echo "  UFW_OPEN_MANAGEMENT_PORT=1 — add ufw allow for ManagementAPIsPort (default: management port not opened in UFW)."
     echo "  PROCESS_CONFIG_SKIP_SYSTEMD=1 — skip optional mpc-auth systemd helper prompts."
     echo "  PROCESS_CONFIG_INSTALL_SYSTEMD=1 — same as --install-mpc-auth-systemd (non-interactive install)."
+    echo "  PROCESS_CONFIG_NONINTERACTIVE=1 — skip optional prompts (e.g. root continue, second management key, MQTT overwrite confirm if regenerating, UFW enable ask, systemd Y/n)."
     echo "  MPC_CONFIG_ROOT=/path/to/mpc-config — locate systemd/install-mpc-auth-docker-systemd.sh when the script runs"
     echo "    from mpc-auth (or any tree that does not include mpc-config/systemd next to repo root)."
     echo ""
@@ -4303,12 +4333,19 @@ apply_process_config_firewall() {
         print_warning "UFW is still inactive — the host will not filter inbound traffic until you run: sudo ufw enable"
         # Read from /dev/tty (not stdin) so the prompt appears when stdin is redirected or not a TTY.
         if [ -r /dev/tty ] && [ -w /dev/tty ]; then
-            read -r -p "Enable UFW now? This may disrupt SSH if port 22 is wrong. [y/N]: " _ufw_en < /dev/tty || true
-            if [[ "${_ufw_en:-}" =~ ^[Yy]$ ]]; then
-                sudo ufw --force enable && print_success "UFW enabled" || print_error "ufw enable failed"
-            else
-                print_info "Skipped. When ready: sudo ufw enable"
-            fi
+            case "${PROCESS_CONFIG_NONINTERACTIVE:-0}" in
+                1|true|TRUE|yes|YES)
+                    print_info "PROCESS_CONFIG_NONINTERACTIVE: not enabling UFW automatically; when ready: sudo ufw enable"
+                    ;;
+                *)
+                    read -r -p "Enable UFW now? This may disrupt SSH if port 22 is wrong. [y/N]: " _ufw_en < /dev/tty || true
+                    if [[ "${_ufw_en:-}" =~ ^[Yy]$ ]]; then
+                        sudo ufw --force enable && print_success "UFW enabled" || print_error "ufw enable failed"
+                    else
+                        print_info "Skipped. When ready: sudo ufw enable"
+                    fi
+                    ;;
+            esac
         else
             print_info "No controlling terminal (/dev/tty) — run manually when ready: sudo ufw enable"
         fi
@@ -4480,6 +4517,9 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
     local __mpc_auth_line=""
 
     _mpc_auth_can_prompt_interactive() {
+        case "${PROCESS_CONFIG_NONINTERACTIVE:-0}" in
+            1|true|TRUE|yes|YES) return 1 ;;
+        esac
         { [ -r /dev/tty ] && [ -w /dev/tty ]; } || [ -t 0 ]
     }
 

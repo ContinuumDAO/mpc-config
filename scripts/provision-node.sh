@@ -52,6 +52,7 @@ Environment (optional):
   PROVISION_HTTP_PORT            Peer URL port when --http-port omitted (default 8081)
   PROVISION_RELAY_PLACEHOLDER_HOST  Override relay placeholder (default 0.0.0.0)
   RELAYER_API_URL                Used by process_config.sh when RelayerAPIURL is empty
+  PROCESS_CONFIG_NONINTERACTIVE  Defaults to 1 for this script (set 0 before sudo -E to allow process_config prompts)
   See process_config.sh --help for additional variables.
 
 Node layout written (MPCGroups[0] only):
@@ -430,5 +431,6 @@ fi
 
 echo ""
 echo "==> Running process_config.sh (${PC_ARGS[*]:-})"
+export PROCESS_CONFIG_NONINTERACTIVE="${PROCESS_CONFIG_NONINTERACTIVE:-1}"
 cd "$REPO_ROOT"
 bash "$PROCESS_CONFIG_SH" "${PC_ARGS[@]}"
