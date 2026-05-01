@@ -1,0 +1,12 @@
+# ContinuumDAO dashboard (pre-built image). Run scripts from this directory.
+# Variables NODE_APP_IMAGE, NODE_APP_TAG, NODE_APP_PORT are read from ./.env for substitution.
+
+name: continuumdao-local-node-app
+
+services:
+  web:
+    image: ${NODE_APP_IMAGE:-continuumdao/continuumdao-node-app}:${NODE_APP_TAG:-latest}
+    env_file: .env
+    ports:
+      - "${NODE_APP_PORT:-3333}:3000"
+    restart: unless-stopped
