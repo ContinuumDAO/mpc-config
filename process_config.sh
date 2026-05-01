@@ -212,7 +212,7 @@ prompt_scanner_api_urls_if_empty() {
     local default_display
     default_display=$(IFS=, ; echo "${DEFAULT_SCANNER_API_URLS[*]}")
 
-    if [ -t 0 ] && [ -t 1 ] && [ -r /dev/tty ]; then
+    if _process_config_prompt_relayer_scanner_ok; then
         echo ""
         print_step "ScannerAPIURLs empty — UFW uses these hostnames/IPs for scoped rules on ScannerRelayerPort"
         print_info "Press Enter for the default list, or enter comma-separated HTTP(S) URLs (host matters for firewall; path/port ignored for allow rules)."
@@ -1096,6 +1096,17 @@ _extract_relayer_api_url_from_config() {
     printf '%s' "$api_url" | tr -d '\r\n'
 }
 
+# True when interactive Relayer/Scanner prompts may run (TTY + not PROCESS_CONFIG_NONINTERACTIVE).
+_process_config_prompt_relayer_scanner_ok() {
+    case "${PROCESS_CONFIG_NONINTERACTIVE:-0}" in
+        1|true|TRUE|yes|YES) return 1 ;;
+    esac
+    if [ -t 0 ] && [ -t 1 ] && [ -r /dev/tty ]; then
+        return 0
+    fi
+    return 1
+}
+
 # When PreSigningVerification exists but RelayerAPIURL is empty: RELAYER_API_URL env, then DEFAULT_RELAYER_API_URL, or prompt (empty line = default).
 # Also fills ScannerAPIURLs in configs.yaml when empty (DEFAULT_SCANNER_API_URLS).
 prompt_relayer_api_url_if_missing() {
@@ -1136,7 +1147,7 @@ prompt_relayer_api_url_if_missing() {
     fi
 
     local url_in=""
-    if [ -t 0 ] && [ -t 1 ] && [ -r /dev/tty ]; then
+    if _process_config_prompt_relayer_scanner_ok; then
         echo ""
         print_step "RelayerAPIURL missing — required when PreSigningVerification is configured"
         print_info "Obtain the relayer HTTP base URL from the DAO (serves /v1/mpc/chain_info). Not the same as MPC node addresses."
@@ -1158,7 +1169,7 @@ prompt_relayer_api_url_if_missing() {
         done
     else
         url_in="$DEFAULT_RELAYER_API_URL"
-        print_info "Non-interactive: setting PreSigningVerification.RelayerAPIURL to default ${DEFAULT_RELAYER_API_URL} (override with RELAYER_API_URL or edit configs.yaml)"
+        print_info "Non-interactive: setting PreSigningVerification.RelayerAPIURL to default ${DEFAULT_RELAYER_API_URL} (override with RELAYER_API_URL or set PROCESS_CONFIG_NONINTERACTIVE=0 to prompt; or edit configs.yaml)"
     fi
 
     configs_yaml_merge_relayer_api_url "$config_file" "$url_in" || return 1
@@ -4028,7 +4039,7 @@ show_process_config_help() {
     echo "  UFW_OPEN_MANAGEMENT_PORT=1 — add ufw allow for ManagementAPIsPort (default: management port not opened in UFW)."
     echo "  PROCESS_CONFIG_SKIP_SYSTEMD=1 — skip optional mpc-auth systemd helper prompts."
     echo "  PROCESS_CONFIG_INSTALL_SYSTEMD=1 — same as --install-mpc-auth-systemd (non-interactive install)."
-    echo "  PROCESS_CONFIG_NONINTERACTIVE=1 — skip optional prompts (e.g. root continue, second management key, MQTT overwrite confirm if regenerating, UFW enable ask, systemd Y/n)."
+    echo "  PROCESS_CONFIG_NONINTERACTIVE=1 — skip optional prompts (RelayerAPIURL / ScannerAPIURLs use defaults when unset; root continue; second management key; MQTT overwrite if regenerating; UFW enable ask; systemd Y/n)."
     echo "  MPC_CONFIG_ROOT=/path/to/mpc-config — locate systemd/install-mpc-auth-docker-systemd.sh when the script runs"
     echo "    from mpc-auth (or any tree that does not include mpc-config/systemd next to repo root)."
     echo ""
