@@ -25,6 +25,8 @@ Edit `.env` and set at least **REOWN_PROJECT_ID** to your Reown project id.
 | **REOWN_PROJECT_ID** | Yes | Reown Cloud project id (wallet modal). |
 | **ENABLE_PLAIN_HTTP_ATTACH** | Yes (local image) | Set to `1` so the attach UI offers **Plain HTTP** (local/LAN). Omit or `0` on **Railway** production so only Browser HTTPS + SSH tunnel appear. `.env.example` includes `1`. |
 | **NODE_READ_DISCOVERY_ALLOW_PRIVATE** | Recommended locally | Set to `1` so the Next.js server can proxy discovery calls to **private / RFC1918 / localhost** addresses where mpc-auth usually listens in dev. |
+| **NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES** | No | NAT hairpin: comma-separated `PublicIPv4=127.0.0.1` (or another bind host). Lets server-side discovery proxies dial the node when `nodeAddresses` use your **WAN** IP but mpc-auth is **reached on loopback** from this stack. See below. |
+| **NODE_READ_DISCOVERY_HAIRPIN_FALLBACK** | No | With **NODE_READ_DISCOVERY_ALLOW_PRIVATE=1** only: after “no route” / unreachable on a **public** IPv4, retry once via `127.0.0.1`. Dev convenience; prefer **LOCAL_BIND_ALIASES** when you know the IP. |
 | **NODE_APP_IMAGE** | No | Docker image repository (default `continuumdao/continuumdao-node-app`). |
 | **NODE_APP_TAG** | No | Image tag (default `latest`). |
 | **NODE_APP_PORT** | No | Host port mapped to the app (default `3333` → container port `3000`). |
@@ -64,6 +66,15 @@ When **`ENABLE_PLAIN_HTTP_ATTACH=1`**, the dashboard shows **Plain HTTP** in the
 Use the **real node LAN or public IP** when required (not `127.0.0.1` from the browser’s perspective, unless the browser is on the same host and mpc-auth binds to loopback).
 
 Keep **NODE_READ_DISCOVERY_ALLOW_PRIVATE=1** in `.env` so server-side routes like `/api/node-read/node-version` can reach private discovery addresses when you use local or RFC1918 hosts.
+
+### NAT hairpin (same machine as mpc-auth, WAN IP in `nodeAddresses`)
+
+If **mpc-auth** is configured with **public** IPv4s in `nodeAddresses` (as `process_config.sh` expects behind NAT), the **Next.js** process may still fail to open `http://<that-public-ip>:18080` (or `:8080`) to itself — many routers do not support loopback to the WAN address. Symptoms: discovery proxy errors (“no route to host”) while the UI is otherwise local.
+
+1. **Preferred:** set **`NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES`** in `.env`, e.g. `203.0.113.5=127.0.0.1`, using the same public IPv4 you list in node config and the address your **server** can use to reach mpc-auth (often `127.0.0.1` when the dashboard container shares the host network or you port-forward to the host).
+2. **Dev-only shortcut:** with **`NODE_READ_DISCOVERY_ALLOW_PRIVATE=1`**, you may set **`NODE_READ_DISCOVERY_HAIRPIN_FALLBACK=1`** so failed dials to a public IPv4 retry via `127.0.0.1` (see **continuumdao-node-app** `app/api/node-read/_lib.ts`). Do not rely on this for hosted dashboards reaching **remote** nodes.
+
+**Note:** If the dashboard runs **only in Docker** with `bridge` networking, `127.0.0.1` inside the container is **not** the host’s mpc-auth unless you use `network_mode: host`, extra_hosts, or publish mpc-auth on the Docker bridge IP. Adjust the **right-hand** side of the alias accordingly.
 
 ## Building and publishing the image
 
