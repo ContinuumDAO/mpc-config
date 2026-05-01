@@ -17,6 +17,8 @@ The Distributed Auth Management API provides a RESTful interface for managing MP
 ### Public discovery HTTP
 If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /health`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`$MANAGEMENT_PORT`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
 
+**`GET /getNodeMgtKey`** returns the configured **`NodeMgtKey`** (Ethereum management address from `configs.yaml` / env) as a JSON string in **`data`**. No authentication on this listener; use it with **`GET /getNodeMgtKeyNonce`** for MetaMask-style management signing.
+
 **`GET /getPublicMgtKey`** returns the same Ed25519 public keys as the allow-list for management auth (config **`PublicMgtKey`** plus keys from **`POST /addManagementKey`**), as a JSON array of 64-hex strings (no labels). Issuers and apps can learn the public keys without reading `configs.yaml` or static Railway env maps.
 
 ### Response Format
@@ -371,7 +373,24 @@ curl "http://localhost:18080/getNodeKey"   # when PublicDiscoveryPort is split (
 
 <a id="get-getnodemgtkey"></a>
 #### `GET /getNodeMgtKey`
-Returns the node management key (Ethereum address format). This key is used for authenticating management operations.
+Returns the **`NodeMgtKey`** configured for this node (Ethereum address: `0x` plus 40 hex from `configs.yaml` / `NodeMgtKey` env). **`data`** is that string. **No authentication** on the management HTTP port or on **PublicDiscoveryPort** (see [Public discovery HTTP](#public-discovery-http)). On **Browser HTTPS** / **BrowserLoopbackReadHTTP**, **GET** requests require **JWT** like other routes on those listeners—use the management or discovery base URL when you need this value without JWT.
+
+Use this address with [`GET /getNodeMgtKeyNonce`](#get-getnodemgtkeynonce) and MetaMask **`personal_sign`** for management API requests signed by the Ethereum key.
+
+**Response:**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb5"
+}
+```
+
+**Example:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKey"
+curl "http://localhost:18080/getNodeMgtKey"   # when PublicDiscoveryPort is split (e.g. 18080)
+```
 
 <a id="get-getnodeuptime"></a>
 #### `GET /getNodeUptime`
@@ -407,20 +426,6 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeUptime"
 - If the node has never been started before, `firstStartDate` and `lastRestartDate` will be set to the current date/time.
 - `totalUptimeHours` represents the total time elapsed since first start, not actual running time (it doesn't subtract downtime periods).
 - `currentSessionUptimeHours` is calculated in real-time on each API call.
-
-**Response:**
-```json
-{
-  "code": 0,
-  "error": "",
-  "data": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb5"
-}
-```
-
-**Example:**
-```bash
-curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKey"
-```
 
 <a id="get-getnodemgtkeynonce"></a>
 #### `GET /getNodeMgtKeyNonce`

@@ -43,6 +43,10 @@ DEFAULT_BROWSER_HTTPS_EXPECTED_ISSUER="https://mpa.continuumdao.org"
 # HTTP port written into nodeAddresses URLs (management API); default Docker mapping is often 8080—set to match your deployment.
 MPC_NODE_HTTP_PORT=8081
 
+# If MPCGroups[0].nodeAddresses first URL host is this address, treat relay as unset: automation / frontend sets the real relay IP later.
+# This host must still appear in nodeAddresses as some peer (not necessarily first); script uses client/MQTT path until first is a real relay IP.
+NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4="0.0.0.0"
+
 # BrowserLoopbackReadHTTP listener port (mpc-auth); must match docker-compose 127.0.0.1:<host>:<container> mapping.
 DEFAULT_BROWSER_LOOPBACK_READ_HTTP_PORT="${DEFAULT_BROWSER_LOOPBACK_READ_HTTP_PORT:-8445}"
 
@@ -2405,8 +2409,8 @@ PYMGT
     return 0
 }
 
-# Get first node address from config (relay node = runs mosquitto).
-# All nodes must list nodeAddresses in the SAME order; the first entry is the relay node.
+# Get first node address from config (relay node = runs mosquitto when host is not NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4).
+# All nodes must list nodeAddresses in the SAME order; the first entry is the relay node (or 0.0.0.0 = placeholder / client path until set).
 get_first_node_address() {
     local config_file="$1"
     
@@ -2484,6 +2488,18 @@ except Exception:
     return 1
 }
 
+# True if the first URL in MPCGroups[0].nodeAddresses uses NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4 as host (relay IP deferred).
+first_node_address_is_relay_placeholder() {
+    local config_file="$1"
+    local first_url first_host
+    first_url=$(get_first_node_address "$config_file" 2>/dev/null) || true
+    if [ -z "$first_url" ] || [ "$first_url" = "null" ]; then
+        return 1
+    fi
+    first_host=$(extract_host_from_url "$first_url")
+    [ "$first_host" = "$NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4" ]
+}
+
 # Validate node IP against config
 validate_node_ip() {
     local config_file="$1"
@@ -2513,6 +2529,11 @@ validate_node_ip() {
     if [ -n "$first_node_addr" ]; then
         first_node_ip=$(extract_ip_from_url "$first_node_addr")
     fi
+
+    local relay_placeholder_first=false
+    if [ "$first_node_ip" = "$NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4" ]; then
+        relay_placeholder_first=true
+    fi
     
     # Get local IPs
     local local_ips=()
@@ -2525,7 +2546,7 @@ validate_node_ip() {
         return 0
     fi
     
-    # Check if any local IP matches any node address
+    # Check if any local IP matches any node address (this machine must be listed as a peer; relay placeholder first slot is OK)
     local found_match=false
     local matched_node_ip=""
     
@@ -2553,11 +2574,13 @@ validate_node_ip() {
         print_info "This script should only be run on a node that is part of the MPC group."
         print_info "Please ensure:"
         echo "  1. You are running this on a node listed in configs.yaml nodeAddresses"
-        echo "  2. The node's IP address matches one of the addresses in the configuration"
+        echo "  2. The node's IP address or hostname matches one of the entries (any position; first may be ${NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4} until the relay is set)"
         exit 1
     fi
-    
     print_success "Node IP validation passed" >&2
+    if [ "$relay_placeholder_first" = true ]; then
+        print_info "First nodeAddresses host is ${NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4} (relay placeholder); this machine matched as a peer (${matched_node_ip:-non-first entry}) — client node path until the real relay IP is first." >&2
+    fi
     
     # Debug output (to stderr so it's not captured by command substitution)
     echo "ℹ Debug: First node IP from config: ${first_node_ip:-<not found>}" >&2
@@ -2565,7 +2588,9 @@ validate_node_ip() {
     
     # Check if it's the first node (relay node) and return result
     local is_first=false
-    if [ -n "$first_node_ip" ]; then
+    if [ "$relay_placeholder_first" = true ]; then
+        is_first=false
+    elif [ -n "$first_node_ip" ]; then
         for local_ip in "${local_ips[@]}"; do
             if ip_matches "$local_ip" "$first_node_ip"; then
                 is_first=true
@@ -2962,6 +2987,9 @@ sign_server_cert() {
         local first_addr=$(get_first_node_address "$config_file")
         if [ -n "$first_addr" ] && [ "$first_addr" != "null" ]; then
             server_ip=$(extract_ip_from_url "$first_addr")
+            if [ "$server_ip" = "$NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4" ]; then
+                server_ip=""
+            fi
             if [ -n "$server_ip" ]; then
                 print_info "Extracted broker IP address from config: $server_ip"
             fi
@@ -3160,6 +3188,10 @@ configure_mqtt_broker() {
     local first_node_host=$(extract_host_from_url "$first_node_addr")
     if [ -z "$first_node_host" ]; then
         print_warning "Could not extract host from first node address - skipping mqttBroker configuration"
+        return 0
+    fi
+    if [ "$first_node_host" = "$NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4" ]; then
+        print_info "First node address host is ${NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4} (relay placeholder) — skipping mqttBroker auto-configuration (set real nodeAddresses / mqttBroker after the relay IP is known)."
         return 0
     fi
     
@@ -3970,6 +4002,8 @@ show_process_config_help() {
     echo ""
     echo "Then, if MPCGroups[0].nodeAddresses is empty or still uses the default 203.0.113.10–12 example IPs, the script prompts"
     echo "and writes http://...:${MPC_NODE_HTTP_PORT} URLs (first entry = relay; same order on all nodes)."
+    echo "For automation, the first URL host may be ${NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4} (relay IP unknown until set in UI):"
+    echo "  client path (no MQTT relay generation, no mqttBroker from first node) until first is real; this host must still appear in nodeAddresses as a peer (any slot)."
     echo "On later runs (interactive TTY), an optional menu (0=continue, 1=add, 2=remove) lets you edit node IPs."
     echo "Set SKIP_NODE_ADDRESS_MENU=1 to skip that menu (e.g. automation)."
     echo ""
@@ -4682,6 +4716,9 @@ main() {
         print_info "Detected as RELAY NODE (this machine is first in configs.yaml nodeAddresses) - mosquitto will be enabled"
     else
         print_info "Detected as CLIENT NODE (this machine is not first in configs.yaml nodeAddresses) - mosquitto will be commented out"
+    fi
+    if first_node_address_is_relay_placeholder "$CONFIG_FILE"; then
+        print_info "First nodeAddresses entry uses ${NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4} as relay placeholder — MQTT relay steps stay disabled until first is the real relay IP (this machine is a peer elsewhere in the list)."
     fi
 
     prompt_browser_loopback_read_http

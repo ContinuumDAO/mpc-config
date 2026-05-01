@@ -22,14 +22,16 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getNodeMgtKey:
     get:
-      description: get node management key
+      description: Returns the configured NodeMgtKey (Ethereum address, 0x + 40 hex) from configs.yaml / NodeMgtKey env. APIResponse
+        data is that string. Unauthenticated on the management port and on PublicDiscoveryPort when split. See mpc-config
+        docs/references/API_IMPLEMENTATION.md (GET /getNodeMgtKey).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
       - Node Related Info
-      summary: get node management key
+      summary: GET getNodeMgtKey
       responses:
         '200':
           description: OK
@@ -37,7 +39,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getPublicMgtKey:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getPublicMgtKey).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getPublicMgtKey).
       consumes:
       - application/json
       produces:
@@ -52,7 +54,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getAllowedEd25519MgtKeys:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getAllowedEd25519MgtKeys).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getAllowedEd25519MgtKeys).
       consumes:
       - application/json
       produces:
@@ -67,7 +69,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /health:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /health).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /health).
       consumes:
       - application/json
       produces:
@@ -169,7 +171,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /verifyMgtKey:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /verifyMgtKey).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /verifyMgtKey).
       consumes:
       - application/json
       produces:
@@ -188,7 +190,7 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /addManagementKey:
     post:
       description: Adds a new Ed25519 public key to the allowed set for management API auth. Request must be signed by an
@@ -235,7 +237,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getNodeUptime:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getNodeUptime).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getNodeUptime).
       consumes:
       - application/json
       produces:
@@ -250,7 +252,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getMessageToSign:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /getMessageToSign).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /getMessageToSign).
       consumes:
       - application/json
       produces:
@@ -269,7 +271,7 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /getAllowedKeyTypes:
     get:
       description: get allowed keytypes of node
@@ -302,7 +304,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getConfiguredNodeKeys:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getConfiguredNodeKeys).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getConfiguredNodeKeys).
       consumes:
       - application/json
       produces:
@@ -317,7 +319,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getSubscriptions:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getSubscriptions).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getSubscriptions).
       consumes:
       - application/json
       produces:
@@ -332,7 +334,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /connectivityHealth:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /connectivityHealth).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /connectivityHealth).
       consumes:
       - application/json
       produces:
@@ -622,7 +624,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /newSubGroupRequest:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /newSubGroupRequest).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /newSubGroupRequest).
       consumes:
       - application/json
       produces:
@@ -641,10 +643,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /listNewSubGroupRequests:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /listNewSubGroupRequests).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listNewSubGroupRequests).
       consumes:
       - application/json
       produces:
@@ -659,7 +661,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /newSubGroupRequestAgree:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /newSubGroupRequestAgree).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /newSubGroupRequestAgree).
       consumes:
       - application/json
       produces:
@@ -678,7 +680,7 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /keyGenRequest:
     post:
       description: send keygen request
@@ -795,7 +797,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getGlobalNonceByKeyGenId:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getGlobalNonceByKeyGenId).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getGlobalNonceByKeyGenId).
       consumes:
       - application/json
       produces:
@@ -810,7 +812,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getKeyGenGroupId:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getKeyGenGroupId).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getKeyGenGroupId).
       consumes:
       - application/json
       produces:
@@ -825,7 +827,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getAllGroupIds:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getAllGroupIds).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getAllGroupIds).
       consumes:
       - application/json
       produces:
@@ -1019,7 +1021,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /multiSignRequest:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /multiSignRequest).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /multiSignRequest).
       consumes:
       - application/json
       produces:
@@ -1038,7 +1040,7 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /listSignRequests:
     get:
       description: list sign requests
@@ -1122,7 +1124,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /isSignRequestReadyById:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /isSignRequestReadyById).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /isSignRequestReadyById).
       consumes:
       - application/json
       produces:
@@ -1143,7 +1145,7 @@ paths:
         description: Resource id
   /listSignRequestsReady:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /listSignRequestsReady).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listSignRequestsReady).
       consumes:
       - application/json
       produces:
@@ -1182,7 +1184,7 @@ paths:
           $ref: '#/definitions/node.TriggerSignRequestByIdPost'
   /updateSignResultStatusById:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /updateSignResultStatusById).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /updateSignResultStatusById).
       consumes:
       - application/json
       produces:
@@ -1201,10 +1203,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /shelveSignRequest:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /shelveSignRequest).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /shelveSignRequest).
       consumes:
       - application/json
       produces:
@@ -1223,10 +1225,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /listSignResults:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /listSignResults).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listSignResults).
       consumes:
       - application/json
       produces:
@@ -1342,7 +1344,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /nodeRegister:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /nodeRegister).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /nodeRegister).
       consumes:
       - application/json
       produces:
@@ -1361,10 +1363,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /fetchNodeData:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /fetchNodeData).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /fetchNodeData).
       consumes:
       - application/json
       produces:
@@ -1379,7 +1381,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /postChainDetails:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /postChainDetails).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postChainDetails).
       consumes:
       - application/json
       produces:
@@ -1400,7 +1402,7 @@ paths:
           $ref: '#/definitions/node.PostChainDetailsPost'
   /getChainDetails:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getChainDetails).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getChainDetails).
       consumes:
       - application/json
       produces:
@@ -1421,7 +1423,7 @@ paths:
         description: Optional chain id filter
   /removeChainDetails:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /removeChainDetails).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeChainDetails).
       consumes:
       - application/json
       produces:
@@ -1440,10 +1442,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /addToken:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /addToken).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /addToken).
       consumes:
       - application/json
       produces:
@@ -1462,10 +1464,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /removeToken:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /removeToken).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeToken).
       consumes:
       - application/json
       produces:
@@ -1484,10 +1486,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /getTokens:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getTokens).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getTokens).
       consumes:
       - application/json
       produces:
@@ -1511,7 +1513,7 @@ paths:
         required: false
   /addKnownAddress:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /addKnownAddress).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /addKnownAddress).
       consumes:
       - application/json
       produces:
@@ -1530,10 +1532,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /removeKnownAddress:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /removeKnownAddress).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeKnownAddress).
       consumes:
       - application/json
       produces:
@@ -1552,10 +1554,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /getKnownAddresses:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getKnownAddresses).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getKnownAddresses).
       consumes:
       - application/json
       produces:
@@ -1584,7 +1586,7 @@ paths:
         description: 0 or 1
   /getMSQTTKey:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getMSQTTKey).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMSQTTKey).
       consumes:
       - application/json
       produces:
@@ -1599,7 +1601,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /postMSQTTKey:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /postMSQTTKey).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postMSQTTKey).
       consumes:
       - application/json
       produces:
@@ -1618,10 +1620,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /configUpdatePlan:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /configUpdatePlan).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /configUpdatePlan).
       consumes:
       - application/json
       produces:
@@ -1640,10 +1642,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /configUpdateImplement:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /configUpdateImplement).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /configUpdateImplement).
       consumes:
       - application/json
       produces:
@@ -1662,10 +1664,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /maintenance/requestRestartPrep:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /maintenance/requestRestartPrep).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /maintenance/requestRestartPrep).
       consumes:
       - application/json
       produces:
@@ -1684,10 +1686,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /maintenance/restartGate:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /maintenance/restartGate).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /maintenance/restartGate).
       consumes:
       - application/json
       produces:
@@ -1702,7 +1704,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /reboot:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /reboot).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /reboot).
       consumes:
       - application/json
       produces:
@@ -1721,10 +1723,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /updateMpcAuth:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /updateMpcAuth).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /updateMpcAuth).
       consumes:
       - application/json
       produces:
@@ -1743,10 +1745,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /sendMessage:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /sendMessage).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /sendMessage).
       consumes:
       - application/json
       produces:
@@ -1765,10 +1767,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /listMessages:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /listMessages).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listMessages).
       consumes:
       - application/json
       produces:
@@ -1813,7 +1815,7 @@ paths:
         required: false
   /getMessageById:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getMessageById).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMessageById).
       consumes:
       - application/json
       produces:
@@ -1837,7 +1839,7 @@ paths:
         required: true
   /getMessageThread:
     get:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /getMessageThread).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMessageThread).
       consumes:
       - application/json
       produces:
@@ -1861,7 +1863,7 @@ paths:
         required: true
   /markMessageRead:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /markMessageRead).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /markMessageRead).
       consumes:
       - application/json
       produces:
@@ -1880,10 +1882,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /multiMarkMessagesRead:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /multiMarkMessagesRead).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /multiMarkMessagesRead).
       consumes:
       - application/json
       produces:
@@ -1902,10 +1904,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /deleteMessage:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /deleteMessage).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /deleteMessage).
       consumes:
       - application/json
       produces:
@@ -1924,10 +1926,10 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /multiDeleteMessages:
     post:
-      description: MPC node management API — see docs/API_IMPLEMENTATION.md (POST /multiDeleteMessages).
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /multiDeleteMessages).
       consumes:
       - application/json
       produces:
@@ -1946,7 +1948,7 @@ paths:
         required: true
         schema:
           type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
 definitions:
   node.APIResponse:
     type: object
