@@ -118,6 +118,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getGlobalNonceByKeyGenId`](#get-getglobalnoncebykeygenid) - Get globalNonce by keyGen result id
 - [`GET /getKeyGenGroupId`](#get-getkeygengroupid) - Get key generation result and GroupId by keyGen ID
 - [`GET /getAllGroupIds`](#get-getallgroupids) - Get all GroupIds with their keyGens
+- [`GET /listGroupResults`](#get-listgroupresults) - List configured groups and member node keys (`nodeKeys`); optional filters `node_key`, `exclude_node_key`
 
 ### KeyGen Messaging
 KeyGen messaging is documented in `./API_KEYGEN_MESSAGING.md`. Response format and conventions follow this document (`./API_IMPLEMENTATION.md`). **sendMessage, markMessageRead, multiMarkMessagesRead, deleteMessage, and multiDeleteMessages require a management key signature** (MetaMask or Ed25519, depending on the client key in the keyGen); see API_KEYGEN_MESSAGING.md for Nonce/Sig and getMessageToSign / getNodeMgtKeyNonce / getAllowedEd25519MgtKeys. For **Open Claw** (or similar), a poll-and-mark-read helper that uses `listMessages` + `multiMarkMessagesRead` is `$MPA_PATH/scripts/keygen_messaging_agent_poll.py`; scheduling and env are described in `../skill/SKILL.md` (**KeyGen inbox poll**). Ed25519 management signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`.
@@ -2486,6 +2487,57 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getAllGroupIds"
 - Verify that `keylist` is populated for all keyGens
 - Debug missing keyList issues
 - Monitor key generation across all groups
+
+<a id="get-listgroupresults"></a>
+#### `GET /listGroupResults`
+Lists every **configured** MPC group and the **member node public keys** for each group (the new-group **`KeyList`**, exposed as `nodeKeys`). This is lighter than [`GET /getAllGroupIds`](#get-getallgroupids), which also loads all keyGen documents per group.
+
+**Query parameters (all optional):**
+
+| Parameter | Semantics |
+|-----------|-----------|
+| `node_key` | **Repeatable** (`?node_key=a&node_key=b`). If any non-empty values are sent, only groups whose `nodeKeys` contain **every** listed key (**AND**, exact string match after trim) are returned. |
+| `exclude_node_key` | **Repeatable**. Omit any group whose `nodeKeys` contain **at least one** of the listed keys. |
+
+Filters apply after resolving each group’s `nodeKeys` (empty if the group record is missing or has no `KeyList`).
+
+**Response:**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": {
+    "groups": [
+      {
+        "groupId": "566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9",
+        "nodeKeys": ["node1_key_hex", "node2_key_hex", "node3_key_hex"]
+      }
+    ]
+  }
+}
+```
+
+**Examples:**
+```bash
+# All configured groups with member node keys
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listGroupResults"
+
+# Only groups that include this node (single value)
+curl -G "$MPC_AUTH_URL:$MANAGEMENT_PORT/listGroupResults" --data-urlencode "node_key=NODE_PUBKEY_HEX"
+
+# Only groups that include both keys (AND)
+curl -G "$MPC_AUTH_URL:$MANAGEMENT_PORT/listGroupResults" \
+  --data-urlencode "node_key=KEY_A" \
+  --data-urlencode "node_key=KEY_B"
+
+# Exclude groups that contain a given member
+curl -G "$MPC_AUTH_URL:$MANAGEMENT_PORT/listGroupResults" --data-urlencode "exclude_node_key=NODE_PUBKEY_HEX"
+```
+
+**Use Cases:**
+- Enumerate group membership without scanning keyGen collections
+- Find which groups include a specific node (or a set of nodes)
+- Exclude groups that still contain retired or unwanted node keys
 
 ### 6a. KeyGen Messaging
 

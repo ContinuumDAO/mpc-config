@@ -840,6 +840,38 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/node.APIResponse'
+  /listGroupResults:
+    get:
+      description: MPC node management API — see docs/references/API_IMPLEMENTATION.md (GET /listGroupResults).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: GET listGroupResults
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: array
+        items:
+          type: string
+        collectionFormat: multi
+        name: node_key
+        in: query
+        required: false
+        description: Repeat for multiple keys; only groups whose nodeKeys include every listed key (AND)
+      - type: array
+        items:
+          type: string
+        collectionFormat: multi
+        name: exclude_node_key
+        in: query
+        required: false
+        description: Repeat for multiple keys; exclude groups whose nodeKeys contain any of these
   /presignRequest:
     post:
       description: send presign request
