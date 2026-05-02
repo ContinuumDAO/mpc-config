@@ -29,7 +29,7 @@ Edit `.env` and set at least **REOWN_PROJECT_ID** to your Reown project id.
 | **NODE_READ_DISCOVERY_HAIRPIN_FALLBACK** | No | With **NODE_READ_DISCOVERY_ALLOW_PRIVATE=1** only: after “no route” / unreachable on a **public** IPv4, retry once via `127.0.0.1`. Dev convenience; prefer **LOCAL_BIND_ALIASES** when you know the IP. |
 | **NODE_APP_IMAGE** | No | Docker image repository (default `continuumdao/continuumdao-node-app`). |
 | **NODE_APP_TAG** | No | Image tag (default `latest`). |
-| **NODE_APP_PORT** | No | Host port mapped to the app (default `3333` → container port `3000`). |
+| **NODE_APP_PORT** | No | **Host** port on the machine where the dashboard container runs (default `3333` → container port `3000`). This is the port on the **server/VPS side** of an SSH tunnel (the right-hand `127.0.0.1:<port>` for the dashboard in `-L`). On your **laptop**, the left-hand local ports in `ssh -L` can be **any free ports** you like — they do not need to match `NODE_APP_PORT`. |
 | **DEFAULT_NODE_DISCOVERY_PORT** | No | If set, must match your node **PublicDiscoveryPort** (often `18080`). |
 | **BROWSER_HTTPS_PORT** | No | Browser HTTPS / read-JWT port if not default `8443`. |
 | **MANAGEMENT_API_PORT** | No | Management API port if not default `8080`. |
@@ -53,6 +53,12 @@ Typical flow after editing `.env`:
 ```
 
 Open **http://127.0.0.1:3333/** (or `http://localhost:${NODE_APP_PORT}/` if you changed the port).
+
+### SSH tunnel: which port is which
+
+- **On the remote machine** (where Docker maps the dashboard): use **`NODE_APP_PORT`** from this `.env` as the **destination** port for the dashboard in your tunnel (e.g. `-L 127.0.0.1:9133:127.0.0.1:3333` if `NODE_APP_PORT=3333`).
+- **On your laptop**: the **first** port in each `-L` (`9133` in the example) is only “open something local”; pick any unused ports. They do not have to match `3333` or `NODE_APP_PORT`.
+- The in-app **Copy** SSH hint uses **`NODE_APP_PORT`** (or the value baked into the image at build time as `NEXT_PUBLIC_NODE_APP_PORT`) for the remote dashboard leg so it stays aligned with your server.
 
 ## Connecting the frontend to your node (Plain HTTP)
 
