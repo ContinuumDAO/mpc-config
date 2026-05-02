@@ -14,7 +14,8 @@ services:
     # as NODE_APP_PORT, etc.). Relying on env_file alone can fail with CRLF or rare parser edge cases.
     environment:
       NODE_READ_DISCOVERY_ALLOW_PRIVATE: ${NODE_READ_DISCOVERY_ALLOW_PRIVATE:-1}
-      NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES: ${NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES:-}
+      # Default so Plain HTTP attach (discovery host 127.0.0.1) reaches mpc-auth on the Docker host, not loopback inside this container.
+      NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES: "${NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES:-127.0.0.1=host.docker.internal}"
       NODE_READ_DISCOVERY_HAIRPIN_FALLBACK: ${NODE_READ_DISCOVERY_HAIRPIN_FALLBACK:-}
     ports:
       - "${NODE_APP_PORT:-3333}:3000"
