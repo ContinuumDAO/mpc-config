@@ -7,6 +7,12 @@ services:
   web:
     image: ${NODE_APP_IMAGE:-continuumdao/continuumdao-node-app}:${NODE_APP_TAG:-latest}
     env_file: .env
+    # Also pass discovery dev flags via Compose interpolation so they always reach the container (same `.env`
+    # as NODE_APP_PORT, etc.). Relying on env_file alone can fail with CRLF or rare parser edge cases.
+    environment:
+      NODE_READ_DISCOVERY_ALLOW_PRIVATE: ${NODE_READ_DISCOVERY_ALLOW_PRIVATE:-1}
+      NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES: ${NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES:-}
+      NODE_READ_DISCOVERY_HAIRPIN_FALLBACK: ${NODE_READ_DISCOVERY_HAIRPIN_FALLBACK:-}
     ports:
       - "${NODE_APP_PORT:-3333}:3000"
     restart: unless-stopped
