@@ -7,6 +7,9 @@ services:
   web:
     image: ${NODE_APP_IMAGE:-continuumdao/continuumdao-node-app}:${NODE_APP_TAG:-latest}
     env_file: .env
+    # So NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES can use host.docker.internal → the Docker host (mpc-auth ports).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # Also pass discovery dev flags via Compose interpolation so they always reach the container (same `.env`
     # as NODE_APP_PORT, etc.). Relying on env_file alone can fail with CRLF or rare parser edge cases.
     environment:
