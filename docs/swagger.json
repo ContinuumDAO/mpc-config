@@ -1276,7 +1276,7 @@
         },
         "/listGroupResults": {
             "get": {
-                "description": "MPC node management API — see docs/references/API_IMPLEMENTATION.md (GET /listGroupResults).",
+                "description": "MPC node management API — see docs/API_IMPLEMENTATION.md (GET /listGroupResults).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2515,6 +2515,29 @@
                         }
                     }
                 ]
+            }
+        },
+        "/getWebTLSKey": {
+            "get": {
+                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getWebTLSKey).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Browser HTTPS TLS cert (local filesystem)"
+                ],
+                "summary": "GET getWebTLSKey",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
             }
         },
         "/configUpdatePlan": {

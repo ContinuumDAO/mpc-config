@@ -842,7 +842,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /listGroupResults:
     get:
-      description: MPC node management API — see docs/references/API_IMPLEMENTATION.md (GET /listGroupResults).
+      description: MPC node management API — see docs/API_IMPLEMENTATION.md (GET /listGroupResults).
       consumes:
       - application/json
       produces:
@@ -1653,6 +1653,21 @@ paths:
         schema:
           type: object
           description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
+  /getWebTLSKey:
+    get:
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getWebTLSKey).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Browser HTTPS TLS cert (local filesystem)
+      summary: GET getWebTLSKey
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
   /configUpdatePlan:
     post:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /configUpdatePlan).

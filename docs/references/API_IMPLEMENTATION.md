@@ -68,6 +68,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getClientSigStatus`](#get-getclientsigstatus) - Get client signature check status (IgnoreClientSigCheck)
 - [`GET /getSubscriptions`](#get-getsubscriptions) - Get MQTT subscriptions
 - [`GET /getMSQTTKey`](#get-getmqttkey) - Get MQTT broker TLS CA PEM (`path`, `caCertPem`)
+- [`GET /getWebTLSKey`](#get-getwebtlskey) - Get Browser HTTPS TLS certificate PEM (`path`, `certPem`)
 - [`POST /postMSQTTKey`](#post-postmqttkey) - Write MQTT broker TLS CA PEM (management key signed)
 - [`POST /configUpdatePlan`](#post-configupdateplan) - Plan staged `configs.yaml` update
 - [`POST /configUpdateImplement`](#post-configupdateimplement) - Apply planned `configs.yaml` (management key signed)
@@ -954,6 +955,35 @@ Returns the MQTT broker TLS CA certificate as PEM text.
 ```bash
 curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getMSQTTKey"
 curl -H "Authorization: Bearer <JWT>" "https://localhost:8443/getMSQTTKey"
+```
+
+<a id="get-getwebtlskey"></a>
+#### `GET /getWebTLSKey`
+
+Returns the Browser HTTPS server certificate as PEM text (the public certificate used for TLS on the browser-facing HTTPS listener, typically **`browser.crt`**).
+
+**`data`:** `{ "path", "certPem" }`. **Error** if the file is missing.
+
+**Resolved `path` (in order):** env **`WEB_TLS_BROWSER_CRT_HOST_PATH`**; **`BrowserHTTPS.CertFile`** from merged `configs.yaml` when non-empty (e.g. **`/webTLS/config/certs/browser.crt`** in Docker); else **`webTLS/config/certs/browser.crt`** relative to the process working directory.
+
+**JWT:** On Browser HTTPS / loopback read listeners, **`GET`** requires a bearer token—see [Browser HTTPS and loopback HTTP (JWT)](#browser-https-and-loopback-http-jwt). Plain **`ManagementAPIsPort`** does not apply JWT to this route.
+
+**Response (`code === 0`):**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": {
+    "path": "/path/to/webTLS/config/certs/browser.crt",
+    "certPem": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n"
+  }
+}
+```
+
+**Examples:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getWebTLSKey"
+curl -H "Authorization: Bearer <JWT>" "https://localhost:8443/getWebTLSKey"
 ```
 
 <a id="post-postmqttkey"></a>

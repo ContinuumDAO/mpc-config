@@ -7,6 +7,7 @@ This repository contains the configuration files and setup scripts needed to dep
 - **`configs.yaml`** - Main node configuration file
 - **`configs-original.yaml`** - Pristine copy of the default `configs.yaml` from this repo; use `cp configs-original.yaml configs.yaml` to revert if something goes wrong. **`process_config.sh` copies it to `configs.yaml` automatically** if `configs.yaml` is missing.
 - **`process_config.sh`** - Configuration validator and certificate generator; **generates `docker-compose.yml`** (not committed) from **`docker-compose.relay.yml`** (relay / first node) or **`docker-compose.client.yml`** (other nodes)
+- **`scripts/provision-node.sh`** - Non-interactive helper for a **fresh** `configs.yaml`: copies `configs-original.yaml`, sets management keys and a two-node `nodeAddresses` layout (relay placeholder + this host), then runs `process_config.sh` (see **Quick Start → Automated provisioning** below)
 - **`mosquitto/config/mosquitto.conf`** - MQTT broker configuration
 - **`sign-clipboard in tools/`** - Utility to sign Ed25519 messages
 - **`webTLS/config/certs`** - certs to allow TLS 1.3 encryption to the browser
@@ -37,6 +38,8 @@ You can see your own IP address using the command hostname -i
 You will be asked to enter each IPv4 address in process_config.sh and you and the other nodes in your group must add the same IPs IN THE SAME ORDER 
 on each node. this is IMPORTANT. The FIRST node IP address is the RELAY node for your group. The other nodes can be added afterwards manually if required.
 
+For a **non-interactive** first-time setup on a VPS (no prompts for keys or `nodeAddresses`), use **`scripts/provision-node.sh`** after cloning—see **Automated provisioning** under step 3.
+
 ### 3. Validate Configuration and Generate Certificates
 
 ```bash
@@ -53,9 +56,72 @@ This script will:
 - Provide instructions for certificate sharing
 - Configure your node for https TLS 1.3 encryption, so that all data to the MPA app is encrypted **EXCEPT your IP address**, which will be public.
 
+### Automated provisioning (`scripts/provision-node.sh`)
+
+Use this when you want **one command** to replace the interactive parts of steps 2–3 (management keys and `nodeAddresses`), for example on a new droplet with cloud-init or SSH as root.
+
+**Requirements**
+
+- Run as **root** (e.g. `sudo`).
+- **`configs.yaml` must not exist** in the repo root—the script copies **`configs-original.yaml`** to **`configs.yaml`** and refuses to overwrite an existing file.
+- **Python 3** and **ruamel.yaml** (same as `process_config.sh`).
+- Provide **at least one** management key on the command line: **`--node-mgt-key`** / **`-k`** (Ethereum `0x` + 40 hex) and/or **`--public-mgt-key`** (64 hex Ed25519 public, or an `ssh-ed25519 …` line—quote if it contains spaces).
+
+**What it writes**
+
+- Sets **`NodeMgtKey`** / **`PublicMgtKey`** in the new `configs.yaml`.
+- Sets **`MPCGroups[0].nodeAddresses`** to **two** entries in order:
+  - **`node1_key`** → `http://<relay-placeholder>:<port>` (default relay placeholder host **`0.0.0.0`**, meaning “real relay IP to be filled later” for `process_config.sh`).
+  - **`node2_key`** → `http://<this-host>:<port>` (this machine’s address for the management API URLs).
+- Default HTTP port for those URLs is **8081** (matches `process_config.sh`’s `MPC_NODE_HTTP_PORT`). Override with **`--http-port`** or **`PROVISION_HTTP_PORT`**.
+
+With **`0.0.0.0`** first, `process_config.sh` treats the machine as a **client** path for MQTT relay steps until the real relay is the first entry; your app or operators can align full group `nodeAddresses` later.
+
+**Environment and flags**
+
+- **`PROCESS_CONFIG_NONINTERACTIVE`** defaults to **`1`** (set to **`0`** before `sudo -E` if you want `process_config.sh` to prompt where it still can).
+- **`SKIP_NODE_ADDRESS_MENU`** defaults to **`1`** when invoked from this script.
+- Pass **`RELAYER_API_URL`** if you need a non-default relayer (use **`sudo -E`** so the variable survives `sudo`).
+- **`PROVISION_NODE_IP`** — same as **`--ip`** if the host cannot infer the correct public IPv4 (NAT / wrong default route).
+- **`PROVISION_RELAY_PLACEHOLDER_HOST`** — override the first peer host (default **`0.0.0.0`**).
+- **`--install-systemd`** — forwards **`--install-mpc-auth-systemd`** to `process_config.sh`.
+- **`--no-loopback`** — disables browser loopback HTTP (otherwise the script enables loopback for non-TTY runs).
+- **`--no-firewall`** — passes **`--no-firewall`** to `process_config.sh`.
+- **`--force-browser-https-certs`** — passes **`--force-browser-https-certs`**.
+
+Full options: **`sudo ./scripts/provision-node.sh --help`**.
+
+**Examples**
+
+MetaMask-style management only, install systemd unit for the Docker stack:
+
+```bash
+cd ~/mpc-config   # or your clone path
+sudo -E RELAYER_API_URL="http://example:8080" ./scripts/provision-node.sh \
+  --node-mgt-key "0xYour40HexCharacters..." \
+  --install-systemd
+```
+
+Ed25519 management only (64-hex public key):
+
+```bash
+sudo ./scripts/provision-node.sh --public-mgt-key "abcdef0123..." 
+```
+
+Both keys; set this node’s peer IP explicitly (e.g. public IPv4 behind NAT):
+
+```bash
+sudo ./scripts/provision-node.sh \
+  --ip "203.0.113.50" \
+  -k "0x..." \
+  --public-mgt-key "$(cat ~/.ssh/your_mpc_ed25519.pub)"
+```
+
+Then continue with **step 4** (`docker compose up -d` / `docker-compose up -d`) as usual.
+
 ### 4. Deploy with Docker
 
-After **`./process_config.sh`** (step 3), **`docker-compose.yml`** exists in the project directory (copied from the relay or client template). Then:
+After **`./process_config.sh`** finishes—whether you ran it yourself (step 3) or **`scripts/provision-node.sh`** ran it for you—**`docker-compose.yml`** exists in the project directory (copied from the relay or client template). Then:
 
 ```bash
 docker-compose up -d
