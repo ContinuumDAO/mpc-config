@@ -276,6 +276,7 @@ Optional flags / overrides (see also **`./scripts/docker-V2_debian_ubuntu.sh --h
 
 ```bash
 sudo ./scripts/docker-V2_debian_ubuntu.sh --force-repo   # rewrite Docker apt entries, then install plugin
+sudo ./scripts/docker-V2_debian_ubuntu.sh --verbose       # trace steps; full diagnostic if compose v2 still missing
 
 # If suite detection is wrong for your derivative:
 sudo DOCKER_V2_REPO=ubuntu DOCKER_V2_CODENAME=jammy ./scripts/docker-V2_debian_ubuntu.sh
