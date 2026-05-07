@@ -265,6 +265,24 @@ sudo apt install -y \
 - **Ubuntu/Debian:** There is no separate Python install step—**§1** is the only `apt install` you need for Python + YAML on Debian/Ubuntu.
 - After install, confirm: `docker --version`, `docker-compose --version` or `docker compose version`, `curl --version`, `python3 -c "import ruamel.yaml"`.
 
+**Docker Compose v2 (Ubuntu / Debian only):** Host **`systemd`** scripts for mpc-auth use **`docker compose`** when the plugin is installed; legacy **`docker-compose` 1.29.x** often fails on current engines (**`KeyError: 'ContainerConfig'`**). From your **mpc-config** clone on the VPS:
+
+```bash
+cd /path/to/mpc-config    # e.g. ~/mpc-config
+sudo ./scripts/docker-V2_debian_ubuntu.sh
+```
+
+Optional flags / overrides (see also **`./scripts/docker-V2_debian_ubuntu.sh --help`**):
+
+```bash
+sudo ./scripts/docker-V2_debian_ubuntu.sh --force-repo   # rewrite Docker apt entries, then install plugin
+
+# If suite detection is wrong for your derivative:
+sudo DOCKER_V2_REPO=ubuntu DOCKER_V2_CODENAME=jammy ./scripts/docker-V2_debian_ubuntu.sh
+```
+
+Then confirm: `docker compose version`. Non-Debian systems are rejected with a clear message; manual install paths are in **`internal/DOCKER_COMPOSE_V2_UPGRADE.md`**.
+
 #### 1.1. Configure Docker Access on VPS (Required)
 
 If you encounter the error `Couldn't connect to Docker daemon at http+docker://localhost - is it running?` when running `docker-compose up -d`, this is typically a permissions issue on VPS systems.

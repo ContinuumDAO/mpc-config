@@ -15,7 +15,7 @@ The Distributed Auth Management API provides a RESTful interface for managing MP
 
 <a id="public-discovery-http"></a>
 ### Public discovery HTTP
-If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /health`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`$MANAGEMENT_PORT`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
+If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /getPreferredSigner`**, **`GET /health`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`$MANAGEMENT_PORT`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
 
 **`GET /getNodeMgtKey`** returns the configured **`NodeMgtKey`** (Ethereum management address from `configs.yaml` / env) as a JSON string in **`data`**. No authentication on this listener; use it with **`GET /getNodeMgtKeyNonce`** for MetaMask-style management signing.
 
@@ -121,7 +121,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getKnownAddresses`](#get-getknownaddresses) - Get all known addresses grouped by chain type; optional `chain_type`, `chain_id`, `is_contract` (0 or 1) filters
 
 ### Agent preferred signer (local node only)
-- [`GET /getPreferredSigner`](#get-getpreferredsigner) - Get the default Ed25519 public key for agent signing if still an active management key
+- [`GET /getPreferredSigner`](#get-getpreferredsigner) - Get the default Ed25519 public key for agent signing if still an active management key. **Also on `PublicDiscoveryPort`** when split from **`ManagementAPIsPort`** (see [Public discovery HTTP](#public-discovery-http)).
 - [`POST /setPreferredSigner`](#post-setpreferredsigner) - Store an **active** allowed Ed25519 management key as default for agents (requires mgt key)
 
 ### Node Ping & Connectivity
@@ -1859,10 +1859,12 @@ See `./KNOWN_ADDRESSES_SCHEMA.md` for the full document shape.
 
 ### Agent preferred signer (local node only)
 
-Operators can persist a single **Ed25519 public key** (64 hex) per MPC node process that automation (for example AI agents calling the management API) should treat as the default key when obtaining nonces and signing **management POST** requests. The value is stored in MongoDB on this node only; it is **not** propagated to peers. **`publicKey` must always be an active allowed management key:** the bootstrap **`PublicMgtKey`** from `configs.yaml` or a key added via **`POST /addManagementKey`** that has **not** been soft-removed with **`POST /removeManagementKey`**. **`GET /getPreferredSigner`** returns **`publicKeyHex` only while that stored key is still in the active allow-list** (same definition); if the key was removed or is otherwise no longer allowed, the response uses an empty string.
+Operators can persist a single **Ed25519 public key** (64 hex) per MPC node process that automation (for example AI agents calling the management API) should treat as the default key when obtaining nonces and signing **management POST** requests. The value is stored in MongoDB on this node only; it is **not** propagated to peers. **`publicKey` must always be an active allowed management key:** the bootstrap **`PublicMgtKey`** from `configs.yaml` or a key added via **`POST /addManagementKey`** that has **not** been soft-removed with **`POST /removeManagementKey`**. **`GET /getPreferredSigner`** (served on **`ManagementAPIsPort`** and **`PublicDiscoveryPort`** when split — see below) returns **`publicKeyHex` only while that stored key is still in the active allow-list** (same definition); if the key was removed or is otherwise no longer allowed, the response uses an empty string.
 
 <a id="get-getpreferredsigner"></a>
 #### `GET /getPreferredSigner`
+
+**Where served:** **`ManagementAPIsPort`** and, when **`PublicDiscoveryPort`** is split from it, the same handler on **`PublicDiscoveryPort`** (e.g. **18080**) — see [Public discovery HTTP](#public-discovery-http). **Not** a substitute for `POST /setPreferredSigner` (that remains management-only with signed auth).
 
 **Auth:** None (same class as `GET /getChainDetails`).
 
@@ -1882,6 +1884,7 @@ Operators can persist a single **Ed25519 public key** (64 hex) per MPC node proc
 **Example:**
 ```bash
 curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPreferredSigner"
+curl "http://localhost:18080/getPreferredSigner"   # when PublicDiscoveryPort is split (e.g. 18080)
 ```
 
 <a id="post-setpreferredsigner"></a>

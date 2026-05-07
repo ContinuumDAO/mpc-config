@@ -2589,7 +2589,7 @@
     },
     "/getPreferredSigner": {
       "get": {
-        "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getPreferredSigner).",
+        "description": "Preferred Ed25519 public key for agent signing when still in the active management allow-list (otherwise empty publicKeyHex in Data). Unauthenticated on the management port and on PublicDiscoveryPort when split. See mpc-config docs/references/API_IMPLEMENTATION.md (GET /getPreferredSigner).",
         "consumes": [
           "application/json"
         ],
