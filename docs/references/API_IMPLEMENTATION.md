@@ -40,6 +40,28 @@ All API requests are logged using the node's logger with the format:
 Client: <IP> Called API: <package>.<function>
 ```
 
+<a id="management-signatures-nodekey"></a>
+### Management signatures and replay binding (`nodeKey`)
+
+**Historical behavior (still accepted):** For most authenticated management calls, the server verifies:
+
+- Proof that you hold **`NodeMgtKey`** (MetaMask **`personal_sign`**) **or** an allowed **Ed25519** management key, and  
+- **`nonce`** (anti-reuse for the same operator key),
+
+over a payload that traditionally did **not** name the MPC node (the node's **128-hex “node key”**, i.e. the P2P / TSS id returned by **`GET /getNodeKey`**). The **management key** proves who signed, but the message alone did **not** always bind to **which node's management endpoint** must accept it. Where one operator identity maps to a single physical node this is harmless; **if the same management key controls multiple nodes**, a blob signed once could be replayed toward another node's API unless the payload distinguishes the target.
+
+**New (recommended):** Clients **SHOULD** include a JSON property **`nodeKey`** in the **exact UTF-8 string that is hashed/signed** (**same bytes** the server verifies):
+
+- **`nodeKey`**: value from **`GET /getNodeKey`** for **this** node (128 hexadecimal characters; no **`0x`** prefix).
+
+**Backward compatibility:** If the payload parses as JSON and **`nodeKey` is omitted**, the request remains **accepted**; the server logs a **deprecation warning**. If **`nodeKey` is present**, it **must** match this server's node key **`or`** the handler returns **`403 Forbidden`**.
+
+**Non-JSON `signedMessage`:** Some endpoints sign an opaque string (e.g. **`POST /configUpdateImplement`** prefixed line, PEM for **`POST /postMSQTTKey`**). These are **not** JSON-parseable **`nodeKey`** binding is **skipped**; they continue to rely on **nonce + key proof** alone until an API revision introduces a backwards-compatible signed envelope.
+
+**Swagger:** **`nodeKey`** appears on **`NodeMgtKeySig`-style bodies and documented `signedMessage` JSON patterns** in `swagger.yaml`; see also this section.
+
+**Future:** **`nodeKey` may become mandatory** on JSON payloads; migrate clients early.
+
 <a id="browser-https-and-loopback-http-jwt"></a>
 ### Browser HTTPS and loopback HTTP (JWT)
 
@@ -61,6 +83,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getPublicMgtKeyNonce`](#get-getpublicmgtkeynonce) - Get current nonce for an Ed25519 key (optional `?publicKey=` for added keys)
 - [`POST /verifyMgtKey`](#post-verifymgtkey) - Verify Ed25519 management key (attach-time proof; no other side effects)
 - [`POST /addManagementKey`](#post-addmanagementkey) - Add another Ed25519 public key (request must be signed by an existing Ed25519 management key)
+- [`POST /removeManagementKey`](#post-removemanagementkey) - Soft-remove an added Ed25519 key (signed by a **different** allowed Ed25519 key; bootstrap key cannot be removed here)
 - [`GET /getAllowedKeyTypes`](#get-getallowedkeytypes) - Get allowed key types
 - [`GET /getAllowedMsgCheckTypes`](#get-getallowedmsgchecktypes) - Get allowed message check types
 - [`GET /getSuccessRate`](#get-getsuccessrate) - Get success rate statistics
@@ -97,6 +120,10 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /removeKnownAddress`](#post-removeknownaddress) - Remove a known address (requires mgt key)
 - [`GET /getKnownAddresses`](#get-getknownaddresses) - Get all known addresses grouped by chain type; optional `chain_type`, `chain_id`, `is_contract` (0 or 1) filters
 
+### Agent preferred signer (local node only)
+- [`GET /getPreferredSigner`](#get-getpreferredsigner) - Get the default Ed25519 public key for agent signing if still an active management key
+- [`POST /setPreferredSigner`](#post-setpreferredsigner) - Store an **active** allowed Ed25519 management key as default for agents (requires mgt key)
+
 ### Node Ping & Connectivity
 - [`GET /pingNodesRequest`](#get-pingnodesrequest) - Ping nodes to test connectivity
 - [`GET /getPingNodesResultById`](#get-getpingnodesresultbyid) - Get ping results by ID
@@ -107,13 +134,16 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /newGroupRequest`](#post-newgrouprequest) - Create new group request (requires mgt key)
 - [`GET /listNewGroupRequests`](#get-listnewgrouprequests) - List new group requests
 - [`GET /getNewGroupRequestById`](#get-getnewgrouprequestbyid) - Get new group request by ID
+- [`POST /newGroupRequestRetry`](#post-newgrouprequestretry) - Retry `NEWGROUPREQUEST` MQTT to one peer (originator only; requires mgt key)
 - [`POST /newGroupRequestAgree`](#post-newgrouprequestagree) - Agree to new group request (requires mgt key)
-- [`GET /getNewGroupResultById`](#get-getnewgroupresultbyid) - Get new group result by ID
+- [`GET /getGroupResultById`](#get-getgroupresultbyid) - Get group result by request ID or group_id
+- [`GET /getNewGroupResultById`](#get-getnewgroupresultbyid) - **Deprecated** — same as `GET /getGroupResultById`
 
 ### Key Generation
 - [`POST /keyGenRequest`](#post-keygenrequest) - Create key generation request (requires mgt key)
 - [`GET /listKeyGenRequests`](#get-listkeygenrequests) - List key generation requests
 - [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid) - Get key generation request by ID
+- [`POST /keyGenRequestRetry`](#post-keygenrequestretry) - Retry `KEYGENREQUEST` MQTT to one peer (originator only; requires mgt key)
 - [`POST /keyGenRequestAgree`](#post-keygenrequestagree) - Agree to key generation request (requires mgt key)
 - [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) - Get key generation result by ID
 - [`GET /getGlobalNonceByKeyGenId`](#get-getglobalnoncebykeygenid) - Get globalNonce by keyGen result id
@@ -185,7 +215,7 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 <a id="post-maintenance-requestrestartprep"></a>
 #### `POST /maintenance/requestRestartPrep`
 
-**Signing:** `POST /maintenance/requestRestartPrep` accepts JSON `{"nonce": <int>, "sig": "<hex>"}`. The server verifies **`VerifyMgtKeySig`** over canonical JSON with **`sig` emptied** (same semantics as other management-signed POSTs). Verification uses **`configs.yaml` on disk** when present for **`NodeMgtKey`** and **`IgnoreMgtKeySigCheck`**, matching `POST /configUpdatePlan`.
+**Signing:** `POST /maintenance/requestRestartPrep` accepts JSON `{"nonce": <int>, "sig": "<hex>", "nodeKey": "<optional 128-hex from GET /getNodeKey>"}`. The server verifies **`VerifyMgtKeySig`** over canonical JSON with **`sig` emptied** (same semantics as other management-signed POSTs); see [Management signatures and replay binding (`nodeKey`)](#management-signatures-nodekey). Verification uses **`configs.yaml` on disk** when present for **`NodeMgtKey`** and **`IgnoreMgtKeySigCheck`**, matching `POST /configUpdatePlan`.
 
 <a id="get-maintenance-restartgate"></a>
 #### `GET /maintenance/restartGate`
@@ -500,7 +530,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/hasPublicMgtKey"
 
 <a id="get-getalloweded25519mgtkeys"></a>
 #### `GET /getAllowedEd25519MgtKeys`
-Returns the list of Ed25519 public keys allowed for management API auth (config `PublicMgtKey` plus keys added via `POST /addManagementKey`), each with a short label so the app can show "Which key are you using?" without the user needing to know the hex. Used by continuumdao-node-app when the user clicks "Attach with Ed25519".
+Returns the list of Ed25519 public keys allowed for management API auth (config `PublicMgtKey` plus keys added via `POST /addManagementKey`), each with a short label so the app can show "Which key are you using?" without the user needing to know the hex. Keys removed with [`POST /removeManagementKey`](#post-removemanagementkey) still occupy their **Added key N** slot: those entries have **`"deleted": true`**, empty **`publicKey`**, and **`removedPublicKey`** set to the retired 64-hex value. Used by continuumdao-node-app when the user clicks "Attach with Ed25519".
 
 **Response (success):**
 ```json
@@ -509,7 +539,8 @@ Returns the list of Ed25519 public keys allowed for management API auth (config 
   "error": "",
   "data": [
     { "publicKey": "64hex...", "label": "Bootstrap (config)" },
-    { "publicKey": "64hex...", "label": "Added key 1" }
+    { "publicKey": "64hex...", "label": "Added key 1" },
+    { "publicKey": "", "label": "Added key 2", "deleted": true, "removedPublicKey": "64hex..." }
   ]
 }
 ```
@@ -591,6 +622,20 @@ Adds a new Ed25519 public key to the allowed set for management API auth. The re
 
 **Example flow:** 1) Set `PublicMgtKey` in config (bootstrap key). 2) Get nonce: `GET /getPublicMgtKeyNonce`. 3) Build body `{"newPublicKey":"<64 hex>","nonce":<n>,"sig":""}`, sign the JSON string with your Ed25519 private key, set `sig` to the signature. 4) `POST /addManagementKey` with that body. The new key can then sign management requests and add further keys.
 
+<a id="post-removemanagementkey"></a>
+#### `POST /removeManagementKey`
+Soft-removes an Ed25519 public key that was **previously added** via `POST /addManagementKey`. The matching MongoDB document keeps its **Added key N** slot: **`publicKey`** is cleared and **`removedPublicKey`** records the retired key so new keys continue to use new slot numbers (e.g. the next `POST /addManagementKey` creates **Added key 3** even after **Added key 2** was removed). The bootstrap **`PublicMgtKey`** from `configs.yaml` **cannot** be removed with this endpoint (it is not stored in the extra-keys collection).
+
+**Auth:** Same signing pattern as `POST /addManagementKey`: canonical JSON of the body with **`sig`** cleared, signed with an **allowed** Ed25519 management key that is **not** the key being removed (so you cannot remove the last remaining signer without another key to authorize the change).
+
+**Request body:** `publicKey` (64 hex, the added key to retire), `nonce` (for the **signer** key from `GET /getPublicMgtKeyNonce?publicKey=<signer_64_hex>`), `sig` (128 hex Ed25519 signature over that canonical JSON after putting `sig` back).
+
+**Response (success):** `{ "code": 0, "error": "", "data": { "removedPublicKey": "<64 hex lowercase>" } }`
+
+**Errors:** `400` invalid `publicKey` or body; `401` invalid signature or signer is the same key as `publicKey`; `404` key not found among added keys (e.g. bootstrap key, wrong hex, or already removed); `500` database error.
+
+**Example flow:** 1) `GET /getPublicMgtKeyNonce?publicKey=<bootstrap_or_other_signer>`. 2) Build `{"publicKey":"<key_to_remove>","nonce":<n>,"sig":""}`, sign with the **signer's** private key, set `sig`. 3) `POST /removeManagementKey`. 4) Call `GET /getAllowedEd25519MgtKeys` to see `deleted` / `removedPublicKey` on that slot; `GET /getPublicMgtKey` lists only keys still authorized.
+
 #### `POST /getMessageToSign` ⭐ **NEW**
 Returns the exact message format that needs to be signed with MetaMask (or any Ethereum wallet) for management API requests. The signature must be from the NodeMgtKey address.
 
@@ -641,7 +686,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/getMessageToSign \
 
 ### Using MetaMask or Ed25519 for Management API Authentication
 
-Management API endpoints (like `/keyGenRequest`, `/newGroupRequest`, `/presignRequest`, etc.) require authentication. The node accepts **either** of the following:
+Management API endpoints (like `/keyGenRequest`, `/keyGenRequestRetry`, `/newGroupRequest`, `/newGroupRequestRetry`, `/presignRequest`, etc.) require authentication. The node accepts **either** of the following:
 
 - **NodeMgtKey (MetaMask)**: Ethereum address in config; sign with MetaMask/personal_sign (EIP-191).
 - **PublicMgtKey (Ed25519)**: Optional Ed25519 public key in config (bootstrap key); additional keys can be added via `POST /addManagementKey` (signed by an existing Ed25519 key). Sign the raw request body with your Ed25519 private key. Use for direct API access without a frontend.
@@ -1812,6 +1857,63 @@ Returns all known addresses stored on this node, grouped by chain type. Each ent
 
 See `./KNOWN_ADDRESSES_SCHEMA.md` for the full document shape.
 
+### Agent preferred signer (local node only)
+
+Operators can persist a single **Ed25519 public key** (64 hex) per MPC node process that automation (for example AI agents calling the management API) should treat as the default key when obtaining nonces and signing **management POST** requests. The value is stored in MongoDB on this node only; it is **not** propagated to peers. **`publicKey` must always be an active allowed management key:** the bootstrap **`PublicMgtKey`** from `configs.yaml` or a key added via **`POST /addManagementKey`** that has **not** been soft-removed with **`POST /removeManagementKey`**. **`GET /getPreferredSigner`** returns **`publicKeyHex` only while that stored key is still in the active allow-list** (same definition); if the key was removed or is otherwise no longer allowed, the response uses an empty string.
+
+<a id="get-getpreferredsigner"></a>
+#### `GET /getPreferredSigner`
+
+**Auth:** None (same class as `GET /getChainDetails`).
+
+**Response:**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": {
+    "publicKeyHex": ""
+  }
+}
+```
+
+- `publicKeyHex`: Lowercase 64-hex Ed25519 public key when a value is stored **and** that key is still an active allowed Ed25519 management key (bootstrap or non-removed added key). **Empty string** when nothing is stored, or when the stored key is no longer allowed (e.g. after `removeManagementKey`).
+
+**Example:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPreferredSigner"
+```
+
+<a id="post-setpreferredsigner"></a>
+#### `POST /setPreferredSigner`
+
+**Auth:** Management key (`signedMessage` + `clientSig`), same pattern as **`POST /postChainDetails`** (MetaMask `personal_sign` or Ed25519 128-hex `clientSig`). **`nonce`** from **`GET /getNodeMgtKeyNonce`** or **`GET /getPublicMgtKeyNonce`** when using Ed25519.
+
+**Request body (SetPreferredSignerPost):**
+```json
+{
+  "nonce": 1,
+  "publicKey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "signedMessage": "<exact string signed by management key>",
+  "clientSig": "0x... or 128-hex Ed25519"
+}
+```
+
+**Validation:**
+- `publicKey` (required): **64 hexadecimal characters** (32-byte Ed25519 public key); optional `0x` prefix (stripped server-side). Must pass **`IsValidEd25519PublicKeyHex`** and must be **currently present** in the active Ed25519 management allow-list: **`PublicMgtKey`** from config and/or keys from **`addManagementKey`** that have **not** been removed with **`removeManagementKey`** (see **`GET /getPublicMgtKey`** / **`GET /getAllowedEd25519MgtKeys`** for active keys).
+- Invalid length, non-hex, malformed keys, or key not in the allow-list → **`400`**.
+
+**Response:** `{ "code": 0, "error": "", "data": "Preferred signer stored" }`
+
+**Errors:** `400` invalid body, invalid `publicKey`, or `publicKey` not an active allowed Ed25519 management key; `401` invalid management signature; `500` database error.
+
+**Example:**
+```bash
+curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/setPreferredSigner" \
+  -H "Content-Type: application/json" \
+  -d '{"nonce":1,"publicKey":"<64-hex>","signedMessage":"...","clientSig":"..."}'
+```
+
 ### 3. Node Tools
 
 <a id="get-getconfigurednodekeys"></a>
@@ -2050,11 +2152,12 @@ The `data` field contains the `requestId` which can be used to track the group c
 1. Initiator calls `POST /newGroupRequest` with `keyList` and optional `BrokerArray`
 2. System registers relay channels and sends `NEWGROUPREQUEST` messages to all nodes
 3. Other nodes can see the request via `GET /listNewGroupRequests`
-4. Each node calls `POST /newGroupRequestAgree` to agree
-5. When all nodes agree, group is created and nodes subscribe to the broker
-6. Check results via `GET /getNewGroupResultById`
+4. **Optional recovery:** If a peer never received the MQTT `NEWGROUPREQUEST` (e.g. transient broker loss after pings succeeded), the **initiator** may call [`POST /newGroupRequestRetry`](#post-newgrouprequestretry) with that peer’s public key to republish the same `requestId` (see guards in that section).
+5. Each node calls `POST /newGroupRequestAgree` to agree
+6. When all nodes agree, group is created and nodes subscribe to the broker
+7. Check results via `GET /getGroupResultById` (deprecated alias: `GET /getNewGroupResultById`)
 
-**Persistence:** Each node stores at most one `NewGroup` document per `requestid` (upsert on save, plus a unique index on `requestid` when the database allows it). Duplicate MQTT deliveries of the same `NEWGROUPREQUEST` therefore do not create duplicate rows in `GET /listNewGroupRequests`. The initiator is stored as **`MsgPb.From`** on that document; list/get new-group request APIs return it as **`originator`**.
+**Persistence:** Each node stores at most one `NewGroup` document per `requestid` (upsert on save, plus a unique index on `requestid` when the database allows it). Duplicate MQTT deliveries of the same `NEWGROUPREQUEST` do not create duplicate rows; the node **merges** `SigList` on re-delivery so locally recorded peer signatures are not dropped. The initiator is stored as **`MsgPb.From`** on that document; list/get new-group request APIs return it as **`originator`**.
 
 <a id="newgroup-request-status-values"></a>
 **New group request `status` (stored on `MsgPb` in the `NewGroup` collection):**
@@ -2116,6 +2219,44 @@ Gets a specific group request by ID.
 
 **Response:** Same shape as one element of `GET /listNewGroupRequests` `data`, including **`status`** ([reference](#newgroup-request-status-values)) and **`originator`** (initiator node key; see note under [`GET /listNewGroupRequests`](#get-listnewgrouprequests)).
 
+<a id="post-newgrouprequestretry"></a>
+#### `POST /newGroupRequestRetry`
+Republishes the same MQTT **`NEWGROUPREQUEST`** (same `requestId`, same key-list payload shape as the initial send) to **one** peer’s topic. **Requires management key authentication.** Intended for recovery when a ping passed but a peer never applied the first message.
+
+**Caller:** Only the **originator** of the request (the node whose key equals **`MsgPb.From`** / **`originator`** for that `requestId`) may call this; use the **`$MPC_AUTH_URL:$MANAGEMENT_PORT`** of that node.
+
+**Request Body:**
+```json
+{
+  "requestId": "NewGroup20241228123456789abc123",
+  "targetNodeKey": "128_hex_node_public_key_of_peer",
+  "nonce": 1,
+  "sig": "..."
+}
+```
+
+**Field Descriptions:**
+- `requestId` (required): Existing new-group request id returned from `POST /newGroupRequest`.
+- `targetNodeKey` (required): Public key (128 hex) of the peer that must receive the retry; must appear in the stored request’s `KeyList`, and must **not** be the originator (the originator does not consume `NEWGROUPREQUEST` over MQTT).
+- `nonce` / `sig` (required unless `IgnoreMgtKeySigCheck`): Same management signing pattern as other group endpoints (canonical JSON of the body with `sig` cleared).
+
+**Guards (error if violated):**
+- Stored request **`status`** is **`failed`**, or the group already exists in **`GROUPDB`** for that `groupId`.
+- The originator’s stored `SigList` already contains a non-empty entry for **`targetNodeKey`** (that peer has already replied on the host; use [`POST /newGroupRequestAgree`](#post-newgrouprequestagree) on the peer instead if they still need to proceed locally).
+
+**Response (success):**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": "retried newGroupRequest NewGroup... to <targetNodeKey>"
+}
+```
+
+**Peer behavior:** If the peer receives a duplicate `NEWGROUPREQUEST`, their node **merges** signatures into the existing `NewGroup` row (same `requestId`, same `From`) and does not drop signatures already saved—so retries and at-least-once delivery are safe without a second `requestId`.
+
+**Error Responses:** `400` / `500` with `code: 1` and an `error` string (e.g. not originator, invalid target, group exists, target already responded).
+
 <a id="post-newgrouprequestagree"></a>
 #### `POST /newGroupRequestAgree`
 Agrees to a new group request. **Requires management key authentication.**
@@ -2140,9 +2281,9 @@ Agrees to a new group request. **Requires management key authentication.**
 
 **Note:** When a node agrees, it registers relay channels for the broker and sends a reply message back to the initiator.
 
-<a id="get-getnewgroupresultbyid"></a>
-#### `GET /getNewGroupResultById`
-Gets a specific group result by ID (requestId) or by group_id (after group is successfully created).
+<a id="get-getgroupresultbyid"></a>
+#### `GET /getGroupResultById`
+Gets a specific group result by ID (requestId) or by group_id (after the group is successfully created). This is the preferred path; `GET /getNewGroupResultById` is an identical deprecated alias and may be removed in a future release.
 
 **Query Parameters:**
 - `id` (optional): Request ID from `newGroupRequest` response
@@ -2187,15 +2328,19 @@ Gets a specific group result by ID (requestId) or by group_id (after group is su
 
 Query by requestId:
 ```bash
-curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNewGroupResultById?id=NewGroup20241228123456789abc123"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getGroupResultById?id=NewGroup20241228123456789abc123"
 ```
 
 Query by group_id:
 ```bash
-curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNewGroupResultById?group_id=566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getGroupResultById?group_id=566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9"
 ```
 
 **Note:** Groups can also be pre-configured in `configs.yaml` and will be automatically created on node startup. API-based creation is recommended for new groups to avoid the chicken-and-egg problem.
+
+<a id="get-getnewgroupresultbyid"></a>
+#### `GET /getNewGroupResultById` (deprecated)
+Same behavior, query parameters, and response as [`GET /getGroupResultById`](#get-getgroupresultbyid). Prefer `GET /getGroupResultById` for new integrations; this path may be removed in a future release.
 
 ### 6. Key Generation
 
@@ -2265,6 +2410,10 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/keyGenRequest \
   }'
 ```
 
+**Deduplication:** Nodes treat duplicate `KEYGENREQUEST` MQTT deliveries for the same `requestId` within a short window as a single processed message for throughput; a later delivery (e.g. operator [`POST /keyGenRequestRetry`](#post-keygenrequestretry)) still **merges** into the same DB row without wiping `SigList` / `ClientKeys` entries peers already stored.
+
+**Optional recovery:** If a peer never received **`KEYGENREQUEST`** after [`POST /keyGenRequest`](#post-keygenrequest), the initiator may call [`POST /keyGenRequestRetry`](#post-keygenrequestretry) for that peer’s public key (see that section for guards). If the first delivery was processed very recently, MQTT dedupe may drop a duplicate until a later retry or until the short window passes.
+
 <a id="get-listkeygenrequests"></a>
 #### `GET /listKeyGenRequests`
 Lists all key generation requests with filtering and pagination.
@@ -2333,6 +2482,28 @@ Gets a specific key generation request by ID.
 ```bash
 curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getKeyGenRequestById?id=KeyGen20260111003720999cf104d0f"
 ```
+
+<a id="post-keygenrequestretry"></a>
+#### `POST /keyGenRequestRetry`
+Republishes the same MQTT **`KEYGENREQUEST`** (same `requestId`, same **`SigList` / `ClientKeys` shape as the initial send**: only the initiator’s slots populated) to **one** peer’s topic. **Requires management key authentication.** Use when pings passed but a peer never persisted the first message.
+
+**Caller:** Only the **originator** (`MsgPb.From` / **`originator`** for that `requestId`) may call; use that node’s **`$MPC_AUTH_URL:$MANAGEMENT_PORT`**.
+
+**Request Body:**
+```json
+{
+  "requestId": "KeyGen20260111003720999cf104d0f",
+  "targetNodeKey": "128_hex_node_public_key_of_peer",
+  "nonce": 1,
+  "sig": "..."
+}
+```
+
+**Guards (error if violated):** target is in the group’s `KeyList` and is not the originator; stored request **`status`** is not **`failed`**; originator’s stored **`SigList[targetNodeKey]`** is still empty (that peer already replied on the initiator); keygen **result** for this `requestId` is not already complete (**`pubkeyhex`** present on this node). Refuses if the stored request is missing the initiator’s **`ClientKeys`** entry.
+
+**Receiver behavior:** Duplicate **`KEYGENREQUEST`** processing **merges** `SigList` and `ClientKeys` with the existing row (same `requestId`, same `From`) so local peer progress is not overwritten. Conflicting non-empty values for the same key return an error.
+
+**Response (success):** `data` string confirms retry, e.g. `retried keyGenRequest <id> to <targetNodeKey>`.
 
 <a id="post-keygenrequestagree"></a>
 #### `POST /keyGenRequestAgree`
@@ -2821,7 +2992,7 @@ Creates a new signing request. **Requires relayer authentication.**
 | `GET /listSignRequests` | None | List with filter/pagination. |
 | `GET /getPresignRequestById`, `GET /getPresignResultById`, `GET /listPresignRequests` | None | No signature required. |
 
-Management-key endpoints (keyGenRequest, presignRequest, newGroupRequest, etc.) are used by the node operator/frontend, not by the relayer; they require NodeMgtKey or PublicMgtKey signature.
+Management-key endpoints (`keyGenRequest`, `keyGenRequestRetry`, `presignRequest`, `newGroupRequest`, `newGroupRequestRetry`, etc.) are used by the node operator/frontend, not by the relayer; they require NodeMgtKey or PublicMgtKey signature.
 
 **Response:**
 ```json
@@ -3814,6 +3985,16 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/newGroupRequest \
     "sig": "0x..."
   }'
 
+# Step 2b (optional): Initiator only — retry NEWGROUPREQUEST to one peer that missed MQTT delivery
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/newGroupRequestRetry \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requestId": "NewGroup20241228123456789abc123",
+    "targetNodeKey": "128_hex_pubkey_of_peer",
+    "nonce": 1,
+    "sig": "0x..."
+  }'
+
 # Step 3: Each node agrees
 curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/newGroupRequestAgree \
   -H "Content-Type: application/json" \
@@ -3835,6 +4016,16 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/keyGenRequest \
     "groupId": "<group_id_from_step_2>",
     "msgCheck": "multi-agree",
     "keyType": "secp256k1"
+  }'
+
+# Step 4b (optional): Initiator only — retry KEYGENREQUEST to one peer that missed MQTT delivery
+curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/keyGenRequestRetry \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requestId": "KeyGen20260111003720999cf104d0f",
+    "targetNodeKey": "128_hex_pubkey_of_peer",
+    "nonce": 2,
+    "sig": "0x..."
   }'
 
 # Step 5: Each node agrees to keygen
