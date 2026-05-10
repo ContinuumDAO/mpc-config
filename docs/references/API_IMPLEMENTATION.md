@@ -4,6 +4,8 @@
 
 The Distributed Auth Management API provides a RESTful interface for managing MPC (Multi-Party Computation) nodes, key generation, signing operations, and system monitoring. The API is implemented using the Gin web framework and follows a consistent response format.
 
+**CGGMP24 / Rust:** For **`ecdsaMpcProtocol`** on **`POST /keyGenRequest`**, **`GET /version`** `cggmp24UpstreamGitRev`, and optional **`‑tags rust`** builds, see **[`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)**.
+
 ## Architecture
 
 ### Base URL
@@ -32,6 +34,18 @@ All endpoints return a standardized `APIResponse` structure:
   "data": {}        // Response data (varies by endpoint)
 }
 ```
+
+<a id="effective-ecdsa-mpc-protocol"></a>
+### `effectiveEcdsaMpcProtocol` (read-only)
+
+Keygen and sign **GET** responses include **`effectiveEcdsaMpcProtocol`** when the implementation can classify the key’s secp256k1 MPC stack:
+
+- **`"gg18"`** or **`"cggmp24"`** for **secp256k1** (derived from the stored keygen payload and defaults).
+- **Omitted or empty** for **ed25519** and other non-ECDSA key types.
+
+This field is **computed for JSON only** (not stored as its own MongoDB column). The keygen request body may still carry **`ecdsaMpcProtocol`** as sent at **`POST /keyGenRequest`**; use **`effectiveEcdsaMpcProtocol`** in clients when branching on which MPC runtime applies.
+
+**Where it appears:** **`GET /listKeyGenRequests`**, **`GET /getKeyGenRequestById`**, **`GET /getKeyGenResultById`**, **`GET /getGlobalNonceByKeyGenId`** (inside **`data`**), **`GET /listSignRequests`**, **`GET /getSignRequestById`**, **`GET /listSignRequestsReady`**, **`GET /getSignResultById`**, **`GET /listSignResults`**.
 
 ### Logging
 
@@ -269,6 +283,8 @@ Returns the current **application release** version (semver string) and the date
 
 Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is split from **ManagementAPIsPort**. **Not** registered on **Browser HTTPS** (**8443**); use discovery or management URL (no JWT for this route).
 
+**Diagnostics:** `data.cggmp24UpstreamGitRev` is the git revision of the **cggmp24** Rust dependency pinned in the build (via CGO FFI). It is **non-empty** only when the binary was built with **`-tags rust`** and the FFI library is linked; default builds omit it (empty string). Use it to confirm which Lockness/cggmp revision a node was built against.
+
 **Response:**
 ```json
 {
@@ -276,7 +292,8 @@ Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is sp
   "error": "",
   "data": {
     "version": "v1.1",
-    "versionDate": "2024-01-15"
+    "versionDate": "2024-01-15",
+    "cggmp24UpstreamGitRev": ""
   }
 }
 ```
@@ -284,6 +301,7 @@ Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is sp
 **Field Descriptions:**
 - `version`: The current node **application** version string (e.g. **`v1.12`**) — from the running binary, not necessarily the Docker image tag (`latest`, `v1.0`, etc.).
 - `versionDate`: The date when this version was set/changed (ISO 8601 date format, e.g., "2024-01-15")
+- `cggmp24UpstreamGitRev`: Pinned upstream git revision for the cggmp24 Rust stack when built with **`-tags rust`**; otherwise `""` (see **Diagnostics** above).
 
 <a id="get-getmachineinfo"></a>
 #### `GET /getMachineInfo`
@@ -2376,7 +2394,8 @@ Creates a new key generation request. **Requires management key authentication.*
   "threshold": 2,
   "groupId": "566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9",
   "msgCheck": "multi-agree",
-  "keyType": "secp256k1"
+  "keyType": "secp256k1",
+  "ecdsaMpcProtocol": "gg18"
 }
 ```
 
@@ -2388,6 +2407,9 @@ Creates a new key generation request. **Requires management key authentication.*
 - `groupId` (required): Group ID where key generation will occur
 - `msgCheck` (optional): Message check type, default is "multi-agree". Must be in allowed types from `/getAllowedMsgCheckTypes`
 - `keyType` (required): Key type - `"secp256k1"` for EVM chains or `"ed25519"` for Solana/Stellar/NEAR/TON
+- `ecdsaMpcProtocol` (optional): **secp256k1 only.** Selects the ECDSA MPC stack for this key: omit or **`"gg18"`** for the default **GG18-style** ECDSA DKG in vendored tss-lib; **`"cggmp24"`** selects the **CGGMP24** runtime path (integration is staged—keygen worker may not start and presign/sign APIs reject until fully wired). **Ignored for `ed25519`**. Invalid non-empty values (other than `gg18` / `cggmp24`) return **400** for secp256k1. The field must be part of the signed JSON whenever sent (same as other body fields).
+
+**Protocol note:** The choice is persisted on the **`KEYGENREQUEST`** payload (`KeyGenRequestDataPb`) and flows with MQTT/relay so all parties run the same mode. **Ed25519** continues to use the **EdDSA** multiparty keygen path (not GG18 ECDSA).
 
 **Response:**
 ```json
@@ -2414,6 +2436,8 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/keyGenRequest \
 ```
 
 **Deduplication:** Nodes treat duplicate `KEYGENREQUEST` MQTT deliveries for the same `requestId` within a short window as a single processed message for throughput; a later delivery (e.g. operator [`POST /keyGenRequestRetry`](#post-keygenrequestretry)) still **merges** into the same DB row without wiping `SigList` / `ClientKeys` entries peers already stored.
+
+**CGGMP24 (optional path):** Until CGGMP24 keygen and signing are fully implemented, prefer omitting `ecdsaMpcProtocol` or using **`"gg18"`** for production secp256k1 keys. Keys eventually created under **`"cggmp24"`** will not support **presign** or **sign** APIs until those flows are implemented.
 
 **Optional recovery:** If a peer never received **`KEYGENREQUEST`** after [`POST /keyGenRequest`](#post-keygenrequest), the initiator may call [`POST /keyGenRequestRetry`](#post-keygenrequestretry) for that peer’s public key (see that section for guards). If the first delivery was processed very recently, MQTT dedupe may drop a duplicate until a later retry or until the short window passes.
 
@@ -2461,6 +2485,7 @@ Lists all key generation requests with filtering and pagination.
 - `GroupId`: Group identifier (hash of sorted keyList)
 - `KeyType`: Key type, e.g. `"secp256k1"` or `"ed25519"`
 - `MsgCheck`: Message check type, e.g. `"tx-check"` or `"multi-agree"`
+- `EcdsaMpcProtocol` (when present): For **secp256k1** keygen requests, the stored ECDSA MPC mode (`gg18` / `cggmp24`). Omitted or empty means GG18 (default). **ed25519** requests omit this field.
 - `SigList`: Map of node public key (128 hex) to signature (hex) for nodes that agreed
 - `Threshold`: Signing threshold (number of nodes required to sign is threshold + 1)
 - `timepoint`: Timestamp when the request was recorded (with optional fractional seconds)
@@ -2556,12 +2581,13 @@ A result is returned (Code 0) only when this node completed the TSS and has the 
     "savedata": "HIDE ENCRYPTED DATA",
     "timepoint": "2026-01-11T00:37:20.999Z",
     "globalnonce": 0,
-    "status": "agree"
+    "status": "agree",
+    "effectiveEcdsaMpcProtocol": "gg18"
   }
 }
 ```
 
-**Note:** The `keylist` field contains all node keys that participated in key generation. **globalnonce** is the number of sign results created for this keyGen (secp256k1); it is also available via `GET /getGlobalNonceByKeyGenId`. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration.
+**Note:** The `keylist` field contains all node keys that participated in key generation. **globalnonce** is the number of sign results created for this keyGen (secp256k1); it is also available via `GET /getGlobalNonceByKeyGenId`. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration. **`effectiveEcdsaMpcProtocol`** summarizes the secp256k1 MPC runtime for this key (`gg18` or `cggmp24`); see [effectiveEcdsaMpcProtocol](#effective-ecdsa-mpc-protocol).
 
 **`status`:** Same **effective** lifecycle as the keygen request (see [KeyGen request `status` field (stored values)](#keygen-request-status-values)): not stored on the keygen result row; if the request is still **`agree`** but this node has **`savedata`**, responses return **`success`**. Omitted if the request record cannot be loaded.
 
@@ -2583,12 +2609,13 @@ Returns the **globalNonce** for a keyGen result. The `id` is the keyGen result i
   "code": 0,
   "error": "",
   "data": {
-    "globalnonce": 5
+    "globalnonce": 5,
+    "effectiveEcdsaMpcProtocol": "gg18"
   }
 }
 ```
 
-For keyGen results that are not secp256k1 (e.g. ed25519), the endpoint returns `globalnonce: 0` and optionally `keytype`.
+For keyGen results that are not secp256k1 (e.g. ed25519), the endpoint returns `globalnonce: 0`, **`keytype`**, and **`effectiveEcdsaMpcProtocol`** (empty when not applicable).
 
 **Example:**
 ```bash
@@ -2803,6 +2830,8 @@ Creates a new pre-signing request. **Requires management key authentication.**
 - `keyList` (required): Array of node keys that will participate in presigning
 - `presignAmt` (required): Number of presignatures to generate
 
+**CGGMP24 secp256k1 keys:** If the MPC key was created with **`ecdsaMpcProtocol: "cggmp24"`** at keygen, **`POST /presignRequest`** returns an error (GG18-style presign only today). Use keys created with GG18 (omit the field or use **`"gg18"`**).
+
 **Response:**
 ```json
 {
@@ -2982,6 +3011,7 @@ Creates a new signing request. **Requires relayer authentication.**
   - Signature verification uses exact JSON structure matching mpc-auth's `SignRequestPost`
   - Case-sensitive: `relayerPublicKey` must match exactly what's stored in the database
 - **Key type:** SignRequest only accepts keys with MsgCheck type `tx-check`. For keys with MsgCheck `multi-agree`, use `POST /multiSignRequest` instead.
+- **CGGMP24 secp256k1 keys:** Keys created with **`ecdsaMpcProtocol: "cggmp24"`** cannot create signing requests yet (API returns an error until CGGMP24 signing is implemented). Standard GG18 secp256k1 keys are unaffected.
 - **Client sig for tx-check:** For `tx-check` (relayer) keys, `clientSig` is **not** verified. Relayer authentication (relayerPublicKey + relayerSignature) is sufficient. Tx-check keys are often created with a placeholder client key at keygen; the relayer is the authorized party. You may send an empty or placeholder `clientSig` for SignRequest. For `multi-agree` keys (multiSignRequest), client sig is still verified.
 
 **Relayer-facing endpoints (no client-sig failure for tx-check flow):**
@@ -3034,6 +3064,8 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/signRequest \
 <a id="post-multisignrequest"></a>
 #### `POST /multiSignRequest`
 Creates a new signing request for **multi-agree keys only**. No relayer authentication; uses the same internal sign flow as `signRequest`. Nodes in the same GroupId must agree via `POST /signRequestAgree`; when enough nodes have agreed, the message(s) are signed. Supports **single** (one message) and **batch** (N messages in one request: one agree, one trigger, one SignResult with N signatures). Supports **gas token (native transfer) requests**: use optional `sendGas` and `value` for "Send gas" flows; they are part of the signed payload and stored in `ExtraJSON` so all nodes see them in `getSignRequestById` and `listSignRequests`.
+
+**CGGMP24:** Keys whose keygen used **`ecdsaMpcProtocol: "cggmp24"`** are rejected by this endpoint until CGGMP24 signing is implemented (same as `POST /signRequest`).
 
 **Single vs batch:** For a **single** message, send `msgHash` (required) and optional `msgRaw`. For a **batch** of N messages (e.g. a sequence of transactions), send `messageHashes` (array of N hex strings, length ≥ 2) and optionally `messageRawBatch` (length 0 or N); do not send `msgHash`/`msgRaw` for batch. One agree and one trigger then produce one SignResult whose `batchSignatures` array holds the N signatures (see `GET /getSignResultById`).
 

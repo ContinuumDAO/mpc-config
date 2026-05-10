@@ -2,12 +2,16 @@ swagger: '2.0'
 info:
   contact: {}
   title: MPC Auth Management API
-  description: Distributed Auth / MPC node HTTP API. All responses use node.APIResponse (code, error, data).
+  description: Distributed Auth / MPC node HTTP API. All responses use node.APIResponse (code, error, data). Keygen and sign
+    GET/list response bodies include effectiveEcdsaMpcProtocol for secp256k1 ("gg18" or "cggmp24"); empty when not applicable.
+    GET /getGlobalNonceByKeyGenId includes it in the data map. See mpc-config docs/references/API_IMPLEMENTATION.md.
   version: '1.0'
 paths:
   /version:
     get:
-      description: get node version
+      description: Returns APIResponse data object with version (app semver), versionDate, and cggmp24UpstreamGitRev (pinned
+        cggmp24/Lockness git revision when the binary is built with -tags rust and the FFI is linked; otherwise ""). Unauthenticated
+        on public discovery and management ports.
       consumes:
       - application/json
       produces:
@@ -62,6 +66,23 @@ paths:
       tags:
       - Node Related Info
       summary: GET getAllowedEd25519MgtKeys
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getPreferredSigner:
+    get:
+      description: Preferred Ed25519 public key for agent signing when still in the active management allow-list (otherwise
+        empty publicKeyHex in Data). Unauthenticated on the management port and on PublicDiscoveryPort when split. See mpc-config
+        docs/references/API_IMPLEMENTATION.md (GET /getPreferredSigner).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: GET getPreferredSigner
       responses:
         '200':
           description: OK
@@ -791,7 +812,8 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /listKeyGenRequests:
     get:
-      description: list keygen requests
+      description: list keygen requests. Each item includes effectiveEcdsaMpcProtocol for secp256k1 (gg18/cggmp24); empty
+        otherwise.
       consumes:
       - application/json
       produces:
@@ -819,7 +841,8 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getKeyGenRequestById:
     get:
-      description: get keygen request by id
+      description: get keygen request by id. Response data includes effectiveEcdsaMpcProtocol for secp256k1 (gg18/cggmp24);
+        empty otherwise.
       consumes:
       - application/json
       produces:
@@ -862,7 +885,8 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getKeyGenResultById:
     get:
-      description: get keygen result by id
+      description: get keygen result by id. Response data includes effectiveEcdsaMpcProtocol for secp256k1 (gg18/cggmp24);
+        empty otherwise.
       consumes:
       - application/json
       produces:
@@ -884,6 +908,8 @@ paths:
   /getGlobalNonceByKeyGenId:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getGlobalNonceByKeyGenId).
+        Success data includes globalnonce, effectiveEcdsaMpcProtocol, and keytype when the key is not secp256k1 (globalnonce
+        0).
       consumes:
       - application/json
       produces:
@@ -1161,7 +1187,7 @@ paths:
           description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /listSignRequests:
     get:
-      description: list sign requests
+      description: list sign requests. Each item includes effectiveEcdsaMpcProtocol for secp256k1 (gg18/cggmp24); empty otherwise.
       consumes:
       - application/json
       produces:
@@ -1199,7 +1225,8 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getSignRequestById:
     get:
-      description: get sign request by id
+      description: get sign request by id. Response data includes effectiveEcdsaMpcProtocol for secp256k1 (gg18/cggmp24);
+        empty otherwise.
       consumes:
       - application/json
       produces:
@@ -1264,6 +1291,7 @@ paths:
   /listSignRequestsReady:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listSignRequestsReady).
+        Items include effectiveEcdsaMpcProtocol for secp256k1 when derivable.
       consumes:
       - application/json
       produces:
@@ -1347,6 +1375,7 @@ paths:
   /listSignResults:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listSignResults).
+        Items include effectiveEcdsaMpcProtocol for secp256k1 when derivable.
       consumes:
       - application/json
       produces:
@@ -1361,7 +1390,8 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getSignResultById:
     get:
-      description: get sign result by id
+      description: get sign result by id. Response data includes effectiveEcdsaMpcProtocol for secp256k1 (gg18/cggmp24); empty
+        otherwise.
       consumes:
       - application/json
       produces:
@@ -1702,21 +1732,6 @@ paths:
         in: query
         required: false
         description: 0 or 1
-  /getPreferredSigner:
-    get:
-      description: Preferred Ed25519 public key for agent signing when still in the active management allow-list (otherwise empty publicKeyHex in Data). Unauthenticated on the management port and on PublicDiscoveryPort when split. See mpc-config docs/references/API_IMPLEMENTATION.md (GET /getPreferredSigner).
-      consumes:
-      - application/json
-      produces:
-      - application/json
-      tags:
-      - Agent automation
-      summary: GET getPreferredSigner
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
   /setPreferredSigner:
     post:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /setPreferredSigner).
@@ -2129,6 +2144,11 @@ definitions:
       data: {}
       error:
         type: string
+  node.EffectiveEcdsaMpcProtocol:
+    type: string
+    description: 'Runtime secp256k1 ECDSA MPC variant for this key/request: "gg18" or "cggmp24". Empty for non-secp256k1 keys.
+      API-only (JSON); stored request field remains ecdsaMpcProtocol on the keygen payload. Returned on keygen/sign GET and
+      list responses and on GET /getGlobalNonceByKeyGenId data.'
   node.KeyGenRequestAgreePost:
     type: object
     properties:
@@ -2142,12 +2162,18 @@ definitions:
         type: string
       nodeKey:
         type: string
-        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
+        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig
+          so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
   node.KeyGenRequestPost:
     type: object
     properties:
       clientPk:
         type: string
+      ecdsaMpcProtocol:
+        type: string
+        description: Optional. secp256k1 only — MPC ECDSA variant for this key ("gg18" or omit = GG18 DKG; "cggmp24" = CGGMP24
+          path when implemented). Ignored for ed25519. Invalid non-empty values are rejected for secp256k1. Must be included
+          in the management-key signed JSON when sent.
       groupId:
         type: string
       keyType:
@@ -2160,7 +2186,8 @@ definitions:
         type: string
       nodeKey:
         type: string
-        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
+        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig
+          so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
       threshold:
         type: integer
   node.NewGroupRequestAgreePost:
@@ -2174,7 +2201,8 @@ definitions:
         type: string
       nodeKey:
         type: string
-        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
+        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig
+          so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
   node.NewGroupRequestPost:
     type: object
     properties:
@@ -2192,7 +2220,8 @@ definitions:
         type: string
       nodeKey:
         type: string
-        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
+        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig
+          so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
   node.PresignRequestPost:
     type: object
     properties:
@@ -2210,7 +2239,8 @@ definitions:
         type: string
       nodeKey:
         type: string
-        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
+        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig
+          so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
   node.PresinRequestAgreePost:
     type: object
     properties:
@@ -2222,7 +2252,8 @@ definitions:
         type: string
       nodeKey:
         type: string
-        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
+        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig
+          so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
   node.RelayerRegisterRequest:
     type: object
     required:
@@ -2276,12 +2307,14 @@ definitions:
         type: string
       signedMessage:
         type: string
-        description: Exact string signed (MetaMask or Ed25519). If JSON, SHOULD include "nodeKey" (128 hex from GET /getNodeKey) so the client signature binds to this node; omitting nodeKey in JSON is deprecated.
+        description: Exact string signed (MetaMask or Ed25519). If JSON, SHOULD include "nodeKey" (128 hex from GET /getNodeKey)
+          so the client signature binds to this node; omitting nodeKey in JSON is deprecated.
       signerAddress:
         type: string
       nodeKey:
         type: string
-        description: Optional; when using Ed25519 with an empty signedMessage, include in JSON so canonical signing includes it (see API_IMPLEMENTATION.md). For MetaMask, embed "nodeKey" inside the JSON you place in signedMessage.
+        description: Optional; when using Ed25519 with an empty signedMessage, include in JSON so canonical signing includes
+          it (see API_IMPLEMENTATION.md). For MetaMask, embed "nodeKey" inside the JSON you place in signedMessage.
   node.SignRequestPost:
     type: object
     properties:
@@ -2339,7 +2372,8 @@ definitions:
         description: Management signature over the JSON body with sig set to empty
       nodeKey:
         type: string
-        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with Nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
+        description: Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with Nonce/sig
+          so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported.
       txParams:
         type: object
         description: Single-tx execute params, or batch index 0 when txParamsBatch omitted (see API_IMPLEMENTATION.md)
@@ -2419,7 +2453,10 @@ definitions:
         - fast
       signedMessage:
         type: string
-        description: Exact string signed (MetaMask personal_sign or Ed25519). If you use a JSON payload, include "nodeKey" set to this node's 128-hex MPC public key (GET /getNodeKey) so the signature cannot be replayed on another node; omitting nodeKey in JSON is deprecated. Not applicable when signedMessage is opaque non-JSON (e.g. some MQTT CA flows).
+        description: Exact string signed (MetaMask personal_sign or Ed25519). If you use a JSON payload, include "nodeKey"
+          set to this node's 128-hex MPC public key (GET /getNodeKey) so the signature cannot be replayed on another node;
+          omitting nodeKey in JSON is deprecated. Not applicable when signedMessage is opaque non-JSON (e.g. some MQTT CA
+          flows).
       clientSig:
         type: string
         description: 'MetaMask: 0x-prefixed; Ed25519: 128 hex characters'

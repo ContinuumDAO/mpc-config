@@ -17,7 +17,8 @@ services:
       retries: 5
       start_period: 40s
   app:
-    image: continuumdao/mpc-auth:latest
+    # Image: default GG18 mpc-auth; set MPC_AUTH_COMPOSE_APP_IMAGE (e.g. continuumdao/cggmp24-auth:latest) or run process_config.sh --cggmp24-docker-image.
+    image: ${MPC_AUTH_COMPOSE_APP_IMAGE:-continuumdao/mpc-auth:latest}
     restart: always
     # Paths for pending-update.json / pending-reboot.json must match the bind mount below (see systemd/README.md).
     environment:

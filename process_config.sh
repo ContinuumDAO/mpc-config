@@ -3520,6 +3520,7 @@ EOF
 configure_docker_compose() {
     local is_relay_node="$1"
     local enable_loopback="${2:-0}"
+    local app_image_override="${3:-}"
     local script_dir="$(cd "$(dirname "$0")" && pwd)"
     local compose_dir="$script_dir"
     if [ -d "$script_dir/mosquitto/config" ]; then
@@ -3556,10 +3557,83 @@ configure_docker_compose() {
     if cp "$template" "$docker_compose_file" 2>/dev/null; then
         print_success "docker-compose.yml configured for $node_type node (copied from $(basename "$template"))"
         apply_docker_compose_loopback_mapping "$docker_compose_file" "$enable_loopback" || true
+        if [ -n "$app_image_override" ]; then
+            apply_docker_compose_mpc_auth_image "$docker_compose_file" "$app_image_override"
+        fi
     else
         print_warning "Failed to copy $template to docker-compose.yml"
         return 1
     fi
+}
+
+# After copying a compose template, replace continuumdao/mpc-auth image lines (app service) with a custom ref (e.g. cggmp24-auth).
+apply_docker_compose_mpc_auth_image() {
+    local file="$1"
+    local new_image="$2"
+    if [ -z "$new_image" ] || [ ! -f "$file" ]; then
+        return 0
+    fi
+    if ! command -v python3 &> /dev/null; then
+        print_warning "python3 not found — could not set docker-compose app image"
+        return 1
+    fi
+    local _img_action
+    _img_action=$(
+        COMPOSE_APP_IMAGE_FILE="$file" COMPOSE_APP_IMAGE_REF="$new_image" python3 << 'PYIMG'
+import os
+import re
+import sys
+
+path = os.environ.get("COMPOSE_APP_IMAGE_FILE", "")
+ref = os.environ.get("COMPOSE_APP_IMAGE_REF", "").strip()
+if not path or not ref:
+    print("skip", flush=True)
+    sys.exit(0)
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+except OSError as e:
+    sys.stderr.write(f"{path}: {e}\n")
+    print("error", flush=True)
+    sys.exit(1)
+
+# Literal mpc-auth image or compose interpolation defaulting to mpc-auth (see docker-compose.*.yml templates).
+_interp = re.compile(
+    r"^\s*image:\s*\$\{MPC_AUTH_COMPOSE_APP_IMAGE:-continuumdao/mpc-auth[^}]*\}\s*$"
+)
+_literal = re.compile(r"^\s*image:\s*continuumdao/mpc-auth\S*\s*$")
+changed = 0
+out = []
+for line in lines:
+    raw = line.rstrip("\n")
+    if _interp.match(raw) or _literal.match(raw):
+        indent = line[: len(line) - len(line.lstrip(" \t"))]
+        out.append(f"{indent}image: {ref}\n")
+        changed += 1
+    else:
+        out.append(line)
+
+if changed == 0:
+    print("none", flush=True)
+    sys.exit(0)
+with open(path, "w", encoding="utf-8") as f:
+    f.writelines(out)
+print(f"ok:{changed}", flush=True)
+PYIMG
+    )
+    case "$_img_action" in
+        ok:*)
+            print_success "docker-compose.yml: app image set to ${new_image} (${_img_action#ok:} line(s))."
+            ;;
+        none)
+            print_warning "docker-compose.yml: no mpc-auth app image line found (expected continuumdao/mpc-auth or \${MPC_AUTH_COMPOSE_APP_IMAGE:-...}) — left unchanged."
+            ;;
+        skip|error)
+            ;;
+        *)
+            print_warning "docker-compose.yml: unexpected image patch result (${_img_action})."
+            ;;
+    esac
 }
 
 # After copying a compose template, uncomment or comment the loopback-only port line for BrowserLoopbackReadHTTP.
@@ -4110,6 +4184,7 @@ show_process_config_help() {
     echo "  --disable-loopback-http         Disable loopback read HTTP (non-interactive)"
     echo "  --no-systemd                    Skip optional mpc-auth Docker systemd installer prompts (after firewall; before Relayer check — see mpc-config/systemd/README.md)."
     echo "  --install-mpc-auth-systemd      Non-interactive: sudo-run systemd/install-mpc-auth-docker-systemd.sh (requires sudo; may prompt restart)."
+    echo "  --cggmp24-docker-image         Use continuumdao/cggmp24-auth:latest for the compose app service (replaces continuumdao/mpc-auth in generated docker-compose.yml)."
     echo "  --help | -h | -help | help   Show this message (arguments above + relay/client behavior below)"
     echo ""
     echo "Environment (optional): FORCE_REGENERATE_MQTT_CERTS=1 / FORCE_REGENERATE_BROWSER_HTTPS_CERTS=1 same as the flags above."
@@ -4121,6 +4196,9 @@ show_process_config_help() {
     echo "  PROCESS_CONFIG_NONINTERACTIVE=1 — skip optional prompts (RelayerAPIURL / ScannerAPIURLs use defaults when unset; root continue; second management key; MQTT overwrite if regenerating; UFW enable ask; systemd Y/n)."
     echo "  MPC_CONFIG_ROOT=/path/to/mpc-config — locate systemd/install-mpc-auth-docker-systemd.sh when the script runs"
     echo "    from mpc-auth (or any tree that does not include mpc-config/systemd next to repo root)."
+    echo "  MPC_AUTH_COMPOSE_APP_IMAGE — full image reference for the mpc-auth container. docker-compose.client.yml / relay use"
+    echo "    \${MPC_AUTH_COMPOSE_APP_IMAGE:-continuumdao/mpc-auth:latest}; export this when running docker compose without regenerating."
+    echo "    process_config rewrites the image line to a concrete ref when this env or --cggmp24-docker-image is set (flag wins over env)."
     echo ""
     echo "This script validates configuration and generates certificates."
     echo ""
@@ -4790,6 +4868,7 @@ main() {
     local SKIP_FIREWALL=false
     local SKIP_SYSTEMD=false
     local INSTALL_MPC_AUTH_SYSTEMD=false
+    local COMPOSE_APP_IMAGE_REF="${MPC_AUTH_COMPOSE_APP_IMAGE:-}"
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -4832,6 +4911,10 @@ main() {
                 ;;
             --install-mpc-auth-systemd)
                 INSTALL_MPC_AUTH_SYSTEMD=true
+                shift
+                ;;
+            --cggmp24-docker-image)
+                COMPOSE_APP_IMAGE_REF="continuumdao/cggmp24-auth:latest"
                 shift
                 ;;
             --help|-h|-help|help)
@@ -4900,7 +4983,7 @@ main() {
     prompt_browser_loopback_read_http
 
     configure_mqtt_broker "$CONFIG_FILE" "$IS_RELAY_NODE"
-    configure_docker_compose "$IS_RELAY_NODE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED"
+    configure_docker_compose "$IS_RELAY_NODE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED" "$COMPOSE_APP_IMAGE_REF"
 
     setup_browser_https "$CONFIG_FILE"
     apply_browser_loopback_read_http_config "$CONFIG_FILE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED"
