@@ -2373,7 +2373,7 @@ Same behavior, query parameters, and response as [`GET /getGroupResultById`](#ge
 | **`pending`** | Waiting for more nodes to complete the agreement: the request exists, but **not every** key in the group’s **`KeyList`** has a non-empty signature in **`SigList`** yet (peers still need to call `keyGenRequestAgree`, or the initiator is still merging partial `KEYGENREQUESTREPLY` updates). New requests are saved with this status. |
 | **`agree`** | **All** group nodes have signed the keygen request off-chain. Set when **`KEYGENREQUESTREPLY`** / **`KEYGENREQUESTCONFIRMSUCCESS`** / **`POST /keyGenRequestAgree`** reflects a full **`SigList`**. The keygen **request** row can remain **`agree`** until TSS finishes; **`success`** is written when encrypted **`SaveData`** is stored on the keygen result. |
 | **`success`** | TSS completed on this node: the keygen **result** document has non-nil **`savedata`** (encrypted share). The server sets **`status`** to **`success`** on the keygen request when **`UpdateKeyGenResultSaveDataFull`** / **`UpdateEDKeyGenResultSaveDataFull`** completes. |
-| **`failed`** | Terminal failure: e.g. TSS/worker error or timeout, expiry of a long-pending request, or fewer than threshold+1 KEYGENRESULT confirmations within the configured window (the keygen **result** may be removed; the **request** row can remain with this status). |
+| **`failed`** | Terminal failure: e.g. TSS/worker error or timeout, expiry of a long-pending request, or fewer than **MPC quorum** KEYGENRESULT confirmations within the configured window (**GG18/ed25519:** *d+1* parties; **CGGMP24:** *t* parties; see **`threshold`** on keygen)—the keygen **result** may be removed; the **request** row can remain with this status. |
 
 **Initiator (`originator`):** The node that created the keygen request is stored as **`MsgPb.From`** on the keygen request document; **`GET /listKeyGenRequests`** and **`GET /getKeyGenRequestById`** return it as the JSON field **`originator`**.
 
@@ -2403,7 +2403,7 @@ Creates a new key generation request. **Requires management key authentication.*
 - `nonce` (required): Current nonce from `/getNodeMgtKeyNonce`
 - `sig` (required): Management key signature over the request body (excluding `sig` field)
 - `clientPk` (required): Client public key (128 hex characters)
-- `threshold` (required): Minimum number of nodes required to sign (must be less than keyList length)
+- `threshold` (required): Depends on ECDSA MPC mode (`ecdsaMpcProtocol`) and key type — **stored as-is** on the keygen payload. **GG18** (secp256k1 omit or `gg18`) **and Ed25519:** Shamir polynomial **degree** *d*; MPC signing requires *d+1* parties (validate: *d* strictly less than *n*, group size *n*). **CGGMP24** (secp256k1 with `ecdsaMpcProtocol` `cggmp24`): **`threshold`** is the signing quorum *t* (validate: *2≤t≤n*). Multi-agree and signing flows use **MPC quorum**: GG18/ed25519 = *d+1*, CGGMP24 = *t*.
 - `groupId` (required): Group ID where key generation will occur
 - `msgCheck` (optional): Message check type, default is "multi-agree". Must be in allowed types from `/getAllowedMsgCheckTypes`
 - `keyType` (required): Key type - `"secp256k1"` for EVM chains or `"ed25519"` for Solana/Stellar/NEAR/TON
@@ -2487,7 +2487,7 @@ Lists all key generation requests with filtering and pagination.
 - `MsgCheck`: Message check type, e.g. `"tx-check"` or `"multi-agree"`
 - `EcdsaMpcProtocol` (when present): For **secp256k1** keygen requests, the stored ECDSA MPC mode (`gg18` / `cggmp24`). Omitted or empty means GG18 (default). **ed25519** requests omit this field.
 - `SigList`: Map of node public key (128 hex) to signature (hex) for nodes that agreed
-- `Threshold`: Signing threshold (number of nodes required to sign is threshold + 1)
+- `Threshold`: Stored **threshold** field from keygen: for **GG18/ed25519** this is polynomial degree *d* (MPC signing quorum = *d+1*); for **CGGMP24** it is the quorum *t* (MPC signing quorum = *t*). See [`POST /keyGenRequest`](#post-keygenrequest) `threshold`.
 - `timepoint`: Timestamp when the request was recorded (with optional fractional seconds)
 - `originator`: Node public key (128 hex characters) of the node that created the keygen **request**—the same value as **`MsgPb.From`** on the stored **`KEYGENREQUEST`** document. Omitted when empty.
 
@@ -2559,7 +2559,7 @@ Agrees to a key generation request. **Requires management key authentication.**
 #### `GET /getKeyGenResultById` ⭐
 Gets a specific key generation result by ID. Returns the generated public key, addresses, and keyList.
 
-A result is returned (Code 0) only when this node completed the TSS and has the full result (including local share), **and** at least **threshold+1** parties sent KEYGENRESULTCONFIRMSUCCESS within 7 days. If fewer parties completed by then, the keygen is useless for signing (cannot produce a signature); the result is then deleted and the keygen request is marked failed. If this node did not complete (e.g. worker timed out), it returns Code 1 "not ready". If one node returns "not ready" and another had completed, the client may need to call `getKeyGenResultById` on another node—but if fewer than threshold+1 parties completed overall, no node will keep the result (all will delete it after the 7-day timeout).
+A result is returned (Code 0) only when this node completed the TSS and has the full result (including local share), **and** at least the **MPC quorum** (**GG18/ed25519:** polynomial degree plus one parties; **CGGMP24:** *t* parties) sent KEYGENRESULTCONFIRMSUCCESS within 7 days. If fewer parties completed by then, the keygen is useless for signing (cannot produce a signature); the result is then deleted and the keygen request is marked failed. If this node did not complete (e.g. worker timed out), it returns Code 1 "not ready". If one node returns "not ready" and another had completed, the client may need to call `getKeyGenResultById` on another node—but if fewer than the quorum completed overall, no node will keep the result (all will delete it after the 7-day timeout).
 
 **Query Parameters:**
 - `id` (required): Key generation request ID
@@ -3171,7 +3171,7 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
   - `live`: Sign requests with status `live` (active requests not yet agreed by this node, success, blocked, or shelved)
   - `pending`: Sign requests with status `pending` (this node has called signRequestAgree; not propagated to other nodes)
   - `success`: Sign requests with status `success` (a sign result was created for the request)
-  - `blocked`: Sign requests with status `blocked` (threshold+1 agreements can no longer be reached)
+  - `blocked`: Sign requests with status `blocked` (MPC quorum agreements can no longer be reached among remaining participants)
   - `shelved`: Sign requests with status `shelved` (originator shelved the request)
 - `pagenum` (optional, default: 0)
 - `pagesize` (optional, default: 10)
@@ -3237,7 +3237,7 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
 - `Purpose`: Key/value map: node key (128 hex) → purpose text (max 256 chars per entry). Visible to nodes considering agree/reject. The key identifies which node created or submitted the request (multiSignRequest: creator node; signRequest/tx-check: node that received the request).
 - `Thoughts`: Map of node key → optional comment (max 256 chars each) from each node when they called `signRequestAgree` (accept or reject).
 - `KeyGenRequestId`: Key generation request ID (keyGenId) for the MPC key used by this sign request (same as the keygen request that produced `PubKey`). Included in listSignRequests, getSignRequestById, getSignResultById, and listSignRequestsReady.
-- `status`: Sign request lifecycle status: `"live"` (default after creation), `"pending"` (set locally when this node has called `POST /signRequestAgree`; not propagated), `"shelved"` (set by the originator via `POST /shelveSignRequest`), `"blocked"` (set automatically when threshold+1 can no longer be reached), or `"success"` (set when a sign result is created). Omitted or `"live"` until set.
+- `status`: Sign request lifecycle status: `"live"` (default after creation), `"pending"` (set locally when this node has called `POST /signRequestAgree`; not propagated), `"shelved"` (set by the originator via `POST /shelveSignRequest`), `"blocked"` (set automatically when the **MPC quorum** can no longer be reached), or `"success"` (set when a sign result is created). Omitted or `"live"` until set.
 - `timepoint`: When the request was recorded
 
 **Example:**
@@ -3451,7 +3451,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSignResultById?id=Sign20260111003720999c
 
 <a id="get-issignrequestreadybyid"></a>
 #### `GET /isSignRequestReadyById`
-Returns whether a sign request is **ready to trigger** (multi-agree only). Ready means the request has at least **threshold+1** nodes in **SigList** (agreeing set). For tx-check or non–multi-agree keys, returns `ready: false`. Use this before calling `POST /triggerSignRequestById`.
+Returns whether a sign request is **ready to trigger** (multi-agree only). Ready means **SigList** has at least the **MPC quorum** (see keygen **`threshold`** semantics). For tx-check or non–multi-agree keys, returns `ready: false`. Use this before calling `POST /triggerSignRequestById`.
 
 **Query Parameters:**
 - `id` (required): Sign request ID.
@@ -3475,7 +3475,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/isSignRequestReadyById?id=Sign2026011100372
 
 <a id="get-listsignrequestsready"></a>
 #### `GET /listSignRequestsReady`
-Lists **multi-agree** sign requests that are **ready to trigger**: this node is in the agreeing set (**SigList**), at least threshold+1 have agreed, and the request has **not** yet been triggered (no sign result). Use `GET /getSignResultById` to see when the signature is ready after triggering. Supports pagination.
+Lists **multi-agree** sign requests that are **ready to trigger**: this node is in the agreeing set (**SigList**), at least **MPC quorum** have agreed (see keygen **`threshold`**), and the request has **not** yet been triggered (no sign result). Use `GET /getSignResultById` to see when the signature is ready after triggering. Supports pagination.
 
 **Query Parameters:**
 - `pagenum` (optional): Page number (default `0`).
@@ -3483,7 +3483,7 @@ Lists **multi-agree** sign requests that are **ready to trigger**: this node is 
 
 **Response:** Same structure as `GET /listSignRequests` (array of sign request objects, including `KeyGenRequestId`). Only includes requests that are ready and where this node is in **SigList**.
 
-**Rejections and keyGen:** Rejecting a sign request (`POST /signRequestAgree` with `accept: false`) only adds this node to **RejectedBy**; it does **not** remove or alter the keyGen request or keyGen result. "Ready" is based solely on **SigList** (agreeing nodes): if at least threshold+1 nodes are in SigList, the request is ready regardless of RejectedBy. If a request with threshold+1 agreements does **not** appear in `listSignRequestsReady` or `triggerSignRequestById` fails with "keygen result for pubkey ... not found", the **keyGen result** is missing on this node. The keyGen result is only deleted when **keygen** failed: fewer than threshold+1 parties sent KEYGENRESULTCONFIRMSUCCESS within 7 days; then the result is deleted and the keyGen **request** is marked `"failed"` (the request document is not deleted). In that case the key is unusable for signing. The keyGen request remains in the DB with status `"failed"`; only the keyGen **result** (the actual key material) is removed.
+**Rejections and keyGen:** Rejecting a sign request (`POST /signRequestAgree` with `accept: false`) only adds this node to **RejectedBy**; it does **not** remove or alter the keyGen request or keyGen result. "Ready" is based solely on **SigList** (agreeing nodes): if **SigList** reaches the **MPC quorum** for this key (**GG18/ed25519:** degree+1; **CGGMP24:** *t*), the request is ready regardless of **RejectedBy** (unless blocked by remaining-participant logic). If a quorum-ready agreement does **not** appear in `listSignRequestsReady` or `triggerSignRequestById` fails with "keygen result for pubkey ... not found", the **keyGen result** is missing on this node. The keyGen result is only deleted when **keygen** failed: fewer than **MPC quorum** parties sent KEYGENRESULTCONFIRMSUCCESS within 7 days; then the result is deleted and the keyGen **request** is marked `"failed"` (the request document is not deleted). In that case the key is unusable for signing. The keyGen request remains in the DB with status `"failed"`; only the keyGen **result** (the actual key material) is removed.
 
 **Example:**
 ```bash
@@ -3492,7 +3492,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequestsReady?pagenum=0&pagesize=10
 
 <a id="post-triggersignrequestbyid"></a>
 #### `POST /triggerSignRequestById`
-**Multi-agree only.** When at least **threshold+1** nodes have accepted (and rejections are excluded), triggers signature generation: sends **SIGNREQUESTCONFIRMSUCCESS** and starts the sign worker(s). For **single** requests, one signature is produced; for **batch** requests, one trigger produces one SignResult with N signatures (retrieved via `GET /getSignResultById` as the `batchSignatures` array). **Only the originator may call this:** the request’s **Purpose** map must have this node’s key as the (originator) key; otherwise the server returns an error. **If the sign request status is `"shelved"`** (set via `POST /shelveSignRequest`), the server returns an error and does not trigger. **Idempotent:** if the request was already triggered, returns success with data `"Already triggered"`. Does not affect tx-check flow. Requires management key signature (MetaMask or Ed25519).
+**Multi-agree only.** When at least the **MPC quorum** for this key have accepted in **SigList** (and rejections are excluded), triggers signature generation: sends **SIGNREQUESTCONFIRMSUCCESS** and starts the sign worker(s). For **single** requests, one signature is produced; for **batch** requests, one trigger produces one SignResult with N signatures (retrieved via `GET /getSignResultById` as the `batchSignatures` array). **Only the originator may call this:** the request’s **Purpose** map must have this node’s key as the (originator) key; otherwise the server returns an error. **If the sign request status is `"shelved"`** (set via `POST /shelveSignRequest`), the server returns an error and does not trigger. **Idempotent:** if the request was already triggered, returns success with data `"Already triggered"`. Does not affect tx-check flow. Requires management key signature (MetaMask or Ed25519).
 
 **EVM unsigned transaction (typical `executeSignResult` / broadcast):** The originator should include **`messageHash`** (single-tx: the **RLP/unsigned-tx** signing hash the MPC will sign; if present, the backend updates the sign request’s **MessageHash** on this node before the worker runs). For gas/nonce/fees stored on **this node only** (not propagated), send:
 - **`txParams`**: one object — used for **single-tx**, or for **batch** merged **only at index 0** with **`proposal_tx_params[0]`** unless **`txParamsBatch`** is set (see below).
@@ -3651,7 +3651,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/updateSignResultStatusById \
 
 <a id="post-shelvesignrequest"></a>
 #### `POST /shelveSignRequest`
-**Originator only.** Sets the sign request lifecycle status to `"shelved"`. Only the node that created the sign request (originator: node key in **Purpose**) may call. The update is propagated to other nodes so all nodes see the status in `GET /getSignRequestById` and `GET /listSignRequests`. **The update can only happen once:** if the sign request is already shelved or blocked, a second call returns an error. Requires management key signature (MetaMask or Ed25519). **Note:** When a node rejects via `POST /signRequestAgree` with `accept: false`, if the number of remaining nodes that could still agree falls below threshold+1, the backend automatically sets the sign request status to `"blocked"` and propagates it to other nodes; `GET /getSignRequestById` then returns `"status": "blocked"`.
+**Originator only.** Sets the sign request lifecycle status to `"shelved"`. Only the node that created the sign request (originator: node key in **Purpose**) may call. The update is propagated to other nodes so all nodes see the status in `GET /getSignRequestById` and `GET /listSignRequests`. **The update can only happen once:** if the sign request is already shelved or blocked, a second call returns an error. Requires management key signature (MetaMask or Ed25519). **Note:** When a node rejects via `POST /signRequestAgree` with `accept: false`, if the number of remaining nodes that could still agree falls below the **MPC quorum** for this key, the backend automatically sets the sign request status to `"blocked"` and propagates it to other nodes; `GET /getSignRequestById` then returns `"status": "blocked"`.
 
 **Request Body:**
 - `requestId` (required): Sign request ID.
@@ -4116,7 +4116,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSignResultById?id=Sign20260111003720999c
 
 ### 3. Multi-Agree Signing (Ready / Trigger Flow)
 
-For **multi-agree** keys, nodes agree via `POST /signRequestAgree`. Once at least **threshold+1** nodes have agreed, **only the originator** (the node whose key is the key in the Purpose map, i.e. the one that created the request via multiSignRequest) may call `POST /triggerSignRequestById` to trigger signature generation. Use `GET /getSignResultById` to poll for the signature. The originator can then call `POST /updateSignResultStatusById` to set status to `"executed"` (with transaction hash) or `"shelved"` (transaction will not be broadcast); these fields appear in `getSignResultById`. The originator can also call `POST /shelveSignRequest` to set the **sign request** status to `"shelved"` (e.g. to cancel or defer the request before triggering); this status appears in `getSignRequestById` and `listSignRequests` and is propagated to all nodes.
+For **multi-agree** keys, nodes agree via `POST /signRequestAgree`. Once **SigList** reaches the **MPC quorum** for this key (**GG18/ed25519:** degree+1; **CGGMP24:** *t*), **only the originator** (the node whose key is the key in the Purpose map, i.e. the one that created the request via multiSignRequest) may call `POST /triggerSignRequestById` to trigger signature generation. Use `GET /getSignResultById` to poll for the signature. The originator can then call `POST /updateSignResultStatusById` to set status to `"executed"` (with transaction hash) or `"shelved"` (transaction will not be broadcast); these fields appear in `getSignResultById`. The originator can also call `POST /shelveSignRequest` to set the **sign request** status to `"shelved"` (e.g. to cancel or defer the request before triggering); this status appears in `getSignRequestById` and `listSignRequests` and is propagated to all nodes.
 
 **Batch sign request:** To request N signatures in one go (e.g. a sequence of transactions), call `POST /multiSignRequest` with `messageHashes` (array of N hex hashes) and optionally `messageRawBatch`. One `POST /signRequestAgree` agrees to the entire batch. After trigger, `GET /getSignResultById` returns one result with `batchSignResult: true`, `batchSize: N`, and `batchSignatures` (array of N entries: `messagehash`, `sigr`, `sigs`, `sigrecover`, `signaturehex`, `ethereumsignature`). Use `data.batchSignatures[i]` for the i-th signature and execute transactions in order (e.g. consecutive nonces on EVM).
 

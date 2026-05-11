@@ -1960,7 +1960,7 @@
         },
         "/triggerSignRequestById": {
             "post": {
-                "description": "Multi-agree: after threshold+1 agreements, triggers SIGNREQUESTCONFIRMSUCCESS and sign workers. Batch-only optional fields **messageHashes** / **messageRawBatch** (length N) update per-leg digests on the originator (fee bump); use empty **messageHashes[i]** to skip that leg. Canonical prose: **mpc-config** `docs/references/API_IMPLEMENTATION.md` § POST /triggerSignRequestById.",
+                "description": "Multi-agree: once the MPC quorum (see keygen Threshold semantics in mpc-config docs/references/API_IMPLEMENTATION.md) is reached in SigList, triggers SIGNREQUESTCONFIRMSUCCESS and sign workers. Batch-only optional fields **messageHashes** / **messageRawBatch** (length N) update per-leg digests on the originator (fee bump); use empty **messageHashes[i]** to skip that leg.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3299,7 +3299,8 @@
                     "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
                 },
                 "threshold": {
-                    "type": "integer"
+                    "type": "integer",
+                    "description": "Interpretation depends on ECDSA MPC mode (see ecdsaMpcProtocol) and key type. GG18 (secp256k1 default / omit) and Ed25519: Shamir polynomial degree d; MPC signing needs d+1 parties; require d strictly less than n (n = group size). CGGMP24 (secp256k1 with ecdsaMpcProtocol \"cggmp24\"): literal signing quorum t; MPC signing needs t parties; require 2 ≤ t ≤ n."
                 }
             }
         },
