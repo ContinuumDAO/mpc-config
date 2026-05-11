@@ -132,11 +132,11 @@ This starts:
 - **Mosquitto** - MQTT broker (port 8883 for TLS) BUT ONLY on the RELAY node. The other nodes are clients.
 - **mpc-auth** - MPC node: HTTP management API on **:8080** (`ManagementAPIsPort`); optional **Browser HTTPS** (TLS 1.3) on a separate port when `BrowserHTTPS` is enabled in `configs.yaml` (browser-facing API with JWT on GET; see comments in `configs.yaml`)
 
-The generated **`docker-compose.yml`** pulls the Docker image from the registry: `continuumdao/mpc-auth:latest`
+The generated **`docker-compose.yml`** pulls the app image **`continuumdao/cggmp24-auth:latest`** by default (CGGMP24 / Rust build). For the legacy GG18 image, run **`./process_config.sh --gg18-docker-image`** or set **`MPC_AUTH_COMPOSE_APP_IMAGE=continuumdao/mpc-auth:latest`** before regenerating compose.
 
 **Release vs. image tag:** `latest` chooses which container image to run. The **application semver** your node reports ( **`GET /version`** → **`data.version`**, e.g. **`v1.1`**) comes from the mpc-auth binary **built inside that image**, not from the Docker tag string. After upgrading with **`docker compose pull`** / **`docker compose up -d`**, confirm the running release with **`GET /version`** (management or public discovery port, per deployment).
 
-**Note:** The default configuration uses **`latest`**. To pin a specific semver tag (for example **`v1.1`**) instead, edit **`docker-compose.relay.yml`** or **`docker-compose.client.yml`** (then run **`./process_config.sh`** again so **`docker-compose.yml`** is regenerated), or edit the generated **`docker-compose.yml`** directly.
+**Note:** The default configuration uses **`latest`** on **`cggmp24-auth`** (or **`mpc-auth`** if you chose `--gg18-docker-image`). To pin a specific semver tag instead, edit **`docker-compose.relay.yml`** or **`docker-compose.client.yml`** (then run **`./process_config.sh`** again so **`docker-compose.yml`** is regenerated), or edit the generated **`docker-compose.yml`** directly.
 
 ## Documentation
 
@@ -651,7 +651,7 @@ docker-compose up -d
 The docker-compose files include:
 - **mongodb**: Local MongoDB instance (port 27017, **127.0.0.1** only)
 - **mosquitto**: MQTT broker (automatically configured from `mosquitto/config/mosquitto.conf` - port 8883 for TLS by default)
-- **app**: The mpc-auth node — pulls Docker image **`continuumdao/mpc-auth:latest`** (rebuild/push when upgrading node code). **`GET /version`** (management or discovery port) returns the **application semver** (e.g. **`v1.1`**) embedded in the binary for that image — not the literal string **`latest`**.
+- **app**: The mpc-auth node — default Docker image **`continuumdao/cggmp24-auth:latest`**; legacy GG18 **`continuumdao/mpc-auth:latest`** via **`process_config.sh --gg18-docker-image`** or **`MPC_AUTH_COMPOSE_APP_IMAGE`**. **`GET /version`** (management or discovery port) returns the **application semver** (e.g. **`v1.1`**) embedded in the binary for that image — not the literal string **`latest`**.
   - **`127.0.0.1:8080:8080`** — management API (**localhost on the host** only; use **SSH tunnel** for remote `curl` / Swagger)
   - **`18080`** — public discovery (`PublicDiscoveryPort`): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /health`**, **`GET /getNodeKey`**, **`GET /getConfiguredNodeKeys`** (no JWT on this port)
   - **`18081`** — scanner/relayer HTTP when **`ScannerRelayerPort`** is set in `configs.yaml` (e.g. **`POST /signRequest`**)
@@ -931,7 +931,7 @@ Use **`docker compose`** everywhere this README shows **`docker-compose`** (e.g.
 
 ### Docker Image Not Found
 
-If you see an error such as `manifest for continuumdao/mpc-auth:latest not found: manifest unknown` (or similar for another tag):
+If you see an error such as `manifest for continuumdao/cggmp24-auth:latest not found` or `manifest for continuumdao/mpc-auth:latest not found: manifest unknown` (or similar for another tag):
 
 **This means the Docker image tag isn't available in the registry (or the tag name is wrong).**
 
@@ -940,13 +940,13 @@ If you see an error such as `manifest for continuumdao/mpc-auth:latest not found
 Check what tags are published and update **`docker-compose.relay.yml`** / **`docker-compose.client.yml`** (then re-run **`./process_config.sh`**) or the generated **`docker-compose.yml`**:
 
 ```bash
-docker pull continuumdao/mpc-auth:v1.1  # Or another tag published by the project
+docker pull continuumdao/cggmp24-auth:v1.1  # Or continuumdao/mpc-auth:… for legacy GG18; use a tag published by the project
 ```
 
 Then update the compose file to use an available tag:
 ```yaml
 app:
-  image: continuumdao/mpc-auth:v1.1  # Replace with available tag from the registry
+  image: continuumdao/cggmp24-auth:v1.1  # Or mpc-auth / another published tag
 ```
 
 **Solution 2: Check Docker Registry Access**
@@ -954,8 +954,9 @@ app:
 If the image should be available, verify you can access the registry:
 
 ```bash
-# Test pulling the image directly (default in this repo: latest)
-docker pull continuumdao/mpc-auth:latest
+# Test pulling the image directly (defaults in this repo: cggmp24-auth:latest; legacy GG18: mpc-auth:latest)
+docker pull continuumdao/cggmp24-auth:latest
+# docker pull continuumdao/mpc-auth:latest
 
 # If it's a private registry, you may need to log in first
 docker login
