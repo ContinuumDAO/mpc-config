@@ -630,7 +630,7 @@ Edit `configs.yaml` with your settings:
 
 - **`NodeMgtKey`**: Ethereum address for API authentication (management endpoints)
 - **`IgnoreMgtKeySigCheck`**: Set to `false` in production (enables signature verification)
-- **`MongodbUri`**: Leave empty for default (`mongodb://localhost:27017`) or specify custom port
+- **`MongodbUri`**: Leave empty for defaults (`mongodb://localhost:27017` on host, `mongodb://mongodb:27017` in Docker). For **MongoDB authentication** (recommended), use **`.env`** at the repo root with **`MongodbUri=…`** matching **`DBName`** (default **DistributedAuth**), plus **`MONGO_*`** variables (**`.env.example`**); **`MongodbUri` in the container environment overrides this YAML field when non-empty**.
 - **`DBName`**: Database name (default: "DistributedAuth")
 - **`ManagementAPIsPort`**: HTTP API server port (default: 8080)
 - **`BrokerQos`**: MQTT QoS level (must be 1 or 2 for reliable MPC operations)
@@ -641,6 +641,12 @@ Edit `configs.yaml` with your settings:
 
 **Important:** MongoDB MUST be on localhost (127.0.0.1). Remote connections are not allowed. Each node uses its own local MongoDB instance.
 
+**MongoDB authentication (recommended):** Copy **`.env.example`** to **`.env`** by hand, **or** export **`MONGO_INITDB_ROOT_PASSWORD`** and **`MONGO_APP_PASSWORD`** (and optional **`MONGO_*` / `MongodbUri`**) and run **`process_config.sh`** from the compose directory: if **`.env`** is missing and **`docker-compose.relay.yml`** or **`docker-compose.client.yml`** lives next to **`configs.yaml`**, the script copies **`.env.example` → `.env`** and fills mongo-related keys from the environment (and builds **`MongodbUri`** if unset). If **`.env`** already exists, use **`PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV=1`** for the same merge, or edit **`.env`** yourself. On a **new** install with an **empty** **`./data/mongodb`**, the stock **`mongo:6.0`** image creates a **MongoDB admin** account (default **`MONGO_INITDB_ROOT_USERNAME=mongoRoot`** — not the Linux superuser) with the **`root` role on `admin`**, and **`mongodb/docker-entrypoint-initdb.d/01-mpc-auth-app-user.sh`** creates an application **`readWrite`** user on **`MONGO_APP_DATABASE`**. **Existing** data directories that were created **without** auth need a one-time manual migration (create users, enable auth, then set **`.env`**) or a fresh volume—do not set **`MongodbUri`** with credentials until Mongo accepts them.
+
+**Host loopback hardening:** After **`process_config.sh`** applies UFW (not with **`--no-firewall`**), it patches **`/etc/ufw/after.rules`** so **non-root OS users** cannot open TCP to **`127.0.0.1:27017`** (Compose publish). This pairs with auth: **root** can still use **`mongosh`** on the host; the **app** container uses **`mongodb:27017`** on the bridge and is unaffected. Disable with **`APPLY_LOOPBACK_MONGO_OWNER_FW=0`**. Details: **`docs/internal/PROCESS_CONFIG_FIREWALL.md`**.
+
+**`.env` permissions:** The file must be **readable and writable only by its owner** (mode **`0600`**, e.g. **`chmod u=rw,go= .env`**). **`process_config.sh`** sets **`0600`** when it creates or merges **`.env`**; after a manual **`cp .env.example .env`**, run **`chmod`** yourself.
+
 #### 5. Build and Run
 
 ```bash
@@ -649,7 +655,7 @@ docker-compose up -d
 ```
 
 The docker-compose files include:
-- **mongodb**: Local MongoDB instance (port 27017, **127.0.0.1** only)
+- **mongodb**: Local MongoDB instance (port 27017, **127.0.0.1** only); optional strong auth via **`.env`** / **`.env.example`** and **`mongodb/docker-entrypoint-initdb.d/`** on first-run empty `./data/mongodb`.
 - **mosquitto**: MQTT broker (automatically configured from `mosquitto/config/mosquitto.conf` - port 8883 for TLS by default)
 - **app**: The mpc-auth node — default Docker image **`continuumdao/cggmp24-auth:latest`**; legacy GG18 **`continuumdao/mpc-auth:latest`** via **`process_config.sh --gg18-docker-image`** or **`MPC_AUTH_COMPOSE_APP_IMAGE`**. **`GET /version`** (management or discovery port) returns the **application semver** (e.g. **`v1.1`**) embedded in the binary for that image — not the literal string **`latest`**.
   - **`127.0.0.1:8080:8080`** — management API (**localhost on the host** only; use **SSH tunnel** for remote `curl` / Swagger)

@@ -48,6 +48,22 @@ Ubuntu often has **IPv6 enabled** in **`/etc/default/ufw`**, so a plain **`ufw a
 
 If **`ufw`** is **inactive**, the script warns and may prompt (when a TTY is available) to run **`sudo ufw enable`**. Confirm **SSH (22)** is allowed before enabling, or you risk locking yourself out.
 
+## Loopback MongoDB (non-root outbound drop)
+
+**`docker-compose*.yml`** publishes Mongo on **`127.0.0.1:27017`**. Ordinary UFW “allow inbound” rules do **not** stop **local processes** owned by non-root OS users from opening **`mongodb://127.0.0.1:27017`**.
+
+After the usual **`process_config.sh`** UFW allow rules are applied (unless **`--no-firewall`**), an extra step installs a **`ufw-user-output`** line in **`/etc/ufw/after.rules`**: **`DROP`** on TCP to **`127.0.0.1/32`** port **27017** from any **effective UID ≠ root**.
+
+- **Purpose:** complement **MongoDB authentication** (see **`README`** and **`.env.example`**) against **same-host UID** misuse (including AI agents running as normal users).
+
+- **`docker-compose` networking:** mpc-auth **`app`** talks to **`mongodb:27017` on the bridge**; host loopback **`127.0.0.1:27017`** is for **`mongosh` / tools from the OS**. This rule blocks **non-root** access on that host loopback path only.
+
+- **Disable:** set **`APPLY_LOOPBACK_MONGO_OWNER_FW=0`** before running **`process_config.sh`**.
+
+- **Custom port:** set **`MONGO_LOOPBACK_FW_PORT`** if the host publish port differs from **27017**.
+
+- **Not UFW / no `*filter` anchor:** if **`/etc/ufw/after.rules`** cannot be patched (unusual layout), add an equivalent **`iptables`** / **`nftables`** rule yourself and document it for your image.
+
 ## See also
 
 - **`./process_config.sh --help`** — **Host firewall** subsection.

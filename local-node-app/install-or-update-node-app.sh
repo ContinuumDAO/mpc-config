@@ -14,7 +14,12 @@ if [[ ! -f .env ]]; then
 		echo "error: missing .env.example in ${SCRIPT_DIR}" >&2
 		exit 1
 	fi
-	cp .env.example .env
+	if command -v install &>/dev/null; then
+		install -m 0600 .env.example .env
+	else
+		cp .env.example .env
+		chmod 0600 .env
+	fi
 	echo "Created .env from .env.example."
 	echo "Edit REOWN_PROJECT_ID (and other values if needed), then run this script again."
 	exit 1

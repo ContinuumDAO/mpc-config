@@ -581,7 +581,139 @@ ensure_configs_yaml_from_original() {
     return 1
 }
 
-# Extract IP address from URL (http://ip:port or https://ip:port)
+# If MONGO_* secrets are exported and this is a Docker Compose project directory, ensure .env
+# exists so `docker compose` picks up secrets. Copies .env.example → .env when .env is missing.
+# Existing .env: set PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV=1 to overwrite mongo-related keys from env.
+# PROCESS_CONFIG_SKIP_DOTENV_FROM_ENV=1 — disable this entire step.
+_process_config_maybe_materialize_dotenv_from_environment() {
+    local root="$1"
+
+    case "${PROCESS_CONFIG_SKIP_DOTENV_FROM_ENV:-}" in
+        1 | true | TRUE | yes | YES) return 0 ;;
+    esac
+
+    if [ ! -f "${root}/docker-compose.relay.yml" ] && [ ! -f "${root}/docker-compose.client.yml" ]; then
+        return 0
+    fi
+    if [ ! -f "${root}/.env.example" ]; then
+        print_warning "${root}/.env.example missing — cannot materialize .env from Mongo passwords in env."
+        return 0
+    fi
+
+    # Both required so we never write half an auth deployment.
+    if [ -z "${MONGO_INITDB_ROOT_PASSWORD:-}" ] || [ -z "${MONGO_APP_PASSWORD:-}" ]; then
+        return 0
+    fi
+
+    local dotenv="${root}/.env" merging=false
+    if [ -f "$dotenv" ]; then
+        if [ "${PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV:-0}" != "1" ]; then
+            print_info ".env already exists (${dotenv}) — skipping auto-write. Set PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV=1 to merge mongo keys from the current environment."
+            return 0
+        fi
+        merging=true
+    else
+        if command -v install >/dev/null 2>&1; then
+            install -m 0600 "${root}/.env.example" "$dotenv"
+        elif ! cp "${root}/.env.example" "$dotenv"; then
+            print_error "Failed to copy ${root}/.env.example → ${dotenv}"
+            return 1
+        else
+            if ! chmod 0600 "$dotenv"; then
+                print_warning "Could not chmod 0600 ${dotenv} — as the owner run: chmod u=rw,go= ${dotenv}"
+            fi
+        fi
+        print_success "Created ${dotenv} from .env.example (Mongo passwords set in environment)."
+    fi
+
+    if ! MCP_DOTENV_FILE="$dotenv" python3 <<'PY_MERGE_DOTENV'
+import os
+import re
+import pathlib
+from urllib.parse import quote
+
+path = pathlib.Path(os.environ["MPC_DOTENV_FILE"])
+assign = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$")
+
+
+def pct(s):
+    return quote(str(s), safe="")
+
+
+def build_updates():
+    out = {}
+    for k in (
+        "MONGO_INITDB_ROOT_USERNAME",
+        "MONGO_INITDB_ROOT_PASSWORD",
+        "MONGO_APP_USER",
+        "MONGO_APP_PASSWORD",
+        "MONGO_APP_DATABASE",
+    ):
+        v = os.environ.get(k)
+        if v not in (None, ""):
+            out[k] = v
+    uri = os.environ.get("MongodbUri", "").strip()
+    if uri:
+        out["MongodbUri"] = uri
+    elif os.environ.get("MONGO_APP_PASSWORD"):
+        u = os.environ.get("MONGO_APP_USER", "").strip() or "mpcauth"
+        p = os.environ.get("MONGO_APP_PASSWORD", "")
+        db = os.environ.get("MONGO_APP_DATABASE", "").strip() or "DistributedAuth"
+        out["MongodbUri"] = "mongodb://{}:{}@mongodb:27017/{}?authSource={}".format(pct(u), pct(p), pct(db), pct(db))
+    return out
+
+
+updates = build_updates()
+
+raw = path.read_text(encoding="utf-8", errors="replace")
+
+out_lines = []
+seen = set()
+for ln in raw.splitlines(keepends=False):
+    m = assign.match(ln)
+    if m:
+        key, _val = m.group(1), m.group(2)
+        if key in updates:
+            out_lines.append("{}={}".format(key, updates[key]))
+            seen.add(key)
+            continue
+    if "MongodbUri" in updates and ln.strip().startswith("#") and "MongodbUri=mongodb://" in ln:
+        continue
+    out_lines.append(ln)
+
+suffix = []
+
+for key in (
+    "MONGO_INITDB_ROOT_USERNAME",
+    "MONGO_INITDB_ROOT_PASSWORD",
+    "MONGO_APP_USER",
+    "MONGO_APP_PASSWORD",
+    "MONGO_APP_DATABASE",
+    "MongodbUri",
+):
+
+    if key in updates and key not in seen:
+        suffix.append("{}={}".format(key, updates[key]))
+
+final = "\n".join(out_lines).rstrip() + ("\n\n" + "\n".join(suffix) + "\n" if suffix else "\n")
+
+path.write_text(final, encoding="utf-8")
+PY_MERGE_DOTENV
+    then
+        print_error "Failed to merge environment into ${dotenv} (python3)."
+        return 1
+    fi
+
+    if ! chmod 0600 "$dotenv"; then
+        print_warning "Could not chmod 0600 ${dotenv} — as the file owner run: chmod u=rw,go= ${dotenv}"
+    fi
+
+    if [ "$merging" = true ]; then
+        print_success "Updated Mongo-related entries in ${dotenv} from the current environment."
+    fi
+}
+
+
 extract_ip_from_url() {
     local url="$1"
     # Remove protocol (http:// or https://)
@@ -4191,7 +4323,11 @@ show_process_config_help() {
     echo "  ENABLE_BROWSER_LOOPBACK_READ_HTTP=0|1 — loopback HTTP when not using an interactive TTY (or override the prompt)."
     echo "  DEFAULT_BROWSER_LOOPBACK_READ_HTTP_PORT — listener/host port (default 8445; must match docker-compose mapping)."
     echo "  UFW_OPEN_MANAGEMENT_PORT=1 — add ufw allow for ManagementAPIsPort (default: management port not opened in UFW)."
-    echo "  PROCESS_CONFIG_SKIP_SYSTEMD=1 — skip optional mpc-auth systemd helper prompts."
+    echo "  APPLY_LOOPBACK_MONGO_OWNER_FW=0 — skip UFW after.rules patch that drops non-root → 127.0.0.1:Mongo (default: apply)."
+    echo "  MONGO_LOOPBACK_FW_PORT=<n> — override published Mongo TCP port used in that drop rule (default 27017)."
+    echo "  With MONGO_INITDB_ROOT_PASSWORD + MONGO_APP_PASSWORD in env (and docker-compose*.yml in the config dir): auto-copy .env.example → .env if .env missing, then merge those credentials (and MongodbUri if absent — derived from user/pass/db)."
+    echo "  PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV=1 — also merge mongo-related keys into an existing .env (overwrite values from env)."
+    echo "  PROCESS_CONFIG_SKIP_DOTENV_FROM_ENV=1 — disable .env creation/merge entirely."
     echo "  PROCESS_CONFIG_INSTALL_SYSTEMD=1 — same as --install-mpc-auth-systemd (non-interactive install)."
     echo "  PROCESS_CONFIG_NONINTERACTIVE=1 — skip optional prompts (RelayerAPIURL / ScannerAPIURLs use defaults when unset; root continue; second management key; MQTT overwrite if regenerating; UFW enable ask; systemd Y/n)."
     echo "  MPC_CONFIG_ROOT=/path/to/mpc-config — locate systemd/install-mpc-auth-docker-systemd.sh when the script runs"
@@ -4246,6 +4382,7 @@ show_process_config_help() {
     echo "  ManagementAPIsPort (8080), relay MQTT (8883). ScannerRelayerPort uses *scoped* UFW rules when"
     echo "  PreSigningVerification.RelayerAPIURL and/or ScannerAPIURLs resolve to IPv4 (see configs.yaml)."
     echo "  ManagementAPIsPort is not opened in UFW by default; set UFW_OPEN_MANAGEMENT_PORT=1 if peers/operators need inbound HTTP to the management API."
+    echo "  Loopback Mongo: after baseline rules, installs /etc/ufw/after.rules DROP for non-root → 127.0.0.1:Mongo (disable: APPLY_LOOPBACK_MONGO_OWNER_FW=0)."
     echo "  If UFW is inactive, you are prompted (via /dev/tty) to run sudo ufw enable, or enable manually."
     echo "  Use --no-firewall to skip (not recommended for production / financial nodes)."
     echo ""
@@ -4431,8 +4568,125 @@ ensure_ufw_active_early() {
     print_success "UFW is active (SSH allowed for remote admin)."
 }
 
-# Apply baseline ufw allow rules for mpc-auth. UFW must be installed and already active (see ensure_ufw_active_early).
-# See docs/internal/PROCESS_CONFIG_FIREWALL.md
+# Drop TCP OUTPUT from non-root OS users toward 127.0.0.1:$mongo_port (Compose Mongo bind). Persisted under
+# /etc/ufw/after.rules; complements MongodbUri auth (mpc-auth docs-internal threat model).
+_apply_loopback_mongodb_owner_firewall_via_ufw_after_rules() {
+    local mongo_port="${MONGO_LOOPBACK_FW_PORT:-27017}"
+    local skip_firewall="$1"
+
+    case "${APPLY_LOOPBACK_MONGO_OWNER_FW:-1}" in
+        0 | false | FALSE | no | NO) return 0 ;;
+    esac
+
+    if [ "$skip_firewall" = "true" ]; then
+        return 0
+    fi
+
+    print_step "UFW after.rules: non-root outbound to localhost Mongo (${mongo_port}/tcp)"
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        print_warning "python3 missing — skipping Mongo loopback owner rule (${mongo_port/tcp}; see PROCESS_CONFIG_FIREWALL.md)."
+        return 0
+    fi
+
+    local ar="/etc/ufw/after.rules" mpc_tmp py_exit
+    mpc_tmp=$(mktemp) || return 1
+    # shellcheck disable=SC2064
+    trap 'rm -f "$mpc_tmp"' RETURN
+
+    py_exit=0
+    MPC_LOOPBACK_TMP="$mpc_tmp" MPC_FW_PORT="$mongo_port" python3 <<'PYCODE'
+import pathlib
+import os
+import sys
+
+begin = "# BEGIN mpc-config-loopback-mongo-fw"
+end = "# END mpc-config-loopback-mongo-fw"
+
+port_s = os.environ["MPC_FW_PORT"]
+want_rule = "-A ufw-user-output -d 127.0.0.1/32 -p tcp --dport {} -m owner ! --uid-owner root -j DROP".format(port_s)
+new_block_txt = "".join(["{}\n".format(begin), "# Host UIDs other than root: drop tcp toward Compose Mongo bind (127.0.0.1).\n", "{}\n".format(want_rule), "{}\n".format(end), "\n"])
+rules_fp = pathlib.Path("/etc/ufw/after.rules")
+
+
+def strip_block(text_data):
+    frag, skip = [], False
+    for ln in text_data.splitlines(keepends=True):
+        s = ln.strip()
+        if s == begin:
+            skip = True
+            continue
+        if skip and s == end:
+            skip = False
+            continue
+        if not skip:
+            frag.append(ln)
+    return "".join(frag)
+
+
+def inject(text_data):
+    lines = text_data.splitlines(keepends=True)
+    out, scan, ok = [], False, False
+    for ln in lines:
+        if ln.strip() == "*filter":
+            scan = True
+        if scan and ln.strip() == "COMMIT":
+            out.append(new_block_txt)
+            scan, ok = False, True
+        out.append(ln)
+    return "".join(out), ok
+
+
+try:
+    raw = rules_fp.read_text(encoding="utf-8", errors="replace")
+except OSError as e:
+    sys.stderr.write("mpc-config: cannot read {}: {}\n".format(rules_fp, e))
+    sys.exit(2)
+
+if begin in raw and want_rule.strip() in raw:
+    pathlib.Path(os.environ["MPC_LOOPBACK_TMP"]).write_text("", encoding="utf-8")
+    sys.stdout.write("unchanged\n")
+    sys.exit(0)
+
+rewritten, injected = inject(strip_block(raw))
+if not injected:
+    sys.stderr.write(
+        "mpc-config: no *filter COMMIT anchor in {}; add iptables DROP manually (PROCESS_CONFIG_FIREWALL.md).\n".format(rules_fp)
+    )
+    sys.exit(3)
+if rewritten == raw:
+    pathlib.Path(os.environ["MPC_LOOPBACK_TMP"]).write_text("", encoding="utf-8")
+    sys.stdout.write("unchanged\n")
+    sys.exit(0)
+pathlib.Path(os.environ["MPC_LOOPBACK_TMP"]).write_text(rewritten, encoding="utf-8")
+PYCODE
+    py_exit=$?
+
+    if [ "$py_exit" -ne 0 ]; then
+        print_warning "Could not derive updated UFW rules for ${ar} (exit ${py_exit})."
+        return 0
+    fi
+
+    if ! sudo test -s "$mpc_tmp"; then
+        return 0
+    fi
+
+    if sudo cmp -s "$mpc_tmp" "$ar" 2>/dev/null; then
+        return 0
+    fi
+
+    if ! sudo install -m 0644 -o root -g root "$mpc_tmp" "$ar"; then
+        print_error "Failed to install updated $ar (sudo install)."
+        return 1
+    fi
+
+    if ! sudo ufw reload; then
+        print_error "sudo ufw reload failed after updating $ar — fix UFW manually."
+        return 1
+    fi
+    print_success "Installed loopback Mongo owner-drop in $ar and reloaded UFW."
+}
+
 apply_process_config_firewall() {
     local config_file="$1"
     local skip_firewall="$2"
@@ -4558,6 +4812,8 @@ apply_process_config_firewall() {
     if [ "$is_relay" = "true" ]; then
         apply_one_ufw 8883 "mpc-auth MQTT TLS broker"
     fi
+
+    _apply_loopback_mongodb_owner_firewall_via_ufw_after_rules "$skip_firewall"
 
     print_info "UFW rules added (or already present). UFW status:"
     sudo ufw status numbered 2>/dev/null || true
@@ -4948,6 +5204,8 @@ main() {
     fi
     print_success "Found config: $CONFIG_FILE"
     echo ""
+
+    _process_config_maybe_materialize_dotenv_from_environment "$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
 
     # Management keys before nodeAddresses so re-runs offer NodeMgtKey / PublicMgtKey when missing
     # (otherwise users only see the node IP flow first).

@@ -7,6 +7,9 @@ mosquitto/config/certs/
 # Internal docs
 docs/internal/
 
+# Secrets (Compose; see .env.example)
+.env
+
 # config
 configs.yaml
 

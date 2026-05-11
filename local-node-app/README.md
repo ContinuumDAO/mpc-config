@@ -14,6 +14,7 @@ From this directory:
 ```bash
 cd local-node-app
 cp .env.example .env
+chmod u=rw,go= .env
 ```
 
 Edit `.env` and set at least **REOWN_PROJECT_ID** to your Reown project id.

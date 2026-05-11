@@ -30,8 +30,10 @@ IgnoreMgtKeySigCheck: true
 # MongoDB MUST be on localhost (127.0.0.1) - remote connections are not allowed
 # Each node uses its own local MongoDB instance running on the same machine
 # Only specify if using a custom port (e.g., mongodb://localhost:27018)
-# Format: mongodb://[username:password@]localhost[:port][/database][?options]
-# When running in Docker, the app auto-detects and uses mongodb://mongodb:27017
+# Format: mongodb://[username:password@]localhost[:port][/database][?authSource=database][&options]
+# When running in Docker, mpc-auth defaults to mongodb://mongodb:27017 (no-auth). For authenticated
+# Mongo (recommended), copy .env.example to .env at the compose project root and set MongodbUri there
+# (env overrides YAML). Use authSource=<DB_NAME> matching MONGO_APP_DATABASE (default DistributedAuth).
 MongodbUri: ""
 
 # MongoDB database name (optional, defaults to "DistributedAuth" for backwards compatibility)
