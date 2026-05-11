@@ -248,7 +248,7 @@ Returns **`draining`**, **`inFlight`**, **`readyForProcessExit`**, and a hint li
 <a id="post-updatempcauth"></a>
 #### `POST /updateMpcAuth`
 
-**Docker image upgrade (tag digest):** `POST /updateMpcAuth` (management-signed JSON `{ nonce, sig, tag }`) may be called **only while draining** (`requestRestartPrep` already applied). The node resolves the image via **Docker Hub** (`registry-1.docker.io`) and returns **`registryDigest`** aligned with **`MpcAuthDockerRepo`** (optional in `configs.yaml`, default **`continuumdao/mpc-auth`**), plus **`previousVersion`** / **`previousVersionDate`** (matches **`GET /version`** for the **current** process) and **`newVersionRequested`** (= requested **image tag**). The running container image is **not** changed by the API itself—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host).
+**Docker image upgrade (tag digest):** `POST /updateMpcAuth` (management-signed JSON `{ nonce, sig, tag }`) may be called **only while draining** (`requestRestartPrep` already applied). The node resolves the image via **Docker Hub** (`registry-1.docker.io`) and returns **`registryDigest`** aligned with **`MpcAuthDockerRepo`** (optional in `configs.yaml`, default **`continuumdao/cggmp24-auth`**), plus **`previousVersion`** / **`previousVersionDate`** (matches **`GET /version`** for the **current** process) and **`newVersionRequested`** (= requested **image tag**). The running container image is **not** changed by the API itself—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host).
 
 <a id="post-updatempc-auth-host"></a>
 ##### Host apply (digest) — why SSH or a host helper is still involved

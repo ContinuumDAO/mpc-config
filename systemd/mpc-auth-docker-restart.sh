@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Restart the mpc-auth Docker container named MPC_AUTH_CONTAINER_NAME (defaults in mpc-auth-docker.env).
 # If that name does not exist and MPC_AUTH_RESTART_STRICT is unset, detects a lone container whose image
-# contains "mpc-auth" (typical continuumdao/mpc-auth:tag across different compose project prefixes).
+# contains "mpc-auth" or "cggmp24-auth" (typical continuumdao images across different compose project prefixes).
 #
 # Typical install: chmod +x; copy to /usr/local/libexec/mpc-auth/;
 # systemd: mpc-auth-docker-restart.service references this script.
@@ -30,23 +30,23 @@ if docker inspect "$CONTAINER" >/dev/null 2>&1; then
 	exec docker restart "$CONTAINER"
 fi
 
-# Configured name missing — optionally restart the single container using an mpc-auth image (Compose project varies by host/dir).
+# Configured name missing — optionally restart the single container using a cggmp24-auth / mpc-auth image (Compose project varies by host/dir).
 hits=()
 while IFS=$'\t' read -r cname img; do
 	case "$img" in
-		*mpc-auth*) hits+=("$cname") ;;
+		*mpc-auth* | *cggmp24-auth*) hits+=("$cname") ;;
 	esac
 done < <(docker ps -a --format '{{.Names}}\t{{.Image}}')
 
 if [[ "${#hits[@]}" -eq 1 ]]; then
-	echo "mpc-auth-docker-restart: no container named ${CONTAINER}; restarting sole *mpc-auth* image container: ${hits[0]}" >&2
+	echo "mpc-auth-docker-restart: no container named ${CONTAINER}; restarting sole app image container: ${hits[0]}" >&2
 	exec docker restart "${hits[0]}"
 fi
 
 if [[ "${#hits[@]}" -eq 0 ]]; then
-	echo "mpc-auth-docker-restart: No container named ${CONTAINER} and no image matching *mpc-auth* (docker ps -a). Set MPC_AUTH_CONTAINER_NAME to your NAMES column in /etc/default/mpc-auth-docker." >&2
+	echo "mpc-auth-docker-restart: No container named ${CONTAINER} and no image matching *mpc-auth* or *cggmp24-auth* (docker ps -a). Set MPC_AUTH_CONTAINER_NAME to your NAMES column in /etc/default/mpc-auth-docker." >&2
 	exit 1
 fi
 
-echo "mpc-auth-docker-restart: Multiple *mpc-auth* containers: ${hits[*]}. Set MPC_AUTH_CONTAINER_NAME in /etc/default/mpc-auth-docker." >&2
+echo "mpc-auth-docker-restart: Multiple app image containers (*mpc-auth* / *cggmp24-auth*): ${hits[*]}. Set MPC_AUTH_CONTAINER_NAME in /etc/default/mpc-auth-docker." >&2
 exit 1

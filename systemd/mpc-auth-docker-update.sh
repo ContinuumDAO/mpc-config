@@ -16,7 +16,7 @@ if [[ -r /etc/default/mpc-auth-docker ]]; then
 fi
 
 CONTAINER="${MPC_AUTH_CONTAINER_NAME:-mpc-config-app-1}"
-REPO="${MPC_AUTH_IMAGE:-continuumdao/mpc-auth}"
+REPO="${MPC_AUTH_IMAGE:-continuumdao/cggmp24-auth}"
 TAG="${1:-latest}"
 EXPECTED_DIGEST="${2:-}"
 if [[ -z "$EXPECTED_DIGEST" ]]; then
