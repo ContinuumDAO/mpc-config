@@ -4390,8 +4390,8 @@ show_process_config_help() {
     echo "  After prompts, if units are on the host, automatically runs install-mpc-auth-docker-systemd.sh --no-env"
     echo "  so /usr/local/libexec/mpc-auth/*.sh matches this repo (git pull does not update libexec otherwise)."
     echo "  Skipped with --no-systemd or PROCESS_CONFIG_SKIP_SYSTEMD=1."
-    echo "  When mpc-auth units exist on the host, also prompts to start mpc-auth-docker-restart.service:"
-    echo "  Default Yes (Enter or y runs sudo systemctl start …); n skips. ⚠ container restart."
+    echo "  When mpc-auth units exist on the host, also prompts to start mpc-auth-docker-restart.service"
+    echo "  if a resolvable mpc-auth container exists ([Y/n] default Yes); skipped when Docker is down or no container yet."
     echo "  See systemd/README.md."
     echo ""
 }
@@ -5032,9 +5032,62 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
         if ! _mpc_auth_can_prompt_interactive; then
             return 0
         fi
+
+        # Only offer restart when a target container exists. (Apr 2026 [Y/n] default made Enter run systemctl; fresh hosts
+        # often have no Compose containers yet — restarting would always fail. Mirrors mpc-auth-docker-restart.sh resolution.)
+        if ! command -v docker >/dev/null 2>&1; then
+            print_info "docker not on PATH — skipping mpc-auth-docker-restart prompt."
+            return 0
+        fi
+        if ! docker ps >/dev/null 2>&1; then
+            print_info "Docker daemon unreachable — skipping mpc-auth-docker-restart prompt (start Docker and compose, then: sudo systemctl start mpc-auth-docker-restart.service)."
+            return 0
+        fi
+
+        local CONTAINER resolved="" hits=()
+        if [ -r /etc/default/mpc-auth-docker ]; then
+            # shellcheck source=/dev/null
+            . /etc/default/mpc-auth-docker
+        fi
+        CONTAINER="${MPC_AUTH_CONTAINER_NAME:-mpc-config-app-1}"
+
+        case "${MPC_AUTH_RESTART_STRICT:-}" in
+            1 | true | TRUE | yes | YES)
+                if docker inspect "$CONTAINER" >/dev/null 2>&1; then
+                    resolved="$CONTAINER"
+                else
+                    print_warning "MPC_AUTH_RESTART_STRICT is set but container \"$CONTAINER\" does not exist — skipping restart prompt."
+                    return 0
+                fi
+                ;;
+            *)
+                if docker inspect "$CONTAINER" >/dev/null 2>&1; then
+                    resolved="$CONTAINER"
+                else
+                    while IFS=$'\t' read -r cname img; do
+                        case "$img" in
+                            *mpc-auth*) hits+=("$cname") ;;
+                        esac
+                    done < <(docker ps -a --format '{{.Names}}\t{{.Image}}')
+                    if [ "${#hits[@]}" -eq 1 ]; then
+                        resolved="${hits[0]}"
+                    fi
+                fi
+                ;;
+        esac
+
+        if [ -z "$resolved" ]; then
+            if [ "${#hits[@]}" -gt 1 ]; then
+                print_warning "Multiple *mpc-auth* image containers ($(IFS=,; echo "${hits[*]}")) — set MPC_AUTH_CONTAINER_NAME in /etc/default/mpc-auth-docker; skipping restart prompt."
+            else
+                print_info "No mpc-auth Docker container found — skipping restart prompt (after docker compose up: sudo systemctl start mpc-auth-docker-restart.service)."
+            fi
+            return 0
+        fi
+
         local _rs
         echo ""
-        print_warning "This runs: sudo systemctl start mpc-auth-docker-restart.service → docker restart of the mpc-auth container."
+        print_warning "This runs: sudo systemctl start mpc-auth-docker-restart.service → docker restart (${resolved})."
         print_info "Default is Yes — Enter confirms (sudo may prompt for a password); type n or N to skip."
         _read_interactive_systemd "Start mpc-auth-docker-restart.service now? [Y/n]: " || true
         _rs="${__mpc_auth_line}"
