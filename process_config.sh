@@ -4603,7 +4603,8 @@ begin = "# BEGIN mpc-config-loopback-mongo-fw"
 end = "# END mpc-config-loopback-mongo-fw"
 
 port_s = os.environ["MPC_FW_PORT"]
-want_rule = "-A ufw-user-output -d 127.0.0.1/32 -p tcp --dport {} -m owner ! --uid-owner root -j DROP".format(port_s)
+# Numeric UID required: iptables-restore (ufw reload) does not reliably accept --uid-owner root.
+want_rule = "-A ufw-user-output -d 127.0.0.1/32 -p tcp --dport {} -m owner ! --uid-owner 0 -j DROP".format(port_s)
 new_block_txt = "".join(["{}\n".format(begin), "# Host UIDs other than root: drop tcp toward Compose Mongo bind (127.0.0.1).\n", "{}\n".format(want_rule), "{}\n".format(end), "\n"])
 rules_fp = pathlib.Path("/etc/ufw/after.rules")
 
