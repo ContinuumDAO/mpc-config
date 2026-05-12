@@ -4,7 +4,9 @@ services:
     image: mongo:6.0
     restart: always
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-mongoRoot}
+      # mongo image requires BOTH set to create root user; leave both unset for legacy no-auth (see .env.example).
+      # Compose substitutes from the shell environment AND .env — stray exports (e.g. MONGO_INITDB_ROOT_USERNAME only) break startup.
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-}
       MONGO_APP_USER: ${MONGO_APP_USER:-mpcauth}
       MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:-}
@@ -21,7 +23,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          'if [ -n "$$MONGO_INITDB_ROOT_PASSWORD" ]; then mongosh --quiet "mongodb://$$MONGO_INITDB_ROOT_USERNAME:$$MONGO_INITDB_ROOT_PASSWORD@127.0.0.1:27017/admin" --eval "db.adminCommand({ ping: 1 })" >/dev/null; else mongosh --quiet --eval "db.adminCommand({ ping: 1 })" >/dev/null; fi || exit 1',
+          'if [ -n "$$MONGO_INITDB_ROOT_PASSWORD" ] && [ -n "$$MONGO_INITDB_ROOT_USERNAME" ]; then mongosh --quiet "mongodb://$$MONGO_INITDB_ROOT_USERNAME:$$MONGO_INITDB_ROOT_PASSWORD@127.0.0.1:27017/admin" --eval "db.adminCommand({ ping: 1 })" >/dev/null; else mongosh --quiet --eval "db.adminCommand({ ping: 1 })" >/dev/null; fi || exit 1',
         ]
       interval: 10s
       timeout: 5s
