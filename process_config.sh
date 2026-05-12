@@ -581,9 +581,9 @@ ensure_configs_yaml_from_original() {
     return 1
 }
 
-# If MONGO_* secrets are exported and this is a Docker Compose project directory, ensure .env
-# exists so `docker compose` picks up secrets. Copies .env.example → .env when .env is missing.
-# Existing .env: set PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV=1 to overwrite mongo-related keys from env.
+# If Docker Compose project directory: ensure .env exists for `docker compose`.
+# - Missing .env: copy .env.example → .env (mode 0600); merge from env only when both Mongo app + root passwords are set.
+# - Existing .env: merge mongo keys from env only when both passwords are set and PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV=1.
 # PROCESS_CONFIG_SKIP_DOTENV_FROM_ENV=1 — disable this entire step.
 _process_config_maybe_materialize_dotenv_from_environment() {
     local root="$1"
@@ -596,25 +596,24 @@ _process_config_maybe_materialize_dotenv_from_environment() {
         return 0
     fi
     if [ ! -f "${root}/.env.example" ]; then
-        print_warning "${root}/.env.example missing — cannot materialize .env from Mongo passwords in env."
+        print_warning "${root}/.env.example missing — cannot materialize .env."
         return 0
     fi
 
-    # Both required so we never write half an auth deployment.
-    if [ -z "${MONGO_INITDB_ROOT_PASSWORD:-}" ] || [ -z "${MONGO_APP_PASSWORD:-}" ]; then
-        return 0
+    local dotenv="${root}/.env"
+    local both_mongo_secrets_set=false
+    if [ -n "${MONGO_INITDB_ROOT_PASSWORD:-}" ] && [ -n "${MONGO_APP_PASSWORD:-}" ]; then
+        both_mongo_secrets_set=true
     fi
 
-    local dotenv="${root}/.env" merging=false
-    if [ -f "$dotenv" ]; then
-        if [ "${PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV:-0}" != "1" ]; then
-            print_info ".env already exists (${dotenv}) — skipping auto-write. Set PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV=1 to merge mongo keys from the current environment."
-            return 0
-        fi
-        merging=true
-    else
+    local merging=false
+
+    if [ ! -f "$dotenv" ]; then
         if command -v install >/dev/null 2>&1; then
-            install -m 0600 "${root}/.env.example" "$dotenv"
+            if ! install -m 0600 "${root}/.env.example" "$dotenv"; then
+                print_error "Failed to copy ${root}/.env.example → ${dotenv}"
+                return 1
+            fi
         elif ! cp "${root}/.env.example" "$dotenv"; then
             print_error "Failed to copy ${root}/.env.example → ${dotenv}"
             return 1
@@ -623,7 +622,21 @@ _process_config_maybe_materialize_dotenv_from_environment() {
                 print_warning "Could not chmod 0600 ${dotenv} — as the owner run: chmod u=rw,go= ${dotenv}"
             fi
         fi
-        print_success "Created ${dotenv} from .env.example (Mongo passwords set in environment)."
+        if [ "$both_mongo_secrets_set" = true ]; then
+            print_success "Created ${dotenv} from .env.example (Mongo passwords set in environment)."
+        else
+            print_success "Created ${dotenv} from .env.example (legacy no-auth template — set passwords and MongodbUri when using Mongo auth)."
+            return 0
+        fi
+    else
+        if [ "$both_mongo_secrets_set" != true ]; then
+            return 0
+        fi
+        if [ "${PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV:-0}" != "1" ]; then
+            print_info ".env already exists (${dotenv}) — skipping Mongo merge from env. Set PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV=1 to overwrite mongo-related keys from the current environment."
+            return 0
+        fi
+        merging=true
     fi
 
     if ! MCP_DOTENV_FILE="$dotenv" python3 <<'PY_MERGE_DOTENV'
@@ -4324,7 +4337,8 @@ show_process_config_help() {
     echo "  UFW_OPEN_MANAGEMENT_PORT=1 — add ufw allow for ManagementAPIsPort (default: management port not opened in UFW)."
     echo "  APPLY_LOOPBACK_MONGO_OWNER_FW=0 — skip UFW after.rules patch that drops non-root → 127.0.0.1:Mongo (default: apply)."
     echo "  MONGO_LOOPBACK_FW_PORT=<n> — override published Mongo TCP port used in that drop rule (default 27017)."
-    echo "  With MONGO_INITDB_ROOT_PASSWORD + MONGO_APP_PASSWORD in env (and docker-compose*.yml in the config dir): auto-copy .env.example → .env if .env missing, then merge those credentials (and MongodbUri if absent — derived from user/pass/db)."
+    echo "  With docker-compose*.yml in the config dir: auto-copy .env.example → .env if .env is missing (even without MONGO_* in env)."
+    echo "  With MONGO_INITDB_ROOT_PASSWORD + MONGO_APP_PASSWORD exported: merge those credentials into .env (and MongodbUri if absent — derived from user/pass/db)."
     echo "  PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV=1 — also merge mongo-related keys into an existing .env (overwrite values from env)."
     echo "  PROCESS_CONFIG_SKIP_DOTENV_FROM_ENV=1 — disable .env creation/merge entirely."
     echo "  PROCESS_CONFIG_INSTALL_SYSTEMD=1 — same as --install-mpc-auth-systemd (non-interactive install)."
