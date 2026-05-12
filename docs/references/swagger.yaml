@@ -4,7 +4,9 @@ info:
   title: MPC Auth Management API
   description: Distributed Auth / MPC node HTTP API. All responses use node.APIResponse (code, error, data). Keygen and sign
     GET/list response bodies include effectiveEcdsaMpcProtocol for secp256k1 ("gg18" or "cggmp24"); empty when not applicable.
-    GET /getGlobalNonceByKeyGenId includes it in the data map. See mpc-config docs/references/API_IMPLEMENTATION.md.
+    For completed secp256k1 keys, GET /getKeyGenResultById data and GET /getAllGroupIds keyGens[] include ethereumaddress plus
+    bitcoinp2wpkhmainnet (bc1… mainnet), bitcoinp2wpkhtestnet (Bitcoin TestNet3 tb1…), bitcoinp2wpkhsignet (Bitcoin Signet; btcd SigNet witness HRP tb so encoding may duplicate testnet).
+    GET /getGlobalNonceByKeyGenId data map includes effectiveEcdsaMpcProtocol (see that path description). See mpc-config docs/references/API_IMPLEMENTATION.md.
   version: '1.0'
 paths:
   /version:
@@ -886,7 +888,7 @@ paths:
   /getKeyGenResultById:
     get:
       description: get keygen result by id. Response data includes effectiveEcdsaMpcProtocol for secp256k1 (gg18/cggmp24);
-        empty otherwise.
+        empty otherwise. For secp256k1 keys with pubkeyhex, data includes ethereumaddress and bitcoin SegWit v0 P2WPKH addresses (bitcoinp2wpkhmainnet, bitcoinp2wpkhtestnet, bitcoinp2wpkhsignet when derivable) — see mpc-config docs/references/API_IMPLEMENTATION.md and definition node.KeyGenResultData (documentation shape).
       consumes:
       - application/json
       produces:
@@ -939,7 +941,7 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getAllGroupIds:
     get:
-      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getAllGroupIds).
+      description: MPC node management API — see mpc-config docs/references/API_IMPLEMENTATION.md (GET /getAllGroupIds). Each keyGens entry may include ethereumaddress plus bitcoin P2WPKH fields for secp256k1 keys (bitcoinp2wpkhmainnet bc1…, bitcoinp2wpkhtestnet and bitcoinp2wpkhsignet tb1… via btcd).
       consumes:
       - application/json
       produces:
@@ -2149,6 +2151,40 @@ definitions:
     description: 'Runtime secp256k1 ECDSA MPC variant for this key/request: "gg18" or "cggmp24". Empty for non-secp256k1 keys.
       API-only (JSON); stored request field remains ecdsaMpcProtocol on the keygen payload. Returned on keygen/sign GET and
       list responses and on GET /getGlobalNonceByKeyGenId data.'
+  node.KeyGenResultData:
+    type: object
+    description: 'Documentary shape for APIResponse.data from GET /getKeyGenResultById when Code=0 (actual payloads also include protobuf keygenrequestdatapb, savedata ciphertext, possibly cggmp24aux; optional fields omitted when empty). For secp256k1 MPC keys with pubkeyhex, ethereumaddress plus bitcoin SegWit v0 P2WPKH strings are recomputed server-side.'
+    properties:
+      requestid:
+        type: string
+      pubkeyhex:
+        type: string
+        description: MPC joint pubkey as x‖y uncompressed coordinates, 128 hex characters
+      ethereumaddress:
+        type: string
+        description: EVM-style address derived from pubkeyhex when keytype is secp256k1
+      bitcoinp2wpkhmainnet:
+        type: string
+        description: Bitcoin mainnet native SegWit v0 (P2WPKH) bc1… from pubkeyhex
+      bitcoinp2wpkhtestnet:
+        type: string
+        description: Bitcoin TestNet3 P2WPKH tb1… (chaincfg.TestNet3Params)
+      bitcoinp2wpkhsignet:
+        type: string
+        description: Bitcoin Signet P2WPKH (chaincfg.SigNetParams; witness HRP is tb per btcd — may match bitcoinp2wpkhtestnet string for the same pubkey)
+      keylist:
+        type: array
+        items:
+          type: string
+      globalnonce:
+        type: integer
+        format: int64
+      timepoint:
+        type: string
+      status:
+        type: string
+      effectiveEcdsaMpcProtocol:
+        $ref: '#/definitions/node.EffectiveEcdsaMpcProtocol'
   node.KeyGenRequestAgreePost:
     type: object
     properties:

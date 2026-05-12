@@ -47,6 +47,19 @@ This field is **computed for JSON only** (not stored as its own MongoDB column).
 
 **Where it appears:** **`GET /listKeyGenRequests`**, **`GET /getKeyGenRequestById`**, **`GET /getKeyGenResultById`**, **`GET /getGlobalNonceByKeyGenId`** (inside **`data`**), **`GET /listSignRequests`**, **`GET /getSignRequestById`**, **`GET /listSignRequestsReady`**, **`GET /getSignResultById`**, **`GET /listSignResults`**.
 
+<a id="bitcoin-p2wpkh-mainnet-address"></a>
+### Bitcoin P2WPKH derived addresses (`bitcoinp2wpkhmainnet`, `bitcoinp2wpkhtestnet`, `bitcoinp2wpkhsignet`) (read-only)
+
+For **secp256k1** keygen results whose **`pubkeyhex`** is present, **`GET /getKeyGenResultById`** and each **`keyGens[]`** element from **`GET /getAllGroupIds`** include these fields when derivable. All three are native **SegWit v0** (**P2WPKH**) **Bech32** encodings computed from the same uncompressed **x‖y `pubkeyhex`** as **`ethereumaddress`**, using **`chaincfg`** from **btcd** (mainnet, **TestNet3**, **SigNet**). They are persisted on the keygen result document when pubkey material is saved; **`GET /getKeyGenResultById`** and **`GET /getAllGroupIds`** **recompute** them so legacy rows without these columns still return consistent values.
+
+| JSON field | Network | Typical prefix |
+|-----------|---------|----------------|
+| **`bitcoinp2wpkhmainnet`** | Bitcoin mainnet | **`bc1q…`** |
+| **`bitcoinp2wpkhtestnet`** | Bitcoin TestNet3 | **`tb1…`** |
+| **`bitcoinp2wpkhsignet`** | Bitcoin Signet | **`tb1…`** in this stack (SigNet witness HRP **`tb`** in **btcd** — for a given pubkey the string often **matches** **`bitcoinp2wpkhtestnet`** exactly; discriminate by context / params, not by Bech32 HRP alone) |
+
+Regtest is **not** exposed as a dedicated API field. **Low-`s`** normalization for ECDSA completions follows the node’s Bitcoin compatibility layer so encodings remain spendable where low-`s` is required.
+
 ### Logging
 
 All API requests are logged using the node's logger with the format:
@@ -248,7 +261,7 @@ Returns **`draining`**, **`inFlight`**, **`readyForProcessExit`**, and a hint li
 <a id="post-updatempcauth"></a>
 #### `POST /updateMpcAuth`
 
-**Docker image upgrade (tag digest):** `POST /updateMpcAuth` (management-signed JSON `{ nonce, sig, tag }`) may be called **only while draining** (`requestRestartPrep` already applied). The node resolves the image via **Docker Hub** (`registry-1.docker.io`) and returns **`registryDigest`** aligned with **`MpcAuthDockerRepo`** (optional in `configs.yaml`, default **`continuumdao/cggmp24-auth`**), plus **`previousVersion`** / **`previousVersionDate`** (matches **`GET /version`** for the **current** process) and **`newVersionRequested`** (= requested **image tag**). The running container image is **not** changed by the API itself—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host).
+**Docker image upgrade (tag digest):** `POST /updateMpcAuth` (management-signed JSON `{ nonce, sig, tag }`) may be called **only while draining** (`requestRestartPrep` already applied). The node resolves the image via **Docker Hub** (`registry-1.docker.io`) and returns **`registryDigest`** aligned with **`MpcAuthDockerRepo`** (optional in `configs.yaml`, default **`continuumdao/mpc-auth`**), plus **`previousVersion`** / **`previousVersionDate`** (matches **`GET /version`** for the **current** process) and **`newVersionRequested`** (= requested **image tag**). The running container image is **not** changed by the API itself—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host).
 
 <a id="post-updatempc-auth-host"></a>
 ##### Host apply (digest) — why SSH or a host helper is still involved
@@ -279,7 +292,7 @@ The script uses the **second argument** as **`MPC_AUTH_EXPECTED_DIGEST`** for th
 #### `GET /version`
 Returns the current **application release** version (semver string) and the date it was set for that release.
 
-**Docker tag vs. `data.version`:** Your compose file may pull **`continuumdao/cggmp24-auth:latest`** (default in mpc-config templates) or **`continuumdao/mpc-auth:latest`** (legacy GG18, **`process_config.sh --gg18-docker-image`**), or any other registry tag. That tag only selects **which image** to run. The **`version`** field here is **not** the Docker tag: it is the **mpc-auth build version** compiled into the binary when that image was produced (e.g. **`v1.1`**). So after **`docker compose pull`** and **`docker compose up -d`**, use **`GET /version`** on the management or public discovery port (per your deployment) to read the **semver of the running app**. Official **`latest`** builds should still embed a normal semver in the binary (so operators see **`v1.1`** in **`data.version`** even though the image reference is **`…:latest`**).
+**Docker tag vs. `data.version`:** Your compose file may pull **`continuumdao/mpc-auth:latest`** (default in mpc-config templates) or any other registry tag you set via **`MPC_AUTH_COMPOSE_APP_IMAGE`**. That tag only selects **which image** to run. The **`version`** field here is **not** the Docker tag: it is the **mpc-auth build version** compiled into the binary when that image was produced (e.g. **`v1.1`**). So after **`docker compose pull`** and **`docker compose up -d`**, use **`GET /version`** on the management or public discovery port (per your deployment) to read the **semver of the running app**. Official **`latest`** builds should still embed a normal semver in the binary (so operators see **`v1.1`** in **`data.version`** even though the image reference is **`…:latest`**).
 
 Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is split from **ManagementAPIsPort**. **Not** registered on **Browser HTTPS** (**8443**); use discovery or management URL (no JWT for this route).
 
@@ -2574,6 +2587,9 @@ A result is returned (Code 0) only when this node completed the TSS and has the 
     "keylist": ["node1_key", "node2_key", "node3_key"],
     "pubkeyhex": "08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de",
     "ethereumaddress": "0x85E554a6Da9c12839561Db76a6F56323e8582e83",
+    "bitcoinp2wpkhmainnet": "bc1qm8kh3fp58gs593p6y7wfduznjchlajmrkl78p8",
+    "bitcoinp2wpkhtestnet": "tb1qm8kh3fp58gs593p6y7wfduznjchlajmrue9565",
+    "bitcoinp2wpkhsignet": "tb1qm8kh3fp58gs593p6y7wfduznjchlajmrue9565",
     "solanaaddress": "",
     "sorobanaddress": "",
     "nearaddress": "",
@@ -2587,7 +2603,7 @@ A result is returned (Code 0) only when this node completed the TSS and has the 
 }
 ```
 
-**Note:** The `keylist` field contains all node keys that participated in key generation. **globalnonce** is the number of sign results created for this keyGen (secp256k1); it is also available via `GET /getGlobalNonceByKeyGenId`. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration. **`effectiveEcdsaMpcProtocol`** summarizes the secp256k1 MPC runtime for this key (`gg18` or `cggmp24`); see [effectiveEcdsaMpcProtocol](#effective-ecdsa-mpc-protocol).
+**Note:** The `keylist` field contains all node keys that participated in key generation. **globalnonce** is the number of sign results created for this keyGen (secp256k1); it is also available via `GET /getGlobalNonceByKeyGenId`. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration. **`effectiveEcdsaMpcProtocol`** summarizes the secp256k1 MPC runtime for this key (`gg18` or `cggmp24`); see [effectiveEcdsaMpcProtocol](#effective-ecdsa-mpc-protocol). For secp256k1 keys, **Bitcoin SegWit v0 P2WPKH** fields (**`bitcoinp2wpkhmainnet`**, **`bitcoinp2wpkhtestnet`**, **`bitcoinp2wpkhsignet`**) are returned when derivable; see [bitcoinp2wpkh fields](#bitcoin-p2wpkh-mainnet-address).
 
 **`status`:** Same **effective** lifecycle as the keygen request (see [KeyGen request `status` field (stored values)](#keygen-request-status-values)): not stored on the keygen result row; if the request is still **`agree`** but this node has **`savedata`**, responses return **`success`**. Omitted if the request record cannot be loaded.
 
@@ -2671,6 +2687,9 @@ Gets all configured GroupIds and their associated keyGen results.
             "keylist": ["node1_key", "node2_key", "node3_key"],
             "timepoint": "2026-01-11T00:37:20.999Z",
             "ethereumaddress": "0x85E554a6Da9c12839561Db76a6F56323e8582e83",
+            "bitcoinp2wpkhmainnet": "bc1qm8kh3fp58gs593p6y7wfduznjchlajmrkl78p8",
+            "bitcoinp2wpkhtestnet": "tb1qm8kh3fp58gs593p6y7wfduznjchlajmrue9565",
+            "bitcoinp2wpkhsignet": "tb1qm8kh3fp58gs593p6y7wfduznjchlajmrue9565",
             "groupid": "566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9",
             "threshold": 2,
             "keytype": "secp256k1"
@@ -2695,6 +2714,9 @@ Gets all configured GroupIds and their associated keyGen results.
     - `keylist`: Array of node keys that participated (may be empty if not saved)
     - `timepoint`: When the key was generated
     - `ethereumaddress`: Ethereum address (for secp256k1 keys)
+    - `bitcoinp2wpkhmainnet`: Bitcoin mainnet P2WPKH / `bc1q…` (for secp256k1 keys; see [Bitcoin P2WPKH derived addresses](#bitcoin-p2wpkh-mainnet-address))
+    - `bitcoinp2wpkhtestnet`: Bitcoin TestNet3 P2WPKH / `tb1…`
+    - `bitcoinp2wpkhsignet`: Bitcoin Signet P2WPKH (often same `tb1…` string as testnet under **btcd** SigNet params)
     - `solanaaddress`: Solana address (for ed25519 keys)
     - `sorobanaddress`: Soroban/Stellar address (for ed25519 keys)
     - `nearaddress`: NEAR address (for ed25519 keys)

@@ -3698,7 +3698,7 @@ configure_docker_compose() {
     fi
 }
 
-# After copying a compose template, replace the app image line (${MPC_AUTH_COMPOSE_APP_IMAGE:-…} or literal) with a concrete ref when env/flags request it (e.g. --gg18-docker-image → mpc-auth).
+# After copying a compose template, replace the app image line (${MPC_AUTH_COMPOSE_APP_IMAGE:-…} or literal) with a concrete ref when MPC_AUTH_COMPOSE_APP_IMAGE is set.
 apply_docker_compose_mpc_auth_image() {
     local file="$1"
     local new_image="$2"
@@ -3729,11 +3729,11 @@ except OSError as e:
     print("error", flush=True)
     sys.exit(1)
 
-# Compose interpolation or literal continuumdao mpc-auth / cggmp24-auth (docker-compose.*.yml templates).
+# Compose interpolation or literal continuumdao mpc-auth (docker-compose.*.yml templates).
 _interp = re.compile(
-    r"^\s*image:\s*\$\{MPC_AUTH_COMPOSE_APP_IMAGE:-continuumdao/(?:mpc-auth|cggmp24-auth)[^}]*\}\s*$"
+    r"^\s*image:\s*\$\{MPC_AUTH_COMPOSE_APP_IMAGE:-continuumdao/mpc-auth[^}]*\}\s*$"
 )
-_literal = re.compile(r"^\s*image:\s*continuumdao/(?:mpc-auth|cggmp24-auth)\S*\s*$")
+_literal = re.compile(r"^\s*image:\s*continuumdao/mpc-auth\S*\s*$")
 changed = 0
 out = []
 for line in lines:
@@ -3758,7 +3758,7 @@ PYIMG
             print_success "docker-compose.yml: app image set to ${new_image} (${_img_action#ok:} line(s))."
             ;;
         none)
-            print_warning "docker-compose.yml: no continuumdao app image line found (expected mpc-auth / cggmp24-auth or \${MPC_AUTH_COMPOSE_APP_IMAGE:-...}) — left unchanged."
+            print_warning "docker-compose.yml: no continuumdao mpc-auth app image line found (expected \${MPC_AUTH_COMPOSE_APP_IMAGE:-continuumdao/mpc-auth:…} or literal continuumdao/mpc-auth:…) — left unchanged."
             ;;
         skip|error)
             ;;
@@ -4316,7 +4316,6 @@ show_process_config_help() {
     echo "  --disable-loopback-http         Disable loopback read HTTP (non-interactive)"
     echo "  --no-systemd                    Skip optional mpc-auth Docker systemd installer prompts (after firewall; before Relayer check — see mpc-config/systemd/README.md)."
     echo "  --install-mpc-auth-systemd      Non-interactive: sudo-run systemd/install-mpc-auth-docker-systemd.sh (requires sudo; may prompt restart)."
-    echo "  --gg18-docker-image            Use continuumdao/mpc-auth:latest (legacy GG18 image) in generated docker-compose.yml instead of the default CGGMP24 image."
     echo "  --help | -h | -help | help   Show this message (arguments above + relay/client behavior below)"
     echo ""
     echo "Environment (optional): FORCE_REGENERATE_MQTT_CERTS=1 / FORCE_REGENERATE_BROWSER_HTTPS_CERTS=1 same as the flags above."
@@ -4332,9 +4331,9 @@ show_process_config_help() {
     echo "  PROCESS_CONFIG_NONINTERACTIVE=1 — skip optional prompts (RelayerAPIURL / ScannerAPIURLs use defaults when unset; root continue; second management key; MQTT overwrite if regenerating; UFW enable ask; systemd Y/n)."
     echo "  MPC_CONFIG_ROOT=/path/to/mpc-config — locate systemd/install-mpc-auth-docker-systemd.sh when the script runs"
     echo "    from mpc-auth (or any tree that does not include mpc-config/systemd next to repo root)."
-    echo "  MPC_AUTH_COMPOSE_APP_IMAGE — full image reference for the app container. Templates default to"
-    echo "    \${MPC_AUTH_COMPOSE_APP_IMAGE:-continuumdao/cggmp24-auth:latest}; set this for a custom tag or legacy GG18 (\`continuumdao/mpc-auth:latest\`)."
-    echo "    process_config rewrites the image line to a concrete ref when this env is set or with --gg18-docker-image (flag wins over env)."
+    echo "  MPC_AUTH_COMPOSE_APP_IMAGE — full image reference for the app container. Templates use"
+    echo "    \${MPC_AUTH_COMPOSE_APP_IMAGE:-continuumdao/mpc-auth:latest}; set this for a custom registry or tag."
+    echo "    When set, process_config rewrites the generated compose app image line to this concrete ref."
     echo ""
     echo "This script validates configuration and generates certificates."
     echo ""
@@ -5167,10 +5166,6 @@ main() {
                 ;;
             --install-mpc-auth-systemd)
                 INSTALL_MPC_AUTH_SYSTEMD=true
-                shift
-                ;;
-            --gg18-docker-image)
-                COMPOSE_APP_IMAGE_REF="continuumdao/mpc-auth:latest"
                 shift
                 ;;
             --help|-h|-help|help)
