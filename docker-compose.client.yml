@@ -29,7 +29,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 40s
+      # First empty volume: official image runs initdb (temp mongod → shutdown → real mongod). That handoff
+      # can exceed 40s on slow disks; failed checks then mark the service unhealthy before app starts.
+      start_period: 120s
   app:
     # Image: default continuumdao/mpc-auth:latest; override with MPC_AUTH_COMPOSE_APP_IMAGE.
     image: ${MPC_AUTH_COMPOSE_APP_IMAGE:-continuumdao/mpc-auth:latest}
