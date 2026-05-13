@@ -70,9 +70,10 @@ services:
       # Optional: loopback read HTTP (mpc-auth BrowserLoopbackReadHTTP) — same JWT routes without TLS in browser (SSH tunnel).
       # Uncomment when configs.yaml sets BrowserLoopbackReadHTTP.Port (match host port to config, bind loopback only):
       # - "127.0.0.1:8445:8445"
+    # See client compose: avoid gating app on Mongo health (Compose can error early during initdb handoff).
     depends_on:
       mongodb:
-        condition: service_healthy
+        condition: service_started
       mosquitto:
         condition: service_started
     volumes:

@@ -52,9 +52,12 @@ services:
       # Optional: loopback read HTTP (mpc-auth BrowserLoopbackReadHTTP) — same JWT routes without TLS in browser (SSH tunnel).
       # Uncomment when configs.yaml sets BrowserLoopbackReadHTTP.Port (match host port to config, bind loopback only):
       # - "127.0.0.1:8445:8445"
+    # Mongo health can lag behind "container started" during first init; some Compose versions abort
+    # `docker compose up -d` if service_healthy is not met in a few seconds even while start_period applies.
+    # App has restart:always and connects once mongod accepts connections.
     depends_on:
       mongodb:
-        condition: service_healthy
+        condition: service_started
     volumes:
       # Writable host dir: mpc-auth may write pending-update.json / pending-reboot.json for systemd automation (see systemd/README.md).
       - /var/lib/mpc-auth-docker:/var/lib/mpc-auth-docker
