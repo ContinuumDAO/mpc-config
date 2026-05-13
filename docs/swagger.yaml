@@ -4,9 +4,10 @@ info:
   title: MPC Auth Management API
   description: Distributed Auth / MPC node HTTP API. All responses use node.APIResponse (code, error, data). Keygen and sign
     GET/list response bodies include effectiveEcdsaMpcProtocol for secp256k1 ("gg18" or "cggmp24"); empty when not applicable.
-    For completed secp256k1 keys, GET /getKeyGenResultById data and GET /getAllGroupIds keyGens[] include ethereumaddress plus
-    bitcoinp2wpkhmainnet (bc1… mainnet), bitcoinp2wpkhtestnet (Bitcoin TestNet3 tb1…), bitcoinp2wpkhsignet (Bitcoin Signet; btcd SigNet witness HRP tb so encoding may duplicate testnet).
-    GET /getGlobalNonceByKeyGenId data map includes effectiveEcdsaMpcProtocol (see that path description). See mpc-config docs/references/API_IMPLEMENTATION.md.
+    For completed secp256k1 keys, GET /getKeyGenResultById data and GET /getAllGroupIds keyGens[] include ethereumaddress
+    plus bitcoinp2wpkhmainnet (bc1… mainnet), bitcoinp2wpkhtestnet (Bitcoin TestNet3 tb1…), bitcoinp2wpkhsignet (Bitcoin Signet;
+    btcd SigNet witness HRP tb so encoding may duplicate testnet). GET /getGlobalNonceByKeyGenId data map includes effectiveEcdsaMpcProtocol
+    (see that path description). See mpc-config docs/references/API_IMPLEMENTATION.md.
   version: '1.0'
 paths:
   /version:
@@ -888,7 +889,9 @@ paths:
   /getKeyGenResultById:
     get:
       description: get keygen result by id. Response data includes effectiveEcdsaMpcProtocol for secp256k1 (gg18/cggmp24);
-        empty otherwise. For secp256k1 keys with pubkeyhex, data includes ethereumaddress and bitcoin SegWit v0 P2WPKH addresses (bitcoinp2wpkhmainnet, bitcoinp2wpkhtestnet, bitcoinp2wpkhsignet when derivable) — see mpc-config docs/references/API_IMPLEMENTATION.md and definition node.KeyGenResultData (documentation shape).
+        empty otherwise. For secp256k1 keys with pubkeyhex, data includes ethereumaddress and bitcoin SegWit v0 P2WPKH addresses
+        (bitcoinp2wpkhmainnet, bitcoinp2wpkhtestnet, bitcoinp2wpkhsignet when derivable) — see mpc-config docs/references/API_IMPLEMENTATION.md
+        and definition node.KeyGenResultData (documentation shape).
       consumes:
       - application/json
       produces:
@@ -941,7 +944,9 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getAllGroupIds:
     get:
-      description: MPC node management API — see mpc-config docs/references/API_IMPLEMENTATION.md (GET /getAllGroupIds). Each keyGens entry may include ethereumaddress plus bitcoin P2WPKH fields for secp256k1 keys (bitcoinp2wpkhmainnet bc1…, bitcoinp2wpkhtestnet and bitcoinp2wpkhsignet tb1… via btcd).
+      description: MPC node management API — see mpc-config docs/references/API_IMPLEMENTATION.md (GET /getAllGroupIds). Each
+        keyGens entry may include ethereumaddress plus bitcoin P2WPKH fields for secp256k1 keys (bitcoinp2wpkhmainnet bc1…,
+        bitcoinp2wpkhtestnet and bitcoinp2wpkhsignet tb1… via btcd).
       consumes:
       - application/json
       produces:
@@ -1933,6 +1938,136 @@ paths:
         schema:
           type: object
           description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
+  /backupDatabase:
+    post:
+      description: 'Create encrypted MongoDB backup (mongodump; deterministic node only) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /backupDatabase).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Database backup
+      summary: Create encrypted MongoDB backup (mongodump; deterministic node only)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.BackupDatabasePost'
+  /restoreDatabase:
+    post:
+      description: 'Restore MongoDB from encrypted backup (mongorestore --drop) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /restoreDatabase).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Database backup
+      summary: Restore MongoDB from encrypted backup (mongorestore --drop)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.RestoreDatabasePost'
+  /listDatabaseBackups:
+    post:
+      description: 'List database backups (id, time, notes) on this node Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /listDatabaseBackups). Success data: object with backups: array of #/definitions/node.DatabaseBackupListItem
+        (newest first). Success data: object with backups: array of #/definitions/node.DatabaseBackupListItem (newest first).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Database backup
+      summary: List database backups (id, time, notes) on this node
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.ListDatabaseBackupsPost'
+  /fetchDatabaseBackup:
+    post:
+      description: 'Stream encrypted backup file (Range/resume; HTTPS or loopback only) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /fetchDatabaseBackup).'
+      consumes:
+      - application/json
+      produces:
+      - application/octet-stream
+      - application/json
+      tags:
+      - Database backup
+      summary: Stream encrypted backup file (Range/resume; HTTPS or loopback only)
+      responses:
+        '200':
+          description: 'Full file stream. No APIResponse wrapper. Includes Accept-Ranges: bytes; X-Mpc-Auth-Database-Backup-Total-Bytes;
+            X-Mpc-Auth-Database-Backup-Id; X-Mpc-Auth-Database-Backup-Resume-Hint; Content-Disposition. Closing the client
+            connection aborts the transfer (no server-side size cap).'
+          schema:
+            type: file
+        '206':
+          description: Partial content (Range request); use for restart after network outage.
+          schema:
+            type: file
+        '400':
+          description: Bad request
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+        '401':
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+        '403':
+          description: Forbidden (requires HTTPS or loopback, or eligibility)
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.FetchDatabaseBackupPost'
+  /fetchBootstrapKey:
+    post:
+      description: 'Export bootstrap Ed25519 seed (HTTPS or loopback only) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /fetchBootstrapKey).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Database backup
+      summary: Export bootstrap Ed25519 seed (HTTPS or loopback only)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.FetchBootstrapKeyPost'
   /sendMessage:
     post:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /sendMessage).
@@ -2153,7 +2288,9 @@ definitions:
       list responses and on GET /getGlobalNonceByKeyGenId data.'
   node.KeyGenResultData:
     type: object
-    description: 'Documentary shape for APIResponse.data from GET /getKeyGenResultById when Code=0 (actual payloads also include protobuf keygenrequestdatapb, savedata ciphertext, possibly cggmp24aux; optional fields omitted when empty). For secp256k1 MPC keys with pubkeyhex, ethereumaddress plus bitcoin SegWit v0 P2WPKH strings are recomputed server-side.'
+    description: Documentary shape for APIResponse.data from GET /getKeyGenResultById when Code=0 (actual payloads also include
+      protobuf keygenrequestdatapb, savedata ciphertext, possibly cggmp24aux; optional fields omitted when empty). For secp256k1
+      MPC keys with pubkeyhex, ethereumaddress plus bitcoin SegWit v0 P2WPKH strings are recomputed server-side.
     properties:
       requestid:
         type: string
@@ -2171,7 +2308,8 @@ definitions:
         description: Bitcoin TestNet3 P2WPKH tb1… (chaincfg.TestNet3Params)
       bitcoinp2wpkhsignet:
         type: string
-        description: Bitcoin Signet P2WPKH (chaincfg.SigNetParams; witness HRP is tb per btcd — may match bitcoinp2wpkhtestnet string for the same pubkey)
+        description: Bitcoin Signet P2WPKH (chaincfg.SigNetParams; witness HRP is tb per btcd — may match bitcoinp2wpkhtestnet
+          string for the same pubkey)
       keylist:
         type: array
         items:
@@ -2543,3 +2681,93 @@ definitions:
       updatedAt:
         type: string
         format: date-time
+  node.NodeMgtKeySig:
+    type: object
+    properties:
+      Nonce:
+        type: integer
+        description: Anti-replay nonce from GET /getNodeMgtKeyNonce
+      Sig:
+        type: string
+        description: Management signature over canonical JSON with Sig cleared
+      nodeKey:
+        type: string
+        description: 'Optional: this node''s MPC public key (hex); binds the signature to this node'
+  node.BackupDatabasePost:
+    type: object
+    description: POST /backupDatabase signed body (verify with Sig cleared).
+    allOf:
+    - $ref: '#/definitions/node.NodeMgtKeySig'
+    - type: object
+      properties:
+        includeGroupIds:
+          type: array
+          items:
+            type: string
+          description: Mutually exclusive with excludeGroupIds; omit both = all configured groups
+        excludeGroupIds:
+          type: array
+          items:
+            type: string
+        mongoRootUsername:
+          type: string
+        mongoRootPassword:
+          type: string
+        notes:
+          type: string
+          maxLength: 256
+          description: Optional note; max 256 Unicode code points enforced server-side
+  node.RestoreDatabasePost:
+    type: object
+    description: POST /restoreDatabase signed body. Exactly one of backupPath or backupId must be set. backupId is the filename
+      only (e.g. data.backupId from backup or list).
+    allOf:
+    - $ref: '#/definitions/node.NodeMgtKeySig'
+    - type: object
+      properties:
+        backupPath:
+          type: string
+          description: Path under database_backups/ or absolute path still confined to that directory
+        backupId:
+          type: string
+          description: Backup filename only (no directories); alternative to backupPath
+        mongoRootUsername:
+          type: string
+        mongoRootPassword:
+          type: string
+  node.FetchBootstrapKeyPost:
+    type: object
+    description: POST /fetchBootstrapKey signed body (typically Nonce + Sig only).
+    allOf:
+    - $ref: '#/definitions/node.NodeMgtKeySig'
+  node.ListDatabaseBackupsPost:
+    type: object
+    description: POST /listDatabaseBackups signed body (typically Nonce + Sig only).
+    allOf:
+    - $ref: '#/definitions/node.NodeMgtKeySig'
+  node.DatabaseBackupListItem:
+    type: object
+    properties:
+      backupId:
+        type: string
+        description: Backup filename under database_backups/
+      backupUtc:
+        type: string
+        description: RFC3339 timestamp from envelope backupUtc
+      notes:
+        type: string
+        description: Plaintext notes from envelope
+  node.FetchDatabaseBackupPost:
+    type: object
+    description: POST /fetchDatabaseBackup signed body. Exactly one of backupPath or backupId (same rules as restore). On
+      success the response body is the raw backup file (not APIResponse JSON). Use Range for resume.
+    allOf:
+    - $ref: '#/definitions/node.NodeMgtKeySig'
+    - type: object
+      properties:
+        backupPath:
+          type: string
+          description: Path under database_backups/ or absolute path still confined to that directory
+        backupId:
+          type: string
+          description: Backup filename only (no directories); alternative to backupPath

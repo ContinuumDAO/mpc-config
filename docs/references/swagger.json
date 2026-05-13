@@ -2917,6 +2917,196 @@
                 ]
             }
         },
+        "/backupDatabase": {
+            "post": {
+                "description": "Create encrypted MongoDB backup (mongodump; deterministic node only) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /backupDatabase).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Database backup"
+                ],
+                "summary": "Create encrypted MongoDB backup (mongodump; deterministic node only)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.BackupDatabasePost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/restoreDatabase": {
+            "post": {
+                "description": "Restore MongoDB from encrypted backup (mongorestore --drop) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /restoreDatabase).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Database backup"
+                ],
+                "summary": "Restore MongoDB from encrypted backup (mongorestore --drop)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.RestoreDatabasePost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/listDatabaseBackups": {
+            "post": {
+                "description": "List database backups (id, time, notes) on this node Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /listDatabaseBackups). Success data: object with backups: array of #/definitions/node.DatabaseBackupListItem (newest first). Success data: object with backups: array of #/definitions/node.DatabaseBackupListItem (newest first).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Database backup"
+                ],
+                "summary": "List database backups (id, time, notes) on this node",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.ListDatabaseBackupsPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/fetchDatabaseBackup": {
+            "post": {
+                "description": "Stream encrypted backup file (Range/resume; HTTPS or loopback only) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /fetchDatabaseBackup).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/octet-stream",
+                    "application/json"
+                ],
+                "tags": [
+                    "Database backup"
+                ],
+                "summary": "Stream encrypted backup file (Range/resume; HTTPS or loopback only)",
+                "responses": {
+                    "200": {
+                        "description": "Full file stream. No APIResponse wrapper. Includes Accept-Ranges: bytes; X-Mpc-Auth-Database-Backup-Total-Bytes; X-Mpc-Auth-Database-Backup-Id; X-Mpc-Auth-Database-Backup-Resume-Hint; Content-Disposition. Closing the client connection aborts the transfer (no server-side size cap).",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "206": {
+                        "description": "Partial content (Range request); use for restart after network outage.",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (requires HTTPS or loopback, or eligibility)",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.FetchDatabaseBackupPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/fetchBootstrapKey": {
+            "post": {
+                "description": "Export bootstrap Ed25519 seed (HTTPS or loopback only) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /fetchBootstrapKey).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Database backup"
+                ],
+                "summary": "Export bootstrap Ed25519 seed (HTTPS or loopback only)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.FetchBootstrapKeyPost"
+                        }
+                    }
+                ]
+            }
+        },
         "/sendMessage": {
             "post": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /sendMessage).",
@@ -3776,6 +3966,146 @@
                     "format": "date-time"
                 }
             }
+        },
+        "node.NodeMgtKeySig": {
+            "type": "object",
+            "properties": {
+                "Nonce": {
+                    "type": "integer",
+                    "description": "Anti-replay nonce from GET /getNodeMgtKeyNonce"
+                },
+                "Sig": {
+                    "type": "string",
+                    "description": "Management signature over canonical JSON with Sig cleared"
+                },
+                "nodeKey": {
+                    "type": "string",
+                    "description": "Optional: this node's MPC public key (hex); binds the signature to this node"
+                }
+            }
+        },
+        "node.BackupDatabasePost": {
+            "type": "object",
+            "description": "POST /backupDatabase signed body (verify with Sig cleared).",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "includeGroupIds": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Mutually exclusive with excludeGroupIds; omit both = all configured groups"
+                        },
+                        "excludeGroupIds": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "mongoRootUsername": {
+                            "type": "string"
+                        },
+                        "mongoRootPassword": {
+                            "type": "string"
+                        },
+                        "notes": {
+                            "type": "string",
+                            "maxLength": 256,
+                            "description": "Optional note; max 256 Unicode code points enforced server-side"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.RestoreDatabasePost": {
+            "type": "object",
+            "description": "POST /restoreDatabase signed body. Exactly one of backupPath or backupId must be set. backupId is the filename only (e.g. data.backupId from backup or list).",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "backupPath": {
+                            "type": "string",
+                            "description": "Path under database_backups/ or absolute path still confined to that directory"
+                        },
+                        "backupId": {
+                            "type": "string",
+                            "description": "Backup filename only (no directories); alternative to backupPath"
+                        },
+                        "mongoRootUsername": {
+                            "type": "string"
+                        },
+                        "mongoRootPassword": {
+                            "type": "string"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.FetchBootstrapKeyPost": {
+            "type": "object",
+            "description": "POST /fetchBootstrapKey signed body (typically Nonce + Sig only).",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                }
+            ]
+        },
+        "node.ListDatabaseBackupsPost": {
+            "type": "object",
+            "description": "POST /listDatabaseBackups signed body (typically Nonce + Sig only).",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                }
+            ]
+        },
+        "node.DatabaseBackupListItem": {
+            "type": "object",
+            "properties": {
+                "backupId": {
+                    "type": "string",
+                    "description": "Backup filename under database_backups/"
+                },
+                "backupUtc": {
+                    "type": "string",
+                    "description": "RFC3339 timestamp from envelope backupUtc"
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Plaintext notes from envelope"
+                }
+            }
+        },
+        "node.FetchDatabaseBackupPost": {
+            "type": "object",
+            "description": "POST /fetchDatabaseBackup signed body. Exactly one of backupPath or backupId (same rules as restore). On success the response body is the raw backup file (not APIResponse JSON). Use Range for resume.",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "backupPath": {
+                            "type": "string",
+                            "description": "Path under database_backups/ or absolute path still confined to that directory"
+                        },
+                        "backupId": {
+                            "type": "string",
+                            "description": "Backup filename only (no directories); alternative to backupPath"
+                        }
+                    }
+                }
+            ]
         }
     }
 }

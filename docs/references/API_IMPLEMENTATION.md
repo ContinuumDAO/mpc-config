@@ -195,6 +195,11 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 - [`GET /maintenance/restartGate`](#get-maintenance-restartgate) — returns `draining`, `inFlight`, `readyForProcessExit`, and a hint list of tracked POST paths.
 - [`POST /reboot`](#post-reboot) — while **draining**, signed `{"nonce", "sig"}`; writes **`pending-reboot.json`** for **`mpc-auth-docker-pending-reboot.path`** when **`MPC_AUTH_PENDING_REBOOT_FILE`** / **`MpcAuthPendingRebootPath`** is set (same bind mount as pending Docker updates); host runs **`systemctl reboot`**. See **`systemd/README.md`**.
 - [`POST /updateMpcAuth`](#post-updatempcauth) — while **draining**, signed request with target **tag** (e.g. `latest`, `v1.1`, or another published tag); node queries **Docker Hub** for **`registryDigest`** (`sha256:…`) for **`MpcAuthDockerRepo`**. Response includes **`previousVersion`** / **`previousVersionDate`** and **`newVersionRequested`**. The API does **not** run Docker on the host; apply the digest with **`mpc-auth-docker-update.sh TAG digest`** (no `/etc/default` edit required for one shot)—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host) and **`systemd/README.md`**.
+- [`POST /backupDatabase`](#post-backupdatabase) — encrypted MongoDB backup file under `database_backups/` (**deterministic** `nodeKey` + `bootstrap_key` only; management-signed). Requires **`mongodump`** on the node host.
+- [`POST /listDatabaseBackups`](#post-listdatabasebackups) — lists backups for this node (`backupId`, `backupUtc`, `notes`); management-signed; same eligibility as backup.
+- [`POST /fetchDatabaseBackup`](#post-fetchdatabasebackup) — **streams** the encrypted backup file to the client (**HTTPS** or **loopback** only, same transport rule as **`fetchBootstrapKey`**); management-signed; supports **HTTP Range** for resumable downloads.
+- [`POST /restoreDatabase`](#post-restoredatabase) — destructive **`mongorestore --drop`** from an encrypted backup produced by this node (same eligibility as backup). Caller supplies **`backupId`** (filename) or **`backupPath`** (see below).
+- [`POST /fetchBootstrapKey`](#post-fetchbootstrapkey) — returns **`ed25519PrivateSeedHex`** for offline backup decryption (**HTTPS** or **loopback** only); same eligibility as backup.
 
 ### Pre-Signing
 - [`POST /presignRequest`](#post-presignrequest) - Create presign request (requires mgt key)
@@ -282,6 +287,74 @@ The script uses the **second argument** as **`MPC_AUTH_EXPECTED_DIGEST`** for th
 **Recommended automation (no Docker socket in the app container):** install **`mpc-config`** **`systemd/mpc-auth-docker-pending-update.path`** + bind-mount **`/var/lib/mpc-auth-docker`** into the container (**`docker-compose*.yml`** in mpc-config). Implement in **mpc-auth**, after **`POST /updateMpcAuth`** succeeds and returns **`registryDigest`**, write **`/var/lib/mpc-auth-docker/pending-update.json`** atomically (**write temp → `rename`**). **`systemd.path`** invokes **`mpc-auth-apply-pending-update.sh`**, which runs **`mpc-auth-docker-update.sh`** on the host. See **`mpc-config/systemd/README.md`** → *Fully automated upgrades*.
 
 **Alternatively — Docker socket (`/var/run/docker.sock`) in the container:** **`docker`** CLI/API from mpc-auth avoids the trigger file but gives the container **full Docker API access** vs the host — usually worse for security than **systemd.path**.
+
+<a id="database-backup-maintenance"></a>
+## MongoDB backup, restore, and bootstrap key (maintenance)
+
+These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or allowed **Ed25519** keys). **Additional gate:** the node’s stored **`nodeKey`** must match the **P-256 public key** derived from **`configs.yaml` `PublicMgtKey`** and the on-disk **`bootstrap_key/ed25519_private.hex`** (see **`DeterministicNodeKey`** in **`mpc-auth`** and **`docs-internal/DATABASE_BACKUP_RESTORE_PLAN.md`**). Legacy **random** `nodeKey` nodes receive **403** on **`POST /backupDatabase`**, **`POST /listDatabaseBackups`**, **`POST /fetchDatabaseBackup`**, **`POST /restoreDatabase`**, and **`POST /fetchBootstrapKey`**.
+
+**Config / layout (defaults):** beside **`configs.yaml`** — directory **`bootstrap_key/`** (private seed file **`ed25519_private.hex`**, `0600`) and **`database_backups/`** (encrypted JSON envelopes). Override with **`BootstrapKeyDir`** / **`DatabaseBackupsDir`** in **`configs.yaml`** (absolute or relative to the configs.yaml parent directory).
+
+**Provisioning:** On an **interactive TTY**, **`mpc-config`** **`process_config.sh`** runs **`tools/bootstrap_key_provision.py`** when **`PublicMgtKey`** is still empty after the management-key prompts: it writes **`bootstrap_key/ed25519_private.hex`**, sets **`PublicMgtKey`**, and sets **`DeterministicNodeKey: true`**. Requires **`pip install cryptography`** (and **`ruamel.yaml`**). Operators must archive **`bootstrap_key/`** securely (or call **`POST /fetchBootstrapKey`** over TLS after the node is up).
+
+<a id="post-backupdatabase"></a>
+#### `POST /backupDatabase`
+
+**Body (signed JSON, `sig` cleared for verification; include `nonce`, optional `nodeKey` binding):**  
+- **`includeGroupIds`** / **`excludeGroupIds`:** mutually exclusive; omit both to back up all **configured** group DBs plus the main **`DBName`** database.  
+- **`mongoRootUsername`** / **`mongoRootPassword`:** optional; merged into **`MongodbUri`** when MongoDB uses auth (**`mongodump`**).
+- **`notes`** (optional): Operator comment, **at most 256 Unicode code points**; stored in plaintext in the backup JSON envelope and echoed in the API **`data`**; must be part of the signed payload if sent.
+
+**Process:** **`mongodump`** to an in-memory archive → **AES-256-GCM** encrypt (key from HKDF on bootstrap seed) → write JSON envelope under **`database_backups/`** (`ciphertextSha256`, `backupGroupFilter`, etc.).
+
+**Success `data`:** includes **`backupId`** (backup filename), **`path`** (full path written), `backupUtc`, `ciphertextSha256`, `ciphertextByteLength`, `backupFileSizeBytes`, plus identifying fields (`notes`, filter, etc.).
+
+<a id="post-listdatabasebackups"></a>
+#### `POST /listDatabaseBackups`
+
+**Body:** management-signed JSON (`nonce`, `sig`, optional `nodeKey`), same pattern as other maintenance POSTs.
+
+**Success `data`:** `{ "backups": [ { "backupId", "backupUtc", "notes" }, ... ] }` sorted **newest first** (by envelope `backupUtc`, with filename tie-break). Only files named `{nodeKeyPublic}.backup.*.json` under **`database_backups/`** are listed (same naming as **`POST /backupDatabase`**). Malformed files are skipped.
+
+<a id="post-fetchdatabasebackup"></a>
+#### `POST /fetchDatabaseBackup`
+
+**Transport:** **`403`** unless the request is **TLS** or **loopback** (same rule as **`POST /fetchBootstrapKey`**). The file is ciphertext, but transport should still be protected.
+
+**Body:** management-signed JSON with **exactly one** of **`backupId`** or **`backupPath`** (same rules as **`POST /restoreDatabase`**; no Mongo fields).
+
+**Success response (not `APIResponse` JSON):** raw bytes of the backup file. The server sets **`Accept-Ranges: bytes`** and uses Go’s **`http.ServeContent`** so clients can resume with an HTTP **`Range`** header (e.g. `bytes=1048576-` for the tail after the first megabyte).
+
+**Notification headers (inspect before/during download):**
+
+- **`X-Mpc-Auth-Database-Backup-Total-Bytes`** — full file size on disk (for progress UI).
+- **`X-Mpc-Auth-Database-Backup-Id`** — backup filename.
+- **`X-Mpc-Auth-Database-Backup-Resume-Hint`** — reminder to repeat the **same signed POST** and send **`Range`** to continue.
+
+**Stopping:** Close the HTTP client (Ctrl-C in **`curl`**); the server stops reading once the client disconnects. There is **no** configured upper size limit on the stream.
+
+**Example (resume with curl):** use **`curl -C -`** against this POST so **`curl`** sends **`Range`** based on the partially written local file. **Each** request needs a **fresh management nonce/signature** (same as any other POST). Build a **new** signed JSON body for every attempt, including retries after a partial download.
+
+<a id="post-restoredatabase"></a>
+#### `POST /restoreDatabase`
+
+**Body:** management-signed JSON with **exactly one** of **`backupId`** or **`backupPath`**, plus optional Mongo credentials as above.
+
+- **`backupId`:** the backup **filename only** (no `/` or `..`), e.g. the **`backupId`** from **`POST /backupDatabase`** or **`POST /listDatabaseBackups`**.
+- **`backupPath`:** legacy form — relative to **`database_backups/`** or absolute path still constrained to that directory.
+
+**Semantics:** **`mongorestore --archive --drop`** from decrypted payload — **destructive** for databases present in the backup. **`publicMgtKey`** / **`nodeKeyPublic`** in the envelope must match this node.
+
+**Success `data`:** `restoredFrom` (absolute path) and **`backupId`** (basename).
+
+<a id="post-fetchbootstrapkey"></a>
+#### `POST /fetchBootstrapKey`
+
+**Body:** management-signed JSON (e.g. `{ "nonce", "sig" }`).
+
+**Transport:** **`403`** when the request is **not** TLS and **not** to **loopback** (`127.0.0.1` / `localhost` / `::1`).
+
+**Success `data`:** `publicMgtKey`, `ed25519PrivateSeedHex` (32-byte seed as 64 hex), `format` discriminator. **Never log** the private material.
 
 <a id="endpoint-categories"></a>
 ## Endpoint Categories
@@ -3151,14 +3224,23 @@ The node verifies `clientSig` using the **KeyGen `ClientKeys`** entry for this n
 - **`proposalTxParams`** (optional, **EVM**): For **batch**, array of length **N** = **`len(messageHashes)`**, one **`txParams`‑shaped** object per index. For **single-tx**, at most **one** element (equivalent to **`txParams`**). Propagated. **Mutually exclusive** with **`txParams`**.
 - **`skipMessageHashVerification`** (optional): Boolean; stored and propagated. Reserved for server-side hash recomputation policy (strict vs skip); does not change **`msgHash`** / **`messageHashes`** on the wire.
 
-**Response:**
+**Response (success):** Standard **`APIResponse`**. **`data`** is an object:
+
 ```json
 {
   "code": 0,
   "error": "",
-  "data": "Sign20260111003720999cf104d0f"
+  "data": {
+    "requestId": "Sign20260111003720999cf104d0f",
+    "warnings": [
+      { "code": 0, "detail": "…" }
+    ]
+  }
 }
 ```
+
+- **`requestId`:** Signing request id (same value older builds returned as a plain string in **`data`**).
+- **`warnings`:** Optional array of **`{ code, detail }`** (`code` **0** = informational config/membership drift when the request still proceeds). Omitted or empty when none.
 
 **Example:**
 ```bash

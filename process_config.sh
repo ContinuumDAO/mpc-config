@@ -2365,6 +2365,52 @@ PYNORMSSH
     return 0
 }
 
+# When PublicMgtKey is still empty after interactive prompts (or NodeMgtKey-only with skip), generate
+# bootstrap_key/ed25519_private.hex + set PublicMgtKey + DeterministicNodeKey (DATABASE_BACKUP_RESTORE_PLAN §8).
+maybe_auto_bootstrap_public_mgt_key() {
+    local config_file="$1"
+    if [ ! -r /dev/tty ]; then
+        return 0
+    fi
+    if ! command -v python3 &>/dev/null; then
+        return 0
+    fi
+    local pk_nonempty
+    pk_nonempty=$(CONFIG_FILE_MGT="$config_file" python3 -c "
+import os
+from ruamel.yaml import YAML
+try:
+    _ry = YAML()
+    with open(os.environ['CONFIG_FILE_MGT']) as f:
+        d = _ry.load(f) or {}
+    v = d.get('PublicMgtKey')
+    v = '' if v is None else str(v).strip().strip('\"').strip(\"'\")
+    print('1' if v else '0')
+except Exception:
+    print('0')
+")
+    if [ "$pk_nonempty" = "1" ]; then
+        return 0
+    fi
+    local prov="${REPO_ROOT}/tools/bootstrap_key_provision.py"
+    if [ ! -f "$prov" ]; then
+        prov="${SCRIPT_DIR}/tools/bootstrap_key_provision.py"
+    fi
+    if [ ! -f "$prov" ]; then
+        print_warning "tools/bootstrap_key_provision.py not found; skipping auto-generation of PublicMgtKey."
+        return 0
+    fi
+    echo ""
+    print_step "PublicMgtKey is still empty — generating Ed25519 bootstrap identity (bootstrap_key/ + configs.yaml)"
+    print_info "Enables deterministic nodeKey, encrypted DB backups, and POST /fetchBootstrapKey. Back up bootstrap_key/ securely."
+    if ! python3 "$prov" "$config_file"; then
+        print_error "bootstrap_key_provision.py failed (install: pip install cryptography 'ruamel.yaml')."
+        return 1
+    fi
+    print_success "Bootstrap management key provisioned."
+    return 0
+}
+
 # Prompt for NodeMgtKey / PublicMgtKey when empty; require at least one valid key after prompts.
 prompt_configure_management_keys() {
     local config_file="$1"
@@ -2597,6 +2643,8 @@ PYMGT
         print_success "Updated configs.yaml (management keys; comments preserved)."
         echo ""
     fi
+
+    maybe_auto_bootstrap_public_mgt_key "$config_file" || return 1
     
     if ! verify_at_least_one_management_key "$config_file"; then
         print_error "You must configure at least one of: NodeMgtKey (valid Ethereum address) or PublicMgtKey (valid Ed25519 public key: 64 hex, ssh-ed25519 line, or OpenSSH base64 blob)."
@@ -4354,6 +4402,8 @@ show_process_config_help() {
     echo "If PublicMgtKey in configs.yaml is an ssh-ed25519 line or OpenSSH base64 blob, it is rewritten to 64 hex (tools/openssh_ed25519_to_hex.py)."
     echo "If NodeMgtKey or PublicMgtKey is empty, the script prompts first (interactive TTY): Ethereum (MetaMask)"
     echo "and/or Ed25519 public key (64 hex, ssh-ed25519 line, or base64 blob; tools/openssh_ed25519_to_hex.py)."
+    echo "If you skip PublicMgtKey on a TTY and it stays empty, the script runs tools/bootstrap_key_provision.py:"
+    echo "  creates bootstrap_key/ed25519_private.hex (0600), sets PublicMgtKey + DeterministicNodeKey in configs.yaml."
     echo "At least one valid key is required."
     echo ""
     echo "Then, if MPCGroups[0].nodeAddresses is empty or still uses the default 203.0.113.10–12 example IPs, the script prompts"
@@ -4369,6 +4419,7 @@ show_process_config_help() {
     echo ""
     echo "Updates to configs.yaml require ruamel.yaml (e.g. apt install python3-ruamel.yaml, or pip in a venv)"
     echo "so the prototype file's comments are preserved on round-trip."
+    echo "Auto-generated bootstrap keys (tools/bootstrap_key_provision.py) require: pip install cryptography"
     echo ""
     echo "On RELAY NODE (first node):"
     echo "  - Validates configuration"
