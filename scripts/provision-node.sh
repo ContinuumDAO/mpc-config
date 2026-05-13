@@ -12,7 +12,7 @@
 #
 # Prerequisites:
 #   - Repo must contain configs-original.yaml (same directory layout as mpc-config).
-#   - python3 + ruamel.yaml (same as process_config.sh).
+#   - python3 + ruamel.yaml (same as process_config.sh); cryptography for auto PublicMgtKey when omitted (--node-mgt-key only).
 #
 set -euo pipefail
 
@@ -31,6 +31,9 @@ Usage:
   Provide at least one of:
     --node-mgt-key, -k ADDR   Ethereum management address (0x + 40 hex or 40 hex). Not the template placeholder.
     --public-mgt-key KEY      Ed25519 public: 64 hex (optional 0x), or full ssh-ed25519 line (quote if it contains spaces).
+
+  If you pass only --node-mgt-key, process_config.sh still auto-generates PublicMgtKey + bootstrap_key/
+  (python3 cryptography) so mpc-auth can derive a deterministic nodeKey.
 
   Legacy: a single positional argument is treated as NODE_MGT_ETH (same as -k).
 
@@ -255,6 +258,12 @@ fi
 
 if ! python3 -c "import ruamel.yaml" 2>/dev/null; then
     echo "error: python3 ruamel.yaml is required (e.g. sudo apt install python3-ruamel.yaml)" >&2
+    exit 1
+fi
+
+if [ -z "$PUBLIC_MGT_FINAL" ] && ! python3 -c "import cryptography" 2>/dev/null; then
+    echo "error: python3 'cryptography' is required when --public-mgt-key is omitted (process_config will auto-provision PublicMgtKey)." >&2
+    echo "       e.g. sudo apt install python3-cryptography  or  sudo pip install cryptography" >&2
     exit 1
 fi
 

@@ -2367,13 +2367,12 @@ PYNORMSSH
 
 # When PublicMgtKey is still empty after interactive prompts (or NodeMgtKey-only with skip), generate
 # bootstrap_key/ed25519_private.hex + set PublicMgtKey + DeterministicNodeKey (DATABASE_BACKUP_RESTORE_PLAN §8).
+# Also used for non-interactive installs (e.g. provision-node.sh): mpc-auth may require PublicMgtKey to derive nodeKey.
 maybe_auto_bootstrap_public_mgt_key() {
     local config_file="$1"
-    if [ ! -r /dev/tty ]; then
-        return 0
-    fi
     if ! command -v python3 &>/dev/null; then
-        return 0
+        print_error "python3 is required to auto-provision PublicMgtKey when it is empty."
+        return 1
     fi
     local pk_nonempty
     pk_nonempty=$(CONFIG_FILE_MGT="$config_file" python3 -c "
@@ -2397,8 +2396,8 @@ except Exception:
         prov="${SCRIPT_DIR}/tools/bootstrap_key_provision.py"
     fi
     if [ ! -f "$prov" ]; then
-        print_warning "tools/bootstrap_key_provision.py not found; skipping auto-generation of PublicMgtKey."
-        return 0
+        print_error "PublicMgtKey is empty and tools/bootstrap_key_provision.py was not found — cannot provision Ed25519 bootstrap / deterministic nodeKey."
+        return 1
     fi
     echo ""
     print_step "PublicMgtKey is still empty — generating Ed25519 bootstrap identity (bootstrap_key/ + configs.yaml)"
@@ -2422,6 +2421,7 @@ prompt_configure_management_keys() {
     
     if [ ! -r /dev/tty ]; then
         if verify_at_least_one_management_key "$config_file"; then
+            maybe_auto_bootstrap_public_mgt_key "$config_file" || return 1
             return 0
         fi
         print_error "At least one of NodeMgtKey or PublicMgtKey must be set. Edit configs.yaml or run this script interactively."
@@ -2430,6 +2430,7 @@ prompt_configure_management_keys() {
 
     # Valid key(s) already in configs.yaml (e.g. provision-node.sh) — do not prompt for optional second key.
     if verify_at_least_one_management_key "$config_file"; then
+        maybe_auto_bootstrap_public_mgt_key "$config_file" || return 1
         return 0
     fi
     
@@ -4404,7 +4405,9 @@ show_process_config_help() {
     echo "and/or Ed25519 public key (64 hex, ssh-ed25519 line, or base64 blob; tools/openssh_ed25519_to_hex.py)."
     echo "If you skip PublicMgtKey on a TTY and it stays empty, the script runs tools/bootstrap_key_provision.py:"
     echo "  creates bootstrap_key/ed25519_private.hex (0600), sets PublicMgtKey + DeterministicNodeKey in configs.yaml."
-    echo "At least one valid key is required."
+    echo "The same auto-provision runs without a TTY when PublicMgtKey is still empty but NodeMgtKey is already valid"
+    echo "(e.g. scripts/provision-node.sh with --node-mgt-key only and PROCESS_CONFIG_NONINTERACTIVE=1)."
+    echo "At least one valid NodeMgtKey or PublicMgtKey is required before this step; empty PublicMgtKey is then filled by bootstrap_key_provision.py."
     echo ""
     echo "Then, if MPCGroups[0].nodeAddresses is empty or still uses the default 203.0.113.10–12 example IPs, the script prompts"
     echo "and writes http://...:${MPC_NODE_HTTP_PORT} URLs (first entry = relay; same order on all nodes)."
