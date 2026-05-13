@@ -1960,6 +1960,33 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.BackupDatabasePost'
+  /postDatabaseBackup:
+    post:
+      description: 'Upload encrypted backup JSON from workstation (multipart; quiescence) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /postDatabaseBackup).'
+      consumes:
+      - multipart/form-data
+      produces:
+      - application/json
+      tags:
+      - Database backup
+      summary: Upload encrypted backup JSON from workstation (multipart; quiescence)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - name: meta
+        in: formData
+        type: string
+        required: true
+        description: 'Signed JSON body (node.PostDatabaseBackupPost): Nonce, Sig, contentSha256 (hex of file), optional nodeKey.'
+      - name: file
+        in: formData
+        type: file
+        required: true
+        description: Encrypted backup envelope (.json), same format as written by POST /backupDatabase.
   /restoreDatabase:
     post:
       description: 'Restore MongoDB from encrypted backup (mongorestore --drop) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
@@ -1986,7 +2013,9 @@ paths:
     post:
       description: 'List database backups (id, time, notes) on this node Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
         (POST /listDatabaseBackups). Success data: object with backups: array of #/definitions/node.DatabaseBackupListItem
-        (newest first). Success data: object with backups: array of #/definitions/node.DatabaseBackupListItem (newest first).'
+        (newest first). Success data: object with backups: array of #/definitions/node.DatabaseBackupListItem (newest first).
+        Success data: object with backups: array of #/definitions/node.DatabaseBackupListItem (newest first). Success data:
+        object with backups: array of #/definitions/node.DatabaseBackupListItem (newest first).'
       consumes:
       - application/json
       produces:
@@ -2068,6 +2097,50 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.FetchBootstrapKeyPost'
+  /postBootstrapKey:
+    post:
+      description: 'Install bootstrap Ed25519 seed file on node (no maintenance drain) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /postBootstrapKey).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Database backup
+      summary: Install bootstrap Ed25519 seed file on node (no maintenance drain)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.PostBootstrapKeyPost'
+  /removeBootstrapKey:
+    post:
+      description: 'Remove bootstrap Ed25519 seed file from node (no maintenance drain) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /removeBootstrapKey).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Database backup
+      summary: Remove bootstrap Ed25519 seed file from node (no maintenance drain)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.RemoveBootstrapKeyPost'
   /sendMessage:
     post:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /sendMessage).
@@ -2771,3 +2844,35 @@ definitions:
         backupId:
           type: string
           description: Backup filename only (no directories); alternative to backupPath
+  node.PostDatabaseBackupPost:
+    type: object
+    description: JSON string in multipart field "meta" for POST /postDatabaseBackup (verify with Sig cleared). contentSha256
+      is lowercase hex SHA-256 of the raw uploaded file bytes (field "file").
+    allOf:
+    - $ref: '#/definitions/node.NodeMgtKeySig'
+    - type: object
+      required:
+      - contentSha256
+      properties:
+        contentSha256:
+          type: string
+          description: Hex-encoded SHA-256 of the uploaded backup JSON file (must match field file)
+  node.PostBootstrapKeyPost:
+    type: object
+    description: POST /postBootstrapKey signed body (verify with Sig cleared). 32-byte Ed25519 seed as 64 hex chars (same
+      as fetchBootstrapKey ed25519PrivateSeedHex). If configs.yaml PublicMgtKey is set, seed must match it.
+    allOf:
+    - $ref: '#/definitions/node.NodeMgtKeySig'
+    - type: object
+      required:
+      - ed25519PrivateSeedHex
+      properties:
+        ed25519PrivateSeedHex:
+          type: string
+          pattern: ^[0-9a-fA-F]{64}$
+          description: 32-byte Ed25519 seed as 64 hex characters
+  node.RemoveBootstrapKeyPost:
+    type: object
+    description: POST /removeBootstrapKey signed body (typically Nonce + Sig only).
+    allOf:
+    - $ref: '#/definitions/node.NodeMgtKeySig'

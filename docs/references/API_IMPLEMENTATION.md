@@ -198,8 +198,11 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 - [`POST /backupDatabase`](#post-backupdatabase) — encrypted MongoDB backup file under `database_backups/` (**deterministic** `nodeKey` + `bootstrap_key` only; management-signed). Requires **`mongodump`** on the node host.
 - [`POST /listDatabaseBackups`](#post-listdatabasebackups) — lists backups for this node (`backupId`, `backupUtc`, `notes`); management-signed; same eligibility as backup.
 - [`POST /fetchDatabaseBackup`](#post-fetchdatabasebackup) — **streams** the encrypted backup file to the client (**HTTPS** or **loopback** only, same transport rule as **`fetchBootstrapKey`**); management-signed; supports **HTTP Range** for resumable downloads.
+- [`POST /postDatabaseBackup`](#post-postdatabasebackup) — **upload** encrypted backup JSON from an operator workstation into **`database_backups/`** (**`multipart/form-data`**: signed JSON field **`meta`** + raw file **`file`**); **`contentSha256`** in **`meta`** must match **`file`**; server validates envelope and proves decrypt with **bootstrap**; same eligibility and **maintenance quiescence** as **`POST /backupDatabase`** / **`POST /restoreDatabase`**.
 - [`POST /restoreDatabase`](#post-restoredatabase) — destructive **`mongorestore --drop`** from an encrypted backup produced by this node (same eligibility as backup). Caller supplies **`backupId`** (filename) or **`backupPath`** (see below).
 - [`POST /fetchBootstrapKey`](#post-fetchbootstrapkey) — returns **`ed25519PrivateSeedHex`** for offline backup decryption (**HTTPS** or **loopback** only); same eligibility as backup.
+- [`POST /postBootstrapKey`](#post-postbootstrapkey) — write **`bootstrap_key/ed25519_private.hex`** from **`ed25519PrivateSeedHex`** in the signed body when the file is absent; management-signed; **not** subject to maintenance quiescence (no **503** while draining).
+- [`POST /removeBootstrapKey`](#post-removebootstrapkey) — delete **`bootstrap_key/ed25519_private.hex`** if present; management-signed; **not** subject to maintenance quiescence.
 
 ### Pre-Signing
 - [`POST /presignRequest`](#post-presignrequest) - Create presign request (requires mgt key)
@@ -254,7 +257,7 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 
 Returns **`draining`**, **`inFlight`**, **`readyForProcessExit`**, and a hint list of tracked POST paths. Read-only; exempt from JWT on the browser HTTPS / loopback listeners where configured (for polling from scripts).
 
-**Flow:** (1) Sign and `POST /maintenance/requestRestartPrep`. (2) Poll `GET /maintenance/restartGate` until **`readyForProcessExit`** is `true` (`draining` is `true` and **`inFlight`** is `0`). (3) Restart the container or process on the host. Tracked paths include group/subgroup agree flows, keyGen, presign, sign/multiSign and related agrees/triggers/status/shelve, **KeyGen messaging** (`sendMessage`, read/delete variants), and **`configUpdatePlan` / `configUpdateImplement`**.
+**Flow:** (1) Sign and `POST /maintenance/requestRestartPrep`. (2) Poll `GET /maintenance/restartGate` until **`readyForProcessExit`** is `true` (`draining` is `true` and **`inFlight`** is `0`). (3) Restart the container or process on the host. Tracked paths include group/subgroup agree flows, keyGen, presign, sign/multiSign and related agrees/triggers/status/shelve, **KeyGen messaging** (`sendMessage`, read/delete variants), **`configUpdatePlan` / `configUpdateImplement`**, and database backup routes **`POST /backupDatabase`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, **`POST /fetchDatabaseBackup`**, **`POST /fetchBootstrapKey`**. **`POST /postBootstrapKey`** and **`POST /removeBootstrapKey`** are **not** tracked — they stay available while **`draining`** and do not increment **`inFlight`**.
 
 **MQTT caveat:** In-flight work that continues only over **MQTT** (without a matching management POST on this node) is **not** included in the HTTP ref-count. Pause clients or wait briefly if needed.
 
@@ -291,9 +294,11 @@ The script uses the **second argument** as **`MPC_AUTH_EXPECTED_DIGEST`** for th
 <a id="database-backup-maintenance"></a>
 ## MongoDB backup, restore, and bootstrap key (maintenance)
 
-These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or allowed **Ed25519** keys). **Additional gate:** the node’s stored **`nodeKey`** must match the **P-256 public key** derived from **`configs.yaml` `PublicMgtKey`** and the on-disk **`bootstrap_key/ed25519_private.hex`** (see **`DeterministicNodeKey`** in **`mpc-auth`** and **`docs-internal/DATABASE_BACKUP_RESTORE_PLAN.md`**). Legacy **random** `nodeKey` nodes receive **403** on **`POST /backupDatabase`**, **`POST /listDatabaseBackups`**, **`POST /fetchDatabaseBackup`**, **`POST /restoreDatabase`**, and **`POST /fetchBootstrapKey`**.
+These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or allowed **Ed25519** keys). **Additional gate:** the node’s stored **`nodeKey`** must match the **P-256 public key** derived from **`configs.yaml` `PublicMgtKey`** and the on-disk **`bootstrap_key/ed25519_private.hex`** (see **`DeterministicNodeKey`** in **`mpc-auth`** and **`docs-internal/DATABASE_BACKUP_RESTORE_PLAN.md`**). Legacy **random** `nodeKey` nodes receive **403** on **`POST /backupDatabase`**, **`POST /listDatabaseBackups`**, **`POST /fetchDatabaseBackup`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, and **`POST /fetchBootstrapKey`**.
 
-**Config / layout (defaults):** beside **`configs.yaml`** — directory **`bootstrap_key/`** (private seed file **`ed25519_private.hex`**, `0600`) and **`database_backups/`** (encrypted JSON envelopes). Override with **`BootstrapKeyDir`** / **`DatabaseBackupsDir`** in **`configs.yaml`** (absolute or relative to the configs.yaml parent directory). In **mpc-config** Docker Compose, **`./database_backups`** is bind-mounted to **`/app/database_backups`** so the default **`DatabaseBackupsDir: database_backups`** persists on the host next to the compose project.
+**Bootstrap file install/remove (separate):** **`POST /postBootstrapKey`** and **`POST /removeBootstrapKey`** are management-signed writes/deletes of **`bootstrap_key/ed25519_private.hex`** (see below). They use **`VerifyMgtKeySig`** but **not** the same deterministic-node / backup eligibility gate as the routes in the preceding paragraph, and they are **excluded** from [restart draining](#restart-quiescence-maintenance-detail) (no **503** while **`draining`**).
+
+**Config / layout (defaults):** beside **`configs.yaml`** — directory **`bootstrap_key/`** (private seed file **`ed25519_private.hex`**, `0600`) and **`database_backups/`** (encrypted JSON envelopes). Override with **`BootstrapKeyDir`** / **`DatabaseBackupsDir`** in **`configs.yaml`** (absolute or relative to the configs.yaml parent directory). In **mpc-config** Docker Compose, **`./database_backups`** is bind-mounted to **`/app/database_backups`** so the default **`DatabaseBackupsDir: database_backups`** persists on the host next to the compose project. If **`bootstrap_key`** is bind-mounted **read-only** into the container, **`POST /postBootstrapKey`** / **`POST /removeBootstrapKey`** cannot change the file from inside the container — use a read-write mount (or change the file on the host) for API-driven provisioning.
 
 **Provisioning:** On an **interactive TTY**, **`mpc-config`** **`process_config.sh`** runs **`tools/bootstrap_key_provision.py`** when **`PublicMgtKey`** is still empty after the management-key prompts: it writes **`bootstrap_key/ed25519_private.hex`**, sets **`PublicMgtKey`**, and sets **`DeterministicNodeKey: true`**. Requires **`pip install cryptography`** (and **`ruamel.yaml`**). Operators must archive **`bootstrap_key/`** securely (or call **`POST /fetchBootstrapKey`** over TLS after the node is up).
 
@@ -314,7 +319,7 @@ These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or all
 
 **Body:** management-signed JSON (`nonce`, `sig`, optional `nodeKey`), same pattern as other maintenance POSTs.
 
-**Success `data`:** `{ "backups": [ { "backupId", "backupUtc", "notes" }, ... ] }` sorted **newest first** (by envelope `backupUtc`, with filename tie-break). Only files named `{nodeKeyPublic}.backup.*.json` under **`database_backups/`** are listed (same naming as **`POST /backupDatabase`**). Malformed files are skipped.
+**Success `data`:** `{ "backups": [ { "backupId", "backupUtc", "notes" }, ... ] }` sorted **newest first** (by envelope `backupUtc`, with filename tie-break). Only files named `{first 20 chars of nodeKeyPublic}.backup.*.json` under **`database_backups/`** are listed (legacy `{full nodeKeyPublic}.backup.*.json` still recognized). Malformed files are skipped.
 
 <a id="post-fetchdatabasebackup"></a>
 #### `POST /fetchDatabaseBackup`
@@ -334,6 +339,28 @@ These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or all
 **Stopping:** Close the HTTP client (Ctrl-C in **`curl`**); the server stops reading once the client disconnects. There is **no** configured upper size limit on the stream.
 
 **Example (resume with curl):** use **`curl -C -`** against this POST so **`curl`** sends **`Range`** based on the partially written local file. **Each** request needs a **fresh management nonce/signature** (same as any other POST). Build a **new** signed JSON body for every attempt, including retries after a partial download.
+
+<a id="post-postdatabasebackup"></a>
+#### `POST /postDatabaseBackup`
+
+**Purpose:** Copy an encrypted backup JSON from an operator machine onto the node’s **`database_backups/`** directory (same on-disk format as **`POST /backupDatabase`**).
+
+**Quiescence:** Same as **`POST /backupDatabase`** — use **`POST /maintenance/requestRestartPrep`** and poll **`GET /maintenance/restartGate`** until **`readyForProcessExit`** before calling this endpoint while the node is busy.
+
+**Request:** **`multipart/form-data`** with:
+
+- **`meta`:** string holding management-signed JSON (**`PostDatabaseBackupPost`**): **`Nonce`**, **`Sig`**, **`contentSha256`** (hex **SHA-256** of the raw bytes sent in **`file`**), optional **`nodeKey`** (same binding pattern as other management POSTs).
+- **`file`:** the backup **`.json`** file (UTF-8), unchanged from download or from another node that shares the same **`PublicMgtKey`** / **`bootstrap_key`** identity.
+
+**Validation:** The server checks **`contentSha256`** matches **`file`**, verifies **`VerifyMgtKeySig`** on **`meta`**, then parses the envelope and applies the same logical checks as **`POST /restoreDatabase`** through successful **AES-GCM decrypt** with this node’s **bootstrap** seed (without writing to Mongo yet). **`publicMgtKey`** / **`nodeKeyPublic`** in the envelope must match this node.
+
+**Filename:** Same rule as **`POST /backupDatabase`**, but the timestamp segment is taken from the envelope’s **`backupUtc`** (when the snapshot was created), **not** the upload time — so downloading a backup and **`POST /postDatabaseBackup`** it back yields the **same** `backupId` whenever the envelope is unchanged. The stem is the first **20** characters of **`nodeKeyPublic`** (or this node’s key if the field was omitted in older envelopes). If a file at that path **already exists**, the server returns **`code: 0`** with **`data.message`** `"Database backup was already present"` and **`data.alreadyPresent: true`** (no write; existing file unchanged).
+
+**Success `data`:** **`backupId`**, **`path`**, **`backupFileSizeBytes`**, **`contentSha256`** (hash of uploaded bytes). **`alreadyPresent`** is **`false`** when a new file was written. When **`alreadyPresent`** is **`true`**, **`message`** is **`Database backup was already present`**, **`backupFileSizeBytes`** is the **existing** file on disk, and the file was not modified (**`contentSha256`** is still the uploaded payload hash).
+
+**Errors:** **`400`** for multipart/sha/envelope/decrypt issues; **`401`** for signature failure; **`503`** while draining and not yet **`readyForProcessExit`** (same as other tracked backup POSTs).
+
+**Size:** The server accepts large backup files via **`multipart/form-data`** (parsed with a generous in-memory buffer, then spillover to disk — suitable for typical encrypted snapshots).
 
 <a id="post-restoredatabase"></a>
 #### `POST /restoreDatabase`
@@ -355,6 +382,36 @@ These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or all
 **Transport:** **`403`** when the request is **not** TLS and **not** to **loopback** (`127.0.0.1` / `localhost` / `::1`).
 
 **Success `data`:** `publicMgtKey`, `ed25519PrivateSeedHex` (32-byte seed as 64 hex), `format` discriminator. **Never log** the private material.
+
+<a id="post-postbootstrapkey"></a>
+#### `POST /postBootstrapKey`
+
+**Purpose:** Create **`ed25519_private.hex`** under **`EffectiveBootstrapKeyDir`** (default **`bootstrap_key/`** next to **`configs.yaml`**) when it does **not** already exist.
+
+**Quiescence:** **None** — this route is **not** in **`maintenancePathsCritical`**; it is **not** refused with **503** while **`draining`**.
+
+**Body:** management-signed JSON (**`PostBootstrapKeyPost`**): **`Nonce`**, **`Sig`**, **`ed25519PrivateSeedHex`** (64 hex chars, 32-byte seed; optional **`nodeKey`** per [management signatures](#management-signatures-nodekey)). Canonical JSON for verification uses **`Sig`** cleared. If **`configs.yaml` `PublicMgtKey`** is non-empty, the seed must correspond to that public key (same check as other bootstrap provisioning).
+
+**Success when absent:** writes the file with mode **`0600`** (and creates the directory **`0700`** if needed). **`data`:** **`path`**, **`wrote: true`**, **`alreadyPresent: false`**.
+
+**Success when already present:** **`code: 0`**, **`data.message`** **`Bootstrap key already in place`**, **`alreadyPresent: true`**, **`wrote: false`** — existing file is **not** overwritten.
+
+**Errors:** **`400`** validation/signature payload issues; **`401`** signature verification failure.
+
+<a id="post-removebootstrapkey"></a>
+#### `POST /removeBootstrapKey`
+
+**Purpose:** Delete **`ed25519_private.hex`** under **`EffectiveBootstrapKeyDir`** if it exists.
+
+**Quiescence:** **None** — same as **`POST /postBootstrapKey`** (not tracked for restart draining).
+
+**Body:** management-signed JSON (**`RemoveBootstrapKeyPost`**): **`Nonce`**, **`Sig`**, optional **`nodeKey`**.
+
+**Success when file existed:** **`data`:** **`path`**, **`removed: true`**, **`message`** **`Bootstrap key file removed`**.
+
+**Success when file missing:** **`code: 0`**, **`removed: false`**, **`message`** **`Bootstrap key file was not present`**.
+
+**Errors:** **`401`** signature failure; **`500`** if **`stat`**/**`remove`** fails unexpectedly.
 
 <a id="endpoint-categories"></a>
 ## Endpoint Categories
