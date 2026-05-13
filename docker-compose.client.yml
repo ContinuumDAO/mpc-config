@@ -58,6 +58,8 @@ services:
       - /var/lib/mpc-auth-docker:/var/lib/mpc-auth-docker
       # Writable so POST /configUpdateImplement can merge planned YAML via ruamel (read-only causes apply failures).
       - ./configs.yaml:/app/configs.yaml
+      # DeterministicNodeKey: seed file from tools/bootstrap_key_provision.py (process_config.sh). Host dir next to configs.yaml.
+      - ./bootstrap_key:/app/bootstrap_key:ro
       # mpc-config ruamel merge script (rename-or-copy vs bind-mounted configs.yaml; see README).
       - ./console/apply_planned_configs_ruamel.py:/app/console/apply_planned_configs_ruamel.py:ro
       - ./data/app/logs:/app/logs
