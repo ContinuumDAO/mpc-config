@@ -52,7 +52,7 @@ If **`ufw`** is **inactive**, the script warns and may prompt (when a TTY is ava
 
 **`docker-compose*.yml`** publishes Mongo on **`127.0.0.1:27017`**. Ordinary UFW “allow inbound” rules do **not** stop **local processes** owned by non-root OS users from opening **`mongodb://127.0.0.1:27017`**.
 
-After the usual **`process_config.sh`** UFW allow rules are applied (unless **`--no-firewall`**), an extra step installs a **`ufw-user-output`** line in **`/etc/ufw/after.rules`**: **`DROP`** on TCP to **`127.0.0.1/32`** port **27017** from any **effective UID ≠ root**.
+After the usual **`process_config.sh`** UFW allow rules are applied (unless **`--no-firewall`**), an extra step installs a **`ufw-after-output`** line in **`/etc/ufw/after.rules`**: **`DROP`** on TCP to **`127.0.0.1/32`** port **27017** from any **effective UID ≠ root**. (UFW restores **`after.rules`** before **`user.rules`**, so rules in **`ufw-user-output`** in that file fail **`iptables-restore`**.)
 
 - **Purpose:** complement **MongoDB authentication** (see **`README`** and **`.env.example`**) against **same-host UID** misuse (including AI agents running as normal users).
 
