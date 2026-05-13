@@ -51,6 +51,12 @@ LogLevel: 6
 # Relative paths are relative to the working directory
 LogPath: "logs/MPCAuth.log"
 
+# Directory for encrypted MongoDB backup files (POST /backupDatabase, JSON envelopes).
+# Relative paths are resolved relative to the directory containing configs.yaml (in Docker: /app).
+# Default name when unset is "database_backups". mpc-config bind-mounts ./database_backups on the host
+# to /app/database_backups in the app container so backups sit beside the compose project on disk.
+DatabaseBackupsDir: "database_backups"
+
 # MQTT TLS configuration (CLIENT-SIDE - for mpc-auth nodes to verify broker certificates)
 # This configures how mpc-auth nodes verify the MQTT broker's TLS certificate
 # IMPORTANT: TLS certificate verification is ALWAYS enforced - cannot be disabled

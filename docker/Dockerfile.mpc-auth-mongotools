@@ -1,0 +1,42 @@
+# Adds MongoDB Database Tools (mongodump / mongorestore) to the mpc-auth image.
+# Official images from continuumdao/mpc-auth are Debian-based; install matches bookworm (debian12) tool builds.
+#
+# Usage (from mpc-config repo root, same compose file you already use):
+#   docker compose -f docker-compose.client.yml build app
+#
+# Wire compose service `app` to use this Dockerfile, e.g. in docker-compose.client.yml or an override:
+#   app:
+#     build:
+#       context: .
+#       dockerfile: docker/Dockerfile.mpc-auth-mongotools
+#       args:
+#         MPC_AUTH_BASE_IMAGE: ${MPC_AUTH_COMPOSE_APP_IMAGE:-continuumdao/mpc-auth:latest}
+#         MONGODB_DATABASE_TOOLS_VERSION: "100.10.0"
+#     image: mpc-config-app:with-mongotools
+#
+# Then: docker compose -f docker-compose.client.yml up -d
+
+ARG MPC_AUTH_BASE_IMAGE=continuumdao/mpc-auth:latest
+FROM ${MPC_AUTH_BASE_IMAGE}
+
+USER root
+
+ARG MONGODB_DATABASE_TOOLS_VERSION=100.10.0
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates wget; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) mdb_arch=x86_64 ;; \
+      arm64) mdb_arch=arm64 ;; \
+      *) echo "unsupported dpkg arch: $arch" >&2; exit 1 ;; \
+    esac; \
+    pkg="mongodb-database-tools-debian12-${mdb_arch}-${MONGODB_DATABASE_TOOLS_VERSION}"; \
+    wget -q "https://fastdl.mongodb.org/tools/db/${pkg}.tgz" -O /tmp/mongodb-database-tools.tgz; \
+    tar -xzf /tmp/mongodb-database-tools.tgz -C /tmp; \
+    install -m 0755 "/tmp/${pkg}/bin/mongodump" "/tmp/${pkg}/bin/mongorestore" /usr/local/bin/; \
+    rm -rf /tmp/mongodb-database-tools.tgz "/tmp/${pkg}"; \
+    apt-get purge -y wget; \
+    apt-get autoremove -y; \
+    rm -rf /var/lib/apt/lists/*; \
+    mongodump --version

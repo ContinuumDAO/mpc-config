@@ -20,6 +20,9 @@ configs.yaml
 # webTLS
 webTLS/config/certs/
 
+# Encrypted DB backup envelopes (POST /backupDatabase); may contain sensitive ciphertext
+database_backups/
+
 # Data directories
 data/
 mosquitto/data/
