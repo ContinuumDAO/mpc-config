@@ -23,6 +23,9 @@ webTLS/config/certs/
 # Encrypted DB backup envelopes (POST /backupDatabase); may contain sensitive ciphertext
 database_backups/
 
+# POST /restoreDatabase pre-restore mongodump snapshots (operators may copy off-host)
+.mongodump/
+
 # Data directories
 data/
 mosquitto/data/
