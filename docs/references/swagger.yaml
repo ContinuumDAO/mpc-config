@@ -217,9 +217,8 @@ paths:
           description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /addManagementKey:
     post:
-      description: Adds a new Ed25519 public key to the allowed set for management API auth. Request must be signed by an
-        existing Ed25519 management key (config PublicMgtKey or a key previously added). Only a permitted machine can add
-        another key.
+      description: 'Add another allowed Ed25519 management public key. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /addManagementKey). Schema: #/definitions/node.AddManagementKeyPost.'
       consumes:
       - application/json
       produces:
@@ -229,49 +228,49 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          required:
-          - newPublicKey
-          - sig
-          properties:
-            newPublicKey:
-              type: string
-              description: 64 hex (32-byte Ed25519 public key) to add
-            nonce:
-              type: integer
-              description: Current nonce for the signer key (from getPublicMgtKeyNonce)
-            sig:
-              type: string
-              description: Ed25519 signature (128 hex) over canonical JSON of body with sig empty
+          $ref: '#/definitions/node.AddManagementKeyPost'
       tags:
       - Node Related Info
-      summary: add an additional Ed25519 management public key
+      summary: Add another allowed Ed25519 management public key
       responses:
         '200':
-          description: OK
+          description: 'OK (`code`: 0 in APIResponse)'
           schema:
             $ref: '#/definitions/node.APIResponse'
         '400':
-          description: Invalid body or no Ed25519 key configured
+          description: Invalid body / nonce / signedMessage mismatch / malformed key
           schema:
             $ref: '#/definitions/node.APIResponse'
         '401':
-          description: Invalid or missing Ed25519 signature
+          description: Invalid Ed25519 or Ethereum management signature
           schema:
             $ref: '#/definitions/node.APIResponse'
   /removeManagementKey:
     post:
-      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeManagementKey).
+      description: 'Soft-remove an added Ed25519 management public key. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /removeManagementKey). Schema: #/definitions/node.RemoveManagementKeyPost.'
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Management API
-      summary: POST removeManagementKey
+      - Node Related Info
+      summary: Soft-remove an added Ed25519 management public key
       responses:
         '200':
-          description: OK
+          description: 'OK (`code`: 0 in APIResponse)'
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+        '400':
+          description: Invalid body / nonce / signedMessage mismatch / malformed key
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+        '401':
+          description: Invalid Ed25519 or Ethereum management signature
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+        '404':
+          description: Target not among added keys (or wrong key type)
           schema:
             $ref: '#/definitions/node.APIResponse'
       parameters:
@@ -279,8 +278,7 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          $ref: '#/definitions/node.RemoveManagementKeyPost'
   /getNodeUptime:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getNodeUptime).
@@ -1813,6 +1811,22 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/node.APIResponse'
+  /checkDatabase:
+    get:
+      description: 'MongoDB integrity report (keygens, sign flows, local chain/tokens/addresses, orphan shards) Full detail:
+        mpc-config docs/references/API_IMPLEMENTATION.md (GET /checkDatabase).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Management API
+      summary: MongoDB integrity report (keygens, sign flows, local chain/tokens/addresses, orphan shards)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
   /configUpdatePlan:
     post:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /configUpdatePlan).
@@ -1837,7 +1851,9 @@ paths:
           description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /configUpdateImplement:
     post:
-      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /configUpdateImplement).
+      description: 'MPC node management API — POST /configUpdateImplement. Body: plannedYaml, nonce, clientSig, signedMessage.
+        rotationPublicMgtKeyClientSig required when the plan sets the first PublicMgtKey; rotationNodeMgtKeyClientSig optional
+        (if present, personal_sign from the new Ethereum NodeMgtKey). Details: mpc-config docs/references/API_IMPLEMENTATION.md.'
       consumes:
       - application/json
       produces:
@@ -1940,15 +1956,15 @@ paths:
           description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
   /backupDatabase:
     post:
-      description: 'Create encrypted MongoDB backup (mongodump; deterministic node only) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /backupDatabase).'
+      description: 'Create encrypted MongoDB backup (partial: shards + scrub base group/ping rows by scope) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (POST /backupDatabase).'
       consumes:
       - application/json
       produces:
       - application/json
       tags:
       - Database backup
-      summary: Create encrypted MongoDB backup (mongodump; deterministic node only)
+      summary: 'Create encrypted MongoDB backup (partial: shards + scrub base group/ping rows by scope)'
       responses:
         '200':
           description: OK
@@ -1989,15 +2005,15 @@ paths:
         description: Encrypted backup envelope (.json), same format as written by POST /backupDatabase.
   /restoreDatabase:
     post:
-      description: 'Restore MongoDB from encrypted backup (mongorestore --drop) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /restoreDatabase).'
+      description: 'Restore MongoDB from encrypted backup (pre-restore ./.mongodump → /app/.mongodump in compose; wipe; mongorestore)
+        Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /restoreDatabase).'
       consumes:
       - application/json
       produces:
       - application/json
       tags:
       - Database backup
-      summary: Restore MongoDB from encrypted backup (mongorestore --drop)
+      summary: Restore MongoDB from encrypted backup (pre-restore ./.mongodump → /app/.mongodump in compose; wipe; mongorestore)
       responses:
         '200':
           description: OK
@@ -2013,9 +2029,7 @@ paths:
     post:
       description: 'List database backups (id, time, notes) on this node Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
         (POST /listDatabaseBackups). Success data: object with backups: array of #/definitions/node.DatabaseBackupListItem
-        (newest first). Success data: object with backups: array of #/definitions/node.DatabaseBackupListItem (newest first).
-        Success data: object with backups: array of #/definitions/node.DatabaseBackupListItem (newest first). Success data:
-        object with backups: array of #/definitions/node.DatabaseBackupListItem (newest first).'
+        (newest first).'
       consumes:
       - application/json
       produces:
@@ -2876,3 +2890,58 @@ definitions:
     description: POST /removeBootstrapKey signed body (typically Nonce + Sig only).
     allOf:
     - $ref: '#/definitions/node.NodeMgtKeySig'
+  node.AddManagementKeyPost:
+    type: object
+    description: 'Canonical UTF-8 string to sign: JSON `{"newPublicKey":"<64-hex-lowercase>","nonce":N,"sig":""}` (optional
+      `nodeKey` per server encoding). **Ed25519:** set `sig` to 128 hex (allowed bootstrap or added Ed25519 management key);
+      omit `signedMessage` and `clientSig`. Nonce from `GET /getPublicMgtKeyNonce` (add `?publicKey=` when signer is not the
+      default config key). **Ethereum:** `signedMessage` must equal that exact canonical string byte-for-byte; `clientSig`
+      is EIP-191 `personal_sign` from `configs.yaml` `NodeMgtKey`; omit `sig`. Nonce from `GET /getNodeMgtKeyNonce`. Do not
+      send both `sig` and `clientSig`. Requires `NodeMgtKey` on node for Ethereum mode.'
+    required:
+    - newPublicKey
+    properties:
+      newPublicKey:
+        type: string
+        description: New Ed25519 public key — 64 hex (lowercase in canonical JSON).
+      nonce:
+        type: integer
+        description: Anti-replay nonce.
+      sig:
+        type: string
+        description: Ed25519 — 128 hex. Omit when using EIP-191 `signedMessage` + `clientSig`.
+      signedMessage:
+        type: string
+        description: Must equal canonical JSON exactly.
+      clientSig:
+        type: string
+        description: EIP-191 output for signedMessage.
+      nodeKey:
+        type: string
+        description: Optional MPC node public key binding.
+  node.RemoveManagementKeyPost:
+    type: object
+    description: 'Canonical UTF-8 string to sign: JSON `{"publicKey":"<64-hex-lowercase-target>","nonce":N,"sig":""}` (optional
+      `nodeKey`). **Ed25519:** `sig` 128 hex from an allowed key **other than** `publicKey`; nonce from `GET /getPublicMgtKeyNonce`
+      for the **signer**. **Ethereum:** `signedMessage` must equal canonical string; `clientSig` EIP-191 from `NodeMgtKey`;
+      omit `sig`; nonce from `GET /getNodeMgtKeyNonce`. Do not combine `sig` with `clientSig`.'
+    required:
+    - publicKey
+    properties:
+      publicKey:
+        type: string
+        description: 64 hex — key added via POST /addManagementKey to soft-remove (not bootstrap PublicMgtKey).
+      nonce:
+        type: integer
+        description: Anti-replay nonce.
+      sig:
+        type: string
+        description: Ed25519 — 128 hex. Omit for Ethereum body.
+      signedMessage:
+        type: string
+        description: Canonical JSON exactly.
+      clientSig:
+        type: string
+        description: EIP-191 for signedMessage.
+      nodeKey:
+        type: string

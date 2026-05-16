@@ -109,8 +109,8 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getPublicMgtKey`](#get-getpublicmgtkey) - List allowed Ed25519 public keys (plain `[]string`, 64 hex); same allow-list as above. **Also served on `PublicDiscoveryPort`** (see [Public discovery HTTP](#public-discovery-http)) alongside `GET /getNodeMgtKey`.
 - [`GET /getPublicMgtKeyNonce`](#get-getpublicmgtkeynonce) - Get current nonce for an Ed25519 key (optional `?publicKey=` for added keys)
 - [`POST /verifyMgtKey`](#post-verifymgtkey) - Verify Ed25519 management key (attach-time proof; no other side effects)
-- [`POST /addManagementKey`](#post-addmanagementkey) - Add another Ed25519 public key (request must be signed by an existing Ed25519 management key)
-- [`POST /removeManagementKey`](#post-removemanagementkey) - Soft-remove an added Ed25519 key (signed by a **different** allowed Ed25519 key; bootstrap key cannot be removed here)
+- [`POST /addManagementKey`](#post-addmanagementkey) - Add another Ed25519 management public key (authorize with Ed25519 `sig`, **or** with EIP‑191 `NodeMgtKey` using `signedMessage` + `clientSig` — canonical JSON matches Ed25519 mode)
+- [`POST /removeManagementKey`](#post-removemanagementkey) - Soft-remove an added Ed25519 key (**same dual auth**; Ed25519 signer must be allowed and ≠ key removed)
 - [`GET /getAllowedKeyTypes`](#get-getallowedkeytypes) - Get allowed key types
 - [`GET /getAllowedMsgCheckTypes`](#get-getallowedmsgchecktypes) - Get allowed message check types
 - [`GET /getSuccessRate`](#get-getsuccessrate) - Get success rate statistics
@@ -204,6 +204,9 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 - [`POST /postBootstrapKey`](#post-postbootstrapkey) — write **`bootstrap_key/ed25519_private.hex`** from **`ed25519PrivateSeedHex`** in the signed body when the file is absent; management-signed; **not** subject to maintenance quiescence (no **503** while draining).
 - [`POST /removeBootstrapKey`](#post-removebootstrapkey) — delete **`bootstrap_key/ed25519_private.hex`** if present; management-signed; **not** subject to maintenance quiescence.
 
+### Database integrity (read-only)
+- [`GET /checkDatabase`](#get-checkdatabase) — MongoDB integrity report for configured group shards and local collections (**no** management signature; **no** deterministic-node / backup eligibility gate). See [MongoDB integrity report](#mongodb-integrity-report-read-only).
+
 ### Pre-Signing
 - [`POST /presignRequest`](#post-presignrequest) - Create presign request (requires mgt key)
 - [`GET /listPresignRequests`](#get-listpresignrequests) - List presign requests
@@ -290,6 +293,35 @@ The script uses the **second argument** as **`MPC_AUTH_EXPECTED_DIGEST`** for th
 **Recommended automation (no Docker socket in the app container):** install **`mpc-config`** **`systemd/mpc-auth-docker-pending-update.path`** + bind-mount **`/var/lib/mpc-auth-docker`** into the container (**`docker-compose*.yml`** in mpc-config). Implement in **mpc-auth**, after **`POST /updateMpcAuth`** succeeds and returns **`registryDigest`**, write **`/var/lib/mpc-auth-docker/pending-update.json`** atomically (**write temp → `rename`**). **`systemd.path`** invokes **`mpc-auth-apply-pending-update.sh`**, which runs **`mpc-auth-docker-update.sh`** on the host. See **`mpc-config/systemd/README.md`** → *Fully automated upgrades*.
 
 **Alternatively — Docker socket (`/var/run/docker.sock`) in the container:** **`docker`** CLI/API from mpc-auth avoids the trigger file but gives the container **full Docker API access** vs the host — usually worse for security than **systemd.path**.
+
+<a id="mongodb-integrity-report-read-only"></a>
+## MongoDB integrity report (read-only)
+
+These checks are **reports only**: the handler performs **no writes** to MongoDB. The scan is bounded by a **server-side timeout** (on the order of minutes on large databases).
+
+**Authentication / eligibility:** **`GET /checkDatabase`** does **not** require **`VerifyMgtKeySig`** and does **not** use the same **deterministic nodeKey + bootstrap_key** gate as [`POST /backupDatabase`](#post-backupdatabase) and related backup routes. Treat it like other unsigned diagnostic **GET** routes on **`ManagementAPIsPort`**: restrict access with **firewall / VPN / SSH tunnel** as you would for the full management API.
+
+<a id="get-checkdatabase"></a>
+#### `GET /checkDatabase`
+
+**Success `data`:** a **`CheckDatabaseReport`** object (JSON), including:
+
+- **`checkedAtUtc`**, **`baseDb`**
+- **`summary`:** counts of **`error`** / **`warning`** / **`info`** issues, **`configuredGroupCount`**, **`groupDatabaseScanned`**
+- **`issues`:** array of findings; each item has **`severity`**, **`scope`**, **`code`**, **`detail`**, optional **`hint`**, optional **`ref`** (e.g. `groupId`, `requestId`, collection name)
+- **`baseCollectionSampleCounts`:** document counts for principal **base** database collections (Group, NewGroup, local chain/token/known-addresses, node key, etc.)
+- **`perGroup`:** for each configured **GroupId**, counts and cross-checks for that shard’s **`KeyGen`**, **`KeyGenRequest`**, **`SignRequest`**, **`Sign`**, presign collections, **`KeyGenMessage`**, plus a map of **`pubkeyhex` → keygen `requestid`** and sign requests that reference a missing keygen
+- **`orphanGroupDatabases`**, **`otherMongoDatabasesMatchingBasePrefix`:** Mongo database names that look like per-group shards (`{DBName}_…`) but do not match any configured group’s resolved DB name (stale shard, truncation, or restore mismatch)
+
+**What it validates (high level):**
+
+- **`Group`** rows: **`GroupId`**, node keys in **`KeyList`**
+- **Per-group `KeyGen` / `KeyGenRequest`:** embedded **`KeyGenRequestDataPb`** (including BSON field-name fallbacks), **`GroupId` matches the shard**, **`KeyType` / `MsgCheck`** vs node allowlists, **`pubkeyhex`** shape for **secp256k1** / **ed25519**, **`globalnonce` / `val`** for secp256k1 fee nonce integrity
+- **`SignRequest` / `Sign`:** embedded **`SignRequestDataPb`**, **`PubKey` ↔ KeyGen` in that group**, **`KeyGenRequestId`** vs the keygen’s **`requestid`**, batch vs single message-hash consistency
+- **Local-only docs:** **`LocalChainConfig`**, **`LocalTokenConfig`**, **`LocalKnownAddresses`**, plus light checks on **`ExtraPublicMgtKeys`**
+- **KeyGen messaging:** **`keyGenId`** references a known keygen **`requestid`** in the shard
+
+**Errors:** **`503`**-class if database services are unavailable; **`500`** if the scan fails (e.g. Mongo error). **`200`** with **`code: 0`** when the report is produced, even when the report lists many **`severity: "error"`** findings (those describe data issues, not HTTP failure).
 
 <a id="database-backup-maintenance"></a>
 ## MongoDB backup, restore, and bootstrap key (maintenance)
@@ -773,29 +805,94 @@ Verify-only endpoint for Ed25519 management key ownership. Accepts `Nonce` and `
 
 <a id="post-addmanagementkey"></a>
 #### `POST /addManagementKey`
-Adds a new Ed25519 public key to the allowed set for management API auth. The request **must be signed with an existing Ed25519 management key** (config `PublicMgtKey` or a key previously added). Only a permitted machine can add another key. Use the first `PublicMgtKey` from config to add the next key.
+Adds a new Ed25519 public key to the allowed set used for Ed25519 management signatures (alongside bootstrap **`PublicMgtKey`** in `configs.yaml` and keys already added via this endpoint). Any **currently allowed** signer may authorize — **either** an allowed **Ed25519** management key **or** the configured **`NodeMgtKey`** (EIP‑191), as below.
 
-**Request body:** `newPublicKey` (64 hex), `nonce` (current nonce for the signer key from `GET /getPublicMgtKeyNonce` or `GET /getPublicMgtKeyNonce?publicKey=<signer_key>`), `sig` (Ed25519 signature, 128 hex, over the canonical JSON of the request body with `sig` set to empty string).
+At least **one** Ed25519 allowance must exist on the node (bootstrap **`PublicMgtKey`** and/or previously added keys) so the extra-key subsystem can persist the new row.
 
-**Response (success):** `{ "code": 0, "error": "", "data": null }` — same [`APIResponse`](#response-format) envelope as other management endpoints. There is no extra payload; treat `code === 0` as confirmation. To confirm the new key appears in the allow-list, call [`GET /getAllowedEd25519MgtKeys`](#get-getalloweded25519mgtkeys) or [`GET /getPublicMgtKey`](#get-getpublicmgtkey).
+##### Canonical payload (same bytes for Ed25519 and EIP‑191 modes)
 
-**Response (failure):** `code` non-zero and `error` describes the reason (e.g. invalid or missing signature, nonce mismatch or already used, malformed or duplicate `newPublicKey`, signer not in the allowed set, or no Ed25519 management key configured). HTTP status may be `200` with `code`≠`0`, or `400` / `401` per server; always read `code` and `error` from the JSON body.
+Compute the canonical UTF‑8 JSON string (**field order**, lowercase `newPublicKey` hex, **`sig`** exactly **`""`**):
 
-**Example flow:** 1) Set `PublicMgtKey` in config (bootstrap key). 2) Get nonce: `GET /getPublicMgtKeyNonce`. 3) Build body `{"newPublicKey":"<64 hex>","nonce":<n>,"sig":""}`, sign the JSON string with your Ed25519 private key, set `sig` to the signature. 4) `POST /addManagementKey` with that body. The new key can then sign management requests and add further keys.
+```json
+{"newPublicKey":"<64_hex_lowercase>","nonce":N,"sig":""}
+```
+
+Optional **`nodeKey`** (MPC node 128‑hex pubkey) follows the same rules as other management POSTs when you include it server-side — your client MUST match mpc-auth’s emitted JSON exactly (omit `nodeKey` if unused).
+
+##### Mode A — Ed25519 signer
+
+1. Obtain **`nonce`** from [`GET /getPublicMgtKeyNonce`](#get-getpublicmgtkeynonce); add **`?publicKey=<your_64_hex_signer>`** when the signer is an **Added key** rather than the default config key.
+
+2. Set **`sig`** to the raw Ed25519 signature (**128 hex**, optional **`0x`** stripped).
+
+3. **Do not** set **`signedMessage`** or **`clientSig`**.
+
+Example POST shape:
+
+```json
+{
+  "newPublicKey":"<64_hex_of_key_being_added_lowercase>",
+  "nonce":7,
+  "sig":"<128_hex>"
+}
+```
+
+##### Mode B — Ethereum `NodeMgtKey`
+
+1. Requires non-empty **`NodeMgtKey`** in `configs.yaml`.
+
+2. Obtain **`nonce`** from [`GET /getNodeMgtKeyNonce`](#get-getnodemgtkeynonce).
+
+3. Set **`signedMessage`** to the **exact** canonical UTF‑8 string (must byte‑match mpc-auth — i.e. the same UTF‑8 as Go `encoding/json.Marshal` would emit for **`{newPublicKey, nonce, sig: "", …}`**, with optional **`nodeKey`** only if present in the marshal output).
+
+4. Set **`clientSig`** to EIP‑191 **`personal_sign(signedMessage)`** (`0x` prefix allowed).
+
+5. **`Omit` `sig`** from the POST body when using EIP‑191 (`sig` empty is allowed). Do not send meaningful **`sig`** (128‑hex Ed25519) together with **`clientSig`**.
+
+Example POST shape:
+
+```json
+{
+  "newPublicKey":"<64_hex_lowercase>",
+  "nonce":3,
+  "signedMessage":"{\"newPublicKey\":\"…\",\"nonce\":3,\"sig\":\"\"}",
+  "clientSig":"0x..."
+}
+```
+
+**Swagger:** **`#/definitions/node.AddManagementKeyPost`**
+
+**Response (success):** [`APIResponse`](#response-format) **`code`** `0`; **`data`** includes **`addedPublicKey`** (64‑hex lowercase). Confirm via [`GET /getAllowedEd25519MgtKeys`](#get-getalloweded25519mgtkeys) / [`GET /getPublicMgtKey`](#get-getpublicmgtkey).
+
+**Response (failure):** invalid body, malformed/new duplicate key, **`signedMessage`** not equal canonical JSON (EIP‑191 mode), wrong nonce bucket, **`NodeMgtKey`** missing while using EIP‑191, ambiguous **`sig`**+**`clientSig`**, or signer not authorized.
 
 <a id="post-removemanagementkey"></a>
 #### `POST /removeManagementKey`
-Soft-removes an Ed25519 public key that was **previously added** via `POST /addManagementKey`. The matching MongoDB document keeps its **Added key N** slot: **`publicKey`** is cleared and **`removedPublicKey`** records the retired key so new keys continue to use new slot numbers (e.g. the next `POST /addManagementKey` creates **Added key 3** even after **Added key 2** was removed). The bootstrap **`PublicMgtKey`** from `configs.yaml` **cannot** be removed with this endpoint (it is not stored in the extra-keys collection).
+Soft-removes an Ed25519 public key **only among keys previously added via** [`POST /addManagementKey`](#post-addmanagementkey). The Mongo row keeps its **Added key N** label: **`publicKey`** clears, **`removedPublicKey`** retains the retired 64‑hex. The bootstrap **`PublicMgtKey`** from `configs.yaml` **cannot** be removed here.
 
-**Auth:** Same signing pattern as `POST /addManagementKey`: canonical JSON of the body with **`sig`** cleared, signed with an **allowed** Ed25519 management key that is **not** the key being removed (so you cannot remove the last remaining signer without another key to authorize the change).
+**Auth:** Dual pattern **identical conceptually** to [`POST /addManagementKey`](#post-addmanagementkey):
 
-**Request body:** `publicKey` (64 hex, the added key to retire), `nonce` (for the **signer** key from `GET /getPublicMgtKeyNonce?publicKey=<signer_64_hex>`), `sig` (128 hex Ed25519 signature over that canonical JSON after putting `sig` back).
+##### Canonical UTF‑8 string
 
-**Response (success):** `{ "code": 0, "error": "", "data": { "removedPublicKey": "<64 hex lowercase>" } }`
+```json
+{"publicKey":"<64_hex_lowercase_of_key_being_removed>","nonce":N,"sig":""}
+```
 
-**Errors:** `400` invalid `publicKey` or body; `401` invalid signature or signer is the same key as `publicKey`; `404` key not found among added keys (e.g. bootstrap key, wrong hex, or already removed); `500` database error.
+##### Mode A — Ed25519
 
-**Example flow:** 1) `GET /getPublicMgtKeyNonce?publicKey=<bootstrap_or_other_signer>`. 2) Build `{"publicKey":"<key_to_remove>","nonce":<n>,"sig":""}`, sign with the **signer's** private key, set `sig`. 3) `POST /removeManagementKey`. 4) Call `GET /getAllowedEd25519MgtKeys` to see `deleted` / `removedPublicKey` on that slot; `GET /getPublicMgtKey` lists only keys still authorized.
+The **signer must be allowed** AND **≠** **`publicKey`** (you cannot authorize removal by signing **as** the key you are retiring). Nonce comes from **`GET /getPublicMgtKeyNonce?publicKey=<signer_hex>`**.
+
+Post `{ publicKey, nonce, sig:<128_hex> }` (omit **`signedMessage`**, **`clientSig`**).
+
+##### Mode B — Ethereum `NodeMgtKey`
+
+Use **`GET /getNodeMgtKeyNonce`**; **`signedMessage`** canonical string must match server encoding; **`clientSig`** EIP‑191; omit **`sig`**.
+
+**Swagger:** **`#/definitions/node.RemoveManagementKeyPost`**
+
+**Response (success):** **`data.removedPublicKey`** (64‑hex lowercase).
+
+**Errors:** **`404`** — target hex not currently present as an active added key (`PublicMgtKey` / wrong hex / soft-already‑removed races); **`401`** — signing rules failed (wrong signer pairing in Ed25519 mode, mismatching **`signedMessage`**, etc.).
 
 #### `POST /getMessageToSign` ⭐ **NEW**
 Returns the exact message format that needs to be signed with MetaMask (or any Ethereum wallet) for management API requests. The signature must be from the NodeMgtKey address.
@@ -850,7 +947,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/getMessageToSign \
 Management API endpoints (like `/keyGenRequest`, `/keyGenRequestRetry`, `/newGroupRequest`, `/newGroupRequestRetry`, `/presignRequest`, etc.) require authentication. The node accepts **either** of the following:
 
 - **NodeMgtKey (MetaMask)**: Ethereum address in config; sign with MetaMask/personal_sign (EIP-191).
-- **PublicMgtKey (Ed25519)**: Optional Ed25519 public key in config (bootstrap key); additional keys can be added via `POST /addManagementKey` (signed by an existing Ed25519 key). Sign the raw request body with your Ed25519 private key. Use for direct API access without a frontend.
+- **PublicMgtKey (Ed25519)**: Bootstrap **`PublicMgtKey`** in config plus keys added via **`POST /addManagementKey`** (and soft-removed via **`POST /removeManagementKey`** for **Added key N** rows only — see headings). Typical management POST bodies use **`sig`**; **add**/ **remove extra Ed25519 management keys** also accept **`signedMessage` + `clientSig`** (**EIP‑191** from **`NodeMgtKey`**) alongside the **`sig`** (Ed25519) path — canonical JSON documented under each endpoint (**Swagger**: **`#/definitions/node.AddManagementKeyPost`**, **`RemoveManagementKeyPost`**).
 
 You only need one. If both are configured, either signature type is accepted.
 
@@ -1221,7 +1318,7 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postMSQTTKey" \
 
 1. **Preview before write** — The plan returns **`plannedYaml`** and **`preview`** but does **not** merge into **`configs.yaml`**. Review derived **`mqttBroker`**, peer URLs, and **`implementSignSteps`**; abandon if incorrect.
 2. **Sign a short binding** — Implement signs **`plannedShaMessage`** (`configUpdateImplement|` + SHA-256 of **`plannedYaml`**), binding the approval to exact bytes without signing a large YAML file in a wallet.
-3. **Current keys vs. rotation** — The plan uses **existing** management keys. **Implement** verifies **`clientSig`** against **on-disk** keys, then **`rotationNodeMgtKeyClientSig`** / **`rotationPublicMgtKeyClientSig`** when a **new** **`NodeMgtKey`** or first **`PublicMgtKey`** appears in the plan.
+3. **Current keys vs. extra proofs** — **Implement** verifies **`clientSig`** against **on-disk** **`NodeMgtKey`** / allowed Ed25519 keys. When the plan adds the **first** **`PublicMgtKey`**, **`rotationPublicMgtKeyClientSig`** is required (Ed25519 from that new key). **`rotationNodeMgtKeyClientSig`** is **optional**: if supplied when **`NodeMgtKey`** changes, it must verify as **`personal_sign(signedMessage)`** from the **new** Ethereum address (callers may omit it when **`clientSig`** already proves control, e.g. Ed25519-only tooling).
 4. **Apply boundary** — Backup, merge, and optional compose run only on successful **implement**.
 
 <a id="post-configupdateplan"></a>
@@ -1252,7 +1349,7 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postMSQTTKey" \
 
 **Examples (plan body only—fill `sig` with your wallet/tool):**
 
-**Example 1 — Change `NodeMgtKey`:** implement will require **`rotationNodeMgtKeyClientSig`** from the **new** Ethereum address over **`plannedShaMessage`**.
+**Example 1 — Change `NodeMgtKey`:** implement requires only a valid **`clientSig`** over **`plannedShaMessage`** from an authorized management key (existing **`NodeMgtKey`** or allowed Ed25519). **`rotationNodeMgtKeyClientSig`** is optional extra proof from the new Ethereum address if you choose to send it.
 
 ```json
 {
@@ -1288,7 +1385,7 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postMSQTTKey" \
 }
 ```
 
-**Example 4 — Combined:** one plan can include **`nodeMgtKey`** and topology fields; call **`configUpdateImplement`** once, supplying every extra signature listed in **`preview.implementSignSteps`**.
+**Example 4 — Combined:** one plan can include **`nodeMgtKey`** and topology fields; call **`configUpdateImplement`** once, supplying **`clientSig`** and any extra signatures listed in **`preview.implementSignSteps`** (e.g. first-time **`PublicMgtKey`** needs **`rotationPublicMgtKeyClientSig`**).
 
 ```json
 {
@@ -1306,9 +1403,11 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postMSQTTKey" \
 <a id="post-configupdateimplement"></a>
 #### `POST /configUpdateImplement`
 
-**Auth:** **`clientSig`** is a management signature over **`signedMessage`**, where **`signedMessage` must exactly equal `data.plannedShaMessage`** from the plan response (i.e. prefix **`configUpdateImplement|`** + **64-hex SHA-256** of the **`plannedYaml`** bytes). Verification uses **on-disk** **`NodeMgtKey`** / Ed25519 allow list **before** apply. Include **`rotationNodeMgtKeyClientSig`** / **`rotationPublicMgtKeyClientSig`** when the plan changes **`NodeMgtKey`** or adds the first **`PublicMgtKey`** (see **`preview.implementSignSteps`**).
+**Auth:** **`clientSig`** is a management signature over **`signedMessage`**, where **`signedMessage` must exactly equal `data.plannedShaMessage`** from the plan response (i.e. prefix **`configUpdateImplement|`** + **64-hex SHA-256** of the **`plannedYaml`** bytes). Verification uses **on-disk** **`NodeMgtKey`** / Ed25519 allow list **before** apply.
 
-**Body:** `plannedYaml` (**exact** string from **`configUpdatePlan`**), `nonce`, `clientSig`, `signedMessage`; optional rotation fields as required.
+**Rotation fields:** **`rotationPublicMgtKeyClientSig`** is **required** when the plan introduces the **first** **`PublicMgtKey`** (was empty in `configs.yaml`). **`rotationNodeMgtKeyClientSig`** is **optional** when **`NodeMgtKey`** changes: if present, it must be **`personal_sign(signedMessage)`** from the **new** Ethereum address; if omitted, **`clientSig`** alone (e.g. Ed25519 from an allowed key) is sufficient. See **`preview.implementSignSteps`** for bootstrap **`PublicMgtKey`** and the primary **`clientSig`** step.
+
+**Body:** `plannedYaml` (**exact** string from **`configUpdatePlan`**), `nonce`, `clientSig`, `signedMessage`; **`rotationPublicMgtKeyClientSig`** when bootstrapping Ed25519; **`rotationNodeMgtKeyClientSig`** only if you supply the optional extra proof.
 
 **Example:**
 
@@ -1318,8 +1417,8 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postMSQTTKey" \
   "nonce": 10,
   "clientSig": "0x… or 128-hex-ed25519",
   "signedMessage": "configUpdateImplement|<copy data.plannedShaMessage from plan response>",
-  "rotationNodeMgtKeyClientSig": "0x…",
-  "rotationPublicMgtKeyClientSig": "…"
+  "rotationPublicMgtKeyClientSig": "128-hex-ed25519 (only when first PublicMgtKey in plan)",
+  "rotationNodeMgtKeyClientSig": "0x… (optional when NodeMgtKey changes)"
 }
 ```
 
