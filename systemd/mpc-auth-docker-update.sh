@@ -215,13 +215,20 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 	case "${MPC_AUTH_UPDATE_NODE_APP:-1}" in
 	0 | false | FALSE | no | NO) return 0 ;;
 	esac
-	local img svc tag ref workdir
+	local img svc tag ref workdir dash_container old_img_id new_img_id compose_ok
 	img="$(mpc_auth_trim "${NODE_APP_IMAGE:-}")"
 	svc="$(mpc_auth_trim "${MPC_AUTH_NODE_APP_COMPOSE_SERVICE:-dashboard}")"
 	[[ -z "$img" ]] && return 0
 	tag="$(mpc_auth_trim "${NODE_APP_TAG:-latest}")"
 	[[ -z "$tag" ]] && tag="latest"
 	ref="${img}:${tag}"
+	dash_container="$(mpc_auth_trim "${NODE_APP_CONTAINER_NAME:-}")"
+
+	old_img_id=""
+	if [[ -n "$dash_container" ]] && docker container inspect "$dash_container" &>/dev/null; then
+		old_img_id="$(docker inspect -f '{{.Image}}' "$dash_container")"
+	fi
+
 	echo "Companion (continuumdao-node-app): pulling ${ref}"
 	docker pull "$ref" || {
 		echo "warning: companion dashboard docker pull failed: ${ref}" >&2
@@ -232,20 +239,33 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 		echo "warning: MPC_AUTH_COMPOSE_WORKDIR (or MPC_AUTH_COMPOSE_DIR) unset or missing — skipping dashboard recreate." >&2
 		return 0
 	fi
+	compose_ok=1
 	if docker compose version &>/dev/null 2>&1; then
 		echo "Running: cd $(printf %q "$workdir") && docker compose up -d --no-deps --force-recreate $(printf %q "$svc")"
-		if ! (cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc"); then
+		if (cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc"); then
+			compose_ok=0
+		else
 			echo "warning: dashboard compose recreate failed (ContinuumdaoNodeApp disabled or compose has no '${svc}' service?)." >&2
 		fi
-		return 0
-	fi
-	if command -v docker-compose &>/dev/null 2>&1; then
+	elif command -v docker-compose &>/dev/null 2>&1; then
 		echo "WARNING: using legacy docker-compose (v1) for dashboard recreate." >&2
 		echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --no-deps --force-recreate $(printf %q "$svc")"
-		if ! (cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc"); then
+		if (cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc"); then
+			compose_ok=0
+		else
 			echo "warning: dashboard docker-compose recreate failed." >&2
 		fi
-		return 0
+	fi
+
+	if [[ "$compose_ok" -eq 0 && -n "$old_img_id" ]]; then
+		new_img_id=""
+		if [[ -n "$dash_container" ]] && docker container inspect "$dash_container" &>/dev/null; then
+			new_img_id="$(docker inspect -f '{{.Image}}' "$dash_container")"
+		fi
+		if [[ -n "$new_img_id" && "$new_img_id" != "$old_img_id" ]]; then
+			echo "Removing previous companion dashboard image (force): ${old_img_id}"
+			docker rmi --force "$old_img_id" || true
+		fi
 	fi
 	return 0
 }

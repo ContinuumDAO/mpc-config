@@ -21,6 +21,22 @@ if [ -d "$SCRIPT_DIR/mosquitto/config" ]; then
 else
     REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 fi
+
+# Prefer the invoking user's ids when running via sudo so repo-local paths are not left root-owned.
+if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ] && id -u "$SUDO_USER" &>/dev/null; then
+    PROCESS_CONFIG_REPO_UID=$(id -u "$SUDO_USER")
+    PROCESS_CONFIG_REPO_GID=$(id -g "$SUDO_USER")
+    PROCESS_CONFIG_REPO_OWNER="$SUDO_USER"
+elif [ "${EUID:-0}" -ne 0 ]; then
+    PROCESS_CONFIG_REPO_UID=$(id -u)
+    PROCESS_CONFIG_REPO_GID=$(id -g)
+    PROCESS_CONFIG_REPO_OWNER="$(id -un)"
+else
+    PROCESS_CONFIG_REPO_UID=$(id -u)
+    PROCESS_CONFIG_REPO_GID=$(id -g)
+    PROCESS_CONFIG_REPO_OWNER="$(id -un)"
+fi
+
 CERT_DIR="${REPO_ROOT}/mosquitto/config/certs"
 CA_KEY="${CERT_DIR}/ca.key"
 CA_CRT="${CERT_DIR}/ca.crt"
@@ -90,6 +106,51 @@ print_info() {
 
 print_step() {
     echo -e "\n${BLUE}==> $1${NC}"
+}
+
+# Hand root-owned repo paths to the invoking user (sudo ./process_config.sh, or sudo mkdir as a normal user).
+process_config_transfer_repo_path_to_invoking_user() {
+    local target path_uid
+    target="$1"
+    [ -n "$target" ] || return 0
+    [ -e "$target" ] || return 0
+    path_uid=$(stat -c '%u' "$target" 2>/dev/null) || return 0
+    [ "${path_uid:-1}" -eq 0 ] || return 0
+
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+        if [ "${EUID:-0}" -eq 0 ]; then
+            chown -R "${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID}" "$target" 2>/dev/null || true
+        else
+            sudo chown -R "${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID}" "$target" 2>/dev/null || true
+        fi
+        return 0
+    fi
+    if [ "${EUID:-0}" -ne 0 ]; then
+        sudo chown -R "${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID}" "$target" 2>/dev/null || true
+    fi
+}
+
+# openssl leaves root-owned keys/certs under the repo when the script runs via sudo — normalize regardless of parent dir ownership.
+_process_config_chown_repo_tree_if_sudo_root() {
+    local dir="$1"
+    [ -n "$dir" ] || return 0
+    [ "${EUID:-0}" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ] || return 0
+    [ -e "$dir" ] || return 0
+    chown -R "${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID}" "$dir" 2>/dev/null || true
+}
+
+# Normal completion: fix typical sudo-created artifacts under the checkout (does not touch non-root-owned trees).
+_process_config_finalize_repo_ownership_after_sudo() {
+    [ -n "${CONFIG_FILE:-}" ] || return 0
+    local compose_root
+    compose_root=$(cd "$(dirname "$CONFIG_FILE")" && pwd)
+    process_config_transfer_repo_path_to_invoking_user "$CONFIG_FILE"
+    process_config_transfer_repo_path_to_invoking_user "${compose_root}/.env"
+    process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/.env"
+    process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/bootstrap_key"
+    process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/docker-compose.yml"
+    process_config_transfer_repo_path_to_invoking_user "$CERT_DIR"
+    _process_config_chown_repo_tree_if_sudo_root "$WEB_TLS_HOST_DIR"
 }
 
 # Writes use ruamel.yaml (round-trip, preserves comments). Reads use yq when possible; Python fallbacks use ruamel.yaml only — not PyYAML (no python3-yaml package).
@@ -2957,6 +3018,9 @@ check_root() {
     if [ "$EUID" -eq 0 ]; then
         print_warning "Running as root — a normal user with sudo is usually enough; the script invokes sudo for UFW (unless --no-firewall) and some paths."
         print_info "Running the entire script as root is only needed in constrained environments."
+        if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+            print_info "Repo-local outputs (configs.yaml, certs, docker-compose.yml, .env, bootstrap_key/) owned by root will be reassigned to ${SUDO_USER} when you finish successfully."
+        fi
         case "${PROCESS_CONFIG_NONINTERACTIVE:-0}" in
             1|true|TRUE|yes|YES)
                 print_info "PROCESS_CONFIG_NONINTERACTIVE: continuing as root."
@@ -2979,7 +3043,6 @@ check_root() {
         fi
     fi
 }
-
 # Check if user has sudo access (UFW by default, TLS dirs under root-owned paths, optional systemd helpers).
 check_sudo_access() {
     # If running as root, sudo is not needed
@@ -3079,7 +3142,7 @@ check_cert_dir() {
     
     # Check directory ownership
     DIR_OWNER=$(stat -c '%U' "$CERT_DIR" 2>/dev/null || stat -f '%Su' "$CERT_DIR" 2>/dev/null)
-    CURRENT_USER=$(whoami)
+    CURRENT_USER="$PROCESS_CONFIG_REPO_OWNER"
     if [ "$DIR_OWNER" != "$CURRENT_USER" ] && [ "$EUID" -ne 0 ]; then
         print_warning "Directory is owned by '$DIR_OWNER' but you are '$CURRENT_USER'"
         print_info "Files will be owned by you. If mosquitto runs as '$DIR_OWNER', you may need to:"
@@ -3448,9 +3511,9 @@ display_summary() {
     print_warning "           Only share the CA certificate ($CA_CRT) with nodes in your group."
     echo ""
     print_info "How to run: as a normal user in a tree you can write to. The script calls sudo when required:"
-    print_info "  default UFW (see Host firewall in --help), MQTT/webTLS paths owned by root, optional systemd steps."
+    print_info "  default UFW (see Host firewall in --help). Running via sudo fixes repo-local ownership back to your user when paths were root-owned."
     print_info "  Use --no-firewall if you manage the host firewall yourself (sudo may still be needed for cert paths)."
-    print_info "  Avoid sudo ./process_config.sh unless you intend everything to run as root (see warning above)."
+    print_info "  Prefer sudo ./process_config.sh only when needed for firewall/systemd; repo artifacts default to your login user when SUDO_USER is set."
     print_info "Script location: console/process_config.sh"
     print_info "Certificate location: mosquitto/config/certs/"
 }
@@ -4357,7 +4420,7 @@ setup_browser_https() {
     if ! mkdir -p "$WEB_TLS_HOST_DIR" 2>/dev/null; then
         require_sudo_capable
         if sudo mkdir -p "$WEB_TLS_HOST_DIR" 2>/dev/null; then
-            sudo chown "$(whoami):$(whoami)" "$WEB_TLS_HOST_DIR" 2>/dev/null || true
+            process_config_transfer_repo_path_to_invoking_user "$WEB_TLS_HOST_DIR"
         else
             print_error "Could not create $WEB_TLS_HOST_DIR"
             return 1
@@ -4413,6 +4476,7 @@ EOF
             rm -f "$sslcnf"
             chmod 600 "$BROWSER_HTTPS_KEY" 2>/dev/null || true
             chmod 644 "$BROWSER_HTTPS_CRT" 2>/dev/null || true
+            _process_config_chown_repo_tree_if_sudo_root "$WEB_TLS_HOST_DIR"
             print_success "Browser HTTPS (web) certificate: $BROWSER_HTTPS_CRT"
         else
             rm -f "$sslcnf"
@@ -5812,6 +5876,7 @@ main() {
                     generate_server_csr
                     sign_server_cert "$CONFIG_FILE"
                     set_permissions
+                    _process_config_chown_repo_tree_if_sudo_root "$CERT_DIR"
                     
                     echo ""
                     echo "=========================================="
@@ -5864,6 +5929,7 @@ main() {
                 generate_server_csr
                 sign_server_cert "$CONFIG_FILE"
                 set_permissions
+                _process_config_chown_repo_tree_if_sudo_root "$CERT_DIR"
                 
                 echo ""
                 print_warning "Next steps (Mosquitto / MQTT):"
@@ -5906,7 +5972,6 @@ main() {
         print_info "Using project mosquitto TLS directory: $cert_dir_path"
         print_info "(Place relay's ca.crt here for the container path /mosquitto/config/certs/ca.crt.)"
         
-        local current_user=$(whoami)
         local ownership_changed=false
         
         if [ ! -d "$cert_dir_path" ]; then
@@ -5919,9 +5984,10 @@ main() {
             elif sudo mkdir -p "$cert_dir_path" 2>/dev/null; then
                 print_success "Certificate directory created (with sudo): $cert_dir_path"
                 sudo chmod 755 "$cert_dir_path" 2>/dev/null || true
-                # Change ownership to current user so they can copy files without sudo
-                if sudo chown "$current_user:$current_user" "$cert_dir_path" 2>/dev/null; then
-                    print_success "Directory ownership changed to $current_user - you can copy files without sudo"
+                process_config_transfer_repo_path_to_invoking_user "$cert_dir_path"
+                # shellcheck disable=SC2312
+                if [ "$(stat -c '%u' "$cert_dir_path" 2>/dev/null)" = "${PROCESS_CONFIG_REPO_UID}" ]; then
+                    print_success "Directory ownership changed to ${PROCESS_CONFIG_REPO_OWNER} - you can copy files without sudo"
                     ownership_changed=true
                 else
                     print_warning "Could not change directory ownership - you may need sudo to copy certificates"
@@ -5931,16 +5997,18 @@ main() {
                 print_info "You need to create it manually with appropriate permissions:"
                 echo "  sudo mkdir -p $cert_dir_path"
                 echo "  sudo chmod 755 $cert_dir_path"
-                echo "  sudo chown $current_user:$current_user $cert_dir_path"
+                echo "  sudo chown ${PROCESS_CONFIG_REPO_OWNER}:${PROCESS_CONFIG_REPO_OWNER} $cert_dir_path"
             fi
         else
             print_success "Certificate directory exists: $cert_dir_path"
             # Check if writable
             if [ ! -w "$cert_dir_path" ]; then
                 print_warning "Certificate directory is not writable by current user"
-                print_info "Attempting to change ownership to $current_user..."
-                if sudo chown "$current_user:$current_user" "$cert_dir_path" 2>/dev/null; then
-                    print_success "Directory ownership changed to $current_user - you can now copy files without sudo"
+                print_info "Attempting to change ownership to ${PROCESS_CONFIG_REPO_OWNER}..."
+                process_config_transfer_repo_path_to_invoking_user "$cert_dir_path"
+                # shellcheck disable=SC2312
+                if [ "$(stat -c '%u' "$cert_dir_path" 2>/dev/null)" = "${PROCESS_CONFIG_REPO_UID}" ]; then
+                    print_success "Directory ownership changed to ${PROCESS_CONFIG_REPO_OWNER} - you can now copy files without sudo"
                     ownership_changed=true
                 else
                     print_warning "Could not change directory ownership"
@@ -6067,6 +6135,8 @@ main() {
         print_info "Replace 'relay-node-user' with the SSH username on the relay node."
         echo ""
     fi
+
+    _process_config_finalize_repo_ownership_after_sudo
 }
 
 # Run main function (pass through CLI arguments)
