@@ -19,7 +19,7 @@ The Distributed Auth Management API provides a RESTful interface for managing MP
 ### Public discovery HTTP
 If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /getPreferredSigner`**, **`GET /health`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`$MANAGEMENT_PORT`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
 
-**`GET /getNodeMgtKey`** returns the configured **`NodeMgtKey`** (Ethereum management address from `configs.yaml` / env) as a JSON string in **`data`**. No authentication on this listener; use it with **`GET /getNodeMgtKeyNonce`** for MetaMask-style management signing.
+**`GET /getNodeMgtKey`** returns the configured **`NodeMgtKey`** (Ethereum management address from `configs.yaml` / env) as a JSON string in **`data`**. No authentication on this listener; use it with **`GET /getNodeMgtKeyNonce`** for Ethereum wallet management signing (`personal_sign`).
 
 **`GET /getPublicMgtKey`** returns the same Ed25519 public keys as the allow-list for management auth (config **`PublicMgtKey`** plus keys from **`POST /addManagementKey`**), as a JSON array of 64-hex strings (no labels). Issuers and apps can learn the public keys without reading `configs.yaml` or static Railway env maps.
 
@@ -72,7 +72,7 @@ Client: <IP> Called API: <package>.<function>
 
 **Historical behavior (still accepted):** For most authenticated management calls, the server verifies:
 
-- Proof that you hold **`NodeMgtKey`** (MetaMask **`personal_sign`**) **or** an allowed **Ed25519** management key, and  
+- Proof that you hold **`NodeMgtKey`** (Ethereum wallet **`personal_sign`**) **or** an allowed **Ed25519** management key, and  
 - **`nonce`** (anti-reuse for the same operator key),
 
 over a payload that traditionally did **not** name the MPC node (the node's **128-hex “node key”**, i.e. the P2P / TSS id returned by **`GET /getNodeKey`**). The **management key** proves who signed, but the message alone did **not** always bind to **which node's management endpoint** must accept it. Where one operator identity maps to a single physical node this is harmless; **if the same management key controls multiple nodes**, a blob signed once could be replayed toward another node's API unless the payload distinguishes the target.
@@ -179,7 +179,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /listGroupResults`](#get-listgroupresults) - List configured groups and member node keys (`nodeKeys`); optional filters `node_key`, `exclude_node_key`
 
 ### KeyGen Messaging
-KeyGen messaging is documented in `./API_KEYGEN_MESSAGING.md`. Response format and conventions follow this document (`./API_IMPLEMENTATION.md`). **sendMessage, markMessageRead, multiMarkMessagesRead, deleteMessage, and multiDeleteMessages require a management key signature** (MetaMask or Ed25519, depending on the client key in the keyGen); see API_KEYGEN_MESSAGING.md for Nonce/Sig and getMessageToSign / getNodeMgtKeyNonce / getAllowedEd25519MgtKeys. For **Open Claw** (or similar), a poll-and-mark-read helper that uses `listMessages` + `multiMarkMessagesRead` is `$MPA_PATH/scripts/keygen_messaging_agent_poll.py`; scheduling and env are described in `../skill/SKILL.md` (**KeyGen inbox poll**). Ed25519 management signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`.
+KeyGen messaging is documented in `./API_KEYGEN_MESSAGING.md`. Response format and conventions follow this document (`./API_IMPLEMENTATION.md`). **sendMessage, markMessageRead, multiMarkMessagesRead, deleteMessage, and multiDeleteMessages require a management key signature** (Ethereum wallet / NodeMgtKey or Ed25519, depending on the client key in the keyGen); see API_KEYGEN_MESSAGING.md for Nonce/Sig and getMessageToSign / getNodeMgtKeyNonce / getAllowedEd25519MgtKeys. For **Open Claw** (or similar), a poll-and-mark-read helper that uses `listMessages` + `multiMarkMessagesRead` is `$MPA_PATH/scripts/keygen_messaging_agent_poll.py`; scheduling and env are described in `../skill/SKILL.md` (**KeyGen inbox poll**). Ed25519 management signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`.
 - [`POST /sendMessage`](#post-sendmessage) - Send a message (top-level or reply) in a keyGen channel (mgt key required)
 - [`GET /listMessages`](#get-listmessages) - List messages (with unread, time range, top_level, pagination)
 - [`GET /getMessageById`](#get-getmessagebyid) - Get a single message by id
@@ -204,8 +204,9 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 - [`POST /postBootstrapKey`](#post-postbootstrapkey) — write **`bootstrap_key/ed25519_private.hex`** from **`ed25519PrivateSeedHex`** in the signed body when the file is absent; management-signed; **not** subject to maintenance quiescence (no **503** while draining).
 - [`POST /removeBootstrapKey`](#post-removebootstrapkey) — delete **`bootstrap_key/ed25519_private.hex`** if present; management-signed; **not** subject to maintenance quiescence.
 
-### Database integrity (read-only)
-- [`GET /checkDatabase`](#get-checkdatabase) — MongoDB integrity report for configured group shards and local collections (**no** management signature; **no** deterministic-node / backup eligibility gate). See [MongoDB integrity report](#mongodb-integrity-report-read-only).
+### Database integrity
+- [`GET /checkDatabase`](#get-checkdatabase) — MongoDB integrity report for configured group shards and local collections (**no** management signature; **no** deterministic-node / backup eligibility gate). See [MongoDB integrity](#mongodb-integrity-report-read-only).
+- [`POST /fixDatabase`](#post-fixdatabase) — Apply **automated** Mongo repairs from the integrity scan (**management-signed**; same deterministic-node eligibility as backup; **maintenance quiescence** until **`GET /maintenance/restartGate`** reports **`readyForProcessExit`**). See [MongoDB integrity](#mongodb-integrity-report-read-only).
 
 ### Pre-Signing
 - [`POST /presignRequest`](#post-presignrequest) - Create presign request (requires mgt key)
@@ -260,7 +261,7 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 
 Returns **`draining`**, **`inFlight`**, **`readyForProcessExit`**, and a hint list of tracked POST paths. Read-only; exempt from JWT on the browser HTTPS / loopback listeners where configured (for polling from scripts).
 
-**Flow:** (1) Sign and `POST /maintenance/requestRestartPrep`. (2) Poll `GET /maintenance/restartGate` until **`readyForProcessExit`** is `true` (`draining` is `true` and **`inFlight`** is `0`). (3) Restart the container or process on the host. Tracked paths include group/subgroup agree flows, keyGen, presign, sign/multiSign and related agrees/triggers/status/shelve, **KeyGen messaging** (`sendMessage`, read/delete variants), **`configUpdatePlan` / `configUpdateImplement`**, and database backup routes **`POST /backupDatabase`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, **`POST /fetchDatabaseBackup`**, **`POST /fetchBootstrapKey`**. **`POST /postBootstrapKey`** and **`POST /removeBootstrapKey`** are **not** tracked — they stay available while **`draining`** and do not increment **`inFlight`**.
+**Flow:** (1) Sign and `POST /maintenance/requestRestartPrep`. (2) Poll `GET /maintenance/restartGate` until **`readyForProcessExit`** is `true` (`draining` is `true` and **`inFlight`** is `0`). (3) Restart the container or process on the host. Tracked paths include group/subgroup agree flows, keyGen, presign, sign/multiSign and related agrees/triggers/status/shelve, **KeyGen messaging** (`sendMessage`, read/delete variants), **`configUpdatePlan` / `configUpdateImplement`**, database backup routes **`POST /backupDatabase`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, **`POST /fetchDatabaseBackup`**, **`POST /fetchBootstrapKey`**, and **`POST /fixDatabase`** (automated integrity repairs under quiescence). **`POST /postBootstrapKey`** and **`POST /removeBootstrapKey`** are **not** tracked — they stay available while **`draining`** and do not increment **`inFlight`**.
 
 **MQTT caveat:** In-flight work that continues only over **MQTT** (without a matching management POST on this node) is **not** included in the HTTP ref-count. Pause clients or wait briefly if needed.
 
@@ -295,11 +296,15 @@ The script uses the **second argument** as **`MPC_AUTH_EXPECTED_DIGEST`** for th
 **Alternatively — Docker socket (`/var/run/docker.sock`) in the container:** **`docker`** CLI/API from mpc-auth avoids the trigger file but gives the container **full Docker API access** vs the host — usually worse for security than **systemd.path**.
 
 <a id="mongodb-integrity-report-read-only"></a>
-## MongoDB integrity report (read-only)
+## MongoDB integrity report and automated repair
 
-These checks are **reports only**: the handler performs **no writes** to MongoDB. The scan is bounded by a **server-side timeout** (on the order of minutes on large databases).
+Read-only diagnostics (**`GET /checkDatabase`**) and optional **automated corrections** (**`POST /fixDatabase`**) share the same scanning logic on the server. Repairs run only under [**restart quiescence**](#restart-quiescence-maintenance-detail): while **`draining`** is **`true`**, **`POST /fixDatabase`** returns **`503`** until **`GET /maintenance/restartGate`** reports **`readyForProcessExit`** (`draining` **and** **`inFlight`** **`0`**), matching **`POST /backupDatabase`** / **`POST /restoreDatabase`** behavior.
+
+These checks from **`GET /checkDatabase`** are **reports only** — that handler performs **no writes**. The scan is bounded by a **server-side timeout** (on the order of minutes on large databases).
 
 **Authentication / eligibility:** **`GET /checkDatabase`** does **not** require **`VerifyMgtKeySig`** and does **not** use the same **deterministic nodeKey + bootstrap_key** gate as [`POST /backupDatabase`](#post-backupdatabase) and related backup routes. Treat it like other unsigned diagnostic **GET** routes on **`ManagementAPIsPort`**: restrict access with **firewall / VPN / SSH tunnel** as you would for the full management API.
+
+**`POST /fixDatabase`** requires **`VerifyMgtKeySig`** and the **same deterministic-node eligibility** as **[MongoDB backup routes](#database-backup-maintenance)** (`403` when ineligible).
 
 <a id="get-checkdatabase"></a>
 #### `GET /checkDatabase`
@@ -323,10 +328,36 @@ These checks are **reports only**: the handler performs **no writes** to MongoDB
 
 **Errors:** **`503`**-class if database services are unavailable; **`500`** if the scan fails (e.g. Mongo error). **`200`** with **`code: 0`** when the report is produced, even when the report lists many **`severity: "error"`** findings (those describe data issues, not HTTP failure).
 
+<a id="post-fixdatabase"></a>
+#### `POST /fixDatabase`
+
+**When to use:** After **`GET /checkDatabase`** shows repairable issue codes and you have entered [**maintenance draining**](#restart-quiescence-maintenance-detail) (`POST /maintenance/requestRestartPrep`, poll **`GET /maintenance/restartGate`** until **`readyForProcessExit`**).
+
+**Signing:** Canonical JSON with **`Sig`** cleared for **`VerifyMgtKeySig`** — same **`Nonce` / `Sig` / optional `nodeKey`** pattern as **`POST /backupDatabase`** ([management signatures](#management-signatures-nodekey)).
+
+**Body:**
+
+- **`instruction`** (required): **`"error"`** — apply fixes only for issues with **`severity`** **`error`**; **`"error_and_warning"`** — **`error`** and **`warning`**; **`"all"`** — **`error`**, **`warning`**, and **`info`** (only codes that have an implementation are changed; most findings have no auto-fix).
+- **`report`** (required): the **`data`** object from **`GET /checkDatabase`** (must include **`checkedAtUtc`**). The signature **binds the operator request** to that snapshot. The server **always re-runs the full integrity scan** before applying fixes; repairs are driven by **current** MongoDB state and the **`instruction`** filter, **not** by stale entries in the submitted report alone.
+
+**Automated fixes (current implementation):**
+
+| Issue `code` | Action |
+|--------------|--------|
+| **`keygen_globalnonce_val_mismatch`** | **`$set`** **`val`** **`= hash(globalnonce)`** on the **`KeyGen`** row (secp256k1) when it still mismatches |
+| **`sign_request_keygen_id_mismatch`** | Set embedded **`SignRequestDataPb.KeyGenRequestId`** to **`expectedKeyGenRequestId`** from the scan (**`SignRequest`** collection) |
+| **`sign_result_keygen_id_mismatch`** | Same for **`Sign`** / **`SignResult`** |
+
+Other finding codes are **skipped** until a repair is implemented. Failed repair attempts appear in **`fixesFailed`** with an error message.
+
+**Success `data`:** **`instruction`**, **`inputReportCheckedAtUtc`**, **`fixesApplied`**, **`fixesFailed`**, **`summaryBefore`**, **`summaryAfter`**, **`issueCountBefore`**, **`issueCountAfter`**, **`reportAfter`** (full second **`GET /checkDatabase`**-shaped report).
+
+**HTTP errors:** **`400`** validation; **`401`** / **`403`** signature or backup eligibility; **`503`** while **`draining`** and not yet **`readyForProcessExit`**; **`500`** scan or internal error.
+
 <a id="database-backup-maintenance"></a>
 ## MongoDB backup, restore, and bootstrap key (maintenance)
 
-These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or allowed **Ed25519** keys). **Additional gate:** the node’s stored **`nodeKey`** must match the **P-256 public key** derived from **`configs.yaml` `PublicMgtKey`** and the on-disk **`bootstrap_key/ed25519_private.hex`** (see **`DeterministicNodeKey`** in **`mpc-auth`** and **`docs-internal/DATABASE_BACKUP_RESTORE_PLAN.md`**). Legacy **random** `nodeKey` nodes receive **403** on **`POST /backupDatabase`**, **`POST /listDatabaseBackups`**, **`POST /fetchDatabaseBackup`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, and **`POST /fetchBootstrapKey`**.
+These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or allowed **Ed25519** keys). **Additional gate:** the node’s stored **`nodeKey`** must match the **P-256 public key** derived from **`configs.yaml` `PublicMgtKey`** and the on-disk **`bootstrap_key/ed25519_private.hex`** (see **`DeterministicNodeKey`** in **`mpc-auth`** and **`docs-internal/DATABASE_BACKUP_RESTORE_PLAN.md`**). Legacy **random** `nodeKey` nodes receive **403** on **`POST /backupDatabase`**, **`POST /listDatabaseBackups`**, **`POST /fetchDatabaseBackup`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, **`POST /fetchBootstrapKey`**, and **`POST /fixDatabase`**.
 
 **Bootstrap file install/remove (separate):** **`POST /postBootstrapKey`** and **`POST /removeBootstrapKey`** are management-signed writes/deletes of **`bootstrap_key/ed25519_private.hex`** (see below). They use **`VerifyMgtKeySig`** but **not** the same deterministic-node / backup eligibility gate as the routes in the preceding paragraph, and they are **excluded** from [restart draining](#restart-quiescence-maintenance-detail) (no **503** while **`draining`**).
 
@@ -600,7 +631,7 @@ curl "http://localhost:18080/getNodeKey"   # when PublicDiscoveryPort is split (
 #### `GET /getNodeMgtKey`
 Returns the **`NodeMgtKey`** configured for this node (Ethereum address: `0x` plus 40 hex from `configs.yaml` / `NodeMgtKey` env). **`data`** is that string. **No authentication** on the management HTTP port or on **PublicDiscoveryPort** (see [Public discovery HTTP](#public-discovery-http)). On **Browser HTTPS** / **BrowserLoopbackReadHTTP**, **GET** requests require **JWT** like other routes on those listeners—use the management or discovery base URL when you need this value without JWT.
 
-Use this address with [`GET /getNodeMgtKeyNonce`](#get-getnodemgtkeynonce) and MetaMask **`personal_sign`** for management API requests signed by the Ethereum key.
+Use this address with [`GET /getNodeMgtKeyNonce`](#get-getnodemgtkeynonce) and Ethereum wallet **`personal_sign`** for management API requests signed by the Ethereum key.
 
 **Response:**
 ```json
@@ -674,7 +705,7 @@ Returns the **next nonce to use** for the **Ethereum NodeMgtKey** from config (t
 - `key`: The node’s **NodeMgtKey** (Ethereum address, `0x`-prefixed). Same value as `GET /getNodeMgtKey`. Confirms which key this nonce applies to.
 - `nonce`: The **expected next nonce** for that Ethereum key in signed management requests. If there is **no** history yet for this address in the DB, this is **`0`** (first signature uses nonce `0`). After each successful authenticated request, the next call returns the previous value plus one.
 
-**Ed25519 vs MetaMask:** If you authenticate with an **Ed25519** management key (config `PublicMgtKey` or keys from `addManagementKey`), nonce consumption is tracked under that **64-hex public key**, not under the Ethereum `NodeMgtKey`. In that case **`GET /getNodeMgtKeyNonce` can stay at `0`** even after many Ed25519-signed operations. Use [`GET /getPublicMgtKeyNonce`](#get-getpublicmgtkeynonce) (and `?publicKey=<64_hex>` for added keys) for the nonce that matches your signing key.
+**Ed25519 vs Ethereum (`NodeMgtKey`):** If you authenticate with an **Ed25519** management key (config `PublicMgtKey` or keys from `addManagementKey`), nonce consumption is tracked under that **64-hex public key**, not under the Ethereum `NodeMgtKey`. In that case **`GET /getNodeMgtKeyNonce` can stay at `0`** even after many Ed25519-signed operations. Use [`GET /getPublicMgtKeyNonce`](#get-getpublicmgtkeynonce) (and `?publicKey=<64_hex>` for added keys) for the nonce that matches your signing key.
 
 **Example:**
 ```bash
@@ -685,7 +716,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKeyNonce"
 
 <a id="get-haspublicmgtkey"></a>
 #### `GET /hasPublicMgtKey`
-Returns whether at least one Ed25519 management key is allowed. This is true if `PublicMgtKey` is set in config with valid structure, or any keys have been added via `POST /addManagementKey`. When true, node runners can use an Ed25519 key pair for direct API management without a frontend (in addition to MetaMask/NodeMgtKey).
+Returns whether at least one Ed25519 management key is allowed. This is true if `PublicMgtKey` is set in config with valid structure, or any keys have been added via `POST /addManagementKey`. When true, node runners can use an Ed25519 key pair for direct API management without a frontend (in addition to Ethereum wallet / NodeMgtKey).
 
 **Validation:** The config key (if set) must be exactly 64 hex characters (32-byte Ed25519 public key). When no key is configured and none have been added, `data` is `false`.
 
@@ -895,7 +926,7 @@ Use **`GET /getNodeMgtKeyNonce`**; **`signedMessage`** canonical string must mat
 **Errors:** **`404`** — target hex not currently present as an active added key (`PublicMgtKey` / wrong hex / soft-already‑removed races); **`401`** — signing rules failed (wrong signer pairing in Ed25519 mode, mismatching **`signedMessage`**, etc.).
 
 #### `POST /getMessageToSign` ⭐ **NEW**
-Returns the exact message format that needs to be signed with MetaMask (or any Ethereum wallet) for management API requests. The signature must be from the NodeMgtKey address.
+Returns the exact message format that needs to be signed with your Ethereum wallet (`personal_sign`, EIP-191) for management API requests. The signature must be from the NodeMgtKey address.
 
 **Request Body:**
 Send the request body (without the `sig` field) that you want to sign. For example, for a `keyGenRequest`:
@@ -919,7 +950,7 @@ Send the request body (without the `sig` field) that you want to sign. For examp
     "messageToSign": "{\"nonce\":1,\"clientPk\":\"08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de\",\"threshold\":2,\"groupId\":\"566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9\",\"msgCheck\":\"multi-agree\",\"keyType\":\"secp256k1\"}",
     "nodeMgtKey": "0x1234567890ABCDEF1234567890ABCDEF12345678",
     "currentNonce": 1,
-    "signingInstructions": "Sign this message using MetaMask's personal_sign method. The signature must be from the NodeMgtKey address. Use eth_signTypedData or personal_sign in your wallet.",
+    "signingInstructions": "Sign this message using personal_sign (EIP-191) from your Ethereum wallet. The signature must be from the NodeMgtKey address. You may use eth_signTypedData or personal_sign, depending on your wallet.",
     "example": {
       "javascript": "const message = '...'; const signature = await ethereum.request({ method: 'personal_sign', params: [message, account] });",
       "web3js": "const signature = await web3.eth.personal.sign(message, account);"
@@ -942,18 +973,18 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/getMessageToSign \
   }'
 ```
 
-### Using MetaMask or Ed25519 for Management API Authentication
+### Using an Ethereum wallet or Ed25519 for Management API Authentication
 
 Management API endpoints (like `/keyGenRequest`, `/keyGenRequestRetry`, `/newGroupRequest`, `/newGroupRequestRetry`, `/presignRequest`, etc.) require authentication. The node accepts **either** of the following:
 
-- **NodeMgtKey (MetaMask)**: Ethereum address in config; sign with MetaMask/personal_sign (EIP-191).
+- **NodeMgtKey (Ethereum wallet)**: Ethereum address in config; sign with `personal_sign` (EIP-191).
 - **PublicMgtKey (Ed25519)**: Bootstrap **`PublicMgtKey`** in config plus keys added via **`POST /addManagementKey`** (and soft-removed via **`POST /removeManagementKey`** for **Added key N** rows only — see headings). Typical management POST bodies use **`sig`**; **add**/ **remove extra Ed25519 management keys** also accept **`signedMessage` + `clientSig`** (**EIP‑191** from **`NodeMgtKey`**) alongside the **`sig`** (Ed25519) path — canonical JSON documented under each endpoint (**Swagger**: **`#/definitions/node.AddManagementKeyPost`**, **`RemoveManagementKeyPost`**).
 
 You only need one. If both are configured, either signature type is accepted.
 
 ---
 
-#### Using MetaMask (NodeMgtKey)
+#### Using NodeMgtKey (Ethereum wallet)
 
 **How it works:**
 1. The request body (excluding the `sig` field) is JSON-marshaled to create a message string
@@ -961,7 +992,7 @@ You only need one. If both are configured, either signature type is accepted.
 3. The signature is verified by recovering the address from the signature and comparing it to `NodeMgtKey`
 4. The signature must be from the same address as `NodeMgtKey`
 
-**Steps to sign with MetaMask:**
+**Steps to sign with your Ethereum wallet:**
 
 1. **Get the NodeMgtKey and current nonce:**
    ```bash
@@ -976,13 +1007,13 @@ You only need one. If both are configured, either signature type is accepted.
      -d '{...your request body without "sig"...}'
    ```
 
-3. **Sign the message with MetaMask:**
+3. **Sign with Ethereum wallet `personal_sign`:**
    ```javascript
    // In your dApp/frontend
    const message = '{"nonce":1,"clientPk":"...","threshold":2,...}';
    const account = '0x1234567890ABCDEF1234567890ABCDEF12345678'; // Must match NodeMgtKey
    
-   // Using MetaMask
+   // Browser wallet (e.g. EIP-1193 provider)
    const signature = await ethereum.request({
      method: 'personal_sign',
      params: [message, account]
@@ -998,7 +1029,7 @@ You only need one. If both are configured, either signature type is accepted.
      -H "Content-Type: application/json" \
      -d '{
        "nonce": 1,
-       "sig": "0x...",  # The signature from MetaMask
+       "sig": "0x...",  # Signature from your Ethereum wallet
        "clientPk": "...",
        ...
      }'
@@ -1007,7 +1038,7 @@ You only need one. If both are configured, either signature type is accepted.
 **Important Notes:**
 - The signature must be from the **same address** as `NodeMgtKey` (configured in `configs.yaml`)
 - The message to sign is the **JSON string** of the request body (without the `sig` field)
-- The signature format is Ethereum's `personal_sign` (EIP-191), which MetaMask uses by default
+- The signature format is Ethereum's `personal_sign` (EIP-191), as implemented by typical Ethereum wallets
 - Each request requires a unique nonce (obtained from `/getNodeMgtKeyNonce`)
 - The nonce increments automatically after each successful request
 
@@ -1015,7 +1046,7 @@ You only need one. If both are configured, either signature type is accepted.
 
 #### Using Ed25519 (PublicMgtKey)
 
-When the node has `PublicMgtKey` configured (check with `GET /hasPublicMgtKey`), you can authenticate management API requests with an Ed25519 key pair instead of MetaMask. This allows scripts and backends to manage the node without a browser.
+When the node has `PublicMgtKey` configured (check with `GET /hasPublicMgtKey`), you can authenticate management API requests with an Ed25519 key pair instead of an Ethereum wallet. This allows scripts and backends to manage the node without a browser.
 
 **How it works:**
 1. The request body (excluding the `sig` field) is JSON-marshaled to produce the **exact message string** to sign. **Do not** add the EIP-191 prefix; sign the raw JSON string.
@@ -1734,7 +1765,7 @@ Chain config details are stored on the local node only (not propagated to other 
 
 <a id="post-postchaindetails"></a>
 #### `POST /postChainDetails`
-Stores or updates chain config for one chain on this node. Requires management key signature over the message. Both **MetaMask (Ethereum)** and **Ed25519** management keys are supported.
+Stores or updates chain config for one chain on this node. Requires management key signature over the message. Both **Ethereum (`NodeMgtKey`)** and **Ed25519** management keys are supported.
 
 **Request Body (PostChainDetailsPost):**
 ```json
@@ -1775,7 +1806,7 @@ Stores or updates chain config for one chain on this node. Requires management k
 - `gasPrice` (optional): Gas price in gwei for legacy chains.
 - `defaultGetSigFeeSpeed` (optional): Default fee tier for the Execute tab **Get Sig / Get Sigs** step on this chain: `slow`, `normal`, or `fast` (RPC `eth_feeHistory`–based). Omit on older nodes; clients should treat missing as `normal`. Not used for `advanced` (user-edited gwei).
 - `signedMessage` (required): The exact string that was signed (e.g. JSON of nonce, chainName, chainId, rpcGateway, explorer, legacy, testnet, gasName, and optional gas fields).
-- `clientSig` (required): Signature from management key. **MetaMask:** sign `signedMessage` with `personal_sign` (NodeMgtKey address), send 0x-prefixed signature. **Ed25519:** sign the same `signedMessage` with an allowed Ed25519 key (config PublicMgtKey or added via addManagementKey), send 128-hex signature.
+- `clientSig` (required): Signature from management key. **Ethereum wallet:** sign `signedMessage` with `personal_sign` (NodeMgtKey address), send 0x-prefixed signature. **Ed25519:** sign the same `signedMessage` with an allowed Ed25519 key (config PublicMgtKey or added via addManagementKey), send 128-hex signature.
 
 **Response:**
 ```json
@@ -1787,12 +1818,12 @@ Stores or updates chain config for one chain on this node. Requires management k
 - `401 Unauthorized`: Invalid or missing management key signature / nonce.
 - `500 Internal Server Error`: Database error.
 
-**Example (MetaMask flow):**
+**Example (Ethereum wallet flow):**
 ```bash
 # 1. Get nonce
 curl -s "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKeyNonce" | jq .data
 
-# 2. Build message (same as signedMessage), sign with MetaMask personal_sign, then:
+# 2. Build message (same as signedMessage), sign with Ethereum wallet personal_sign, then:
 curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/postChainDetails \
   -H "Content-Type: application/json" \
   -d '{
@@ -1908,7 +1939,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getChainDetails?chain_id=1"
 
 <a id="post-removechaindetails"></a>
 #### `POST /removeChainDetails`
-Removes the stored chain config for one chain on this node. Requires management key signature over the message. Same signature types as `POST /postChainDetails` (MetaMask `personal_sign` or Ed25519).
+Removes the stored chain config for one chain on this node. Requires management key signature over the message. Same signature types as `POST /postChainDetails` (Ethereum wallet `personal_sign` or Ed25519).
 
 **Request Body (RemoveChainDetailsPost):**
 ```json
@@ -1942,7 +1973,7 @@ Removes the stored chain config for one chain on this node. Requires management 
 # 1. Get nonce
 curl -s "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKeyNonce" | jq .data
 
-# 2. Build message, sign with MetaMask personal_sign (or Ed25519), then:
+# 2. Build message, sign with Ethereum wallet personal_sign (or Ed25519), then:
 curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/removeChainDetails \
   -H "Content-Type: application/json" \
   -d '{
@@ -1959,7 +1990,7 @@ Token contracts are stored on the local node only (not propagated). Used so the 
 
 <a id="post-addtoken"></a>
 #### `POST /addToken`
-Adds a token contract for the given `chainType`, `chainId` and `tokenType`. Requires management key signature (MetaMask or Ed25519, same as postChainDetails).
+Adds a token contract for the given `chainType`, `chainId` and `tokenType`. Requires management key signature (Ethereum wallet / NodeMgtKey or Ed25519, same as postChainDetails).
 
 **Request Body (AddTokenPost):**
 ```json
@@ -1990,7 +2021,7 @@ Adds a token contract for the given `chainType`, `chainId` and `tokenType`. Requ
   - **CTMRWA1**: same as ERC20/ERC721 plus any RWA-specific fields (transfer sigs are set by server).
 - `transferSig`, `transferNames` (optional): Used when creating a new token-type entry; omitted for known types (server uses defaults).
 - `signedMessage` (required): Exact string signed by management key.
-- `clientSig` (required): MetaMask (0x-prefixed) or Ed25519 (128 hex) signature.
+- `clientSig` (required): Ethereum wallet (0x-prefixed) or Ed25519 (128 hex) signature.
 
 **Response:** `{ "code": 0, "error": "", "data": "Token added" }`
 
@@ -2052,7 +2083,7 @@ Known addresses are stored on the local node only (not propagated). Each entry i
 
 <a id="post-addknownaddress"></a>
 #### `POST /addKnownAddress`
-Adds or updates a known address for the given `chainType`. Requires management key signature (MetaMask or Ed25519, same as postChainDetails).
+Adds or updates a known address for the given `chainType`. Requires management key signature (Ethereum wallet / NodeMgtKey or Ed25519, same as postChainDetails).
 
 **Request Body (AddKnownAddressPost):**
 ```json
@@ -2076,7 +2107,7 @@ Adds or updates a known address for the given `chainType`. Requires management k
 - `chainIds` (optional): Array of chain IDs this address is valid on. **Omit or empty = no restrictions** (valid on all chains of that type).
 - `isContract` (optional, default false): `true` = contract address, `false` = EOA.
 - `signedMessage` (required): Exact string signed by management key.
-- `clientSig` (required): MetaMask (0x-prefixed) or Ed25519 (128 hex) signature.
+- `clientSig` (required): Ethereum wallet (0x-prefixed) or Ed25519 (128 hex) signature.
 
 **Response:** `{ "code": 0, "error": "", "data": "Known address added" }`
 
@@ -2150,7 +2181,7 @@ curl "http://localhost:18080/getPreferredSigner"   # when PublicDiscoveryPort is
 <a id="post-setpreferredsigner"></a>
 #### `POST /setPreferredSigner`
 
-**Auth:** Management key (`signedMessage` + `clientSig`), same pattern as **`POST /postChainDetails`** (MetaMask `personal_sign` or Ed25519 128-hex `clientSig`). **`nonce`** from **`GET /getNodeMgtKeyNonce`** or **`GET /getPublicMgtKeyNonce`** when using Ed25519.
+**Auth:** Management key (`signedMessage` + `clientSig`), same pattern as **`POST /postChainDetails`** (Ethereum wallet `personal_sign` or Ed25519 128-hex `clientSig`). **`nonce`** from **`GET /getNodeMgtKeyNonce`** or **`GET /getPublicMgtKeyNonce`** when using Ed25519.
 
 **Request body (SetPreferredSignerPost):**
 ```json
@@ -3327,7 +3358,7 @@ The node verifies `clientSig` using the **KeyGen `ClientKeys`** entry for this n
 - **`purpose` in JSON:** The `purpose` field is **always present** in the Go request struct’s JSON encoding: `encoding/json` emits **`"purpose"`** even when the value is `""`. Any **`messageToSign` / compact JSON** you build for **`signedMessage`** (compose helpers, agents) **must include the `purpose` key** (string, possibly empty). Omitting `purpose` from the bytes you sign will not match what the node verifies. This aligns with the stored **Purpose** map (creator node key → text, including empty text).
 - **P256 (128-hex client key in ClientKeys):** The signed payload uses **deterministic JSON** (sorted object keys), with `clientSig` cleared; it **includes `"purpose"`** (possibly `"purpose":""`).
 - **Ed25519 (64-hex client key):** If **`signedMessage`** is non-empty, verification uses that exact UTF-8 string. If **`signedMessage`** is **omitted or empty** and the node verifies via **PublicMgtKey** (or the ClientKeys Ed25519 path with canonical JSON), the node uses **`json.Marshal`** of the POST body with **`clientSig` and `signedMessage` set to empty strings** — that canonical string **always contains `"purpose"`**. Compose flows should either include `purpose` in `messageToSign` or match the node’s canonical marshal.
-- **Ethereum address (MetaMask / `NodeMgtKey`):** **`signedMessage` is required** (non-empty). It must be the exact string passed to **`personal_sign`**. That JSON **must include `"purpose"`** (`""` if unused). The node returns **`400`** if `signedMessage` is empty on this path.
+- **Ethereum address (`NodeMgtKey`):** **`signedMessage` is required** (non-empty). It must be the exact string passed to **`personal_sign`**. That JSON **must include `"purpose"`** (`""` if unused). The node returns **`400`** if `signedMessage` is empty on this path.
 
 **Request Body (single):**
 ```json
@@ -3362,7 +3393,7 @@ The node verifies `clientSig` using the **KeyGen `ClientKeys`** entry for this n
 
 **Field Descriptions:**
 - `clientSig` (required): Client signature over the management-auth message; see **Client signature (`clientSig`), `signedMessage`, and `purpose` in the signed payload** above.
-- `signedMessage` (required for **MetaMask** / Ethereum `NodeMgtKey`; optional for some **Ed25519** paths): Exact UTF-8 string that was signed — typically the same compact JSON as the request fields **without** `clientSig` / `signedMessage` (compose helpers expose this as **`messageToSign`**). **Must include the `purpose` key** (string, possibly `""`) so the signed bytes match the node. **MetaMask:** `personal_sign` over `signedMessage`; empty `signedMessage` → **`400`**. **Ed25519 via PublicMgtKey:** if `signedMessage` is empty, the node verifies over **canonical JSON** of the full body (with `clientSig` / `signedMessage` cleared), which always includes `"purpose"`.
+- `signedMessage` (required for Ethereum **`NodeMgtKey`**; optional for some **Ed25519** paths): Exact UTF-8 string that was signed — typically the same compact JSON as the request fields **without** `clientSig` / `signedMessage` (compose helpers expose this as **`messageToSign`**). **Must include the `purpose` key** (string, possibly `""`) so the signed bytes match the node. **Ethereum wallet:** `personal_sign` over `signedMessage`; empty `signedMessage` → **`400`**. **Ed25519 via PublicMgtKey:** if `signedMessage` is empty, the node verifies over **canonical JSON** of the full body (with `clientSig` / `signedMessage` cleared), which always includes `"purpose"`.
 - `keyList` (required): Array of node keys in the same GroupId that may participate; can be empty array `[]` to use keyList from KeyGenResult
 - `pubKey` (required): Public key (128 hex characters) from key generation (must be multi-agree key)
 - `msgHash` (required for **single**): Keccak256 hash of the message to sign. Omit when using `messageHashes` (batch). **EVM broadcast:** For secp256k1 keys, if the client will build a signed tx and call `eth_sendRawTransaction`, the recovered signer must match the keyGen's `ethereumaddress`. That only holds when the signature is over the **transaction signing hash** (hash of the serialized unsigned EIP-1559/legacy tx). If the client sends a different hash (e.g. only `keccak256(msgRaw)`), the MPC signs it correctly, but using that (r,s,v) on the full tx yields a different recovered address; send the tx signing hash as `msgHash` and use the same nonce/gas when building the signed tx.
@@ -3416,7 +3447,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest \
 ```
 
 **Error Responses:**
-- `400 Bad Request`: Key not found or key is not multi-agree type; for single, missing `msgHash`; for batch, invalid `messageHashes` (e.g. non-hex or `messageRawBatch` length not 0 or N); MetaMask path with empty `signedMessage`
+- `400 Bad Request`: Key not found or key is not multi-agree type; for single, missing `msgHash`; for batch, invalid `messageHashes` (e.g. non-hex or `messageRawBatch` length not 0 or N); Ethereum wallet / NodeMgtKey path with empty `signedMessage`
 - `401 Unauthorized`: Client signature invalid
 - `500 Internal Server Error`: Internal processing error
 
@@ -3544,11 +3575,11 @@ Agrees to or rejects a signing request.
 
 **Request Body:**
 - `requestId` (required): Sign request ID
-- `clientSig` (required for multi-agree when client sig check enabled): Signature over the **exact** request body used for this call (including `requestId`, `clientSig` empty, `accept`, and `thoughts` when present). For **MetaMask** (Ethereum address client key), use `personal_sign`; send the same string in `signedMessage`. For P256 (128-hex client key), the backend hashes the JSON with SHA256 and verifies ECDSA P256.
+- `clientSig` (required for multi-agree when client sig check enabled): Signature over the **exact** request body used for this call (including `requestId`, `clientSig` empty, `accept`, and `thoughts` when present). For an **Ethereum address** client key (`NodeMgtKey`), use `personal_sign`; send the same string in `signedMessage`. For P256 (128-hex client key), the backend hashes the JSON with SHA256 and verifies ECDSA P256.
 - `accept` (optional, **multi-agree only**): `true` or omitted = agree to sign; `false` = reject (drops from this node's pending list). Ignored for tx-check.
 - `thoughts` (optional): Comment from this node when agreeing or rejecting, max 256 characters; stored per node key and returned in list/get and `getSignResultById`.
-- `signedMessage` (optional, **required for MetaMask**): The exact string the client signed (e.g. the JSON body with `clientSig: ""`). Required when the key's client key is an Ethereum address (MetaMask); optional for Ed25519 (backend can use canonical JSON if omitted). Ignored for P256.
-- `signerAddress` (optional): The connected wallet address (e.g. from MetaMask). When provided together with `signedMessage`, the node verifies that `signerAddress` matches this node's **NodeMgtKey** (config) and verifies the signature with `VerifyMessageSignature(signedMessage, clientSig, signerAddress)`. Use this when the key was created on another node so this node's ClientKeys entry may be empty or a placeholder.
+- `signedMessage` (optional, **required for Ethereum / NodeMgtKey**): The exact string the client signed (e.g. the JSON body with `clientSig: ""`). Required when the key's client key is an Ethereum address (`NodeMgtKey`); optional for Ed25519 (backend can use canonical JSON if omitted). Ignored for P256.
+- `signerAddress` (optional): The connected wallet address (e.g. from your Ethereum wallet). When provided together with `signedMessage`, the node verifies that `signerAddress` matches this node's **NodeMgtKey** (config) and verifies the signature with `VerifyMessageSignature(signedMessage, clientSig, signerAddress)`. Use this when the key was created on another node so this node's ClientKeys entry may be empty or a placeholder.
 
 **Example (multi-agree agree):**
 ```json
@@ -3752,7 +3783,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequestsReady?pagenum=0&pagesize=10
 
 <a id="post-triggersignrequestbyid"></a>
 #### `POST /triggerSignRequestById`
-**Multi-agree only.** When at least the **MPC quorum** for this key have accepted in **SigList** (and rejections are excluded), triggers signature generation: sends **SIGNREQUESTCONFIRMSUCCESS** and starts the sign worker(s). For **single** requests, one signature is produced; for **batch** requests, one trigger produces one SignResult with N signatures (retrieved via `GET /getSignResultById` as the `batchSignatures` array). **Only the originator may call this:** the request’s **Purpose** map must have this node’s key as the (originator) key; otherwise the server returns an error. **If the sign request status is `"shelved"`** (set via `POST /shelveSignRequest`), the server returns an error and does not trigger. **Idempotent:** if the request was already triggered, returns success with data `"Already triggered"`. Does not affect tx-check flow. Requires management key signature (MetaMask or Ed25519).
+**Multi-agree only.** When at least the **MPC quorum** for this key have accepted in **SigList** (and rejections are excluded), triggers signature generation: sends **SIGNREQUESTCONFIRMSUCCESS** and starts the sign worker(s). For **single** requests, one signature is produced; for **batch** requests, one trigger produces one SignResult with N signatures (retrieved via `GET /getSignResultById` as the `batchSignatures` array). **Only the originator may call this:** the request’s **Purpose** map must have this node’s key as the (originator) key; otherwise the server returns an error. **If the sign request status is `"shelved"`** (set via `POST /shelveSignRequest`), the server returns an error and does not trigger. **Idempotent:** if the request was already triggered, returns success with data `"Already triggered"`. Does not affect tx-check flow. Requires management key signature (Ethereum wallet / NodeMgtKey or Ed25519).
 
 **EVM unsigned transaction (typical `executeSignResult` / broadcast):** The originator should include **`messageHash`** (single-tx: the **RLP/unsigned-tx** signing hash the MPC will sign; if present, the backend updates the sign request’s **MessageHash** on this node before the worker runs). For gas/nonce/fees stored on **this node only** (not propagated), send:
 - **`txParams`**: one object — used for **single-tx**, or for **batch** merged **only at index 0** with **`proposal_tx_params[0]`** unless **`txParamsBatch`** is set (see below).
@@ -3818,7 +3849,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/triggerSignRequestById \
 
 <a id="post-updatesignresultstatusbyid"></a>
 #### `POST /updateSignResultStatusById`
-**Originator only.** Updates the sign result status so that nodes see it in `GET /getSignResultById` and `GET /listSignResults`. Only the node that created the sign request (originator: node key in **Purpose**) may call. Requires management key signature (MetaMask or Ed25519).
+**Originator only.** Updates the sign result status so that nodes see it in `GET /getSignResultById` and `GET /listSignResults`. Only the node that created the sign request (originator: node key in **Purpose**) may call. Requires management key signature (Ethereum wallet / NodeMgtKey or Ed25519).
 
 **Final vs retryable:**
 - **`executed`** and **`shelved`** are terminal for a sign result (no further status updates except as below).
@@ -3911,7 +3942,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/updateSignResultStatusById \
 
 <a id="post-shelvesignrequest"></a>
 #### `POST /shelveSignRequest`
-**Originator only.** Sets the sign request lifecycle status to `"shelved"`. Only the node that created the sign request (originator: node key in **Purpose**) may call. The update is propagated to other nodes so all nodes see the status in `GET /getSignRequestById` and `GET /listSignRequests`. **The update can only happen once:** if the sign request is already shelved or blocked, a second call returns an error. Requires management key signature (MetaMask or Ed25519). **Note:** When a node rejects via `POST /signRequestAgree` with `accept: false`, if the number of remaining nodes that could still agree falls below the **MPC quorum** for this key, the backend automatically sets the sign request status to `"blocked"` and propagates it to other nodes; `GET /getSignRequestById` then returns `"status": "blocked"`.
+**Originator only.** Sets the sign request lifecycle status to `"shelved"`. Only the node that created the sign request (originator: node key in **Purpose**) may call. The update is propagated to other nodes so all nodes see the status in `GET /getSignRequestById` and `GET /listSignRequests`. **The update can only happen once:** if the sign request is already shelved or blocked, a second call returns an error. Requires management key signature (Ethereum wallet / NodeMgtKey or Ed25519). **Note:** When a node rejects via `POST /signRequestAgree` with `accept: false`, if the number of remaining nodes that could still agree falls below the **MPC quorum** for this key, the backend automatically sets the sign request status to `"blocked"` and propagates it to other nodes; `GET /getSignRequestById` then returns `"status": "blocked"`.
 
 **Request Body:**
 - `requestId` (required): Sign request ID.

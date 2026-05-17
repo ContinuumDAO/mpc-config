@@ -210,6 +210,46 @@ mpc_auth_run_default_compose_up() {
 	return 1
 }
 
+# After mpc-auth pulls and compose recreates app: pull continuumdao-node-app (configs ContinuumdaoNodeApp) if MPC_AUTH_UPDATE_NODE_APP=1.
+mpc_auth_companion_dashboard_pull_and_recreate() {
+	case "${MPC_AUTH_UPDATE_NODE_APP:-1}" in
+	0 | false | FALSE | no | NO) return 0 ;;
+	esac
+	local img svc tag ref workdir
+	img="$(mpc_auth_trim "${NODE_APP_IMAGE:-}")"
+	svc="$(mpc_auth_trim "${MPC_AUTH_NODE_APP_COMPOSE_SERVICE:-dashboard}")"
+	[[ -z "$img" ]] && return 0
+	tag="$(mpc_auth_trim "${NODE_APP_TAG:-latest}")"
+	[[ -z "$tag" ]] && tag="latest"
+	ref="${img}:${tag}"
+	echo "Companion (continuumdao-node-app): pulling ${ref}"
+	docker pull "$ref" || {
+		echo "warning: companion dashboard docker pull failed: ${ref}" >&2
+		return 0
+	}
+	workdir="$(mpc_auth_compose_workdir_resolve)"
+	if [[ -z "$workdir" ]] || [[ ! -d "$workdir" ]]; then
+		echo "warning: MPC_AUTH_COMPOSE_WORKDIR (or MPC_AUTH_COMPOSE_DIR) unset or missing — skipping dashboard recreate." >&2
+		return 0
+	fi
+	if docker compose version &>/dev/null 2>&1; then
+		echo "Running: cd $(printf %q "$workdir") && docker compose up -d --no-deps --force-recreate $(printf %q "$svc")"
+		if ! (cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc"); then
+			echo "warning: dashboard compose recreate failed (ContinuumdaoNodeApp disabled or compose has no '${svc}' service?)." >&2
+		fi
+		return 0
+	fi
+	if command -v docker-compose &>/dev/null 2>&1; then
+		echo "WARNING: using legacy docker-compose (v1) for dashboard recreate." >&2
+		echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --no-deps --force-recreate $(printf %q "$svc")"
+		if ! (cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc"); then
+			echo "warning: dashboard docker-compose recreate failed." >&2
+		fi
+		return 0
+	fi
+	return 0
+}
+
 explicit="$(mpc_auth_trim "${MPC_AUTH_POST_UPDATE_CMD:-}")"
 if [[ -n "$explicit" ]]; then
 	echo "Running MPC_AUTH_POST_UPDATE_CMD: $explicit"
@@ -223,5 +263,7 @@ else
 	echo "error: MPC_AUTH_POST_UPDATE_CMD unset and neither 'docker compose' nor docker-compose is available; cannot bring stack up." >&2
 	exit 1
 fi
+
+mpc_auth_companion_dashboard_pull_and_recreate || true
 
 echo "Update complete for $NEW_REF."

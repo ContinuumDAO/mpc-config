@@ -14,7 +14,7 @@ docs/internal/
 configs.yaml
 
 # Generated at repo root by process_config.sh from docker-compose.relay.yml or docker-compose.client.yml
-# Leading "/" = only mpc-config/docker-compose.yml (not local-node-app/docker-compose.yml).
+# Leading "/" = only mpc-config/docker-compose.yml.
 /docker-compose.yml
 
 # webTLS
@@ -60,7 +60,3 @@ forge/broadcast/
 scripts/__pycache__/
 recipes/__pycache__/
 tools/__pycache__/
-
-# Local ContinuumDAO dashboard (secrets)
-local-node-app/.env
-

@@ -1,6 +1,6 @@
 # Configuring Ed25519 management keys (node owner guide)
 
-This guide is for **operators and node owners** who want mpc-auth to accept **Ed25519** management authentication (so agents or scripts can call the management API **without MetaMask**). It covers **creating keys**, **putting the public key on the node**, **adding more allowed keys**, and **where to store private key material**.
+This guide is for **operators and node owners** who want mpc-auth to accept **Ed25519** management authentication (so agents or scripts can call the management API **without an Ethereum wallet / EIP-191 signing**). It covers **creating keys**, **putting the public key on the node**, **adding more allowed keys**, and **where to store private key material**.
 
 **Day-to-day API signing** (nonces, `clientSig`, `messageToSign`, `getAllowedEd25519MgtKeys`, tools): use **[references/ED25519_MANAGEMENT_KEY_SIGNING.md](./references/ED25519_MANAGEMENT_KEY_SIGNING.md)** — not this document.
 

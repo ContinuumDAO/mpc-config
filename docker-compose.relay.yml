@@ -100,6 +100,26 @@ services:
       - seccomp:unconfined
     cap_add:
       - SYS_PTRACE
+
+  # BEGIN mpc-config continuumdao-node-app
+  dashboard:
+    image: continuumdao/continuumdao-node-app:latest
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      ENABLE_PLAIN_HTTP_ATTACH: "1"
+      NODE_READ_DISCOVERY_ALLOW_PRIVATE: "1"
+      NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES: "127.0.0.1=host.docker.internal,localhost=host.docker.internal,::1=host.docker.internal"
+      DEFAULT_NODE_DISCOVERY_PORT: "18080"
+      BROWSER_HTTPS_PORT: "8443"
+      MANAGEMENT_API_PORT: "8080"
+    ports:
+      - "3333:3000"
+    networks:
+      - local-network
+  # END mpc-config continuumdao-node-app
+
 networks:
   local-network:
     driver: bridge

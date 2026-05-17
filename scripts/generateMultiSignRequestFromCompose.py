@@ -1346,7 +1346,7 @@ def main() -> None:
     ap.add_argument(
         "--eip191-private-key-hex",
         metavar="HEX",
-        help="If set, sign with secp256k1 personal_sign (MetaMask-style) and output postBody with clientSig + signedMessage",
+        help="If set, sign with secp256k1 personal_sign (Ethereum wallet, EIP-191) and output postBody with clientSig + signedMessage",
     )
     args = ap.parse_args()
 

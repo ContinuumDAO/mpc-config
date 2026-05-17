@@ -84,7 +84,7 @@ Note: there are two types of signature referenced in this document, not to be co
 - MPC Signature: This is a signature formed by a threshold number of nodes in a Group for a given KeyGen. There is no private key, and client nodes must accept the MPC signature request according to the threshold in order for the signature to be performed.
 
 
-All of the controls specified hereof are accessible via an API on each client. All actions are authenticated by a management key that each client has stored on their node, unique to them. For agents running on a node, this is a locally stored ed25519 keypair (PublicMgtKey - see environment below for the location of the key). For users who manage their node via the frontend application, this is usually a MetaMask signature (NodeMgtKey in the config file) - this is out of scope for the following instructions, which are for agents that users have deployed on their nodes to manage the client for them.
+All of the controls specified hereof are accessible via an API on each client. All actions are authenticated by a management key that each client has stored on their node, unique to them. For agents running on a node, this is a locally stored ed25519 keypair (PublicMgtKey - see environment below for the location of the key). For users who manage their node via the frontend application, this is usually an **Ethereum wallet** signature (`personal_sign` / **`NodeMgtKey`** in the config file)—this is out of scope for the following instructions, which are for agents that users have deployed on their nodes to manage the client for them.
 
 ## Environment
 

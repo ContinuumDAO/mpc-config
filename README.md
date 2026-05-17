@@ -7,7 +7,7 @@ This repository contains the configuration files and setup scripts needed to dep
 - **`configs.yaml`** - Main node configuration file
 - **`configs-original.yaml`** - Pristine copy of the default `configs.yaml` from this repo; use `cp configs-original.yaml configs.yaml` to revert if something goes wrong. **`process_config.sh` copies it to `configs.yaml` automatically** if `configs.yaml` is missing.
 - **`process_config.sh`** - Configuration validator and certificate generator; **generates `docker-compose.yml`** (not committed) from **`docker-compose.relay.yml`** (relay / first node) or **`docker-compose.client.yml`** (other nodes)
-- **`scripts/provision-node.sh`** - Non-interactive helper for a **fresh** `configs.yaml`: copies `configs-original.yaml`, sets management keys and a two-node `nodeAddresses` layout (relay placeholder + this host), then runs `process_config.sh` (see **Quick Start → Automated provisioning** below)
+- **`scripts/provision-node.sh`** - Non-interactive helper for a **fresh** `configs.yaml`: copies `configs-original.yaml`, sets management keys and a two-node `nodeAddresses` layout (relay placeholder + this host), then runs `process_config.sh` (see **Quick Start → Automated provisioning** below). **Node identity:** mpc-auth’s **nodeKey** is derived from **PublicMgtKey**, not random—omit **`--public-mgt-key`** to auto-generate bootstrap material, or pass your existing Ed25519 public key to match a prior node for restore/migration.
 - **`mosquitto/config/mosquitto.conf`** - MQTT broker configuration
 - **`sign-clipboard in tools/`** - Utility to sign Ed25519 messages
 - **`webTLS/config/certs`** - certs to allow TLS 1.3 encryption to the browser
@@ -31,8 +31,8 @@ cd mpc-config
 
 ### 2. Configure Your Node
 
-- Choose which Ethereum address you wish to manage your node (in configs.yaml - NodeMgtKey), and/or which ed25519 key (in configs.yaml PublicMgtKey).
-One or both of these will be required by process_config.sh (the next step)
+- Choose which Ethereum address you wish to manage your node (in `configs.yaml` — **NodeMgtKey**), and/or which Ed25519 key (in `configs.yaml` — **PublicMgtKey**). At least one must end up valid before **`./process_config.sh`** can finish.
+- **PublicMgtKey** fixes the deterministic **nodeKey** mpc-auth uses (it is not randomly assigned). If you do **not** supply an Ed25519 public key, **`./process_config.sh`** can generate a new bootstrap identity (**`tools/bootstrap_key_provision.py`** → **`bootstrap_key/`**, **`PublicMgtKey`**, and related entries in `configs.yaml`). **Back up `bootstrap_key/`** securely. To recover the same logical node after reinstall or on a new IP, use the **same** **PublicMgtKey** as before, then restore your MongoDB data into the new instance.
 - Decide what IPv4 addresses will be included in the Node Addresses in your config. You may need to coordinate with other people to fetch these.
 You can see your own IP address using the command hostname -i
 You will be asked to enter each IPv4 address in process_config.sh and you and the other nodes in your group must add the same IPs IN THE SAME ORDER 
@@ -48,7 +48,7 @@ For a **non-interactive** first-time setup on a VPS (no prompts for keys or `nod
 
 This script will:
 - Validate your configuration
-- Add your NodeMgtKey and/or your PublicMgtKey
+- Add your NodeMgtKey and/or your PublicMgtKey (and, when **PublicMgtKey** is still empty but allowed, run **`tools/bootstrap_key_provision.py`** so **PublicMgtKey** and the deterministic **nodeKey** are set—see **Automated provisioning** above)
 - Add the IPv4 addresses of each node in your group.
 - Add the Relayer IP address, so that your wallet can help secure cross-chain transactions, if you wish to.
 - Generate TLS certificates for the MQTT broker (on relay node)
@@ -60,16 +60,23 @@ This script will:
 
 Use this when you want **one command** to replace the interactive parts of steps 2–3 (management keys and `nodeAddresses`), for example on a new droplet with cloud-init or SSH as root.
 
+**Deterministic node identity:** The running node’s **nodeKey** is derived from **PublicMgtKey**, not generated independently at random. That enables two provisioning patterns:
+
+1. **New install — omit the Ed25519 public key** (e.g. pass only **`--node-mgt-key`**). The script leaves **`PublicMgtKey`** empty in the fresh `configs.yaml`; **`process_config.sh`** then runs **`tools/bootstrap_key_provision.py`**, which creates **`bootstrap_key/`**, sets **`PublicMgtKey`** (and related deterministic identity fields such as **`DeterministicNodeKey`**), and aligns mpc-auth with that identity. Install Python **`cryptography`** on the host when using this path (`provision-node.sh` checks for it). **Back up `bootstrap_key/`** with your other secrets.
+2. **Recover or migrate — pass your existing bootstrap public key** (use **`--public-mgt-key`** with the same 64-hex or `ssh-ed25519` line as the original node, optionally alongside **`--node-mgt-key`**). You get a minimal fresh layout with the **same** derived **nodeKey**, suitable for importing a MongoDB backup or moving to a new IPv4 address without becoming a “different” node to the rest of the group.
+
+The same PublicMgtKey / bootstrap behavior applies when you run **`./process_config.sh`** interactively: supply an existing Ed25519 public key, or skip it and allow auto-bootstrap when eligible.
+
 **Requirements**
 
 - Run as **root** (e.g. `sudo`).
 - **`configs.yaml` must not exist** in the repo root—the script copies **`configs-original.yaml`** to **`configs.yaml`** and refuses to overwrite an existing file.
 - **Python 3** and **ruamel.yaml** (same as `process_config.sh`).
-- Provide **at least one** management key on the command line: **`--node-mgt-key`** / **`-k`** (Ethereum `0x` + 40 hex) and/or **`--public-mgt-key`** (64 hex Ed25519 public, or an `ssh-ed25519 …` line—quote if it contains spaces).
+- Provide **at least one** management key on the command line: **`--node-mgt-key`** / **`-k`** (Ethereum `0x` + 40 hex) and/or **`--public-mgt-key`** (64 hex Ed25519 public, or an `ssh-ed25519 …` line—quote if it contains spaces). **`--public-mgt-key`** may be omitted only when **`--node-mgt-key`** is set (see pattern 1 above); **`cryptography`** is then required before **`process_config.sh`** runs.
 
 **What it writes**
 
-- Sets **`NodeMgtKey`** / **`PublicMgtKey`** in the new `configs.yaml`.
+- Sets **`NodeMgtKey`** / **`PublicMgtKey`** in the new `configs.yaml` (**`PublicMgtKey`** may be filled in later by **`process_config.sh`** when you omit **`--public-mgt-key`**).
 - Sets **`MPCGroups[0].nodeAddresses`** to **two** entries in order:
   - **`node1_key`** → `http://<relay-placeholder>:<port>` (default relay placeholder host **`0.0.0.0`**, meaning “real relay IP to be filled later” for `process_config.sh`).
   - **`node2_key`** → `http://<this-host>:<port>` (this machine’s address for the management API URLs).
@@ -93,7 +100,7 @@ Full options: **`sudo ./scripts/provision-node.sh --help`**.
 
 **Examples**
 
-MetaMask-style management only, install systemd unit for the Docker stack:
+Ethereum wallet management only (no `--public-mgt-key`), install systemd unit for the Docker stack:
 
 ```bash
 cd ~/mpc-config   # or your clone path

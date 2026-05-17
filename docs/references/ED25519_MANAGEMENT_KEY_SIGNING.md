@@ -37,7 +37,7 @@ If none of your keys match, you cannot sign management **`POST`**s on this node 
 
 ## 3. Every `POST` needs a management signature
 
-**Every** **`POST`** to the management API requires **management** authentication: **Ed25519** (this doc) or **Ethereum** **`NodeMgtKey`** / MetaMask (`personal_sign`), depending on what the node accepts (see **`./API_IMPLEMENTATION.md`** § *Using MetaMask or Ed25519 for Management API Authentication*).
+**Every** **`POST`** to the management API requires **management** authentication: **Ed25519** (this doc) or **Ethereum** **`NodeMgtKey`** / **`personal_sign`** (EIP-191), depending on what the node accepts (see **`./API_IMPLEMENTATION.md`** § *Using an Ethereum wallet or Ed25519 for Management API Authentication*).
 
 - **`clientSig`** on **`POST /multiSignRequest`** signs the **canonical `messageToSign`** string with the **management** key (not the MPC key). Details and **`signedMessage`** rules: **`./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`** and **`./AI_AGENT_FORGE_SIGNREQUEST.md`**.
 
@@ -54,7 +54,7 @@ Among **Ed25519** management keys, **each distinct keypair** (each **64-hex publ
 | Signer | Next nonce |
 |--------|------------|
 | **Ed25519** management key (bootstrap **`PublicMgtKey`** or keys from **`POST /addManagementKey`**) | **`GET /getPublicMgtKeyNonce`** — add **`?publicKey=<64_hex>`** when the signer is an **added** key, not the config default |
-| **Ethereum** **`NodeMgtKey`** (MetaMask / `personal_sign`) | **`GET /getNodeMgtKeyNonce`** |
+| **Ethereum** **`NodeMgtKey`** (`personal_sign`) | **`GET /getNodeMgtKeyNonce`** |
 
 **`GET /getPublicMgtKeyNonce`** and **`GET /getNodeMgtKeyNonce`** return **`Data`** shaped as **`{ "key": "<…>", "nonce": <int> }`** (`key` is either the **64-hex Ed25519** public key or the **`0x…`** NodeMgtKey, matching the endpoint).
 
@@ -79,7 +79,7 @@ The two systems do not advance each other: changing **`globalNonce`** does not c
 
 ## 5. KeyGen `ClientKeys`, `clientId`, and which key to use
 
-A **KeyGen result** includes **`ClientKeys`**: a map from **node public key** (128 hex) → **client key** for that node (e.g. **Ethereum `0x…`** for MetaMask, or **Ed25519 64 hex** for agent-style signing). See **`GET /getKeyGenResultById`** in **`./API_IMPLEMENTATION.md`**.
+A **KeyGen result** includes **`ClientKeys`**: a map from **node public key** (128 hex) → **client key** for that node (e.g. **Ethereum `0x…`** for browser-wallet management, or **Ed25519 64 hex** for agent-style signing). See **`GET /getKeyGenResultById`** in **`./API_IMPLEMENTATION.md`**.
 
 ### `clientId` on `multiSignRequest` payloads
 
@@ -87,7 +87,7 @@ Helpers such as **`generateMultiSignRequestFromCompose.py`** add an optional **`
 
 ### Same identity for KeyGen-scoped actions
 
-For **KeyGen messaging** (`POST /sendMessage`, `POST /markMessageRead`, …), the server chooses **MetaMask vs Ed25519** verification based on **your** entry in **`ClientKeys`** for that KeyGen (**`./API_KEYGEN_MESSAGING.md`** § *Management key signature*). In practice:
+For **KeyGen messaging** (`POST /sendMessage`, `POST /markMessageRead`, …), the server chooses **Ethereum `personal_sign` vs Ed25519** verification based on **your** entry in **`ClientKeys`** for that KeyGen (**`./API_KEYGEN_MESSAGING.md`** § *Management key signature*). In practice:
 
 - Use the **Ed25519 private key** whose **64-hex public key** matches **your** **`ClientKeys`** value for this KeyGen **and** appears in **`getAllowedEd25519MgtKeys`** for management **`POST`**s.
 - Keep **management** signing **consistent** for that KeyGen across **`sendMessage`**, **`multiSignRequest`** (as **`clientSig`**), **`signRequestAgree`**, **`triggerSignRequestById`**, etc., per the **API** rules for each route.
@@ -144,7 +144,7 @@ If a recipe or script fails before printing JSON (e.g. empty **`curl -d`** and *
 
 The management **`clientSig`** must be an **Ed25519** signature (128 hex) over **`signedMessage`** (same bytes as **`messageToSign`** from the helper). If the node rejects the signature, check **in order**:
 
-1. **KeyGen `ClientKeys` vs your key** — For multi-agree KeyGens, mpc-auth expects the signer’s **64-hex Ed25519 public key** to appear as **a value** in **`GET /getKeyGenResultById` → `ClientKeys`** for the KeyGen you are using (the client identity your **node** registered for that wallet). If **`getAllowedEd25519MgtKeys`** lists an **added** key but **`ClientKeys`** still has only the **bootstrap** public key (or a **MetaMask** `0x…` address), signing with the **added** key will fail until **`ClientKeys`** matches that identity for your node (same onboarding as the web app).
+1. **KeyGen `ClientKeys` vs your key** — For multi-agree KeyGens, mpc-auth expects the signer’s **64-hex Ed25519 public key** to appear as **a value** in **`GET /getKeyGenResultById` → `ClientKeys`** for the KeyGen you are using (the client identity your **node** registered for that wallet). If **`getAllowedEd25519MgtKeys`** lists an **added** key but **`ClientKeys`** still has only the **bootstrap** public key (or an **Ethereum `0x…`** client address), signing with the **added** key will fail until **`ClientKeys`** matches that identity for your node (same onboarding as the web app).
 
 2. **Allow-list** — **`GET /getAllowedEd25519MgtKeys`** must include your public key.
 

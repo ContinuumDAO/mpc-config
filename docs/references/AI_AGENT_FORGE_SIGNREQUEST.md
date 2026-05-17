@@ -43,7 +43,7 @@ If the keygen is not ready yet, the API returns `code: 1` ("not ready"); wait fo
 
 ### clientSig: management key signature (same as keyGenRequest)
 
-`clientSig` is **not** from the MPC key. It is the **management key** of the node (the key that is allowed to create sign requests and trigger them). The node accepts either **MetaMask (NodeMgtKey)** or **Ed25519 (PublicMgtKey)**. Use the same key type and key that the node has configured (and that was used when creating the keygen, if applicable).
+`clientSig` is **not** from the MPC key. It is the **management key** of the node (the key that is allowed to create sign requests and trigger them). The node accepts either **Ethereum wallet (`NodeMgtKey`)** or **Ed25519 (`PublicMgtKey`)**. Use the same key type and key that the node has configured (and that was used when creating the keygen, if applicable).
 
 #### Option 1: Ed25519 management key (recommended for agents)
 
@@ -55,16 +55,16 @@ Use when the node has an Ed25519 management key configured (`GET /hasPublicMgtKe
 
 **Note:** The Ed25519 keypair is the **management** keypair (e.g. from config or from the key you added). It is not the MPC key from keygen.
 
-#### Option 2: MetaMask (NodeMgtKey)
+#### Option 2: Ethereum wallet (`NodeMgtKey`)
 
-Use when the node uses an Ethereum address as the management key (e.g. MetaMask).
+Use when the node uses an Ethereum address as the management key (browser wallet or other EIP-1193 provider).
 
 1. **Build the full request body** with `clientSig` and `signedMessage` empty.
 2. **Build the exact message string** that will be signed (canonical JSON of the body with `clientSig` and `signedMessage` empty).
 3. **Sign** that string with **Ethereum `personal_sign`** (EIP-191) from the **NodeMgtKey** address (same as in node config).
-4. **Send** the body with **`clientSig`** = the 0x-prefixed signature and **`signedMessage`** = the exact string you signed (required for MetaMask).
+4. **Send** the body with **`clientSig`** = the 0x-prefixed signature and **`signedMessage`** = the exact string you signed (required for Ethereum / NodeMgtKey).
 
-**Summary:** `keyList` and `pubKey` come from **GET /getKeyGenResultById**. `clientSig` is produced by signing the (canonical) request body with the node’s **management key** (Ed25519 or MetaMask), not with the MPC key.
+**Summary:** `keyList` and `pubKey` come from **GET /getKeyGenResultById**. `clientSig` is produced by signing the (canonical) request body with the node’s **management key** (Ed25519 or Ethereum wallet / NodeMgtKey), not with the MPC key.
 
 ---
 
@@ -262,7 +262,7 @@ Use **`--override-sender`** / **`--first-nonce`** when the broadcast **`from`** 
 2. **Read** **`bodyForSign`** and **`messageToSign`** (and confirm **`endpoint`** is **`multiSignRequest`**).
 3. **Add** to **`bodyForSign`** (or build the HTTP body as **`bodyForSign`** plus signing fields):
    - **keyList** / **pubKey**: already set by the Python script (same as `GET /getKeyGenResultById`). If not using the script, fetch manually; see [How to get keyList, pubKey, and clientSig](#how-to-get-keylist-pubkey-and-clientsig).
-   - **clientSig** / **signedMessage**: management key (Ed25519 or MetaMask); sign **`messageToSign`** exactly—see the same section for step-by-step.
+   - **clientSig** / **signedMessage**: management key (Ed25519 or Ethereum wallet / NodeMgtKey); sign **`messageToSign`** exactly—see the same section for step-by-step.
    - Optionally, but purpose is strongly recommended (including link to github if applicable): **`purpose`**, **`destinationAddress`**, **`extraJSON`**, **`signatureText`**.
 4. **POST** the final **`POST /multiSignRequest`** body (**`bodyForSign`** fields + **`clientSig`** + **`signedMessage`**) only (not **/signRequest**—that path is for tx-check / relayer keys).
 5. **Use** the returned `requestId` for:

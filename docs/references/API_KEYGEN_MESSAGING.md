@@ -58,9 +58,9 @@ A simple messaging system between all nodes that participated in a given **keyGe
 
 These five endpoints require a **management key signature** in the request body: **`Nonce`** and **`Sig`**. The signature type depends on the **client key** for this node in the keyGen (from the keyGen’s `ClientKeys`):
 
-- **If the client key is an Ethereum address** (e.g. MetaMask): sign the request payload (exact JSON of the body with `Sig` set to `""`) using **MetaMask** `personal_sign` from the node’s management address (`NodeMgtKey`). Obtain the next nonce via `GET /getNodeMgtKeyNonce` — response `Data` is `{ "key": "<NodeMgtKey 0x…>", "nonce": <int> }` (same Ethereum address as `GET /getNodeMgtKey`). See `GET /getMessageToSign` in `./API_IMPLEMENTATION.md` for the signing flow.
+- **If the client key is an Ethereum address** (Ethereum wallet): sign the request payload (exact JSON of the body with `Sig` set to `""`) using **`personal_sign`** (EIP-191) from the node’s management address (`NodeMgtKey`). Obtain the next nonce via `GET /getNodeMgtKeyNonce` — response `Data` is `{ "key": "<NodeMgtKey 0x…>", "nonce": <int> }` (same Ethereum address as `GET /getNodeMgtKey`). See `GET /getMessageToSign` in `./API_IMPLEMENTATION.md` for the signing flow.
 - **If the client key is Ed25519** (64 hex): sign the same payload with the **Ed25519** management key (config `PublicMgtKey` or a key added via `POST /addManagementKey`). Signature must be 128 hex characters. Use `GET /getAllowedEd25519MgtKeys` and `GET /getPublicMgtKeyNonce` (optional `?publicKey=<64_hex>` for added keys) for nonce — **not** `getNodeMgtKeyNonce`, which tracks only the Ethereum `NodeMgtKey`. See `./API_IMPLEMENTATION.md` for Ed25519 mgt auth.
-- If the client key is missing or of another form, the server accepts **either** MetaMask or Ed25519 (same as other mgt-protected endpoints).
+- If the client key is missing or of another form, the server accepts **either** Ethereum wallet (`NodeMgtKey` / `personal_sign`) or Ed25519 (same as other mgt-protected endpoints).
 
 The server verifies the signature and consumes the nonce (replay protection). If signature check is disabled via config (`IgnoreMgtKeySigCheck`), the body may omit `Nonce` and `Sig`.
 
@@ -76,8 +76,8 @@ Creates a new message (top-level or reply) in the keyGen channel. **Requires man
 
 | Field     | Type   | Required | Description |
 |----------|--------|----------|-------------|
-| `Nonce`    | int    | Yes (mgt) | Next nonce for **this** signer: **MetaMask** → `GET /getNodeMgtKeyNonce` (`Data.nonce` for `NodeMgtKey`). **Ed25519** → `GET /getPublicMgtKeyNonce` (optional `?publicKey=`). Sequences are independent. |
-| `Sig`      | string | Yes (mgt) | Signature over the exact JSON of this body with `Sig` set to `""` (MetaMask personal_sign or Ed25519 128-hex). |
+| `Nonce`    | int    | Yes (mgt) | Next nonce for **this** signer: **Ethereum / NodeMgtKey** → `GET /getNodeMgtKeyNonce` (`Data.nonce` for `NodeMgtKey`). **Ed25519** → `GET /getPublicMgtKeyNonce` (optional `?publicKey=`). Sequences are independent. |
+| `Sig`      | string | Yes (mgt) | Signature over the exact JSON of this body with `Sig` set to `""` (Ethereum wallet `personal_sign` or Ed25519 128-hex). |
 | `keyGenId` | string | Yes | KeyGen request/result id (keyGen channel). |
 | `title`    | string | For top-level | Required for top-level messages; omit or empty for replies. |
 | `replyTo`  | string | For replies | Message `id` this reply targets. |
@@ -159,7 +159,7 @@ Adds the calling node’s read receipt to the message (idempotent). **Requires m
 
 | Field      | Type   | Required | Description |
 |-----------|--------|----------|-------------|
-| `Nonce`      | int    | Yes (mgt) | Same as **`POST /sendMessage`**: MetaMask → `GET /getNodeMgtKeyNonce`; Ed25519 → `GET /getPublicMgtKeyNonce` (`?publicKey=` if needed). |
+| `Nonce`      | int    | Yes (mgt) | Same as **`POST /sendMessage`**: Ethereum / NodeMgtKey → `GET /getNodeMgtKeyNonce`; Ed25519 → `GET /getPublicMgtKeyNonce` (`?publicKey=` if needed). |
 | `Sig`        | string | Yes (mgt) | Signature over the exact JSON of this body with `Sig` set to `""`. |
 | `keyGenId`   | string | Yes | KeyGen channel. |
 | `messageId`  | string | Yes | Message id. |
@@ -179,7 +179,7 @@ Adds the calling node’s read receipt to **each** of the given messages (idempo
 
 | Field       | Type     | Required | Description |
 |------------|----------|----------|-------------|
-| `Nonce`      | int      | Yes (mgt) | Same as **`POST /sendMessage`**: MetaMask → `GET /getNodeMgtKeyNonce`; Ed25519 → `GET /getPublicMgtKeyNonce` (`?publicKey=` if needed). |
+| `Nonce`      | int      | Yes (mgt) | Same as **`POST /sendMessage`**: Ethereum / NodeMgtKey → `GET /getNodeMgtKeyNonce`; Ed25519 → `GET /getPublicMgtKeyNonce` (`?publicKey=` if needed). |
 | `Sig`        | string   | Yes (mgt) | Signature over the exact JSON of this body with `Sig` set to `""`. |
 | `keyGenId`   | string   | Yes      | KeyGen channel. |
 | `messageIds` | []string | Yes      | List of message ids to mark as read. Must not be empty. |
@@ -199,7 +199,7 @@ Soft-deletes the message and **all its replies**. Only the **message originator*
 
 | Field      | Type   | Required | Description |
 |-----------|--------|----------|-------------|
-| `Nonce`      | int    | Yes (mgt) | Same as **`POST /sendMessage`**: MetaMask → `GET /getNodeMgtKeyNonce`; Ed25519 → `GET /getPublicMgtKeyNonce` (`?publicKey=` if needed). |
+| `Nonce`      | int    | Yes (mgt) | Same as **`POST /sendMessage`**: Ethereum / NodeMgtKey → `GET /getNodeMgtKeyNonce`; Ed25519 → `GET /getPublicMgtKeyNonce` (`?publicKey=` if needed). |
 | `Sig`        | string | Yes (mgt) | Signature over the exact JSON of this body with `Sig` set to `""`. |
 | `keyGenId`   | string | Yes | KeyGen channel. |
 | `messageId`  | string | Yes | Message id. |
@@ -218,7 +218,7 @@ Soft-deletes **multiple** messages (and their reply trees). Only the **message o
 
 | Field       | Type     | Required | Description |
 |------------|----------|----------|-------------|
-| `Nonce`      | int      | Yes (mgt) | Same as **`POST /sendMessage`**: MetaMask → `GET /getNodeMgtKeyNonce`; Ed25519 → `GET /getPublicMgtKeyNonce` (`?publicKey=` if needed). |
+| `Nonce`      | int      | Yes (mgt) | Same as **`POST /sendMessage`**: Ethereum / NodeMgtKey → `GET /getNodeMgtKeyNonce`; Ed25519 → `GET /getPublicMgtKeyNonce` (`?publicKey=` if needed). |
 | `Sig`        | string   | Yes (mgt) | Signature over the exact JSON of this body with `Sig` set to `""`. |
 | `keyGenId`   | string   | Yes      | KeyGen channel. |
 | `messageIds` | []string | Yes      | List of root message ids to delete (each plus its reply tree). Must not be empty. |

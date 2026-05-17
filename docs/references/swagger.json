@@ -2746,6 +2746,40 @@
                 }
             }
         },
+        "/fixDatabase": {
+            "post": {
+                "description": "Apply automated Mongo repairs from integrity scan (management-signed; draining until restartGate) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /fixDatabase).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Apply automated Mongo repairs from integrity scan (management-signed; draining until restartGate)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                        }
+                    }
+                ]
+            }
+        },
         "/configUpdatePlan": {
             "post": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /configUpdatePlan).",
@@ -3833,14 +3867,14 @@
                 },
                 "signedMessage": {
                     "type": "string",
-                    "description": "Exact string signed (MetaMask or Ed25519). If JSON, SHOULD include \"nodeKey\" (128 hex from GET /getNodeKey) so the client signature binds to this node; omitting nodeKey in JSON is deprecated."
+                    "description": "Exact string signed (Ethereum wallet / NodeMgtKey or Ed25519). If JSON, SHOULD include \"nodeKey\" (128 hex from GET /getNodeKey) so the client signature binds to this node; omitting nodeKey in JSON is deprecated."
                 },
                 "signerAddress": {
                     "type": "string"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional; when using Ed25519 with an empty signedMessage, include in JSON so canonical signing includes it (see API_IMPLEMENTATION.md). For MetaMask, embed \"nodeKey\" inside the JSON you place in signedMessage."
+                    "description": "Optional; when using Ed25519 with an empty signedMessage, include in JSON so canonical signing includes it (see API_IMPLEMENTATION.md). For Ethereum wallet / NodeMgtKey, embed \"nodeKey\" inside the JSON you place in signedMessage."
                 }
             }
         },
@@ -4026,11 +4060,11 @@
                 },
                 "signedMessage": {
                     "type": "string",
-                    "description": "Exact string signed (MetaMask personal_sign or Ed25519). If you use a JSON payload, include \"nodeKey\" set to this node's 128-hex MPC public key (GET /getNodeKey) so the signature cannot be replayed on another node; omitting nodeKey in JSON is deprecated. Not applicable when signedMessage is opaque non-JSON (e.g. some MQTT CA flows)."
+                    "description": "Exact string signed (Ethereum wallet personal_sign or Ed25519). If you use a JSON payload, include \"nodeKey\" set to this node's 128-hex MPC public key (GET /getNodeKey) so the signature cannot be replayed on another node; omitting nodeKey in JSON is deprecated. Not applicable when signedMessage is opaque non-JSON (e.g. some MQTT CA flows)."
                 },
                 "clientSig": {
                     "type": "string",
-                    "description": "MetaMask: 0x-prefixed; Ed25519: 128 hex characters"
+                    "description": "Ethereum wallet: 0x-prefixed; Ed25519: 128 hex characters"
                 }
             }
         },

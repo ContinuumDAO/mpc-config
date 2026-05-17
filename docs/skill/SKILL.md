@@ -67,7 +67,7 @@ environment** in ContinuumDAO terms—not a single standalone node:
 for the **AI agent**. Threshold signing requires multiple parties; a minimal
 useful setup pairs a human-controlled node with an agent-controlled node.
 - The **agent’s node** must use **Ed25519 management signing** so automated
-`POST` calls to the management API are authenticated without MetaMask (operator
+`POST` calls to the management API are authenticated without a browser Ethereum wallet (operator
 provisions `**PublicMgtKey`** / allow-list). Operational signing details:
 `**$MPA_PATH/references/ED25519_MANAGEMENT_KEY_SIGNING.md**`.
 
@@ -182,7 +182,7 @@ https://www.getfoundry.sh/introduction/getting-started
 1. **Management signature** — **Per-node API authentication.** Each client has its
   **own** key material; public keys are in config (e.g. `**mpc-config/configs.yaml**`).
    Every `**POST**` to the management API must be signed by **that** client’s
-   management key (Ed25519 for agents, often MetaMask for interactive users). This
+   management key (Ed25519 for agents, often a browser Ethereum wallet for interactive users). This
    proves **who is calling the API**, not what the MPC wallet authorizes on-chain.
 2. **MPC signature** — **On-chain authorization** by the **shared** wallet. There
   is **no** single MPC private key file. Nodes run a protocol so that, only after

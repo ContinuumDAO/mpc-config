@@ -57,7 +57,7 @@ It also performs **JSON-RPC** against that RPC (`eth_getTransactionCount`, `eth_
 
 1. Build (or receive) one **compose JSON** object describing one or more contract calls (signature + args + destination contract), plus **destination chain** and optional gas behavior.
 2. Run **`$MPA_PATH/scripts/generateMultiSignRequestFromCompose.py`** to obtain **`bodyForSign`** and **`messageToSign`** (same convention as the web app before management signing).
-3. Add **`clientSig`** (and **`signedMessage`** for MetaMask-style management keys), then **POST /multiSignRequest**.
+3. Add **`clientSig`** (and **`signedMessage`** when authenticating with **`NodeMgtKey`** / Ethereum `personal_sign`), then **POST /multiSignRequest**.
 
 The script fills **`keyList`** and **`pubKey`** from the node. It computes **EVM tx signing hashes** using the same helpers as the Foundry script so **`msgHash`** / **`messageHashes`** match **unsigned EIP-1559 / legacy** serialization. The numbered **Checklist** at the top of this file is the same sequence as **`./instructions.md`**.
 

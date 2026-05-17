@@ -224,7 +224,7 @@ def main() -> None:
     ap.add_argument(
         "--eip191-private-key-hex",
         metavar="HEX",
-        help="If set, sign with MetaMask-style personal_sign and add postBody",
+        help="If set, sign with Ethereum wallet personal_sign (EIP-191) and add postBody",
     )
     args = ap.parse_args()
 

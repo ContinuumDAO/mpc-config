@@ -7,15 +7,15 @@
 
 # Node management key for API authentication
 # Format: Ethereum address (0x followed by 40 hex characters)
-# Used to verify signatures on management API requests (e.g. MetaMask personal_sign)
+# Used to verify signatures on management API requests (e.g. Ethereum wallet personal_sign / EIP-191)
 NodeMgtKey: "0x1234567890ABCDEF1234567890ABCDEF12345678"
 
 # Optional: Ed25519 public key for direct API management without a frontend (bootstrap key)
 # Format: 64 hex characters (32-byte Ed25519 public key)
 # This is the first permitted machine; it can add more keys via POST /addManagementKey (signed
-# with this key). When set, the node accepts NodeMgtKey (MetaMask) or any Ed25519 key (this one
+# with this key). When set, the node accepts NodeMgtKey (Ethereum wallet / EIP-191) or any Ed25519 key (this one
 # plus any added via addManagementKey) for management endpoints. Leave empty if you only use
-# the frontend with MetaMask for management.
+# a browser Ethereum wallet for management.
 PublicMgtKey: ""
 
 # Ignore management key signature check (for testing/development only)
@@ -141,6 +141,24 @@ ScannerRelayerPort: 18081
 #   - "198.51.100.0/24"
 # Empty list [] uses DEFAULT_SCANNER_API_URLS in console/process_config.sh for UFW (override there or set entries here).
 ScannerAPIURLs: []
+
+# -----------------------------------------------------------------------------
+# ContinuumDAO node dashboard (continuumdao/continuumdao-node-app)
+# Managed by process_config.sh: merged into docker-compose.yml (service "dashboard").
+# DEFAULT_NODE_DISCOVERY_PORT, BROWSER_HTTPS_PORT, and MANAGEMENT_API_PORT in the container are set from
+# PublicDiscoveryPort, BrowserHTTPS.Port (0 → 8443), and ManagementAPIsPort in this file.
+# Set Enabled: false for headless nodes with no local web UI.
+# -----------------------------------------------------------------------------
+ContinuumdaoNodeApp:
+  Enabled: true
+  Image: continuumdao/continuumdao-node-app
+  Tag: latest
+  HostPort: 3333
+  EnablePlainHttpAttach: true
+  NodeReadDiscoveryAllowPrivate: true
+  # When empty, defaults to: 127.0.0.1=host.docker.internal,localhost=host.docker.internal,::1=host.docker.internal
+  NodeReadDiscoveryLocalBindAliases: ""
+  NodeReadDiscoveryHairpinFallback: false
 
 # Ignore client signature check (set to true for testing/development only)
 # Controls signature verification for CLIENT signatures used in MPC coordination

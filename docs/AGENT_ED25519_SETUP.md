@@ -1,6 +1,6 @@
 # Agent Ed25519 setup for node management
 
-This doc describes how a **node owner** can set up their node so that an **AI agent** (e.g. Open Claw or any automated process) can perform management signing using an Ed25519 keypair—without MetaMask. The agent can then call the node APIs for signRequestAgree, triggerSignRequestById, updateSignResultStatusById, shelveSignRequest, and keyGen (create/join) using Ed25519 signatures.
+This doc describes how a **node owner** can set up their node so that an **AI agent** (e.g. Open Claw or any automated process) can perform management signing using an Ed25519 keypair—without relying on Ethereum wallet / EIP-191 signing for management API calls. The agent can then call the node APIs for signRequestAgree, triggerSignRequestById, updateSignResultStatusById, shelveSignRequest, and keyGen (create/join) using Ed25519 signatures.
 
 ## Summary
 
@@ -88,7 +88,7 @@ curl "http://<node-host>:<port>/getAllowedEd25519MgtKeys"
 
 ### 1.4 Frontend: connect the node
 
-From the app, attach the node by its URL (e.g. `https://your-node.example.com`). You can connect MetaMask for your own use; the agent will use Ed25519.
+From the app, attach the node by its URL (e.g. `https://your-node.example.com`). You can connect an Ethereum wallet for your own use; the agent will use Ed25519.
 
 ## 2. KeyGen: use Ed25519 for this key (optional but recommended for agent-only flows)
 
@@ -139,7 +139,7 @@ If the keyGen uses Ed25519 client auth:
 - **Compose:** After you click OK, the app shows the message to sign and a field to paste the 128-hex Ed25519 signature (from your CLI or script), then Submit.
 - **Accept/Reject:** Click Accept or Reject; the app fetches the nonce and shows the same "Sign with Ed25519" panel (message + signature field). Paste the signature and Submit.
 
-So you can use the frontend without MetaMask for that key by signing elsewhere and pasting the signature.
+So you can use the frontend without an Ethereum wallet for that key by signing elsewhere and pasting the signature.
 
 ## 5. Info page: create key pair and instructions
 

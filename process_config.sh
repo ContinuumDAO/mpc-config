@@ -2483,8 +2483,8 @@ print('1' if not v else '0')
     
     if [ "$nk_empty" = "1" ]; then
         echo ""
-        print_step "NodeMgtKey is missing or still the default example address — optional Ethereum (MetaMask) management address"
-        print_info "Replace the placeholder with an address you control. It is used with MetaMask (or any Ethereum wallet) and EIP-191 personal_sign for management API calls."
+        print_step "NodeMgtKey is missing or still the default example address — optional Ethereum management address"
+        print_info "Replace the placeholder with an address you control. It is used with EIP-191 personal_sign from your Ethereum wallet for management API calls."
         print_info "You do not have to set it if you will use Ed25519 management (PublicMgtKey) instead."
         print_info "Press Enter to skip and configure PublicMgtKey only (or add NodeMgtKey later)."
         echo ""
@@ -2528,8 +2528,8 @@ print('0x' + low)
     
     if [ "$pk_empty" = "1" ]; then
         echo ""
-        print_step "PublicMgtKey is empty — optional Ed25519 public key (non-MetaMask management)"
-        print_info "This lets you manage the node without MetaMask (no EIP-191); scripts and AI agents can sign with the matching Ed25519 secret key."
+        print_step "PublicMgtKey is empty — optional Ed25519 public key (direct API management)"
+        print_info "This lets you manage the node without Ethereum wallet signing (no EIP-191); scripts and AI agents can sign with the matching Ed25519 secret key."
         print_info "You can set both NodeMgtKey and PublicMgtKey, or add PublicMgtKey later in configs.yaml."
         print_info "Enter: (1) 64 hex (32-byte public key), or (2) full OpenSSH line (ssh-ed25519 AAAA... [comment]), or (3) the base64 blob only from that line (no type prefix / comment). Press Enter to skip if you use NodeMgtKey only."
         echo ""
@@ -3715,6 +3715,7 @@ configure_docker_compose() {
     local is_relay_node="$1"
     local enable_loopback="${2:-0}"
     local app_image_override="${3:-}"
+    local configs_yaml_path="${4:-}"
     local script_dir="$(cd "$(dirname "$0")" && pwd)"
     local compose_dir="$script_dir"
     if [ -d "$script_dir/mosquitto/config" ]; then
@@ -3754,6 +3755,7 @@ configure_docker_compose() {
         if [ -n "$app_image_override" ]; then
             apply_docker_compose_mpc_auth_image "$docker_compose_file" "$app_image_override"
         fi
+        apply_docker_compose_continuumdao_node_app "$docker_compose_file" "$configs_yaml_path" || true
     else
         print_warning "Failed to copy $template to docker-compose.yml"
         return 1
@@ -3826,6 +3828,207 @@ PYIMG
             ;;
         *)
             print_warning "docker-compose.yml: unexpected image patch result (${_img_action})."
+            ;;
+    esac
+}
+
+# Replace the marked continuumdao-node-app (dashboard) block in docker-compose.yml from ContinuumdaoNodeApp in configs.yaml.
+apply_docker_compose_continuumdao_node_app() {
+    local file="$1"
+    local config_file="${2:-}"
+    if [ -z "$config_file" ] || [ ! -f "$config_file" ]; then
+        print_warning "Skipping continuumdao-node-app compose merge (missing configs.yaml path)."
+        return 0
+    fi
+    if [ ! -f "$file" ]; then
+        print_warning "Skipping continuumdao-node-app compose merge (compose file missing)."
+        return 0
+    fi
+    if ! command -v python3 &>/dev/null; then
+        print_warning "python3 not found — could not merge ContinuumdaoNodeApp into docker-compose.yml"
+        return 1
+    fi
+    local _na_action
+    _na_action=$(
+        MPC_NA_COMPOSE_PATH="$file" MPC_NA_CONFIG_PATH="$config_file" python3 <<'PYNA'
+import os
+import sys
+
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    print("no_ruamel", flush=True)
+    sys.exit(1)
+
+path_c = os.environ.get("MPC_NA_CONFIG_PATH", "")
+path_compose = os.environ.get("MPC_NA_COMPOSE_PATH", "")
+if not path_c or not path_compose:
+    print("skip", flush=True)
+    sys.exit(0)
+
+BEGIN = "  # BEGIN mpc-config continuumdao-node-app\n"
+END = "  # END mpc-config continuumdao-node-app\n"
+
+DEFAULT_ALIASES = (
+    "127.0.0.1=host.docker.internal,localhost=host.docker.internal,::1=host.docker.internal"
+)
+
+y = YAML()
+with open(path_c, encoding="utf-8") as f:
+    d = y.load(f) or {}
+
+if not isinstance(d, dict):
+    d = {}
+
+
+def scalar_int(val, default):
+    if val is None:
+        return default
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def scalar_bool(val, default):
+    if val is None:
+        return default
+    if isinstance(val, bool):
+        return val
+    s = str(val).strip().lower()
+    if s in ("0", "false", "no", "off", ""):
+        return False
+    if s in ("1", "true", "yes", "on"):
+        return True
+    return default
+
+
+na = d.get("ContinuumdaoNodeApp")
+enabled = True
+image = "continuumdao/continuumdao-node-app"
+tag = "latest"
+host_port = 3333
+plain_attach = True
+disc_allow_private = True
+hairpin = False
+aliases = ""
+
+if na is None:
+    pass  # defaults
+elif isinstance(na, dict):
+    enabled = scalar_bool(na.get("Enabled"), True)
+    image = (na.get("Image") or image).strip() or image
+    tag = (na.get("Tag") or tag).strip() or tag
+    host_port = scalar_int(na.get("HostPort"), host_port)
+    plain_attach = scalar_bool(na.get("EnablePlainHttpAttach"), True)
+    disc_allow_private = scalar_bool(na.get("NodeReadDiscoveryAllowPrivate"), True)
+    hairpin = scalar_bool(na.get("NodeReadDiscoveryHairpinFallback"), False)
+    if na.get("NodeReadDiscoveryLocalBindAliases") not in (None, ""):
+        aliases = str(na.get("NodeReadDiscoveryLocalBindAliases")).strip()
+else:
+    enabled = False
+
+mgt_port = scalar_int(d.get("ManagementAPIsPort"), 8080)
+pub_port = scalar_int(d.get("PublicDiscoveryPort"), 18080)
+bh = d.get("BrowserHTTPS")
+bh_port_raw = None
+if isinstance(bh, dict):
+    bh_port_raw = bh.get("Port")
+if bh_port_raw is None or bh_port_raw == 0:
+    bh_use = 8443
+else:
+    bh_use = scalar_int(bh_port_raw, 8443)
+
+if host_port <= 0 or host_port > 65535:
+    host_port = 3333
+
+
+def yaml_sq(s):
+    return "'" + str(s).replace("'", "''") + "'"
+
+
+if not aliases:
+    aliases_use = DEFAULT_ALIASES
+else:
+    aliases_use = aliases
+
+try:
+    with open(path_compose, encoding="utf-8") as f:
+        text = f.read()
+except OSError:
+    print("error_read", flush=True)
+    sys.exit(1)
+
+if BEGIN not in text or END not in text:
+    print("no_marker", flush=True)
+    sys.exit(0)
+
+i0 = text.index(BEGIN)
+i1 = text.index(END) + len(END)
+
+if enabled:
+    hairpin_lines = ""
+    if hairpin:
+        hairpin_lines = (
+            '      NODE_READ_DISCOVERY_HAIRPIN_FALLBACK: "1"\n'
+        )
+
+    dash = (
+        f"{BEGIN}"
+        f"  dashboard:\n"
+        f'    image: {yaml_sq(image + ":" + tag)}\n'
+        f"    restart: unless-stopped\n"
+        f"    extra_hosts:\n"
+        f'      - "host.docker.internal:host-gateway"\n'
+        f"    environment:\n"
+        f'      ENABLE_PLAIN_HTTP_ATTACH: {"\"1\"" if plain_attach else "\"0\""}\n'
+        f'      NODE_READ_DISCOVERY_ALLOW_PRIVATE: {"\"1\"" if disc_allow_private else "\"0\""}\n'
+        f"      NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES: {yaml_sq(aliases_use)}\n"
+        f'      DEFAULT_NODE_DISCOVERY_PORT: "{pub_port}"\n'
+        f'      BROWSER_HTTPS_PORT: "{bh_use}"\n'
+        f'      MANAGEMENT_API_PORT: "{mgt_port}"\n'
+        f"{hairpin_lines}"
+        f"    ports:\n"
+        f'      - "{host_port}:3000"\n'
+        f"    networks:\n"
+        f"      - local-network\n"
+        f"{END}"
+    )
+    new_text = text[:i0] + dash + text[i1:]
+    action = "ok_on"
+else:
+    new_text = text[:i0] + text[i1:]
+    action = "ok_off"
+
+try:
+    with open(path_compose, "w", encoding="utf-8") as f:
+        f.write(new_text)
+except OSError:
+    print("error_write", flush=True)
+    sys.exit(1)
+print(action, flush=True)
+PYNA
+    )
+    case "$_na_action" in
+        ok_on)
+            print_success "docker-compose.yml: continuumdao-node-app (dashboard) enabled from configs.yaml."
+            ;;
+        ok_off)
+            print_info "docker-compose.yml: continuumdao-node-app (dashboard) disabled (ContinuumdaoNodeApp.Enabled: false)."
+            ;;
+        skip)
+            ;;
+        no_marker)
+            print_warning "docker-compose.yml: no continuumdao-node-app markers — update templates or regenerate compose."
+            ;;
+        no_ruamel)
+            print_warning "python3 ruamel.yaml missing — install python3-ruamel.yaml or pip install ruamel.yaml; ContinuumdaoNodeApp compose merge skipped."
+            ;;
+        error_read | error_write)
+            print_warning "Could not merge ContinuumdaoNodeApp into docker-compose.yml (${_na_action})."
+            ;;
+        *)
+            print_warning "Unexpected ContinuumdaoNodeApp compose merge result: ${_na_action}"
             ;;
     esac
 }
@@ -4401,7 +4604,7 @@ show_process_config_help() {
     echo "This script validates configuration and generates certificates."
     echo ""
     echo "If PublicMgtKey in configs.yaml is an ssh-ed25519 line or OpenSSH base64 blob, it is rewritten to 64 hex (tools/openssh_ed25519_to_hex.py)."
-    echo "If NodeMgtKey or PublicMgtKey is empty, the script prompts first (interactive TTY): Ethereum (MetaMask)"
+    echo "If NodeMgtKey or PublicMgtKey is empty, the script prompts first (interactive TTY): Ethereum wallet / NodeMgtKey"
     echo "and/or Ed25519 public key (64 hex, ssh-ed25519 line, or base64 blob; tools/openssh_ed25519_to_hex.py)."
     echo "If you skip PublicMgtKey on a TTY and it stays empty, the script runs tools/bootstrap_key_provision.py:"
     echo "  creates bootstrap_key/ed25519_private.hex (0600), sets PublicMgtKey + DeterministicNodeKey in configs.yaml."
@@ -4757,6 +4960,74 @@ PYCODE
     print_success "Installed loopback Mongo owner-drop in $ar and reloaded UFW."
 }
 
+# ContinuumdaoNodeApp.Enabled + HostPort — for UFW allow on dashboard HTTP (HostPort maps host → container 3000).
+_firewall_read_continuumdao_node_app_listen() {
+    local config_file="$1"
+    if [ -z "$config_file" ] || [ ! -f "$config_file" ]; then
+        return 1
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        return 1
+    fi
+    FW_NODE_APP_LISTEN_CFG="$config_file" python3 <<'PYFNA'
+import os
+import sys
+
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.exit(2)
+
+path = os.environ.get("FW_NODE_APP_LISTEN_CFG", "")
+if not path:
+    sys.exit(1)
+
+y = YAML()
+with open(path, encoding="utf-8") as f:
+    d = y.load(f) or {}
+if not isinstance(d, dict):
+    d = {}
+
+
+def scalar_int(val, default):
+    if val is None:
+        return default
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def scalar_bool(val, default):
+    if val is None:
+        return default
+    if isinstance(val, bool):
+        return val
+    s = str(val).strip().lower()
+    if s in ("0", "false", "no", "off", ""):
+        return False
+    if s in ("1", "true", "yes", "on"):
+        return True
+    return default
+
+
+na = d.get("ContinuumdaoNodeApp")
+enabled = True
+host_port = 3333
+if na is None:
+    pass
+elif isinstance(na, dict):
+    enabled = scalar_bool(na.get("Enabled"), True)
+    host_port = scalar_int(na.get("HostPort"), host_port)
+else:
+    enabled = False
+
+if host_port <= 0 or host_port > 65535:
+    host_port = 3333
+print(f"{1 if enabled else 0}|{host_port}", flush=True)
+PYFNA
+}
+
 apply_process_config_firewall() {
     local config_file="$1"
     local skip_firewall="$2"
@@ -4846,6 +5117,17 @@ apply_process_config_firewall() {
     apply_one_ufw 22 "ssh"
     apply_one_ufw "$bh_port" "mpc-auth BrowserHTTPS"
     apply_one_ufw "$pub_port" "mpc-auth PublicDiscovery"
+    local _na_fw _na_en _na_hp
+    if _na_fw=$(_firewall_read_continuumdao_node_app_listen "$config_file"); then
+        IFS='|' read -r _na_en _na_hp <<< "$_na_fw"
+        if [ "$_na_en" = "1" ] && [ -n "$_na_hp" ] && [ "$_na_hp" != "0" ]; then
+            if [ "$_na_hp" != "$bh_port" ] && [ "$_na_hp" != "$pub_port" ] && [ "$_na_hp" != "$mgt_port" ]; then
+                apply_one_ufw "$_na_hp" "continuumdao-node-app dashboard"
+            else
+                print_info "UFW: continuumdao-node-app HostPort ${_na_hp} matches an existing mpc-auth listener port — no duplicate rule."
+            fi
+        fi
+    fi
     # ScannerRelayerPort: open unless same port already covered by another listener rule above.
     # Include bh_port so we do not duplicate rules when BrowserHTTPS.Port == ScannerRelayerPort.
     if [ -n "$sr_port" ] && [ "$sr_port" != "0" ] && [ "$sr_port" != "null" ] \
@@ -4952,6 +5234,127 @@ PY
         print_success "Synced MPC_AUTH_COMPOSE_WORKDIR in ${cfg} → ${abs}"
     else
         print_warning "Could not write ${cfg} — set MPC_AUTH_COMPOSE_WORKDIR=${abs} manually."
+    fi
+}
+
+# Sync ContinuumdaoNodeApp image/tag + dashboard container name into /etc/default/mpc-auth-docker so
+# mpc-auth-docker-update.sh can pull the companion image when mpc-auth is updated.
+_process_config_sync_mpc_auth_docker_dashboard_keys() {
+    local config_file="$1"
+    local cfg=/etc/default/mpc-auth-docker
+    [ -f "$config_file" ] || return 0
+    [ -f "$cfg" ] || return 0
+    local abs=""
+    if [ -f "${REPO_ROOT}/docker-compose.yml" ] || [ -f "${REPO_ROOT}/docker-compose.relay.yml" ] || [ -f "${REPO_ROOT}/docker-compose.client.yml" ]; then
+        abs="$(cd "${REPO_ROOT}" && pwd)"
+    elif [ -f "${REPO_ROOT}/../docker-compose.yml" ] || [ -f "${REPO_ROOT}/../docker-compose.relay.yml" ] || [ -f "${REPO_ROOT}/../docker-compose.client.yml" ]; then
+        abs="$(cd "${REPO_ROOT}/.." && pwd)"
+    else
+        return 0
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        return 0
+    fi
+    if ! sudo -n true 2>/dev/null && ! sudo true; then
+        print_warning "sudo required to sync ContinuumdaoNodeApp keys in ${cfg} — companion image pull on systemd update may be skipped."
+        return 0
+    fi
+    # shellcheck disable=SC2310
+    if sudo env MPC_DASH_CFG="$config_file" MPC_DASH_ENV="$cfg" MPC_DASH_PROJ="$(basename "$abs")" python3 <<'PYDASH'
+import os
+import pathlib
+
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    raise SystemExit(2)
+
+cfg_path = pathlib.Path(os.environ["MPC_DASH_ENV"])
+yaml_path = pathlib.Path(os.environ["MPC_DASH_CFG"])
+proj = (os.environ.get("MPC_DASH_PROJ") or "mpc-config").strip() or "mpc-config"
+
+
+def scalar_bool(val, default):
+    if val is None:
+        return default
+    if isinstance(val, bool):
+        return val
+    s = str(val).strip().lower()
+    if s in ("0", "false", "no", "off", ""):
+        return False
+    if s in ("1", "true", "yes", "on"):
+        return True
+    return default
+
+
+y = YAML()
+with open(yaml_path, encoding="utf-8") as f:
+    d = y.load(f) or {}
+if not isinstance(d, dict):
+    d = {}
+
+na = d.get("ContinuumdaoNodeApp")
+enabled = True
+image = "continuumdao/continuumdao-node-app"
+tag = "latest"
+if na is None:
+    pass
+elif isinstance(na, dict):
+    enabled = scalar_bool(na.get("Enabled"), True)
+    image = (na.get("Image") or image).strip() or image
+    tag = (na.get("Tag") or tag).strip() or tag
+else:
+    enabled = False
+
+if enabled:
+    keys = {
+        "MPC_AUTH_UPDATE_NODE_APP": "1",
+        "NODE_APP_IMAGE": image,
+        "NODE_APP_TAG": tag,
+        "MPC_AUTH_NODE_APP_COMPOSE_SERVICE": "dashboard",
+        "NODE_APP_CONTAINER_NAME": proj + "-dashboard-1",
+    }
+else:
+    keys = {
+        "MPC_AUTH_UPDATE_NODE_APP": "0",
+        "NODE_APP_IMAGE": "",
+        "NODE_APP_TAG": "",
+        "MPC_AUTH_NODE_APP_COMPOSE_SERVICE": "dashboard",
+        "NODE_APP_CONTAINER_NAME": proj + "-dashboard-1",
+    }
+
+text = cfg_path.read_text(encoding="utf-8", errors="replace")
+lines = text.splitlines(keepends=True)
+known = list(keys.keys())
+repl = dict(keys)
+present = dict.fromkeys(known, False)
+out = []
+for line in lines:
+    lk = None
+    s = line.lstrip()
+    for k in known:
+        if s.startswith(k + "="):
+            lk = k
+            break
+    if lk is None:
+        out.append(line)
+        continue
+    present[lk] = True
+    nl = line.endswith("\r\n")
+    frag = lk + "=" + repl[lk]
+    out.append((frag + "\r\n") if nl else (frag + "\n"))
+if not lines or not (lines[-1].endswith("\n") or lines[-1].endswith("\r\n")):
+    out.append("\n")
+for k in known:
+    if not present[k]:
+        out.append(k + "=" + repl[k] + "\n")
+
+cfg_path.write_text("".join(out), encoding="utf-8")
+PYDASH
+    then
+        print_success "Synced ContinuumdaoNodeApp → ${cfg} (NODE_APP_* for mpc-auth-docker-update.sh)."
+    else
+        print_warning "Could not merge ContinuumdaoNodeApp keys into ${cfg} (missing ruamel.yaml or write failed)."
     fi
 }
 
@@ -5360,7 +5763,7 @@ main() {
     prompt_browser_loopback_read_http
 
     configure_mqtt_broker "$CONFIG_FILE" "$IS_RELAY_NODE"
-    configure_docker_compose "$IS_RELAY_NODE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED" "$COMPOSE_APP_IMAGE_REF"
+    configure_docker_compose "$IS_RELAY_NODE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED" "$COMPOSE_APP_IMAGE_REF" "$CONFIG_FILE"
 
     setup_browser_https "$CONFIG_FILE"
     apply_browser_loopback_read_http_config "$CONFIG_FILE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED"
@@ -5374,6 +5777,7 @@ main() {
     # validate_relayer_api_connection so Relayer/network failures cannot skip these prompts entirely.
     _process_config_prompt_mpc_auth_systemd_helpers "$SKIP_SYSTEMD" "$INSTALL_MPC_AUTH_SYSTEMD"
     _process_config_sync_mpc_auth_docker_compose_workdir
+    _process_config_sync_mpc_auth_docker_dashboard_keys "$CONFIG_FILE"
     _process_config_sync_mpc_auth_libexec_from_repo "$SKIP_SYSTEMD"
 
     # Validate Relayer API connection (MANDATORY for relay before certificate generation; may exit 1 on failure)
