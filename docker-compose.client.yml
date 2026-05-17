@@ -65,8 +65,9 @@ services:
       - /var/lib/mpc-auth-docker:/var/lib/mpc-auth-docker
       # Writable so POST /configUpdateImplement can merge planned YAML via ruamel (read-only causes apply failures).
       - ./configs.yaml:/app/configs.yaml
-      # DeterministicNodeKey: seed file from tools/bootstrap_key_provision.py (process_config.sh). Host dir next to configs.yaml.
-      - ./bootstrap_key:/app/bootstrap_key:ro
+      # DeterministicNodeKey: seed from tools/bootstrap_key_provision.py / host. Writable so management POST /postBootstrapKey
+      # and POST /removeBootstrapKey can change ed25519_private.hex inside the container (read-only bind causes EROFS on write).
+      - ./bootstrap_key:/app/bootstrap_key
       # POST /backupDatabase writes encrypted JSON here; host path ./database_backups (same default as DatabaseBackupsDir in configs.yaml).
       - ./database_backups:/app/database_backups
       # POST /restoreDatabase pre-restore mongodump (README + pre_restore_<UTC>/); ./.mongodump:/app/.mongodump must match env.
@@ -87,6 +88,9 @@ services:
   dashboard:
     image: continuumdao/continuumdao-node-app:latest
     restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
