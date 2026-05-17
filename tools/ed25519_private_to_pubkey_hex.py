@@ -7,6 +7,8 @@ openssh_ed25519_to_hex.py.
 Supports common formats:
   - OpenSSH (ssh-keygen): -----BEGIN OPENSSH PRIVATE KEY-----
   - PEM PKCS#8: openssl genpkey -algorithm ED25519
+  - Raw hex seed (UTF-8 text): 64 hex chars (32-byte seed), same as bootstrap_key/ed25519_private.hex;
+    or 128 hex chars (64-byte expanded secret; first 32 bytes used as seed), matching bootstrap_key_provision.py.
 
 Requires: cryptography (e.g. install in ``$MPA_PATH/.venv`` with ``pip install cryptography``; see ``docs/skill/SKILL.md`` **Python dependencies**).
 
@@ -38,6 +40,29 @@ except ImportError:
     sys.exit(1)
 
 
+def _try_ed25519_private_from_seed_hex(data: bytes) -> Ed25519PrivateKey | None:
+    """Parse bootstrap-style hex: 32-byte seed (64 hex) or 64-byte expanded (128 hex), optional 0x."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    hexs = text.strip().lower().removeprefix("0x")
+    hexs = "".join(hexs.split())
+    if len(hexs) % 2 != 0:
+        return None
+    if not hexs or any(c not in "0123456789abcdef" for c in hexs):
+        return None
+    try:
+        seed = bytes.fromhex(hexs)
+    except ValueError:
+        return None
+    if len(seed) == 32:
+        return Ed25519PrivateKey.from_private_bytes(seed)
+    if len(seed) == 64:
+        return Ed25519PrivateKey.from_private_bytes(seed[:32])
+    return None
+
+
 def load_ed25519_private_key(data: bytes, password: bytes | None) -> Ed25519PrivateKey:
     last: Exception | None = None
     for loader in (load_ssh_private_key, load_pem_private_key):
@@ -49,6 +74,11 @@ def load_ed25519_private_key(data: bytes, password: bytes | None) -> Ed25519Priv
         if isinstance(key, Ed25519PrivateKey):
             return key
         raise ValueError(f"not an Ed25519 private key (got {type(key).__name__})")
+
+    key_hex = _try_ed25519_private_from_seed_hex(data)
+    if key_hex is not None:
+        return key_hex
+
     msg = "could not deserialize private key (wrong format or passphrase?)"
     if last is not None:
         raise ValueError(msg) from last
@@ -72,7 +102,7 @@ def main() -> None:
     )
     parser.add_argument(
         "path",
-        help="Path to private key (OpenSSH or PEM)",
+        help="Path to private key (OpenSSH, PEM, or raw Ed25519 seed hex file)",
     )
     parser.add_argument(
         "--passphrase",
