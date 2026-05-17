@@ -2,13 +2,15 @@
 // stdin (--stdin), signs it with the Ed25519 management key from
 // ~/.ssh/mpc_auth_ed25519 (or, if that does not exist,
 // ~/.ssh/mpc_auth_bootstrap_ed25519), and writes the 128-hex signature to the
-// clipboard or stdout.
+// clipboard or stdout. Key files may be PKCS#8 PEM, OpenSSH PEM, or raw hex
+// (64 hex chars = seed, 128 = expanded or seed||public).
 // Usage: copy the message in the app, run this binary, then paste the signature into the app.
 // For SSH sessions without DISPLAY, use --stdin and pipe the message or redirect from a file.
 // For POST bodies without shell-quoting huge JSON, use --inline-file <path>.
 package main
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/x509"
 	"encoding/hex"
@@ -220,13 +222,26 @@ func run(forceBootstrap, forcePrimary bool, keyFileOverride string, stdinMode bo
 	return nil
 }
 
-// parseEd25519PrivateKey supports PKCS#8 PEM (from the app) and OpenSSH format.
-func parseEd25519PrivateKey(keyPem []byte) (ed25519.PrivateKey, error) {
-	block, _ := pem.Decode(keyPem)
-	if block == nil {
-		return nil, fmt.Errorf("no PEM block found")
-	}
+// utf8BOM is the UTF-8 byte order mark sometimes prepended by editors.
+var utf8BOM = []byte{0xef, 0xbb, 0xbf}
 
+// parseEd25519PrivateKey supports PKCS#8 PEM (from the app), OpenSSH format, and
+// raw hex: 64 hex chars (32-byte seed) or 128 hex chars (64-byte secret:
+// libsodium seed||pub or a standard-library expanded private key).
+func parseEd25519PrivateKey(data []byte) (ed25519.PrivateKey, error) {
+	data = bytes.TrimPrefix(data, utf8BOM)
+	block, _ := pem.Decode(data)
+	if block != nil {
+		return parsePEMEd25519(block, data)
+	}
+	priv, err := parseHexEd25519PrivateKey(data)
+	if err != nil {
+		return nil, fmt.Errorf("%w (expected PKCS#8 PEM, OpenSSH PEM, or Ed25519 private key as hex)", err)
+	}
+	return priv, nil
+}
+
+func parsePEMEd25519(block *pem.Block, full []byte) (ed25519.PrivateKey, error) {
 	switch block.Type {
 	case "PRIVATE KEY":
 		// PKCS#8 from the app's key generation
@@ -241,7 +256,7 @@ func parseEd25519PrivateKey(keyPem []byte) (ed25519.PrivateKey, error) {
 		return p, nil
 	case "OPENSSH PRIVATE KEY":
 		// OpenSSH format (e.g. from ssh-keygen)
-		key, err := ssh.ParseRawPrivateKey(keyPem)
+		key, err := ssh.ParseRawPrivateKey(full)
 		if err != nil {
 			return nil, fmt.Errorf("OpenSSH: %w", err)
 		}
@@ -255,6 +270,51 @@ func parseEd25519PrivateKey(keyPem []byte) (ed25519.PrivateKey, error) {
 		}
 	default:
 		return nil, fmt.Errorf("unsupported key type %q; use PRIVATE KEY (PKCS#8) or OPENSSH PRIVATE KEY", block.Type)
+	}
+}
+
+// stripForHexKey removes whitespace so a hex key may span lines.
+func stripForHexKey(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch r {
+		case ' ', '\t', '\n', '\r':
+			continue
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func parseHexEd25519PrivateKey(data []byte) (ed25519.PrivateKey, error) {
+	s := stripForHexKey(strings.TrimSpace(string(data)))
+	if s == "" {
+		return nil, fmt.Errorf("empty key after trim")
+	}
+	if len(s) >= 2 && (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+		s = s[2:]
+	}
+	raw, err := hex.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hex: %w", err)
+	}
+	switch len(raw) {
+	case ed25519.SeedSize:
+		return ed25519.NewKeyFromSeed(raw), nil
+	case ed25519.PrivateKeySize:
+		// Libsodium / common export: 32-byte seed || 32-byte public key
+		derived := ed25519.NewKeyFromSeed(raw[:ed25519.SeedSize])
+		if bytes.Equal(derived[ed25519.SeedSize:], raw[ed25519.SeedSize:]) {
+			return ed25519.NewKeyFromSeed(raw[:ed25519.SeedSize]), nil
+		}
+		// Standard library expanded private key (64 bytes)
+		return ed25519.PrivateKey(raw), nil
+	default:
+		return nil, fmt.Errorf(
+			"hex decodes to %d bytes (want %d for seed or %d for expanded secret)",
+			len(raw), ed25519.SeedSize, ed25519.PrivateKeySize,
+		)
 	}
 }
 

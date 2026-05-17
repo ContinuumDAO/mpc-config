@@ -37,6 +37,7 @@ GOWORK=off go build -o sign-clipboard .
 - **Key file:** By default the tool looks for a key in this order: `~/.ssh/mpc_auth_ed25519`, then `~/.ssh/mpc_auth_bootstrap_ed25519` (uses the first that exists). Use `--bootstrap` or `--primary` to force one of those. Use `--key-file ~/.ssh/mpc_auth_2_ed25519` (or similar) when you have multiple added keys. Supports:
   - PKCS#8 PEM (`-----BEGIN PRIVATE KEY-----`) from the app’s “Create new key pair” flow.
   - OpenSSH format (`-----BEGIN OPENSSH PRIVATE KEY-----`).
+  - **Raw hex (private material only):** optional `0x` prefix; whitespace ignored. **64 hex characters** = 32-byte Ed25519 **seed**. **128 hex characters** = 64-byte secret, either **libsodium-style** `seed || public_key` (first 32 bytes are the seed) or a **Go/crypto** expanded private key. **This is not the 64-hex public key** shown in the app for `PublicMgtKey`—that value cannot sign; you need the private seed or a PEM/OpenSSH private key file.
 - **Clipboard:** On Linux, `xclip` or `xsel` must be installed for clipboard access (not needed if you use `--stdin`).
 - **Headless / SSH:** If `echo $DISPLAY` is empty, the clipboard path will not work. Put the exact message in a file and run:
   `sign-clipboard --bootstrap --stdin < message.txt`
