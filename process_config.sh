@@ -4036,6 +4036,10 @@ if enabled:
             '      NODE_READ_DISCOVERY_HAIRPIN_FALLBACK: "1"\n'
         )
 
+    # f-strings cannot contain backslashes inside {…} (e.g. escaped quotes); use bindings.
+    plain_attach_env = '"1"' if plain_attach else '"0"'
+    disc_allow_private_env = '"1"' if disc_allow_private else '"0"'
+
     dash = (
         f"{BEGIN}"
         f"  dashboard:\n"
@@ -4044,8 +4048,8 @@ if enabled:
         f"    extra_hosts:\n"
         f'      - "host.docker.internal:host-gateway"\n'
         f"    environment:\n"
-        f'      ENABLE_PLAIN_HTTP_ATTACH: {"\"1\"" if plain_attach else "\"0\""}\n'
-        f'      NODE_READ_DISCOVERY_ALLOW_PRIVATE: {"\"1\"" if disc_allow_private else "\"0\""}\n'
+        f"      ENABLE_PLAIN_HTTP_ATTACH: {plain_attach_env}\n"
+        f"      NODE_READ_DISCOVERY_ALLOW_PRIVATE: {disc_allow_private_env}\n"
         f"      NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES: {yaml_sq(aliases_use)}\n"
         f'      DEFAULT_NODE_DISCOVERY_PORT: "{pub_port}"\n'
         f'      BROWSER_HTTPS_PORT: "{bh_use}"\n'
