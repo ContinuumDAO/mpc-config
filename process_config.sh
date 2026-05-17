@@ -130,6 +130,28 @@ process_config_transfer_repo_path_to_invoking_user() {
     fi
 }
 
+# Same rules as configure_docker_compose(): where docker-compose.yml is written (repo root vs console/ vs parent).
+_process_config_resolve_compose_project_dir() {
+    local script_dir
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    if [ -d "$script_dir/mosquitto/config" ]; then
+        printf '%s\n' "$script_dir"
+    elif [ -f "$script_dir/../docker-compose.yml" ]; then
+        (cd "$script_dir/.." && pwd)
+    else
+        printf '%s\n' "$script_dir"
+    fi
+}
+
+# When running via sudo, hand this path to SUDO_USER even if ownership is already non-root (e.g. rewritten in place).
+process_config_repo_take_if_sudo_invoker() {
+    local target="$1"
+    [ -n "$target" ] || return 0
+    [ -e "$target" ] || return 0
+    [ "${EUID:-0}" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ] || return 0
+    chown "${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID}" "$target" 2>/dev/null || true
+}
+
 # openssl leaves root-owned keys/certs under the repo when the script runs via sudo — normalize regardless of parent dir ownership.
 _process_config_chown_repo_tree_if_sudo_root() {
     local dir="$1"
@@ -142,13 +164,33 @@ _process_config_chown_repo_tree_if_sudo_root() {
 # Normal completion: fix typical sudo-created artifacts under the checkout (does not touch non-root-owned trees).
 _process_config_finalize_repo_ownership_after_sudo() {
     [ -n "${CONFIG_FILE:-}" ] || return 0
-    local compose_root
+    local compose_root compose_project_dir compose_file cf_alt
     compose_root=$(cd "$(dirname "$CONFIG_FILE")" && pwd)
+    compose_project_dir="$(_process_config_resolve_compose_project_dir)"
+    compose_file="${compose_project_dir}/docker-compose.yml"
     process_config_transfer_repo_path_to_invoking_user "$CONFIG_FILE"
     process_config_transfer_repo_path_to_invoking_user "${compose_root}/.env"
     process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/.env"
     process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/bootstrap_key"
-    process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/docker-compose.yml"
+    process_config_repo_take_if_sudo_invoker "$compose_file"
+    process_config_transfer_repo_path_to_invoking_user "$compose_file"
+    cf_alt="${compose_root}/docker-compose.yml"
+    if [ "$cf_alt" != "$compose_file" ]; then
+        process_config_repo_take_if_sudo_invoker "$cf_alt"
+        process_config_transfer_repo_path_to_invoking_user "$cf_alt"
+    fi
+    cf_alt="${REPO_ROOT}/docker-compose.yml"
+    if [ "$cf_alt" != "$compose_file" ] && [ "$cf_alt" != "${compose_root}/docker-compose.yml" ]; then
+        process_config_repo_take_if_sudo_invoker "$cf_alt"
+        process_config_transfer_repo_path_to_invoking_user "$cf_alt"
+    fi
+    shopt -s nullglob
+    local bf
+    for bf in "${compose_file}.backup."*; do
+        process_config_repo_take_if_sudo_invoker "$bf"
+        process_config_transfer_repo_path_to_invoking_user "$bf"
+    done
+    shopt -u nullglob
     process_config_transfer_repo_path_to_invoking_user "$CERT_DIR"
     _process_config_chown_repo_tree_if_sudo_root "$WEB_TLS_HOST_DIR"
 }
@@ -3819,6 +3861,13 @@ configure_docker_compose() {
             apply_docker_compose_mpc_auth_image "$docker_compose_file" "$app_image_override"
         fi
         apply_docker_compose_continuumdao_node_app "$docker_compose_file" "$configs_yaml_path" || true
+        process_config_repo_take_if_sudo_invoker "$docker_compose_file"
+        shopt -s nullglob
+        local _dcf_bak
+        for _dcf_bak in "${docker_compose_file}.backup."*; do
+            process_config_repo_take_if_sudo_invoker "$_dcf_bak"
+        done
+        shopt -u nullglob
     else
         print_warning "Failed to copy $template to docker-compose.yml"
         return 1
