@@ -2491,25 +2491,28 @@ try:
 except Exception:
     print('0')
 ")
-    if [ "$pk_nonempty" = "1" ]; then
-        return 0
-    fi
     local prov="${REPO_ROOT}/tools/bootstrap_key_provision.py"
     if [ ! -f "$prov" ]; then
         prov="${SCRIPT_DIR}/tools/bootstrap_key_provision.py"
     fi
     if [ ! -f "$prov" ]; then
-        print_error "PublicMgtKey is empty and tools/bootstrap_key_provision.py was not found — cannot provision Ed25519 bootstrap / deterministic nodeKey."
+        print_error "tools/bootstrap_key_provision.py was not found — cannot provision or sync Ed25519 bootstrap / DeterministicNodeKey."
         return 1
     fi
-    echo ""
-    print_step "PublicMgtKey is still empty — generating Ed25519 bootstrap identity (bootstrap_key/ + configs.yaml)"
-    print_info "Enables deterministic nodeKey, encrypted DB backups, and POST /fetchBootstrapKey. Back up bootstrap_key/ securely."
+    # Always run bootstrap_key_provision.py: generates bootstrap when PublicMgtKey is empty; when preset (e.g. provision-node.sh
+    # --public-mgt-key), syncs DeterministicNodeKey if bootstrap_key/ed25519_private.hex exists and matches PublicMgtKey.
+    if [ "$pk_nonempty" = "0" ]; then
+        echo ""
+        print_step "PublicMgtKey is still empty — generating Ed25519 bootstrap identity (bootstrap_key/ + configs.yaml)"
+        print_info "Enables deterministic nodeKey, encrypted DB backups, and POST /fetchBootstrapKey. Back up bootstrap_key/ securely."
+    fi
     if ! python3 "$prov" "$config_file"; then
         print_error "bootstrap_key_provision.py failed (install: pip install cryptography 'ruamel.yaml')."
         return 1
     fi
-    print_success "Bootstrap management key provisioned."
+    if [ "$pk_nonempty" = "0" ]; then
+        print_success "Bootstrap management key provisioned."
+    fi
     return 0
 }
 
@@ -4723,11 +4726,14 @@ show_process_config_help() {
     echo "If PublicMgtKey in configs.yaml is an ssh-ed25519 line or OpenSSH base64 blob, it is rewritten to 64 hex (tools/openssh_ed25519_to_hex.py)."
     echo "If NodeMgtKey or PublicMgtKey is empty, the script prompts first (interactive TTY): Ethereum wallet / NodeMgtKey"
     echo "and/or Ed25519 public key (64 hex, ssh-ed25519 line, or base64 blob; tools/openssh_ed25519_to_hex.py)."
-    echo "If you skip PublicMgtKey on a TTY and it stays empty, the script runs tools/bootstrap_key_provision.py:"
-    echo "  creates bootstrap_key/ed25519_private.hex (0600), sets PublicMgtKey + DeterministicNodeKey in configs.yaml."
-    echo "The same auto-provision runs without a TTY when PublicMgtKey is still empty but NodeMgtKey is already valid"
-    echo "(e.g. scripts/provision-node.sh with --node-mgt-key only and PROCESS_CONFIG_NONINTERACTIVE=1)."
-    echo "At least one valid NodeMgtKey or PublicMgtKey is required before this step; empty PublicMgtKey is then filled by bootstrap_key_provision.py."
+    echo "tools/bootstrap_key_provision.py runs for every configs.yaml:"
+    echo "  - PublicMgtKey empty: creates bootstrap_key/ed25519_private.hex (0600), sets PublicMgtKey + DeterministicNodeKey."
+    echo "  - PublicMgtKey preset (reinstall): if bootstrap_key/ed25519_private.hex exists and matches, sets DeterministicNodeKey."
+    echo "Without a TTY when PublicMgtKey is still empty but NodeMgtKey is valid (e.g. provision-node.sh -k only),"
+    echo "bootstrap_key_provision.py fills Ed25519 the same way."
+    echo "Reinstall with an existing Ed25519 public key: install bootstrap_key/ed25519_private.hex before process_config completes"
+    echo "so deterministic nodeKey aligns on fresh Mongo (scripts/provision-node.sh copies configs.yaml before process_config)."
+    echo "At least one valid NodeMgtKey or PublicMgtKey is required before bootstrap_key_provision.py."
     echo ""
     echo "Then, if MPCGroups[0].nodeAddresses is empty or still uses the default 203.0.113.10–12 example IPs, the script prompts"
     echo "and writes http://...:${MPC_NODE_HTTP_PORT} URLs (first entry = relay; same order on all nodes)."
