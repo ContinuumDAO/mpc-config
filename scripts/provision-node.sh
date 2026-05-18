@@ -33,8 +33,10 @@ Usage:
     --public-mgt-key KEY      Ed25519 public: 64 hex (optional 0x), or full ssh-ed25519 line (quote if it contains spaces).
 
   If you pass only --node-mgt-key, process_config.sh generates PublicMgtKey + bootstrap_key + DeterministicNodeKey.
-  Reinstall with --public-mgt-key: put bootstrap_key/ed25519_private.hex in the repo (beside configs.yaml) BEFORE this
-  script so process_config can sync configs and mpc-auth derives the same nodeKey on fresh Mongo.
+  With --public-mgt-key and no bootstrap seed file yet, configs set DeterministicNodeKey so mpc-auth stays bootstrap-pending
+  (no random nodeKey) until you POST /postBootstrapKey or place bootstrap_key/ed25519_private.hex — e.g. frontend restore flow.
+  Reinstall with seed on disk: copy bootstrap_key/ed25519_private.hex beside configs.yaml before this script; mpc-auth then
+  derives the same deterministic nodeKey on fresh Mongo when the file matches PublicMgtKey.
 
   Legacy: a single positional argument is treated as NODE_MGT_ETH (same as -k).
 
@@ -57,6 +59,8 @@ Environment (optional):
   PROVISION_RELAY_PLACEHOLDER_HOST  Override relay placeholder (default 0.0.0.0)
   RELAYER_API_URL                Used by process_config.sh when RelayerAPIURL is empty
   PROCESS_CONFIG_NONINTERACTIVE  Defaults to 1 for this script (set 0 before sudo -E to allow process_config prompts)
+  PROVISION_DEFER_NODE_KEY_UNTIL_BOOTSTRAP  Defaults to 1 when --public-mgt-key is set (bootstrap-pending, no random nodeKey).
+                                             Set to 0 before sudo -E to restore the old behavior (omit DeterministicNodeKey when seed absent).
   See process_config.sh --help for additional variables.
 
 Node layout written (MPCGroups[0] only):
@@ -442,5 +446,9 @@ fi
 echo ""
 echo "==> Running process_config.sh (${PC_ARGS[*]:-})"
 export PROCESS_CONFIG_NONINTERACTIVE="${PROCESS_CONFIG_NONINTERACTIVE:-1}"
+# Preset Ed25519 bootstrap public key without a local seed: avoid mpc-auth generating a random nodeKey on empty Mongo.
+if [ -n "$PUBLIC_MGT_KEY_CLI" ]; then
+    export PROVISION_DEFER_NODE_KEY_UNTIL_BOOTSTRAP="${PROVISION_DEFER_NODE_KEY_UNTIL_BOOTSTRAP:-1}"
+fi
 cd "$REPO_ROOT"
 bash "$PROCESS_CONFIG_SH" "${PC_ARGS[@]}"

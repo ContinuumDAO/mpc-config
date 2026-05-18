@@ -7,6 +7,11 @@ docs-internal/DATABASE_BACKUP_RESTORE_PLAN.md §8; mpc-config API_IMPLEMENTATION
 When PublicMgtKey is already set (e.g. provision-node.sh --public-mgt-key), this script
 still runs: if bootstrap_key/ed25519_private.hex exists and matches configs.yaml,
 it sets DeterministicNodeKey: true so mpc-auth can derive the same nodeKey after a reinstall.
+
+When PublicMgtKey is preset and the seed file is absent, mpc-auth would otherwise generate a
+random nodeKey (DeterministicNodeKey false). provision-node.sh passes
+--defer-node-key-until-bootstrap so we set DeterministicNodeKey: true without creating a
+seed file — mpc-auth stays in bootstrap-pending mode until POST /postBootstrapKey or restore.
 """
 
 from __future__ import annotations
@@ -125,6 +130,15 @@ def main() -> int:
         default="bootstrap_key",
         help="Directory name under configs.yaml parent (default: bootstrap_key)",
     )
+    ap.add_argument(
+        "--defer-node-key-until-bootstrap",
+        action="store_true",
+        help=(
+            "PublicMgtKey already set: if ed25519_private.hex is missing, set DeterministicNodeKey true "
+            "so mpc-auth does not generate a random nodeKey (bootstrap-pending until seed on disk or POST). "
+            "If the seed file exists and matches PublicMgtKey, sync DeterministicNodeKey as usual."
+        ),
+    )
     args = ap.parse_args()
 
     cfg_path: Path = args.config_yaml.resolve()
@@ -161,6 +175,25 @@ def main() -> int:
     # --- PublicMgtKey preset: align DeterministicNodeKey when bootstrap seed is on disk (reinstall / --public-mgt-key path).
     if existing_hex:
         if not keyfile.is_file():
+            if args.defer_node_key_until_bootstrap:
+                changed = False
+                if data.get("DeterministicNodeKey") is not True:
+                    data["DeterministicNodeKey"] = True
+                    changed = True
+                if changed:
+                    with cfg_path.open("w") as f:
+                        yaml.dump(data, f)
+                    print(
+                        f"Set DeterministicNodeKey: true in {cfg_path} (PublicMgtKey preset, {keyfile.name} absent). "
+                        "mpc-auth will stay in bootstrap-pending mode (no random nodeKey) until the seed is installed "
+                        "or POST /postBootstrapKey succeeds."
+                    )
+                else:
+                    print(
+                        f"DeterministicNodeKey already true ({cfg_path}); bootstrap seed still absent — "
+                        "mpc-auth remains bootstrap-pending until seed on disk or POST /postBootstrapKey."
+                    )
+                return 0
             print(
                 "bootstrap_key_provision: PublicMgtKey is set but "
                 f"{keyfile} is missing — mpc-auth needs this file for deterministic nodeKey / DB backups. "

@@ -2501,12 +2501,18 @@ except Exception:
     fi
     # Always run bootstrap_key_provision.py: generates bootstrap when PublicMgtKey is empty; when preset (e.g. provision-node.sh
     # --public-mgt-key), syncs DeterministicNodeKey if bootstrap_key/ed25519_private.hex exists and matches PublicMgtKey.
+    # PROVISION_DEFER_NODE_KEY_UNTIL_BOOTSTRAP=1 (set by provision-node.sh --public-mgt-key): if seed file is absent, set
+    # DeterministicNodeKey true anyway so mpc-auth does not auto-generate a random nodeKey before bootstrap/restore.
+    local bs_extra=()
+    if [ "${PROVISION_DEFER_NODE_KEY_UNTIL_BOOTSTRAP:-0}" = "1" ]; then
+        bs_extra+=(--defer-node-key-until-bootstrap)
+    fi
     if [ "$pk_nonempty" = "0" ]; then
         echo ""
         print_step "PublicMgtKey is still empty — generating Ed25519 bootstrap identity (bootstrap_key/ + configs.yaml)"
         print_info "Enables deterministic nodeKey, encrypted DB backups, and POST /fetchBootstrapKey. Back up bootstrap_key/ securely."
     fi
-    if ! python3 "$prov" "$config_file"; then
+    if ! python3 "$prov" "${bs_extra[@]}" "$config_file"; then
         print_error "bootstrap_key_provision.py failed (install: pip install cryptography 'ruamel.yaml')."
         return 1
     fi
@@ -4729,6 +4735,8 @@ show_process_config_help() {
     echo "tools/bootstrap_key_provision.py runs for every configs.yaml:"
     echo "  - PublicMgtKey empty: creates bootstrap_key/ed25519_private.hex (0600), sets PublicMgtKey + DeterministicNodeKey."
     echo "  - PublicMgtKey preset (reinstall): if bootstrap_key/ed25519_private.hex exists and matches, sets DeterministicNodeKey."
+    echo "  - PROVISION_DEFER_NODE_KEY_UNTIL_BOOTSTRAP=1 (provision-node.sh --public-mgt-key): seed absent → DeterministicNodeKey true,"
+    echo "    bootstrap-pending (no random nodeKey) until seed or POST /postBootstrapKey."
     echo "Without a TTY when PublicMgtKey is still empty but NodeMgtKey is valid (e.g. provision-node.sh -k only),"
     echo "bootstrap_key_provision.py fills Ed25519 the same way."
     echo "Reinstall with an existing Ed25519 public key: install bootstrap_key/ed25519_private.hex before process_config completes"
