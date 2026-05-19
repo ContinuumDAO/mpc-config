@@ -4,7 +4,7 @@
 
 The Distributed Auth Management API provides a RESTful interface for managing MPC (Multi-Party Computation) nodes, key generation, signing operations, and system monitoring. The API is implemented using the Gin web framework and follows a consistent response format.
 
-**CGGMP24 / Rust:** For **`ecdsaMpcProtocol`** on **`POST /keyGenRequest`**, **`GET /version`** `cggmp24UpstreamGitRev`, and optional **`‑tags rust`** builds, see **[`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)**.
+**CGGMP24 / Rust:** For **`ecdsaMpcProtocol`** on **`POST /keyGenRequest`**, **`GET /version`** `cggmp24UpstreamGitRev`, **`POST /keyGenEjectRequest`** / **`POST /getEthereumPrivateKey`** (reconstruction needs a **`rust`** / CGGMP24 FFI build on nodes that finalize eject), and optional **`‑tags rust`** builds, see **[`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)**.
 
 ## Architecture
 
@@ -45,12 +45,14 @@ Keygen and sign **GET** responses include **`effectiveEcdsaMpcProtocol`** when t
 
 This field is **computed for JSON only** (not stored as its own MongoDB column). The keygen request body may still carry **`ecdsaMpcProtocol`** as sent at **`POST /keyGenRequest`**; use **`effectiveEcdsaMpcProtocol`** in clients when branching on which MPC runtime applies.
 
-**Where it appears:** **`GET /listKeyGenRequests`**, **`GET /getKeyGenRequestById`**, **`GET /getKeyGenResultById`**, **`GET /getGlobalNonceByKeyGenId`** (inside **`data`**), **`GET /listSignRequests`**, **`GET /getSignRequestById`**, **`GET /listSignRequestsReady`**, **`GET /getSignResultById`**, **`GET /listSignResults`**.
+**Where it appears:** [`GET /listKeyGenRequests`](#get-listkeygenrequests), [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid), [`GET /getKeyGenResultById`](#get-getkeygenresultbyid), **`GET /getGlobalNonceByKeyGenId`** (inside **`data`**), **`GET /listSignRequests`**, **`GET /getSignRequestById`**, **`GET /listSignRequestsReady`**, **`GET /getSignResultById`**, **`GET /listSignResults`**.
+
+For **ejected** CGGMP24 keys, [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) still returns public metadata, **`status`**: **`ejected`**, persisted **`keygenresultstatus`**: **`ejected`**, and **`ejectedat`** when present; **`savedata`** / **`cggmp24aux`** are cleared. The raw scalar is not returned on this GET; use **`POST /getEthereumPrivateKey`** on a node that stored the export. See [Key eject (CGGMP24)](#post-keygenejectrequest). On [`GET /listKeyGenRequests`](#get-listkeygenrequests) / [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid), the request row’s effective **`status`** is also **`ejected`** when the result row is tombstoned; use **`filter=ejected`** to list those requests.
 
 <a id="bitcoin-p2wpkh-mainnet-address"></a>
 ### Bitcoin P2WPKH derived addresses (`bitcoinp2wpkhmainnet`, `bitcoinp2wpkhtestnet`, `bitcoinp2wpkhsignet`) (read-only)
 
-For **secp256k1** keygen results whose **`pubkeyhex`** is present, **`GET /getKeyGenResultById`** and each **`keyGens[]`** element from **`GET /getAllGroupIds`** include these fields when derivable. All three are native **SegWit v0** (**P2WPKH**) **Bech32** encodings computed from the same uncompressed **x‖y `pubkeyhex`** as **`ethereumaddress`**, using **`chaincfg`** from **btcd** (mainnet, **TestNet3**, **SigNet**). They are persisted on the keygen result document when pubkey material is saved; **`GET /getKeyGenResultById`** and **`GET /getAllGroupIds`** **recompute** them so legacy rows without these columns still return consistent values.
+For **secp256k1** keygen results whose **`pubkeyhex`** is present, [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) and each **`keyGens[]`** element from **`GET /getAllGroupIds`** include these fields when derivable. All three are native **SegWit v0** (**P2WPKH**) **Bech32** encodings computed from the same uncompressed **x‖y `pubkeyhex`** as **`ethereumaddress`**, using **`chaincfg`** from **btcd** (mainnet, **TestNet3**, **SigNet**). They are persisted on the keygen result document when pubkey material is saved; [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) and **`GET /getAllGroupIds`** **recompute** them so legacy rows without these columns still return consistent values.
 
 | JSON field | Network | Typical prefix |
 |-----------|---------|----------------|
@@ -173,6 +175,9 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /keyGenRequestRetry`](#post-keygenrequestretry) - Retry `KEYGENREQUEST` MQTT to one peer (originator only; requires mgt key)
 - [`POST /keyGenRequestAgree`](#post-keygenrequestagree) - Agree to key generation request (requires mgt key)
 - [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) - Get key generation result by ID
+- [`POST /keyGenEjectRequest`](#post-keygenejectrequest) - Start **CGGMP24** multi-agree key eject (export full Ethereum key; requires mgt key)
+- [`POST /keyGenEjectAgree`](#post-keygenejectagree) - Vote accept/reject on key eject (client-signed, same pattern as `signRequestAgree`)
+- [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) - Read exported **64-hex** secp256k1 scalar after eject (requires mgt key; this node must hold export material)
 - [`GET /getGlobalNonceByKeyGenId`](#get-getglobalnoncebykeygenid) - Get globalNonce by keyGen result id
 - [`GET /getKeyGenGroupId`](#get-getkeygengroupid) - Get key generation result and GroupId by keyGen ID
 - [`GET /getAllGroupIds`](#get-getallgroupids) - Get all GroupIds with their keyGens
@@ -925,7 +930,7 @@ Use **`GET /getNodeMgtKeyNonce`**; **`signedMessage`** canonical string must mat
 
 **Errors:** **`404`** — target hex not currently present as an active added key (`PublicMgtKey` / wrong hex / soft-already‑removed races); **`401`** — signing rules failed (wrong signer pairing in Ed25519 mode, mismatching **`signedMessage`**, etc.).
 
-#### `POST /getMessageToSign` ⭐ **NEW**
+#### `POST /getMessageToSign` **NEW**
 Returns the exact message format that needs to be signed with your Ethereum wallet (`personal_sign`, EIP-191) for management API requests. The signature must be from the NodeMgtKey address.
 
 **Request Body:**
@@ -1458,7 +1463,7 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postMSQTTKey" \
 **Response:** Successful merge; **`composeWarning`** may be present. **Restart** the process so in-memory config matches the file.
 
 <a id="get-health"></a>
-#### `GET /health` ⭐ **NEW**
+#### `GET /health` **NEW**
 Returns comprehensive health status including MQTT connection, subscriptions, and MongoDB connection.
 
 **Response:**
@@ -1535,7 +1540,7 @@ curl $MPC_AUTH_URL:$MANAGEMENT_PORT/health
 
 <a id="get-connectivityhealth"></a>
 <a id="get-connectivityhealth"></a>
-#### `GET /connectivityHealth` ⭐ **NEW**
+#### `GET /connectivityHealth` **NEW**
 Pings all nodes in a group (or all groups if groupId not provided) and reports connectivity status and latency with speed categorization.
 
 **Query Parameters:**
@@ -1627,7 +1632,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/connectivityHealth?groupId=566633a647306335
 - If no groups are found, returns an error response
 
 <a id="get-getlogs"></a>
-#### `GET /getLogs` ⭐ **NEW**
+#### `GET /getLogs` **NEW**
 Retrieves log entries from the node's log files for a specified time period.
 
 **Query Parameters:**
@@ -2647,12 +2652,13 @@ Same behavior, query parameters, and response as [`GET /getGroupResultById`](#ge
 | **`agree`** | **All** group nodes have signed the keygen request off-chain. Set when **`KEYGENREQUESTREPLY`** / **`KEYGENREQUESTCONFIRMSUCCESS`** / **`POST /keyGenRequestAgree`** reflects a full **`SigList`**. The keygen **request** row can remain **`agree`** until TSS finishes; **`success`** is written when encrypted **`SaveData`** is stored on the keygen result. |
 | **`success`** | TSS completed on this node: the keygen **result** document has non-nil **`savedata`** (encrypted share). The server sets **`status`** to **`success`** on the keygen request when **`UpdateKeyGenResultSaveDataFull`** / **`UpdateEDKeyGenResultSaveDataFull`** completes. |
 | **`failed`** | Terminal failure: e.g. TSS/worker error or timeout, expiry of a long-pending request, or fewer than **MPC quorum** KEYGENRESULT confirmations within the configured window (**GG18/ed25519:** *d+1* parties; **CGGMP24:** *t* parties; see **`threshold`** on keygen)—the keygen **result** may be removed; the **request** row can remain with this status. |
+| **`ejected`** | **Effective** status only (derived from the keygen **result** row, not the request document): [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) returns **`status`** **`ejected`** when **`keygenresultstatus`** is **`ejected`**; [`GET /listKeyGenRequests`](#get-listkeygenrequests) / [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid) surface the same effective **`status`** for the request list/detail. MPC shares are cleared; see [Key eject](#post-keygenejectrequest). |
 
-**Initiator (`originator`):** The node that created the keygen request is stored as **`MsgPb.From`** on the keygen request document; **`GET /listKeyGenRequests`** and **`GET /getKeyGenRequestById`** return it as the JSON field **`originator`**.
+**Initiator (`originator`):** The node that created the keygen request is stored as **`MsgPb.From`** on the keygen request document; [`GET /listKeyGenRequests`](#get-listkeygenrequests) and [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid) return it as the JSON field **`originator`**.
 
-**API “effective” status** (for **`GET /getKeyGenRequestById`**, **`GET /listKeyGenRequests`**, **`GET /getKeyGenResultById`**): if the stored request status is **`agree`** but this node’s keygen **result** row already has **`savedata`**, responses return **`status`** **`success`** (so clients see completion even if the request document was not yet updated to **`success`**).
+**API “effective” status** (for [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid), [`GET /listKeyGenRequests`](#get-listkeygenrequests)): if the keygen **result** row has **`keygenresultstatus`** **`ejected`**, responses return **`status`** **`ejected`**. Otherwise, if the stored request status is **`agree`** but this node’s keygen **result** row already has **`savedata`**, responses return **`status`** **`success`** (so clients see completion even if the request document was not yet updated to **`success`**). The keygen **result** endpoint [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) uses the same **`ejected`** / **`success`** semantics on its JSON **`status`** field (see that section).
 
-**`GET /listKeyGenRequests` `filter` vs stored / effective status:** `filter=pending` → effective status is not **`agree`**, **`success`**, or **`failed`**; `filter=success` → effective status is **`success`** (TSS complete / **`SaveData`** present); `filter=agree` → **stored** status is **`agree`** and this node’s keygen result has **no** **`savedata`** yet (off-chain agreement done, TSS still in progress); `filter=failed` → stored **`status === "failed"`**.
+**`GET /listKeyGenRequests` `filter` vs stored / effective status:** `filter=pending` → effective status is not **`agree`**, **`success`**, **`failed`**, or **`ejected`**; `filter=success` → effective status is **`success`** (TSS complete / **`SaveData`** present); `filter=ejected` → effective status is **`ejected`** (key export tombstone); `filter=agree` → **stored** status is **`agree`**, this node’s keygen result has **no** **`savedata`** yet, and the result is **not** **ejected** (off-chain agreement done, TSS still in progress); `filter=failed` → stored **`status === "failed"`**.
 
 <a id="post-keygenrequest"></a>
 #### `POST /keyGenRequest`
@@ -2719,7 +2725,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/keyGenRequest \
 Lists all key generation requests with filtering and pagination.
 
 **Query Parameters:**
-- `filter` (optional): `all`, `pending`, `success`, `failed`, `agree`, `originator` (default: `all`). For keygen: **`success`** = TSS complete (effective status includes **`SaveData`**); **`agree`** = stored **`agree`** with no **`savedata`** on the result yet; **`failed`** = failed keygen.
+- `filter` (optional): `all`, `pending`, `success`, `failed`, `agree`, `originator`, **`ejected`** (default: `all`). For keygen: **`success`** = TSS complete (effective **`SaveData`**); **`ejected`** = key export tombstone (**`keygenresultstatus`** on the result row; see [`GET /getKeyGenResultById`](#get-getkeygenresultbyid)); **`agree`** = stored **`agree`** with no **`savedata`** yet and not **ejected**; **`pending`** excludes **`agree`**, **`success`**, **`failed`**, and **`ejected`**; **`failed`** = failed keygen.
 - `pagenum` (optional, default: 0)
 - `pagesize` (optional, default: 10)
 
@@ -2766,6 +2772,7 @@ Lists all key generation requests with filtering and pagination.
 
 **Example:**
 ```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listKeyGenRequests?filter=ejected"
 curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listKeyGenRequests?filter=success"
 curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listKeyGenRequests?filter=all&pagenum=0&pagesize=10"
 ```
@@ -2828,11 +2835,93 @@ Agrees to a key generation request. **Requires management key authentication.**
 }
 ```
 
-<a id="get-getkeygenresultbyid"></a>
-#### `GET /getKeyGenResultById` ⭐
-Gets a specific key generation result by ID. Returns the generated public key, addresses, and keyList.
+<a id="post-keygenejectrequest"></a>
+#### `POST /keyGenEjectRequest`
+Starts a **multi-agree key eject** for a **`secp256k1` CGGMP24** key so the committee can export the **full Ethereum private key** (64-hex scalar), verify it against **`pubkeyhex`** / **`ethereumaddress`**, then **tombstone** MPC for that key (**`keygenresultstatus`** → **`ejected`**, **`savedata`** and **`cggmp24aux`** cleared on nodes that finalize). **Requires management key authentication** (same **`Nonce` / `Sig`** pattern as other signed POST bodies; optional **`nodeKey`** binding per [Management signatures](#management-signatures-nodekey)).
 
-A result is returned (Code 0) only when this node completed the TSS and has the full result (including local share), **and** at least the **MPC quorum** (**GG18/ed25519:** polynomial degree plus one parties; **CGGMP24:** *t* parties) sent KEYGENRESULTCONFIRMSUCCESS within 7 days. If fewer parties completed by then, the keygen is useless for signing (cannot produce a signature); the result is then deleted and the keygen request is marked failed. If this node did not complete (e.g. worker timed out), it returns Code 1 "not ready". If one node returns "not ready" and another had completed, the client may need to call `getKeyGenResultById` on another node—but if fewer than the quorum completed overall, no node will keep the result (all will delete it after the 7-day timeout).
+**Eligibility (server-enforced):** **`msgCheck`** on the keygen must be **`multi-agree`**; effective protocol must be **CGGMP24** (see **`effectiveEcdsaMpcProtocol`** from [`GET /getKeyGenResultById`](#get-getkeygenresultbyid)). **GG18** and **ed25519** keygens are **not** eligible.
+
+**Governance:** **M-of-N accepts** use the **same quorum semantics as signing** for that key (**`KeyGenMpcSigningQuorumFromStored`** / stored threshold vs **`KeyList`**). **Reject** votes (**`POST /keyGenEjectAgree`** with **`accept`:** **`false`**) are **audit-only** and do **not** block completion once enough parties have accepted.
+
+**Request body (canonical JSON is what you sign with `Sig` emptied):**
+```json
+{
+  "Nonce": 42,
+  "Sig": "<management signature>",
+  "nodeKey": "<optional 128-hex GET /getNodeKey>",
+  "keyGenId": "KeyGen20260111003720999cf104d0f",
+  "purpose": "Optional operator rationale"
+}
+```
+
+**Success response:**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": {
+    "ejectRequestId": "<id used for agrees and status>"
+  }
+}
+```
+
+The node propagates eject protocol traffic over MQTT (`KEYGENEJECT*` message types). Finalization requires a **Rust / CGGMP24 FFI** build on participating nodes (see [`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)). Product-level notes: sibling repo **mpc-auth** [`docs-internal/ETHEREUM_KEY_EJECT_EVALUATION.md`](../../mpc-auth/docs-internal/ETHEREUM_KEY_EJECT_EVALUATION.md) (clone layout: **mpc-config** and **mpc-auth** as sibling directories).
+
+<a id="post-keygenejectagree"></a>
+#### `POST /keyGenEjectAgree`
+Records a committee member **accept** or **reject** for an eject started with [`POST /keyGenEjectRequest`](#post-keygenejectrequest). **Client signature** policy matches **`signRequestAgree`**: EIP-191 **`signedMessage`** + **`clientSig`** (and optional **`signerAddress`**) or Ed25519 paths; optional **`thoughts`** (max 256 characters). **No management `Nonce`/`Sig`** on this endpoint—the voting node proves intent with the **client** key associated with the keygen / group policy (`verifySignRequestAgreeClientSig`).
+
+**Request body:**
+```json
+{
+  "ejectRequestId": "<from keyGenEjectRequest data>",
+  "accept": true,
+  "thoughts": "optional",
+  "signedMessage": "...",
+  "clientSig": "...",
+  "signerAddress": "0x..."
+}
+```
+
+Use **`accept`:** **`false`** for a logged reject (does not veto quorum). Omit **`accept`** or set **`true`** for the accept path.
+
+**Success:** `data` is the string **`ok`**.
+
+<a id="post-getethereumprivatekey"></a>
+#### `POST /getEthereumPrivateKey`
+Returns the **exported private key** as **64 hex characters** (no `0x` prefix) after eject. **Requires management key authentication** over **`Nonce`**, **`Sig`** (with **`Sig`** cleared for verification), **`keyGenId`**, and optional **`nodeKey`**.
+
+**Preconditions:** This node must appear in the keygen **`keylist`**; the stored result must have **`keygenresultstatus`** **`ejected`**; this node must have persisted the encrypted export blob (nodes that did not run finalize may return an error).
+
+**Request body:**
+```json
+{
+  "Nonce": 43,
+  "Sig": "<management signature>",
+  "nodeKey": "<optional 128-hex>",
+  "keyGenId": "KeyGen20260111003720999cf104d0f"
+}
+```
+
+**Success response:**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": {
+    "privateKeyHex": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+}
+```
+
+Typical errors: **`400`** if the key is not **`ejected`**; **`403`** if this node is not in **`KeyList`**; **`404`** if there is no export material on this node.
+
+<a id="get-getkeygenresultbyid"></a>
+#### `GET /getKeyGenResultById`
+
+Returns the **keygen result** for one **`requestid`** (same id as the keygen request): public key, derived addresses, **`keylist`**, and lifecycle fields such as **`status`** (including **`ejected`** after key export). There is **no** `filter` query parameter—only **`id`**. To **list** all ejected keygens, use [`GET /listKeyGenRequests`](#get-listkeygenrequests) with **`filter=ejected`**; each item’s effective **`status`** matches this endpoint’s semantics for that request.
+
+A result is returned (Code 0) when either **(a)** this node completed the TSS and still has a local share (**`savedata`** present), **or (b)** the key was **ejected** on this node (**`keygenresultstatus`** **`ejected`**) so **`savedata`** / **`cggmp24aux`** were cleared but public metadata and tombstone state remain. In the usual case, **(a)** also requires at least the **MPC quorum** (**GG18/ed25519:** polynomial degree plus one parties; **CGGMP24:** *t* parties) to have sent KEYGENRESULTCONFIRMSUCCESS within 7 days. If fewer parties completed by then, the keygen is useless for signing (cannot produce a signature); the result is then deleted and the keygen request is marked failed. If this node did not complete (e.g. worker timed out) and the key is not **ejected**, it returns Code 1 "not ready". If one node returns "not ready" and another had completed, the client may need to call `getKeyGenResultById` on another node—but if fewer than the quorum completed overall, no node will keep the result (all will delete it after the 7-day timeout).
 
 **Query Parameters:**
 - `id` (required): Key generation request ID
@@ -2863,9 +2952,9 @@ A result is returned (Code 0) only when this node completed the TSS and has the 
 }
 ```
 
-**Note:** The `keylist` field contains all node keys that participated in key generation. **globalnonce** is the number of sign results created for this keyGen (secp256k1); it is also available via `GET /getGlobalNonceByKeyGenId`. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration. **`effectiveEcdsaMpcProtocol`** summarizes the secp256k1 MPC runtime for this key (`gg18` or `cggmp24`); see [effectiveEcdsaMpcProtocol](#effective-ecdsa-mpc-protocol). For secp256k1 keys, **Bitcoin SegWit v0 P2WPKH** fields (**`bitcoinp2wpkhmainnet`**, **`bitcoinp2wpkhtestnet`**, **`bitcoinp2wpkhsignet`**) are returned when derivable; see [bitcoinp2wpkh fields](#bitcoin-p2wpkh-mainnet-address).
+**Note:** The `keylist` field contains all node keys that participated in key generation. **globalnonce** is the number of sign results created for this keyGen (secp256k1); it is also available via `GET /getGlobalNonceByKeyGenId`. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration. **`effectiveEcdsaMpcProtocol`** summarizes the secp256k1 MPC runtime for this key (`gg18` or `cggmp24`); see [effectiveEcdsaMpcProtocol](#effective-ecdsa-mpc-protocol). For secp256k1 keys, **Bitcoin SegWit v0 P2WPKH** fields (**`bitcoinp2wpkhmainnet`**, **`bitcoinp2wpkhtestnet`**, **`bitcoinp2wpkhsignet`**) are returned when derivable; see [bitcoinp2wpkh fields](#bitcoin-p2wpkh-mainnet-address). After **eject**, **`savedata`** / **`cggmp24aux`** are absent; responses may include **`keygenresultstatus`**, **`ejectedat`**, and redacted **`ejectedprivatekey`**; use [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) for the scalar on nodes that stored the export.
 
-**`status`:** Same **effective** lifecycle as the keygen request (see [KeyGen request `status` field (stored values)](#keygen-request-status-values)): not stored on the keygen result row; if the request is still **`agree`** but this node has **`savedata`**, responses return **`success`**. Omitted if the request record cannot be loaded.
+**`status`:** Same **effective** lifecycle as the keygen request (see [KeyGen request `status` field (stored values)](#keygen-request-status-values)): not stored on the keygen result row; if **`keygenresultstatus`** is **`ejected`**, responses force **`status`** **`ejected`**. Otherwise, if the request is still **`agree`** but this node has **`savedata`**, responses return **`success`**. Omitted if the request record cannot be loaded.
 
 **Example:**
 ```bash
@@ -2899,7 +2988,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getGlobalNonceByKeyGenId?id=KeyGen202601110
 ```
 
 <a id="get-getkeygengroupid"></a>
-#### `GET /getKeyGenGroupId` ⭐ **NEW**
+#### `GET /getKeyGenGroupId` **NEW**
 Gets the GroupId for a given keyGen request ID.
 
 **Query Parameters:**
@@ -2928,7 +3017,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getKeyGenGroupId?id=KeyGen20260111003720999
 - Query group-specific information
 
 <a id="get-getallgroupids"></a>
-#### `GET /getAllGroupIds` ⭐ **NEW**
+#### `GET /getAllGroupIds` **NEW**
 Gets all configured GroupIds and their associated keyGen results.
 
 **Response:**

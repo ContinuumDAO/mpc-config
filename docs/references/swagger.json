@@ -1229,7 +1229,7 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "filter",
+                        "description": "all | pending | success | failed | agree | originator | ejected. Keygen: success=TSS complete (SaveData on result row); ejected=key export tombstone (keygenresultstatus); agree=stored agree, no SaveData, not ejected; pending excludes agree, success, failed, ejected. See mpc-config docs/references/API_IMPLEMENTATION.md (GET /listKeyGenRequests).",
                         "name": "filter",
                         "in": "query"
                     },
@@ -1320,6 +1320,171 @@
                         }
                     }
                 }
+            }
+        },
+        "/keyGenEjectRequest": {
+            "post": {
+                "description": "Start CGGMP24 key eject (returns ejectRequestId). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenEjectRequest). Schema: #/definitions/node.KeyGenEjectRequestPost.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Key Generation"
+                ],
+                "summary": "Start CGGMP24 key eject (returns ejectRequestId)",
+                "responses": {
+                    "200": {
+                        "description": "OK (`code`: 0 in APIResponse)",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation or eligibility error",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid management or client signature",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.KeyGenEjectRequestPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/keyGenEjectAgree": {
+            "post": {
+                "description": "Accept or reject key eject (client-signed; reject is audit-only). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenEjectAgree). Schema: #/definitions/node.KeyGenEjectAgreePost.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Key Generation"
+                ],
+                "summary": "Accept or reject key eject (client-signed; reject is audit-only)",
+                "responses": {
+                    "200": {
+                        "description": "OK (`code`: 0 in APIResponse)",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation or eligibility error",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid management or client signature",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.KeyGenEjectAgreePost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/getEthereumPrivateKey": {
+            "post": {
+                "description": "Get exported Ethereum private key (64-hex scalar) after eject. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /getEthereumPrivateKey). Schema: #/definitions/node.GetEthereumPrivateKeyPost.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Key Generation"
+                ],
+                "summary": "Get exported Ethereum private key (64-hex scalar) after eject",
+                "responses": {
+                    "200": {
+                        "description": "OK (`code`: 0 in APIResponse)",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation or eligibility error",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid management or client signature",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "This node not in keygen KeyList",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Keygen not found or no export blob on this node",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.GetEthereumPrivateKeyPost"
+                        }
+                    }
+                ]
             }
         },
         "/getKeyGenResultById": {
@@ -2748,7 +2913,7 @@
         },
         "/fixDatabase": {
             "post": {
-                "description": "Apply automated Mongo repairs from integrity scan (management-signed; draining until restartGate) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /fixDatabase).",
+                "description": "Apply automated Mongo repairs from integrity scan (pre-fix mongodump under .mongodump; management-signed; draining until restartGate) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /fixDatabase).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2758,7 +2923,7 @@
                 "tags": [
                     "Management API"
                 ],
-                "summary": "Apply automated Mongo repairs from integrity scan (management-signed; draining until restartGate)",
+                "summary": "Apply automated Mongo repairs from integrity scan (pre-fix mongodump under .mongodump; management-signed; draining until restartGate)",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -3644,6 +3809,18 @@
                 },
                 "effectiveEcdsaMpcProtocol": {
                     "$ref": "#/definitions/node.EffectiveEcdsaMpcProtocol"
+                },
+                "keygenresultstatus": {
+                    "type": "string",
+                    "description": "When **ejected**, MPC shares are cleared; use POST /getEthereumPrivateKey for the scalar on this node."
+                },
+                "ejectedat": {
+                    "type": "string",
+                    "description": "UTC time when eject finalized (when status is ejected)"
+                },
+                "ejectedprivatekey": {
+                    "type": "string",
+                    "description": "Omitted or redacted as HIDE ENCRYPTED DATA in list/get unless decrypted internally."
                 }
             }
         },
@@ -3867,14 +4044,14 @@
                 },
                 "signedMessage": {
                     "type": "string",
-                    "description": "Exact string signed (Ethereum wallet / NodeMgtKey or Ed25519). If JSON, SHOULD include \"nodeKey\" (128 hex from GET /getNodeKey) so the client signature binds to this node; omitting nodeKey in JSON is deprecated."
+                    "description": "Exact string signed (MetaMask or Ed25519). If JSON, SHOULD include \"nodeKey\" (128 hex from GET /getNodeKey) so the client signature binds to this node; omitting nodeKey in JSON is deprecated."
                 },
                 "signerAddress": {
                     "type": "string"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional; when using Ed25519 with an empty signedMessage, include in JSON so canonical signing includes it (see API_IMPLEMENTATION.md). For Ethereum wallet / NodeMgtKey, embed \"nodeKey\" inside the JSON you place in signedMessage."
+                    "description": "Optional; when using Ed25519 with an empty signedMessage, include in JSON so canonical signing includes it (see API_IMPLEMENTATION.md). For MetaMask, embed \"nodeKey\" inside the JSON you place in signedMessage."
                 }
             }
         },
@@ -4060,11 +4237,11 @@
                 },
                 "signedMessage": {
                     "type": "string",
-                    "description": "Exact string signed (Ethereum wallet personal_sign or Ed25519). If you use a JSON payload, include \"nodeKey\" set to this node's 128-hex MPC public key (GET /getNodeKey) so the signature cannot be replayed on another node; omitting nodeKey in JSON is deprecated. Not applicable when signedMessage is opaque non-JSON (e.g. some MQTT CA flows)."
+                    "description": "Exact string signed (MetaMask personal_sign or Ed25519). If you use a JSON payload, include \"nodeKey\" set to this node's 128-hex MPC public key (GET /getNodeKey) so the signature cannot be replayed on another node; omitting nodeKey in JSON is deprecated. Not applicable when signedMessage is opaque non-JSON (e.g. some MQTT CA flows)."
                 },
                 "clientSig": {
                     "type": "string",
-                    "description": "Ethereum wallet: 0x-prefixed; Ed25519: 128 hex characters"
+                    "description": "MetaMask: 0x-prefixed; Ed25519: 128 hex characters"
                 }
             }
         },
@@ -4382,6 +4559,94 @@
                 },
                 "nodeKey": {
                     "type": "string"
+                }
+            }
+        },
+        "node.KeyGenEjectRequestPost": {
+            "type": "object",
+            "description": "POST /keyGenEjectRequest. Starts multi-agree eject for a **CGGMP24** secp256k1 key only (`keyGenId` = keygen request id). Requires management proof: verify with **Sig** cleared over canonical JSON including **Nonce**, **keyGenId**, optional **purpose**, optional **nodeKey**. GG18 and ed25519 keygens are rejected. See mpc-config docs/references/API_IMPLEMENTATION.md.",
+            "required": [
+                "Nonce",
+                "Sig",
+                "keyGenId"
+            ],
+            "properties": {
+                "Nonce": {
+                    "type": "integer",
+                    "description": "Anti-replay nonce from GET /getNodeMgtKeyNonce or GET /getPublicMgtKeyNonce"
+                },
+                "Sig": {
+                    "type": "string",
+                    "description": "Management signature over canonical JSON with Sig as empty string"
+                },
+                "nodeKey": {
+                    "type": "string",
+                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey — binds signature to this node."
+                },
+                "keyGenId": {
+                    "type": "string",
+                    "description": "Keygen request id (same as GET /getKeyGenResultById ?id=)."
+                },
+                "purpose": {
+                    "type": "string",
+                    "description": "Optional originator rationale stored on the eject request."
+                }
+            }
+        },
+        "node.KeyGenEjectAgreePost": {
+            "type": "object",
+            "description": "POST /keyGenEjectAgree. Committee member vote: **client** signature (same pattern as signRequestAgree — EIP-191 **personal_sign** / **signedMessage** + **clientSig**, or Ed25519 canonical body). **Reject** (`accept`: false) is recorded for audit only and does **not** veto the eject once signing-quorum accepts exist.",
+            "required": [
+                "ejectRequestId"
+            ],
+            "properties": {
+                "ejectRequestId": {
+                    "type": "string",
+                    "description": "Id returned in POST /keyGenEjectRequest data.ejectRequestId"
+                },
+                "accept": {
+                    "type": "boolean",
+                    "description": "false = reject (audit-only); omit or true = accept"
+                },
+                "thoughts": {
+                    "type": "string",
+                    "description": "Optional comment; max 256 chars server-side"
+                },
+                "clientSig": {
+                    "type": "string"
+                },
+                "signedMessage": {
+                    "type": "string",
+                    "description": "Exact UTF-8 string signed (Ethereum or Ed25519 mode)"
+                },
+                "signerAddress": {
+                    "type": "string",
+                    "description": "Wallet address when using MetaMask-style signing"
+                }
+            }
+        },
+        "node.GetEthereumPrivateKeyPost": {
+            "type": "object",
+            "description": "POST /getEthereumPrivateKey. Returns decrypted **64-hex** secp256k1 scalar after successful eject. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node. Use only on nodes that participated in finalize (export ciphertext may be missing on others).",
+            "required": [
+                "Nonce",
+                "Sig",
+                "keyGenId"
+            ],
+            "properties": {
+                "Nonce": {
+                    "type": "integer"
+                },
+                "Sig": {
+                    "type": "string"
+                },
+                "nodeKey": {
+                    "type": "string",
+                    "description": "Optional (recommended) 128-hex MPC node id binding"
+                },
+                "keyGenId": {
+                    "type": "string",
+                    "description": "Keygen request id"
                 }
             }
         }
