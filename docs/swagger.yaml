@@ -954,6 +954,60 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.KeyGenEjectAgreePost'
+  /listKeyGenEjectRequests:
+    get:
+      description: 'List in-progress or completed key eject flows where this node is in KeyList. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /listKeyGenEjectRequests). Schema: #/definitions/node.KeyGenEjectRequestResult (each Data[] element).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: List CGGMP24 key eject flows for this node
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: filter
+        in: query
+        required: false
+        description: all | pending | done (default pending). pending=not done and keygen not yet ejected on this node; done=lifecycle
+          done or keygen ejected. continuumdao-node-app Keys UI may hide pending rows older than 7 days (client-side only).
+          See mpc-config docs/references/API_IMPLEMENTATION.md (GET /listKeyGenEjectRequests).
+      - type: integer
+        name: pagenum
+        in: query
+        required: false
+      - type: integer
+        name: pagesize
+        in: query
+        required: false
+  /getKeyGenEjectRequestById:
+    get:
+      description: 'Get one CGGMP24 key eject flow by requestid. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /getKeyGenEjectRequestById). Schema: #/definitions/node.KeyGenEjectRequestResult.'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: Get key eject flow by eject request id
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: id
+        in: query
+        required: true
+        description: Eject request id (from POST /keyGenEjectRequest data.ejectRequestId)
   /getEthereumPrivateKey:
     post:
       description: 'Get exported Ethereum private key (64-hex scalar) after eject. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
@@ -3161,3 +3215,48 @@ definitions:
       keyGenId:
         type: string
         description: Keygen request id
+  node.KeyGenEjectRequestResult:
+    type: object
+    description: One CGGMP24 key eject flow returned by GET /listKeyGenEjectRequests and GET /getKeyGenEjectRequestById. Only
+      ejects where this node's key appears in KeyList are listed.
+    properties:
+      requestid:
+        type: string
+        description: Eject request id (ejectRequestId from POST /keyGenEjectRequest)
+      KeyGenId:
+        type: string
+        description: Target keygen request id
+      KeyList:
+        type: array
+        items:
+          type: string
+        description: Committee node public keys (128 hex)
+      SigList:
+        type: object
+        additionalProperties:
+          type: string
+        description: Node key → management signature hex (empty when not yet agreed)
+      ClientSigs:
+        type: object
+        additionalProperties:
+          type: string
+      Purpose:
+        type: object
+        additionalProperties:
+          type: string
+      Thoughts:
+        type: object
+        additionalProperties:
+          type: string
+      RejectedBy:
+        type: array
+        items:
+          type: string
+      timepoint:
+        type: string
+      status:
+        type: string
+        description: Eject lifecycle on this node (e.g. live, eject_share_phase, done)
+      originator:
+        type: string
+        description: Node key that started the eject (MsgPb.From)

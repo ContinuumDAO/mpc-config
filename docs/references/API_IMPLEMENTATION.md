@@ -177,6 +177,8 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) - Get key generation result by ID
 - [`POST /keyGenEjectRequest`](#post-keygenejectrequest) - Start **CGGMP24** multi-agree key eject (export full Ethereum key; requires mgt key)
 - [`POST /keyGenEjectAgree`](#post-keygenejectagree) - Vote accept/reject on key eject (client-signed, same pattern as `signRequestAgree`)
+- [`GET /listKeyGenEjectRequests`](#get-listkeygenejectrequests) - List CGGMP24 key eject flows for this node
+- [`GET /getKeyGenEjectRequestById`](#get-getkeygenejectrequestbyid) - Get one key eject flow by eject request id
 - [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) - Read exported **64-hex** secp256k1 scalar after eject (requires mgt key; this node must hold export material)
 - [`GET /getGlobalNonceByKeyGenId`](#get-getglobalnoncebykeygenid) - Get globalNonce by keyGen result id
 - [`GET /getKeyGenGroupId`](#get-getkeygengroupid) - Get key generation result and GroupId by keyGen ID
@@ -2886,6 +2888,79 @@ Records a committee member **accept** or **reject** for an eject started with [`
 Use **`accept`:** **`false`** for a logged reject (does not veto quorum). Omit **`accept`** or set **`true`** for the accept path.
 
 **Success:** `data` is the string **`ok`**.
+
+<a id="get-listkeygenejectrequests"></a>
+#### `GET /listKeyGenEjectRequests`
+Lists **CGGMP24 key eject** flows visible to **this node** (the caller’s **`GET /getNodeKey`** must appear in the eject **`KeyList`**). Use this to drive Pending Keys UI rows while an eject is in progress and to inspect completed flows.
+
+**Query Parameters:**
+- `filter` (optional, default: **`pending`**): **`all`**, **`pending`**, or **`done`**
+  - **`pending`**: lifecycle status is not **`done`** and the target keygen result is **not** yet **ejected** on this node
+  - **`done`**: lifecycle status is **`done`** **or** the keygen result is **ejected** (tombstone)
+  - **`all`**: no status filter (still scoped to ejects where this node is in **`KeyList`**)
+- `pagenum` (optional, default: 0)
+- `pagesize` (optional, default: 10)
+
+**Response:** `Data` is an array of eject request objects (newest **`timepoint`** first). Each item has the same shape as [`GET /getKeyGenEjectRequestById`](#get-getkeygenejectrequestbyid) **`data`**.
+
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": [
+    {
+      "requestid": "KeyGenEject20260519143000abc123",
+      "KeyGenId": "KeyGen20260111003720999cf104d0f",
+      "KeyList": ["node1_key", "node2_key", "node3_key"],
+      "SigList": {
+        "node1_key": "80485a105bbdefc74c3e08e51c39f2bbcac037679bde0956c02e6709b996e9f38d0f4724e2b397714fc633b88e49ce3dace9044b0828d8f1f2dd939591b989b7",
+        "node2_key": "",
+        "node3_key": ""
+      },
+      "ClientSigs": {},
+      "Purpose": { "node1_key": "Operator export" },
+      "Thoughts": {},
+      "RejectedBy": [],
+      "timepoint": "2026-05-19 14:30:00.123",
+      "status": "live",
+      "originator": "node1_key"
+    }
+  ]
+}
+```
+
+**Response field descriptions (each item in `Data`):**
+- `requestid`: Eject request id (same value as **`ejectRequestId`** from [`POST /keyGenEjectRequest`](#post-keygenejectrequest))
+- `KeyGenId`: Target keygen request id
+- `KeyList`: Committee node public keys (128 hex) participating in the eject
+- `SigList`: Map of node public key → management signature hex for nodes that accepted (empty string when not yet agreed)
+- `ClientSigs`, `Purpose`, `Thoughts`: Optional per-node maps merged during propagation (same merge semantics as keygen agrees)
+- `RejectedBy`: Node keys that logged a reject via [`POST /keyGenEjectAgree`](#post-keygenejectagree) with **`accept`:** **`false`** (audit-only; does not block quorum)
+- `timepoint`: When this eject request was recorded on this node
+- `status`: Eject lifecycle on this node (e.g. **`live`**, **`eject_share_phase`**, **`done`**). **`done`** means the eject protocol finished on this node; the keygen may already show **`ejected`** on [`GET /getKeyGenResultById`](#get-getkeygenresultbyid)
+- `originator`: Node public key that started the eject (**`MsgPb.From`** on the stored **`KEYGENEJECTREQUEST`**)
+
+**Client UI note:** The continuumdao-node-app Keys page may hide **pending** eject rows whose **`timepoint`** is older than **7 days** (same client-side stale window as pending keygens). The API still returns those rows when **`filter=pending`**.
+
+**Example:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listKeyGenEjectRequests?filter=pending"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listKeyGenEjectRequests?filter=all&pagenum=0&pagesize=10"
+```
+
+<a id="get-getkeygenejectrequestbyid"></a>
+#### `GET /getKeyGenEjectRequestById`
+Returns one key eject flow by **`requestid`**.
+
+**Query Parameters:**
+- `id` (required): Eject request id (from [`POST /keyGenEjectRequest`](#post-keygenejectrequest) **`data.ejectRequestId`**)
+
+**Response:** Same shape as one element of [`GET /listKeyGenEjectRequests`](#get-listkeygenejectrequests) **`Data`** (single object in **`data`**, not an array).
+
+**Example:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getKeyGenEjectRequestById?id=KeyGenEject20260519143000abc123"
+```
 
 <a id="post-getethereumprivatekey"></a>
 #### `POST /getEthereumPrivateKey`
