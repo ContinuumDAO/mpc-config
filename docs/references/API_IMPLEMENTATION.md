@@ -4,7 +4,7 @@
 
 The Distributed Auth Management API provides a RESTful interface for managing MPC (Multi-Party Computation) nodes, key generation, signing operations, and system monitoring. The API is implemented using the Gin web framework and follows a consistent response format.
 
-**CGGMP24 / Rust:** For **`ecdsaMpcProtocol`** on **`POST /keyGenRequest`**, **`GET /version`** `cggmp24UpstreamGitRev`, **`POST /keyGenEjectRequest`** / **`POST /getEthereumPrivateKey`** (reconstruction needs a **`rust`** / CGGMP24 FFI build on nodes that finalize eject), and optional **`‑tags rust`** builds, see **[`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)**.
+**CGGMP24 / Rust:** For **`ecdsaMpcProtocol`** on **`POST /keyGenRequest`**, **`GET /version`** `cggmp24UpstreamGitRev`, **`POST /keyGenEjectRequest`** / **`POST /getEthereumPrivateKey`** / **`POST /getBitcoinPrivateKey`** (reconstruction needs a **`rust`** / CGGMP24 FFI build on nodes that finalize eject), and optional **`‑tags rust`** builds, see **[`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)**.
 
 ## Architecture
 
@@ -47,7 +47,7 @@ This field is **computed for JSON only** (not stored as its own MongoDB column).
 
 **Where it appears:** [`GET /listKeyGenRequests`](#get-listkeygenrequests), [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid), [`GET /getKeyGenResultById`](#get-getkeygenresultbyid), **`GET /getGlobalNonceByKeyGenId`** (inside **`data`**), **`GET /listSignRequests`**, **`GET /getSignRequestById`**, **`GET /listSignRequestsReady`**, **`GET /getSignResultById`**, **`GET /listSignResults`**.
 
-For **ejected** CGGMP24 keys, [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) still returns public metadata, **`status`**: **`ejected`**, persisted **`keygenresultstatus`**: **`ejected`**, and **`ejectedat`** when present; **`savedata`** / **`cggmp24aux`** are cleared. The raw scalar is not returned on this GET; use **`POST /getEthereumPrivateKey`** on a node that stored the export. See [Key eject (CGGMP24)](#post-keygenejectrequest). On [`GET /listKeyGenRequests`](#get-listkeygenrequests) / [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid), the request row’s effective **`status`** is also **`ejected`** when the result row is tombstoned; use **`filter=ejected`** to list those requests.
+For **ejected** CGGMP24 keys, [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) still returns public metadata, **`status`**: **`ejected`**, persisted **`keygenresultstatus`**: **`ejected`**, and **`ejectedat`** when present; **`savedata`** / **`cggmp24aux`** are cleared. The raw scalar is not returned on this GET; use **`POST /getEthereumPrivateKey`** or **`POST /getBitcoinPrivateKey`** on a node that stored the export. See [Key eject (CGGMP24)](#post-keygenejectrequest). On [`GET /listKeyGenRequests`](#get-listkeygenrequests) / [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid), the request row’s effective **`status`** is also **`ejected`** when the result row is tombstoned; use **`filter=ejected`** to list those requests.
 
 <a id="bitcoin-p2wpkh-mainnet-address"></a>
 ### Bitcoin P2WPKH derived addresses (`bitcoinp2wpkhmainnet`, `bitcoinp2wpkhtestnet`, `bitcoinp2wpkhsignet`) (read-only)
@@ -153,6 +153,11 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getPreferredSigner`](#get-getpreferredsigner) - Get the default Ed25519 public key for agent signing if still an active management key. **Also on `PublicDiscoveryPort`** when split from **`ManagementAPIsPort`** (see [Public discovery HTTP](#public-discovery-http)).
 - [`POST /setPreferredSigner`](#post-setpreferredsigner) - Store an **active** allowed Ed25519 management key as default for agents (requires mgt key)
 
+### Agent LLM config (local filesystem)
+- [`GET /agentLlmConfigStatus`](#get-agentllmconfigstatus) - Read agent LLM settings for the node agent (masked API key; **read JWT** on Browser HTTPS / loopback)
+- [`POST /agentLlmConfig`](#post-agentllmconfig) - Update provider, model, and optional base URL (**management signature**; does not change `apiKey`)
+- [`POST /agentLlmApiKey`](#post-agentllmapikey) - Set, rotate, or clear the cloud LLM API key only (**management signature**; `apiKey: ""` clears)
+
 ### Node Ping & Connectivity
 - [`GET /pingNodesRequest`](#get-pingnodesrequest) - Ping nodes to test connectivity
 - [`GET /getPingNodesResultById`](#get-getpingnodesresultbyid) - Get ping results by ID
@@ -179,7 +184,8 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /keyGenEjectAgree`](#post-keygenejectagree) - Vote accept/reject on key eject (client-signed, same pattern as `signRequestAgree`)
 - [`GET /listKeyGenEjectRequests`](#get-listkeygenejectrequests) - List CGGMP24 key eject flows for this node
 - [`GET /getKeyGenEjectRequestById`](#get-getkeygenejectrequestbyid) - Get one key eject flow by eject request id
-- [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) - Read exported **64-hex** secp256k1 scalar after eject (requires mgt key; this node must hold export material)
+- [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) - Read exported **64-hex** secp256k1 scalar after eject (also returns Bitcoin mainnet WIF when derivable; requires mgt key; this node must hold export material)
+- [`POST /getBitcoinPrivateKey`](#post-getbitcoinprivatekey) - Read exported **Bitcoin mainnet compressed WIF** for the same ejected scalar (requires mgt key; this node must hold export material)
 - [`GET /getGlobalNonceByKeyGenId`](#get-getglobalnoncebykeygenid) - Get globalNonce by keyGen result id
 - [`GET /getKeyGenGroupId`](#get-getkeygengroupid) - Get key generation result and GroupId by keyGen ID
 - [`GET /getAllGroupIds`](#get-getallgroupids) - Get all GroupIds with their keyGens
@@ -2215,6 +2221,121 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/setPreferredSigner" \
   -d '{"nonce":1,"publicKey":"<64-hex>","signedMessage":"...","clientSig":"..."}'
 ```
 
+### Agent LLM config (local filesystem)
+
+Cloud LLM settings for the **node agent** (MCP chat / in-app agent) are stored in a **bind-mounted JSON file** on the host, not in MongoDB. The browser and automation never receive the full API key on read; only the node agent runtime loads the file when calling the model.
+
+| Piece | Value |
+|-------|--------|
+| **Default host path** | `<compose-project>/agent_llm_config/agent-llm-config.json` (beside **`configs.yaml`**, same layout as **`database_backups/`**) |
+| **Container path** | `/app/agent_llm_config/agent-llm-config.json` |
+| **Config key** | **`AgentLlmConfigDir`** in **`configs.yaml`** (default **`agent_llm_config`**; relative paths resolve next to **`configs.yaml`**) |
+| **Env override** | **`MPC_AUTH_AGENT_LLM_CONFIG_FILE`** (wins over YAML dir resolution) |
+| **Docker** | **`./agent_llm_config`** bind-mounted to **`/app/agent_llm_config`** (same pattern as **`database_backups/`**) |
+| **Provisioning** | **`process_config.sh`** and **`scripts/provision-node.sh`** set **`AgentLlmConfigDir`**, create **`./agent_llm_config/`**, and set compose env by default; use **`--no-agent-llm-config-path`** or **`PROCESS_CONFIG_SKIP_AGENT_LLM_CONFIG_PATH=1`** to skip |
+| **Write** | Atomic temp file + `rename`; file mode **0640**; parent dirs **0755** |
+| **Listeners** | **ManagementAPIsPort**, **Browser HTTPS** (`:8443`), **BrowserLoopbackReadHTTP** (SSH tunnel), and plain co-located attach — same route registration as other management APIs |
+
+**Where served:** All three routes are on the attach URL family the wallet UI already uses (`https` / loopback / plain). **`GET /agentLlmConfigStatus`** follows [Browser HTTPS and loopback HTTP (JWT)](#browser-https-and-loopback-http-jwt) on those listeners. **`POST`** routes are **not** JWT-gated; use **management-key signature** like `POST /postChainDetails`.
+
+<a id="get-agentllmconfigstatus"></a>
+#### `GET /agentLlmConfigStatus`
+
+**Auth:** On **Browser HTTPS** and **BrowserLoopbackReadHTTP**, **`Authorization: Bearer <read JWT>`** (same RS256 read JWT as other GETs on those listeners). On plain **ManagementAPIsPort** / co-located attach, same rules as other GETs on that listener (no JWT when the port is not JWT-enabled).
+
+**Response `data`:**
+```json
+{
+  "configured": true,
+  "provider": "openai",
+  "model": "gpt-4.1",
+  "baseUrl": null,
+  "apiKeyPresent": true,
+  "apiKeyMasked": "…4f2a",
+  "updatedAt": "2026-05-19T12:00:00.000000000Z"
+}
+```
+
+| Field | Notes |
+|-------|--------|
+| `configured` | `true` when `provider` and `model` are non-empty in the file |
+| `provider`, `model`, `baseUrl` | Current non-secret fields (`baseUrl` may be `null`) |
+| `apiKey` | **Never** returned in full |
+| `apiKeyPresent` | `true` when a non-empty key is stored |
+| `apiKeyMasked` | Last four characters only, prefixed with `…` (e.g. `…4f2a`) |
+| `updatedAt` | RFC3339Nano timestamp from last write |
+
+**Example:**
+```bash
+curl -H "Authorization: Bearer <JWT>" "https://localhost:8443/agentLlmConfigStatus"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/agentLlmConfigStatus"   # plain management when no JWT
+```
+
+<a id="post-agentllmconfig"></a>
+#### `POST /agentLlmConfig`
+
+**Does not include `apiKey`.** Use **`POST /agentLlmApiKey`** to set or clear the secret.
+
+**Auth:** Management key (`signedMessage` + `clientSig`), same pattern as **`POST /postChainDetails`**. **`nonce`** from **`GET /getNodeMgtKeyNonce`** or **`GET /getPublicMgtKeyNonce`** (Ed25519).
+
+**Request body (AgentLlmConfigPost):**
+```json
+{
+  "nonce": 42,
+  "provider": "openai",
+  "model": "gpt-4.1",
+  "baseUrl": null,
+  "signedMessage": "{\"action\":\"agentLlmConfig\",\"baseUrl\":null,\"model\":\"gpt-4.1\",\"nonce\":42,\"provider\":\"openai\",\"sig\":\"\"}",
+  "clientSig": "0x... or 128-hex Ed25519"
+}
+```
+
+**Canonical `signedMessage`:** Server verifies `signedMessage` equals exactly:
+```json
+{"action":"agentLlmConfig","baseUrl":<string|null>,"model":"<model>","nonce":<int>,"provider":"<provider>","sig":""}
+```
+Field order must match (as produced by `JSON.stringify` in continuumdao-node-app / the Go marshaller). `baseUrl` is `null` when omitted or empty.
+
+**Behavior:** Read-merge-write `agent-llm-config.json`; updates `provider`, `model`, `baseUrl` only; **preserves** existing `apiKey` unless **`POST /agentLlmApiKey`** runs.
+
+**Response:** `{ "code": 0, "error": "", "data": { ...same shape as GET /agentLlmConfigStatus... } }`
+
+**Errors:** `400` invalid body or `signedMessage` mismatch; `401` invalid management signature; `500` filesystem error.
+
+<a id="post-agentllmapikey"></a>
+#### `POST /agentLlmApiKey`
+
+**Auth:** Management signature (same as **`POST /agentLlmConfig`**).
+
+**Request body (AgentLlmApiKeyPost):**
+```json
+{
+  "nonce": 43,
+  "apiKey": "sk-…",
+  "signedMessage": "{\"action\":\"agentLlmApiKey\",\"apiKey\":\"sk-…\",\"nonce\":43,\"sig\":\"\"}",
+  "clientSig": "0x... or 128-hex Ed25519"
+}
+```
+
+**Clear key:** Same route with **`"apiKey": ""`** (exact empty string). Whitespace-only values are rejected. There is **no** `DELETE` route.
+
+**Canonical `signedMessage`:**
+```json
+{"action":"agentLlmApiKey","apiKey":"<string>","nonce":<int>,"sig":""}
+```
+For clear, `apiKey` in both body and signed JSON is `""`.
+
+**Behavior:** Updates only `apiKey` in the file (merge-write). Agent must not call the LLM until a new key is set after clear.
+
+**Response:** `{ "code": 0, "error": "", "data": { ...status object... } }`
+
+**Example (clear):**
+```bash
+curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/agentLlmApiKey" \
+  -H "Content-Type: application/json" \
+  -d '{"nonce":44,"apiKey":"","signedMessage":"{\"action\":\"agentLlmApiKey\",\"apiKey\":\"\",\"nonce\":44,\"sig\":\"\"}","clientSig":"..."}'
+```
+
 ### 3. Node Tools
 
 <a id="get-getconfigurednodekeys"></a>
@@ -2839,7 +2960,7 @@ Agrees to a key generation request. **Requires management key authentication.**
 
 <a id="post-keygenejectrequest"></a>
 #### `POST /keyGenEjectRequest`
-Starts a **multi-agree key eject** for a **`secp256k1` CGGMP24** key so the committee can export the **full Ethereum private key** (64-hex scalar), verify it against **`pubkeyhex`** / **`ethereumaddress`**, then **tombstone** MPC for that key (**`keygenresultstatus`** → **`ejected`**, **`savedata`** and **`cggmp24aux`** cleared on nodes that finalize). **Requires management key authentication** (same **`Nonce` / `Sig`** pattern as other signed POST bodies; optional **`nodeKey`** binding per [Management signatures](#management-signatures-nodekey)).
+Starts a **multi-agree key eject** for a **`secp256k1` CGGMP24** key so the committee can export the **full secp256k1 private key** (64-hex scalar; same key as **`ethereumaddress`** and **`bitcoinp2wpkhmainnet`**), verify it against **`pubkeyhex`** / derived addresses, then **tombstone** MPC for that key (**`keygenresultstatus`** → **`ejected`**, **`savedata`** and **`cggmp24aux`** cleared on nodes that finalize). **Requires management key authentication** (same **`Nonce` / `Sig`** pattern as other signed POST bodies; optional **`nodeKey`** binding per [Management signatures](#management-signatures-nodekey)).
 
 **Eligibility (server-enforced):** **`msgCheck`** on the keygen must be **`multi-agree`**; effective protocol must be **CGGMP24** (see **`effectiveEcdsaMpcProtocol`** from [`GET /getKeyGenResultById`](#get-getkeygenresultbyid)). **GG18** and **ed25519** keygens are **not** eligible.
 
@@ -2964,9 +3085,9 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getKeyGenEjectRequestById?id=KeyGenEject202
 
 <a id="post-getethereumprivatekey"></a>
 #### `POST /getEthereumPrivateKey`
-Returns the **exported private key** as **64 hex characters** (no `0x` prefix) after eject. **Requires management key authentication** over **`Nonce`**, **`Sig`** (with **`Sig`** cleared for verification), **`keyGenId`**, and optional **`nodeKey`**.
+Returns the **exported private key** as **64 hex characters** (no `0x` prefix) after eject, plus **Bitcoin mainnet** export fields derived from the same secp256k1 scalar when available. **Requires management key authentication** over **`Nonce`**, **`Sig`** (with **`Sig`** cleared for verification), **`keyGenId`**, and optional **`nodeKey`**.
 
-**Preconditions:** This node must appear in the keygen **`keylist`**; the stored result must have **`keygenresultstatus`** **`ejected`**; this node must have persisted the encrypted export blob (nodes that did not run finalize may return an error).
+**Preconditions:** This node must appear in the keygen **`keylist`**; the stored result must have **`keygenresultstatus`** **`ejected`**; this node must have persisted the encrypted export blob (each **KeyList** participant stores ciphertext locally after finalize; nodes that did not run finalize may return an error).
 
 **Request body:**
 ```json
@@ -2984,12 +3105,59 @@ Returns the **exported private key** as **64 hex characters** (no `0x` prefix) a
   "code": 0,
   "error": "",
   "data": {
-    "privateKeyHex": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    "privateKeyHex": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "bitcoinPrivateKeyWif": "Kyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "privateKeyWif": "Kyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "bitcoinP2WPKHMainnet": "bc1qm8kh3fp58gs593p6y7wfduznjchlajmrkl78p8"
   }
 }
 ```
 
+| Field | Description |
+|-------|-------------|
+| **`privateKeyHex`** | Ethereum / raw secp256k1 scalar (**64 hex**, no `0x`) |
+| **`bitcoinPrivateKeyWif`** / **`privateKeyWif`** | Bitcoin **mainnet compressed WIF** for the same scalar (P2WPKH-compatible) |
+| **`bitcoinP2WPKHMainnet`** | Native SegWit v0 **bc1…** address for this key when derivable; see [bitcoinp2wpkh fields](#bitcoin-p2wpkh-mainnet-address) |
+
 Typical errors: **`400`** if the key is not **`ejected`**; **`403`** if this node is not in **`KeyList`**; **`404`** if there is no export material on this node.
+
+**Example:**
+```bash
+curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/getEthereumPrivateKey" \
+  -H "Content-Type: application/json" \
+  -d '{"Nonce":43,"Sig":"<management signature>","keyGenId":"KeyGen20260111003720999cf104d0f"}'
+```
+
+<a id="post-getbitcoinprivatekey"></a>
+#### `POST /getBitcoinPrivateKey`
+Returns the **Bitcoin mainnet compressed private key (WIF)** for the ejected secp256k1 scalar—the same underlying key as [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey), encoded for Bitcoin wallet import. **Requires management key authentication** over **`Nonce`**, **`Sig`** (with **`Sig`** cleared for verification), **`keyGenId`**, and optional **`nodeKey`**.
+
+**Preconditions:** Same as [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey).
+
+**Request body:** Same shape as [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) (`keyGenId` identifies the keygen request).
+
+**Success response:**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": {
+    "privateKeyWif": "Kyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "bitcoinPrivateKeyWif": "Kyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "privateKeyHex": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "bitcoinP2WPKHMainnet": "bc1qm8kh3fp58gs593p6y7wfduznjchlajmrkl78p8"
+  }
+}
+```
+
+Typical errors: same as [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey).
+
+**Example:**
+```bash
+curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/getBitcoinPrivateKey" \
+  -H "Content-Type: application/json" \
+  -d '{"Nonce":43,"Sig":"<management signature>","keyGenId":"KeyGen20260111003720999cf104d0f"}'
+```
 
 <a id="get-getkeygenresultbyid"></a>
 #### `GET /getKeyGenResultById`
@@ -3027,7 +3195,7 @@ A result is returned (Code 0) when either **(a)** this node completed the TSS an
 }
 ```
 
-**Note:** The `keylist` field contains all node keys that participated in key generation. **globalnonce** is the number of sign results created for this keyGen (secp256k1); it is also available via `GET /getGlobalNonceByKeyGenId`. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration. **`effectiveEcdsaMpcProtocol`** summarizes the secp256k1 MPC runtime for this key (`gg18` or `cggmp24`); see [effectiveEcdsaMpcProtocol](#effective-ecdsa-mpc-protocol). For secp256k1 keys, **Bitcoin SegWit v0 P2WPKH** fields (**`bitcoinp2wpkhmainnet`**, **`bitcoinp2wpkhtestnet`**, **`bitcoinp2wpkhsignet`**) are returned when derivable; see [bitcoinp2wpkh fields](#bitcoin-p2wpkh-mainnet-address). After **eject**, **`savedata`** / **`cggmp24aux`** are absent; responses may include **`keygenresultstatus`**, **`ejectedat`**, and redacted **`ejectedprivatekey`**; use [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) for the scalar on nodes that stored the export.
+**Note:** The `keylist` field contains all node keys that participated in key generation. **globalnonce** is the number of sign results created for this keyGen (secp256k1); it is also available via `GET /getGlobalNonceByKeyGenId`. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration. **`effectiveEcdsaMpcProtocol`** summarizes the secp256k1 MPC runtime for this key (`gg18` or `cggmp24`); see [effectiveEcdsaMpcProtocol](#effective-ecdsa-mpc-protocol). For secp256k1 keys, **Bitcoin SegWit v0 P2WPKH** fields (**`bitcoinp2wpkhmainnet`**, **`bitcoinp2wpkhtestnet`**, **`bitcoinp2wpkhsignet`**) are returned when derivable; see [bitcoinp2wpkh fields](#bitcoin-p2wpkh-mainnet-address). After **eject**, **`savedata`** / **`cggmp24aux`** are absent; responses may include **`keygenresultstatus`**, **`ejectedat`**, and redacted **`ejectedprivatekey`**; use [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) or [`POST /getBitcoinPrivateKey`](#post-getbitcoinprivatekey) for export on nodes that stored the ciphertext.
 
 **`status`:** Same **effective** lifecycle as the keygen request (see [KeyGen request `status` field (stored values)](#keygen-request-status-values)): not stored on the keygen result row; if **`keygenresultstatus`** is **`ejected`**, responses force **`status`** **`ejected`**. Otherwise, if the request is still **`agree`** but this node has **`savedata`**, responses return **`success`**. Omitted if the request record cannot be loaded.
 

@@ -1502,7 +1502,7 @@
         },
         "/getEthereumPrivateKey": {
             "post": {
-                "description": "Get exported Ethereum private key (64-hex scalar) after eject. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /getEthereumPrivateKey). Schema: #/definitions/node.GetEthereumPrivateKeyPost.",
+                "description": "Get exported Ethereum private key (64-hex scalar) and Bitcoin mainnet WIF after eject. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /getEthereumPrivateKey). Schema: #/definitions/node.GetEthereumPrivateKeyPost.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1512,7 +1512,7 @@
                 "tags": [
                     "Key Generation"
                 ],
-                "summary": "Get exported Ethereum private key (64-hex scalar) after eject",
+                "summary": "Get exported Ethereum private key (64-hex scalar) and Bitcoin mainnet WIF after eject",
                 "responses": {
                     "200": {
                         "description": "OK (`code`: 0 in APIResponse)",
@@ -1558,6 +1558,69 @@
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/node.GetEthereumPrivateKeyPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/getBitcoinPrivateKey": {
+            "post": {
+                "description": "Get exported Bitcoin mainnet private key (compressed WIF) after eject. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /getBitcoinPrivateKey). Schema: #/definitions/node.GetBitcoinPrivateKeyPost.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Key Generation"
+                ],
+                "summary": "Get exported Bitcoin mainnet private key (compressed WIF) after eject",
+                "responses": {
+                    "200": {
+                        "description": "OK (`code`: 0 in APIResponse)",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation or eligibility error",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid management or client signature",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "This node not in keygen KeyList",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Keygen not found or no export blob on this node",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.GetBitcoinPrivateKeyPost"
                         }
                     }
                 ]
@@ -2884,6 +2947,157 @@
                 ]
             }
         },
+        "/agentLlmConfigStatus": {
+            "get": {
+                "description": "Agent LLM config status (masked API key; read JWT on Browser HTTPS / loopback) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /agentLlmConfigStatus).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "Agent LLM config status (masked API key; read JWT on Browser HTTPS / loopback)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": false,
+                        "description": "Bearer read JWT required on Browser HTTPS (8443) and BrowserLoopbackReadHTTP GET"
+                    }
+                ]
+            }
+        },
+        "/agentLlmConfig": {
+            "post": {
+                "description": "Update agent LLM provider, model, baseUrl (management-signed; does not change apiKey) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /agentLlmConfig).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "Update agent LLM provider, model, baseUrl (management-signed; does not change apiKey)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "required": [
+                                "nonce",
+                                "provider",
+                                "model",
+                                "signedMessage",
+                                "clientSig"
+                            ],
+                            "properties": {
+                                "nonce": {
+                                    "type": "integer"
+                                },
+                                "provider": {
+                                    "type": "string",
+                                    "description": "e.g. openai, anthropic"
+                                },
+                                "model": {
+                                    "type": "string"
+                                },
+                                "baseUrl": {
+                                    "type": "string",
+                                    "description": "Optional custom API base URL; omit or null for provider default"
+                                },
+                                "signedMessage": {
+                                    "type": "string",
+                                    "description": "Exact JSON signed: {\"action\":\"agentLlmConfig\",\"baseUrl\":...,\"model\":\"...\",\"nonce\":N,\"provider\":\"...\",\"sig\":\"\"}"
+                                },
+                                "clientSig": {
+                                    "type": "string",
+                                    "description": "128-hex Ed25519 or Ethereum personal_sign hex"
+                                }
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        "/agentLlmApiKey": {
+            "post": {
+                "description": "Set or clear agent LLM API key only (management-signed; apiKey \"\" clears) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /agentLlmApiKey).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "Set or clear agent LLM API key only (management-signed; apiKey \"\" clears)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "required": [
+                                "nonce",
+                                "apiKey",
+                                "signedMessage",
+                                "clientSig"
+                            ],
+                            "properties": {
+                                "nonce": {
+                                    "type": "integer"
+                                },
+                                "apiKey": {
+                                    "type": "string",
+                                    "description": "Non-empty to set/rotate; exactly \"\" (empty string) to clear stored key"
+                                },
+                                "signedMessage": {
+                                    "type": "string",
+                                    "description": "Exact JSON signed: {\"action\":\"agentLlmApiKey\",\"apiKey\":\"...\",\"nonce\":N,\"sig\":\"\"}"
+                                },
+                                "clientSig": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ]
+            }
+        },
         "/getMSQTTKey": {
             "get": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMSQTTKey).",
@@ -3888,7 +4102,7 @@
                 },
                 "keygenresultstatus": {
                     "type": "string",
-                    "description": "When **ejected**, MPC shares are cleared; use POST /getEthereumPrivateKey for the scalar on this node."
+                    "description": "When **ejected**, MPC shares are cleared; use POST /getEthereumPrivateKey or POST /getBitcoinPrivateKey for export on this node."
                 },
                 "ejectedat": {
                     "type": "string",
@@ -4703,7 +4917,7 @@
         },
         "node.GetEthereumPrivateKeyPost": {
             "type": "object",
-            "description": "POST /getEthereumPrivateKey. Returns decrypted **64-hex** secp256k1 scalar after successful eject. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node. Use only on nodes that participated in finalize (export ciphertext may be missing on others).",
+            "description": "POST /getEthereumPrivateKey. Returns decrypted **64-hex** secp256k1 scalar after successful eject, plus Bitcoin mainnet **privateKeyWif** / **bitcoinPrivateKeyWif** (compressed WIF) and **bitcoinP2WPKHMainnet** when derivable from the same scalar. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node. After eject, each KeyList participant stores export ciphertext locally (encrypted to that node's key); use POST /getEthereumPrivateKey on any participant that completed local finalize.",
             "required": [
                 "Nonce",
                 "Sig",
@@ -4786,6 +5000,31 @@
                 "originator": {
                     "type": "string",
                     "description": "Node key that started the eject (MsgPb.From)"
+                }
+            }
+        },
+        "node.GetBitcoinPrivateKeyPost": {
+            "type": "object",
+            "description": "POST /getBitcoinPrivateKey. Returns Bitcoin mainnet compressed **privateKeyWif** for the ejected secp256k1 scalar (same underlying key as POST /getEthereumPrivateKey). Also returns **privateKeyHex** and **bitcoinP2WPKHMainnet**. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node.",
+            "required": [
+                "Nonce",
+                "Sig",
+                "keyGenId"
+            ],
+            "properties": {
+                "Nonce": {
+                    "type": "integer"
+                },
+                "Sig": {
+                    "type": "string"
+                },
+                "nodeKey": {
+                    "type": "string",
+                    "description": "Optional (recommended) 128-hex MPC node id binding"
+                },
+                "keyGenId": {
+                    "type": "string",
+                    "description": "Keygen request id"
                 }
             }
         }

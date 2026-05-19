@@ -49,6 +49,7 @@ Options:
       --force-browser-certs  Pass --force-browser-https-certs
       --no-loopback       Do not enable BrowserLoopbackReadHTTP / omit --enable-loopback-http
       --no-firewall       Pass --no-firewall to process_config.sh
+      --no-agent-llm-config-path  Pass --no-agent-llm-config-path to process_config.sh
   -h, --help            Show this help
 
 If the destination configs.yaml already exists, the script exits with an error (nothing is overwritten).
@@ -143,6 +144,7 @@ INSTALL_SYSTEMD=false
 FORCE_BROWSER=false
 ENABLE_LOOPBACK=true
 FIREWALL=true
+SKIP_AGENT_LLM_CONFIG_PATH=false
 NODE_MGT_KEY_CLI=""
 PUBLIC_MGT_KEY_CLI=""
 LEGACY_ETH_ARG=()
@@ -187,6 +189,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-firewall)
             FIREWALL=false
+            shift
+            ;;
+        --no-agent-llm-config-path)
+            SKIP_AGENT_LLM_CONFIG_PATH=true
             shift
             ;;
         -h|--help)
@@ -441,6 +447,9 @@ if [ "$FORCE_BROWSER" = true ]; then
 fi
 if [ "$FIREWALL" = false ]; then
     PC_ARGS+=(--no-firewall)
+fi
+if [ "$SKIP_AGENT_LLM_CONFIG_PATH" = true ]; then
+    PC_ARGS+=(--no-agent-llm-config-path)
 fi
 
 echo ""

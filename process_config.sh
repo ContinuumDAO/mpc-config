@@ -87,6 +87,10 @@ DEFAULT_SCANNER_API_URLS=(
     "http://82.208.20.136:8080"
 )
 
+# Agent LLM settings directory beside configs.yaml (bind-mounted ./agent_llm_config; see API_IMPLEMENTATION.md).
+DEFAULT_AGENT_LLM_CONFIG_DIR="agent_llm_config"
+DEFAULT_AGENT_LLM_CONFIG_CONTAINER_FILE="/app/agent_llm_config/agent-llm-config.json"
+
 # Functions
 print_error() {
     echo -e "${RED}ERROR: $1${NC}" >&2
@@ -292,6 +296,54 @@ if empty:
     with open(path, "w") as f:
         yaml.dump(data, f)
 PYSCANNERMERGE
+}
+
+# Set AgentLlmConfigDir when missing or empty (preserves comments; skips if already set).
+configs_yaml_merge_agent_llm_config_dir() {
+    local config_file="$1"
+    local dir="${2:-$DEFAULT_AGENT_LLM_CONFIG_DIR}"
+    local _out
+    require_ruamel_yaml || return 1
+    if ! _out=$(AGENT_LLM_MERGE_CFG="$config_file" AGENT_LLM_MERGE_DIR="$dir" python3 << 'PYAGENTLLMMERGE' 2>&1
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.stderr.write("configs.yaml: install ruamel.yaml\n")
+    sys.exit(1)
+
+path_cfg = os.environ["AGENT_LLM_MERGE_CFG"]
+agent_dir = os.environ.get("AGENT_LLM_MERGE_DIR", "").strip()
+if not path_cfg or not agent_dir:
+    sys.exit(0)
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)
+
+with open(path_cfg, "r") as f:
+    data = yaml.load(f)
+if not isinstance(data, dict):
+    sys.stderr.write("invalid yaml root\n")
+    sys.exit(1)
+
+existing = data.get("AgentLlmConfigDir")
+if existing is not None and str(existing).strip():
+    print("present", flush=True)
+    sys.exit(0)
+
+data["AgentLlmConfigDir"] = agent_dir
+with open(path_cfg, "w") as f:
+    yaml.dump(data, f)
+print("merged", flush=True)
+PYAGENTLLMMERGE
+); then
+        echo "$_out" >&2
+        return 1
+    fi
+    echo "$_out" | tail -n 1
 }
 
 # When ScannerAPIURLs is empty: interactive prompt (Enter = defaults), else merge defaults with a clear message.
@@ -3870,6 +3922,7 @@ configure_docker_compose() {
             apply_docker_compose_mpc_auth_image "$docker_compose_file" "$app_image_override"
         fi
         apply_docker_compose_continuumdao_node_app "$docker_compose_file" "$configs_yaml_path" || true
+        apply_docker_compose_agent_llm_config_env "$docker_compose_file" "${5:-1}" || true
         process_config_repo_take_if_sudo_invoker "$docker_compose_file"
         shopt -s nullglob
         local _dcf_bak
@@ -4154,6 +4207,105 @@ PYNA
             ;;
         *)
             print_warning "Unexpected ContinuumdaoNodeApp compose merge result: ${_na_action}"
+            ;;
+    esac
+}
+
+# Ensure or remove MPC_AUTH_AGENT_LLM_CONFIG_FILE in docker-compose app environment (matches configs.yaml + bind mount).
+apply_docker_compose_agent_llm_config_env() {
+    local file="$1"
+    local enable="${2:-1}"
+    local agent_path="${DEFAULT_AGENT_LLM_CONFIG_CONTAINER_FILE}"
+    if [ ! -f "$file" ]; then
+        return 0
+    fi
+    if ! command -v python3 &>/dev/null; then
+        print_warning "python3 not found — could not adjust agent LLM config env in docker-compose.yml"
+        return 1
+    fi
+    local _action
+    _action=$(
+        COMPOSE_AGENT_LLM_FILE="$file" COMPOSE_AGENT_LLM_ENABLE="$enable" COMPOSE_AGENT_LLM_PATH="$agent_path" python3 << 'PYCOMPOSEAGENT'
+import os
+import re
+import sys
+
+path = os.environ.get("COMPOSE_AGENT_LLM_FILE", "")
+enable = os.environ.get("COMPOSE_AGENT_LLM_ENABLE", "1").strip() == "1"
+agent_path = os.environ.get("COMPOSE_AGENT_LLM_PATH", "").strip()
+env_key = "MPC_AUTH_AGENT_LLM_CONFIG_FILE"
+line_active = f"      {env_key}: {agent_path}\n"
+line_comment = f"      # {env_key}: {agent_path}\n"
+pat = re.compile(r"^\s*#?\s*MPC_AUTH_AGENT_LLM_CONFIG_FILE:\s*")
+
+if not path or not agent_path:
+    print("skip", flush=True)
+    sys.exit(0)
+
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+except OSError as e:
+    sys.stderr.write(f"{path}: {e}\n")
+    print("error", flush=True)
+    sys.exit(1)
+
+out = []
+found = False
+for line in lines:
+    if pat.match(line):
+        found = True
+        if enable:
+            out.append(line_active)
+        continue
+    out.append(line)
+
+if enable and not found:
+    inserted = False
+    reboot_pat = re.compile(r"^\s*MPC_AUTH_PENDING_REBOOT_FILE:")
+    for i, line in enumerate(out):
+        if reboot_pat.match(line):
+            out.insert(i + 1, line_active)
+            inserted = True
+            break
+    if not inserted:
+        pending_pat = re.compile(r"^\s*MPC_AUTH_DOCKER_PENDING_UPDATE_FILE:")
+        for i, line in enumerate(out):
+            if pending_pat.match(line):
+                out.insert(i + 1, line_active)
+                inserted = True
+                break
+    if not inserted:
+        print("none", flush=True)
+        sys.exit(0)
+    action = "insert"
+elif enable and found:
+    action = "set"
+elif not enable and found:
+    action = "remove"
+else:
+    action = "noop"
+    sys.exit(0)
+
+with open(path, "w", encoding="utf-8") as f:
+    f.writelines(out)
+print(action, flush=True)
+PYCOMPOSEAGENT
+    )
+    case "$_action" in
+        set|insert)
+            print_success "docker-compose.yml: MPC_AUTH_AGENT_LLM_CONFIG_FILE → ${agent_path}"
+            ;;
+        remove)
+            print_info "docker-compose.yml: omitted MPC_AUTH_AGENT_LLM_CONFIG_FILE (--no-agent-llm-config-path)"
+            ;;
+        none)
+            print_warning "docker-compose.yml: could not insert MPC_AUTH_AGENT_LLM_CONFIG_FILE (pending-update env lines missing)"
+            ;;
+        skip|noop) ;;
+        error)
+            print_warning "docker-compose.yml: failed to adjust agent LLM config env"
+            return 1
             ;;
     esac
 }
@@ -4706,6 +4858,7 @@ show_process_config_help() {
     echo "  --enable-loopback-http          Enable SSH-tunnel loopback read HTTP (configs.yaml + docker-compose; non-interactive)"
     echo "  --disable-loopback-http         Disable loopback read HTTP (non-interactive)"
     echo "  --no-systemd                    Skip optional mpc-auth Docker systemd installer prompts (after firewall; before Relayer check — see mpc-config/systemd/README.md)."
+    echo "  --no-agent-llm-config-path      Do not set AgentLlmConfigDir in configs.yaml, agent_llm_config bind-mount, or MPC_AUTH_AGENT_LLM_CONFIG_FILE in docker-compose.yml."
     echo "  --install-mpc-auth-systemd      Non-interactive: sudo-run systemd/install-mpc-auth-docker-systemd.sh (requires sudo; may prompt restart)."
     echo "  --help | -h | -help | help   Show this message (arguments above + relay/client behavior below)"
     echo ""
@@ -4721,6 +4874,7 @@ show_process_config_help() {
     echo "  PROCESS_CONFIG_SKIP_DOTENV_FROM_ENV=1 — disable .env creation/merge entirely."
     echo "  PROCESS_CONFIG_INSTALL_SYSTEMD=1 — same as --install-mpc-auth-systemd (non-interactive install)."
     echo "  PROCESS_CONFIG_NONINTERACTIVE=1 — skip optional prompts (RelayerAPIURL / ScannerAPIURLs use defaults when unset; root continue; second management key; MQTT overwrite if regenerating; UFW enable ask; systemd Y/n)."
+    echo "  PROCESS_CONFIG_SKIP_AGENT_LLM_CONFIG_PATH=1 — same as --no-agent-llm-config-path."
     echo "  MPC_CONFIG_ROOT=/path/to/mpc-config — locate systemd/install-mpc-auth-docker-systemd.sh when the script runs"
     echo "    from mpc-auth (or any tree that does not include mpc-config/systemd next to repo root)."
     echo "  MPC_AUTH_COMPOSE_APP_IMAGE — full image reference for the app container. Templates use"
@@ -5780,6 +5934,7 @@ main() {
     local COPY_CERTS=false
     local SKIP_FIREWALL=false
     local SKIP_SYSTEMD=false
+    local SKIP_AGENT_LLM_CONFIG_PATH=false
     local INSTALL_MPC_AUTH_SYSTEMD=false
     local COMPOSE_APP_IMAGE_REF="${MPC_AUTH_COMPOSE_APP_IMAGE:-}"
 
@@ -5822,6 +5977,10 @@ main() {
                 SKIP_SYSTEMD=true
                 shift
                 ;;
+            --no-agent-llm-config-path)
+                SKIP_AGENT_LLM_CONFIG_PATH=true
+                shift
+                ;;
             --install-mpc-auth-systemd)
                 INSTALL_MPC_AUTH_SYSTEMD=true
                 shift
@@ -5860,6 +6019,26 @@ main() {
 
     _process_config_maybe_materialize_dotenv_from_environment "$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
 
+    case "${PROCESS_CONFIG_SKIP_AGENT_LLM_CONFIG_PATH:-}" in
+        1|true|TRUE|yes|YES) SKIP_AGENT_LLM_CONFIG_PATH=true ;;
+    esac
+    if [ "$SKIP_AGENT_LLM_CONFIG_PATH" = false ]; then
+        local _agent_llm_merge_result
+        _agent_llm_merge_result=$(configs_yaml_merge_agent_llm_config_dir "$CONFIG_FILE" "$DEFAULT_AGENT_LLM_CONFIG_DIR") || exit 1
+        _cfg_parent="$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
+        mkdir -p "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}" 2>/dev/null || true
+        case "$_agent_llm_merge_result" in
+            merged)
+                print_success "configs.yaml: set AgentLlmConfigDir → ${DEFAULT_AGENT_LLM_CONFIG_DIR} (host: ${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/)"
+                ;;
+            present)
+                print_info "configs.yaml: AgentLlmConfigDir already set (unchanged)"
+                ;;
+        esac
+    else
+        print_info "Skipping AgentLlmConfigDir in configs.yaml (--no-agent-llm-config-path)"
+    fi
+
     # Management keys before nodeAddresses so re-runs offer NodeMgtKey / PublicMgtKey when missing
     # (otherwise users only see the node IP flow first).
     normalize_openssh_public_mgt_key_in_yaml "$CONFIG_FILE" || exit 1
@@ -5894,7 +6073,11 @@ main() {
     prompt_browser_loopback_read_http
 
     configure_mqtt_broker "$CONFIG_FILE" "$IS_RELAY_NODE"
-    configure_docker_compose "$IS_RELAY_NODE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED" "$COMPOSE_APP_IMAGE_REF" "$CONFIG_FILE"
+    local _agent_llm_compose_enable=1
+    if [ "$SKIP_AGENT_LLM_CONFIG_PATH" = true ]; then
+        _agent_llm_compose_enable=0
+    fi
+    configure_docker_compose "$IS_RELAY_NODE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED" "$COMPOSE_APP_IMAGE_REF" "$CONFIG_FILE" "$_agent_llm_compose_enable"
 
     setup_browser_https "$CONFIG_FILE"
     apply_browser_loopback_read_http_config "$CONFIG_FILE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED"

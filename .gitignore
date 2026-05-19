@@ -23,6 +23,9 @@ webTLS/config/certs/
 # Encrypted DB backup envelopes (POST /backupDatabase); may contain sensitive ciphertext
 database_backups/
 
+# Agent LLM config (may contain API key material in agent-llm-config.json)
+agent_llm_config/
+
 # POST /restoreDatabase pre-restore mongodump snapshots (operators may copy off-host)
 .mongodump/
 
