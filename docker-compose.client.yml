@@ -43,6 +43,7 @@ services:
       MPC_AUTH_DOCKER_PENDING_UPDATE_FILE: /var/lib/mpc-auth-docker/pending-update.json
       MPC_AUTH_PENDING_REBOOT_FILE: /var/lib/mpc-auth-docker/pending-reboot.json
       MPC_AUTH_AGENT_LLM_CONFIG_FILE: /app/agent_llm_config/agent-llm-config.json
+      MPC_AGENT_MCP_SERVER_URL: "http://continuum-mcp:8446/mcp"
       # POST /restoreDatabase: full mongodump before wipe; host path ./.mongodump next to this compose file / docker-compose.yml project dir.
       MPC_AUTH_PRE_RESTORE_MONGODUMP_DIR: /app/.mongodump
       # Optional: mongodb://user:password@mongodb:27017/DB?authSource=DB (see .env.example). Empty = YAML/default (legacy no-auth compatible).

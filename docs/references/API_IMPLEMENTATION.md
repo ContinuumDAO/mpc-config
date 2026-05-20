@@ -157,6 +157,9 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /agentLlmConfigStatus`](#get-agentllmconfigstatus) - Read agent LLM settings for the node agent (masked API key; **read JWT** on Browser HTTPS / loopback)
 - [`POST /agentLlmConfig`](#post-agentllmconfig) - Update provider, model, and optional base URL (**management signature**; does not change `apiKey`)
 - [`POST /agentLlmApiKey`](#post-agentllmapikey) - Set, rotate, or clear the cloud LLM API key only (**management signature**; `apiKey: ""` clears)
+- [`POST /agent/chat`](#post-agentchat) - Stream one assistant turn (OpenAI-compatible LLM; **read JWT** on Browser HTTPS / loopback)
+- [`GET /agent/chat`](#get-agentchat) - Load in-memory conversation history by `conversationId` (**read JWT** when JWT applies)
+- [`GET /agent/mcp/tools`](#get-agentmcptools) - **tools/list** from **continuum-mcp** (Streamable HTTP; **read JWT** when JWT applies)
 
 ### Node Ping & Connectivity
 - [`GET /pingNodesRequest`](#get-pingnodesrequest) - Ping nodes to test connectivity
@@ -2335,6 +2338,54 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/agentLlmApiKey" \
   -H "Content-Type: application/json" \
   -d '{"nonce":44,"apiKey":"","signedMessage":"{\"action\":\"agentLlmApiKey\",\"apiKey\":\"\",\"nonce\":44,\"sig\":\"\"}","clientSig":"..."}'
 ```
+
+<a id="post-agentchat"></a>
+#### `POST /agent/chat`
+
+**Auth:** **Read JWT** on Browser HTTPS and loopback read HTTP (same as **`GET /agentLlmConfigStatus`**). Plain **management** port (`ManagementAPIsPort`) has no JWT — trusted co-located / LAN attach only.
+
+**Request body:**
+```json
+{ "conversationId": "<uuid or empty for new>", "message": "user text" }
+```
+
+**Response:** `Content-Type: text/event-stream` — SSE events:
+
+| Event | Data |
+|-------|------|
+| `meta` | `{ "conversationId", "provider", "model" }` |
+| `token` | `{ "delta": "<text chunk>" }` |
+| `done` | `{ "conversationId" }` |
+| `error` | `{ "message": "..." }` |
+
+**Behavior (MVP):** Reads **`agent-llm-config.json`**, streams one assistant turn. Provider routing:
+
+| `provider` | Default base (if `baseUrl` empty) | HTTP path |
+|------------|-----------------------------------|-----------|
+| `openai` | `https://api.openai.com/v1` | `{base}/chat/completions` (OpenAI-compatible SSE) |
+| `ollama` | `https://ollama.com/api` | `{base}/chat` (Ollama native NDJSON stream) |
+
+Other providers require **`baseUrl`**. If `baseUrl` ends with `/chat`, Ollama native is used; if it ends with `/chat/completions`, OpenAI-compatible is used. Conversation history is **in memory** on mpc-auth (not Mongo). **MCP tools are not invoked yet.**
+
+<a id="get-agentchat"></a>
+#### `GET /agent/chat`
+
+**Query:** `conversationId` (required)
+
+**Auth:** Read JWT when applicable (see **`POST /agent/chat`**).
+
+**Response:** `{ "code": 0, "data": { "conversationId", "messages": [ { "role", "content", "createdAt" } ] } }`
+
+<a id="get-agentmcptools"></a>
+#### `GET /agent/mcp/tools`
+
+**Auth:** Read JWT when applicable (same as **`GET /agentLlmConfigStatus`**).
+
+**Behavior:** mpc-auth connects to the MCP server as an MCP client (`@modelcontextprotocol/go-sdk`), runs **`tools/list`**, and returns summaries. Default server URL from env **`MPC_AGENT_MCP_SERVER_URL`** (`http://continuum-mcp:8446/mcp` in compose).
+
+**Response `data`:** `{ "mcpServerUrl", "toolCount", "tools": [ { "name", "title", "description" } ] }`
+
+**Chat stream:** **`POST /agent/chat`** also emits SSE event **`tools`** (same shape, or `error` if MCP is unreachable). A short system hint listing tool names is prepended for the LLM; **`tools/call`** is not executed yet.
 
 ### 3. Node Tools
 
