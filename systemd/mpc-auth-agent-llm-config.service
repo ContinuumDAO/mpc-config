@@ -1,0 +1,7 @@
+[Unit]
+Description=Apply agent LLM config change (optional mpc-auth restart)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-apply-agent-llm-config.sh
+StandardInput=null

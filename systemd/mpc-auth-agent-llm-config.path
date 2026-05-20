@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch agent-llm-config.json for changes (MCP chat LLM settings)
+
+[Path]
+# Host path bind-mounted into mpc-auth (./agent_llm_config/agent-llm-config.json).
+PathChanged=/var/lib/mpc-auth-docker/agent-llm-config.stamp
+
+[Install]
+WantedBy=multi-user.target

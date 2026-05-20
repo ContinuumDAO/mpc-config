@@ -157,8 +157,13 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /agentLlmConfigStatus`](#get-agentllmconfigstatus) - Read agent LLM settings for the node agent (masked API key; **read JWT** on Browser HTTPS / loopback)
 - [`POST /agentLlmConfig`](#post-agentllmconfig) - Update provider, model, and optional base URL (**management signature**; does not change `apiKey`)
 - [`POST /agentLlmApiKey`](#post-agentllmapikey) - Set, rotate, or clear the cloud LLM API key only (**management signature**; `apiKey: ""` clears)
-- [`POST /agent/chat`](#post-agentchat) - Stream one assistant turn (OpenAI-compatible LLM; **read JWT** on Browser HTTPS / loopback)
-- [`GET /agent/chat`](#get-agentchat) - Load in-memory conversation history by `conversationId` (**read JWT** when JWT applies)
+- [`POST /agent/chat`](#post-agentchat) - Stream one assistant turn (LLM + MCP **tools/call** loop; **read JWT** on Browser HTTPS / loopback)
+- [`GET /agent/chat`](#get-agentchat) - Load persisted conversation history by `conversationId` (**read JWT** when JWT applies)
+- [`POST /agent/chat/cancel`](#post-agentchatcancel) - Cancel in-flight turn for `conversationId` (**read JWT**)
+- [`POST /agent/chat/elicitation`](#post-agentchatelicitation) - Complete pending MCP elicitation during a stream (**read JWT**)
+- [`GET /agent/conversations`](#get-agentconversations) - List thread metadata for multi-tab UI (**read JWT**)
+- [`GET /agent/conversations/:id`](#get-agentconversationsid) - Load one thread by id (**read JWT**)
+- [`DELETE /agent/conversations/:id`](#delete-agentconversationsid) - Delete a thread (**read JWT**)
 - [`GET /agent/mcp/tools`](#get-agentmcptools) - **tools/list** from **continuum-mcp** (Streamable HTTP; **read JWT** when JWT applies)
 
 ### Node Ping & Connectivity
@@ -2354,18 +2359,25 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/agentLlmApiKey" \
 | Event | Data |
 |-------|------|
 | `meta` | `{ "conversationId", "provider", "model" }` |
+| `tools` | `{ "mcpServerUrl", "toolCount", "tools", "error"? }` |
+| `tool_call` | `{ "name", "id"?, "arguments"?, "error"? }` |
+| `tool_result` | `{ "name", "id"?, "content", "isError"? }` |
+| `elicitation` | `{ "conversationId", "elicitationId", "mode", "message", "url"?, "requestedSchema"? }` — browser must **`POST /agent/chat/elicitation`** |
 | `token` | `{ "delta": "<text chunk>" }` |
 | `done` | `{ "conversationId" }` |
+| `cancelled` | `{ "conversationId" }` |
 | `error` | `{ "message": "..." }` |
 
-**Behavior (MVP):** Reads **`agent-llm-config.json`**, streams one assistant turn. Provider routing:
+**Feature flag:** When **`EnableMcpChat: false`** in `configs.yaml` (or env **`MPC_AUTH_ENABLE_MCP_CHAT=0`**), chat routes return **403**. **`GET /agentLlmConfigStatus`** includes **`enableMcpChat`**.
+
+**Behavior:** Reads **`agent-llm-config.json`**, streams one assistant turn with optional MCP tool loop. Provider routing:
 
 | `provider` | Default base (if `baseUrl` empty) | HTTP path |
 |------------|-----------------------------------|-----------|
 | `openai` | `https://api.openai.com/v1` | `{base}/chat/completions` (OpenAI-compatible SSE) |
 | `ollama` | `https://ollama.com/api` | `{base}/chat` (Ollama native NDJSON stream) |
 
-Other providers require **`baseUrl`**. If `baseUrl` ends with `/chat`, Ollama native is used; if it ends with `/chat/completions`, OpenAI-compatible is used. Conversation history is **in memory** on mpc-auth (not Mongo). **MCP tools are not invoked yet.**
+Other providers require **`baseUrl`**. If `baseUrl` ends with `/chat`, Ollama native is used; if it ends with `/chat/completions`, OpenAI-compatible is used. Conversation history is persisted under **`{AgentLlmConfigDir}/conversations/`** on the bind mount (survives mpc-auth restarts).
 
 <a id="get-agentchat"></a>
 #### `GET /agent/chat`
@@ -2376,16 +2388,49 @@ Other providers require **`baseUrl`**. If `baseUrl` ends with `/chat`, Ollama na
 
 **Response:** `{ "code": 0, "data": { "conversationId", "messages": [ { "role", "content", "createdAt" } ] } }`
 
+<a id="post-agentchatcancel"></a>
+#### `POST /agent/chat/cancel`
+
+**Auth:** Read JWT when applicable.
+
+**Request body:** `{ "conversationId": "<uuid>" }`
+
+**Response `data`:** `{ "conversationId", "cancelled": true|false }`
+
+<a id="post-agentchatelicitation"></a>
+#### `POST /agent/chat/elicitation`
+
+**Auth:** Read JWT when applicable.
+
+**Request body:** `{ "conversationId", "elicitationId", "action": "accept"|"decline"|"cancel", "content"?: { ... } }`
+
+**Behavior:** Unblocks the in-flight **`POST /agent/chat`** stream waiting on MCP **`elicitation/create`**.
+
+<a id="get-agentconversations"></a>
+#### `GET /agent/conversations`
+
+**Auth:** Read JWT when applicable.
+
+**Response `data`:** `{ "conversations": [ { "conversationId", "title", "updatedAt", "createdAt" } ] }`
+
+<a id="get-agentconversationsid"></a>
+#### `GET /agent/conversations/:id`
+
+Same payload as **`GET /agent/chat?conversationId=`** for the given id.
+
+<a id="delete-agentconversationsid"></a>
+#### `DELETE /agent/conversations/:id`
+
+Removes the persisted thread file and index entry.
+
 <a id="get-agentmcptools"></a>
 #### `GET /agent/mcp/tools`
 
 **Auth:** Read JWT when applicable (same as **`GET /agentLlmConfigStatus`**).
 
-**Behavior:** mpc-auth connects to the MCP server as an MCP client (`@modelcontextprotocol/go-sdk`), runs **`tools/list`**, and returns summaries. Default server URL from env **`MPC_AGENT_MCP_SERVER_URL`** (`http://continuum-mcp:8446/mcp` in compose).
+**Behavior:** mpc-auth connects to the MCP server as an MCP client (`@modelcontextprotocol/go-sdk`), runs **`tools/list`**, and returns summaries. Default server URL from env **`MPC_AGENT_MCP_SERVER_URL`** (`http://continuum-mcp:8446/mcp` in compose). MCP client advertises **elicitation**; **`tools/call`** may trigger **`elicitation/create`** during **`POST /agent/chat`**.
 
 **Response `data`:** `{ "mcpServerUrl", "toolCount", "tools": [ { "name", "title", "description" } ] }`
-
-**Chat stream:** **`POST /agent/chat`** also emits SSE event **`tools`** (same shape, or `error` if MCP is unreachable). A short system hint listing tool names is prepended for the LLM; **`tools/call`** is not executed yet.
 
 ### 3. Node Tools
 

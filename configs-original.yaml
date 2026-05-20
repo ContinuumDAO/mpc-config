@@ -62,6 +62,9 @@ DatabaseBackupsDir: "database_backups"
 # (same pattern as database_backups/) so settings persist across mpc-auth image updates.
 AgentLlmConfigDir: "agent_llm_config"
 
+# Enable in-app MCP chat (/agent/chat, Cat launcher). Set false to disable agent chat routes.
+EnableMcpChat: true
+
 # MQTT TLS configuration (CLIENT-SIDE - for mpc-auth nodes to verify broker certificates)
 # This configures how mpc-auth nodes verify the MQTT broker's TLS certificate
 # IMPORTANT: TLS certificate verification is ALWAYS enforced - cannot be disabled

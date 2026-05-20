@@ -46,6 +46,7 @@ install -m 0755 \
 	"$HERE/mpc-auth-docker-update.sh" \
 	"$HERE/mpc-auth-apply-pending-update.sh" \
 	"$HERE/mpc-auth-apply-pending-reboot.sh" \
+	"$HERE/mpc-auth-apply-agent-llm-config.sh" \
 	"$LIBEXEC/"
 
 if [[ "$INSTALL_ENV" == true ]]; then
@@ -64,6 +65,8 @@ install -m 0644 \
 	"$HERE/mpc-auth-docker-pending-update.service" \
 	"$HERE/mpc-auth-docker-pending-reboot.path" \
 	"$HERE/mpc-auth-docker-pending-reboot.service" \
+	"$HERE/mpc-auth-agent-llm-config.path" \
+	"$HERE/mpc-auth-agent-llm-config.service" \
 	"$UNIT_DIR/"
 
 mkdir -p /var/lib/mpc-auth-docker/applied
@@ -77,6 +80,9 @@ systemctl restart mpc-auth-docker-pending-update.path || systemctl start mpc-aut
 systemctl enable mpc-auth-docker-pending-reboot.path
 systemctl restart mpc-auth-docker-pending-reboot.path || systemctl start mpc-auth-docker-pending-reboot.path
 
+systemctl enable mpc-auth-agent-llm-config.path
+systemctl restart mpc-auth-agent-llm-config.path || systemctl start mpc-auth-agent-llm-config.path
+
 echo
 echo "Installed:"
 echo "  $LIBEXEC/mpc-auth-docker-{restart,update}.sh + mpc-auth-apply-pending-{update,reboot}.sh"
@@ -85,6 +91,8 @@ echo "  $UNIT_DIR/mpc-auth-docker-restart.service"
 echo "  $UNIT_DIR/mpc-auth-docker-update@.service"
 echo "  $UNIT_DIR/mpc-auth-docker-pending-update.{path,service} (auto image update — bind-mount /var/lib/mpc-auth-docker in compose)"
 echo "  $UNIT_DIR/mpc-auth-docker-pending-reboot.{path,service} (POST mpc-auth /reboot — host reboot)"
+echo "  $UNIT_DIR/mpc-auth-agent-llm-config.{path,service} (agent LLM config stamp — optional restart)"
+echo "  $LIBEXEC/mpc-auth-apply-agent-llm-config.sh"
 echo "  $LIBEXEC/mpc-auth-apply-pending-update.sh"
 echo "  $LIBEXEC/mpc-auth-apply-pending-reboot.sh"
 echo
