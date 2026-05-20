@@ -124,6 +124,25 @@ services:
       - local-network
   # END mpc-config continuumdao-node-app
 
+  # BEGIN mpc-config continuum-mcp-server
+  continuum-mcp:
+    image: continuumdao/continuum-mcp-server:latest
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    environment:
+      MCP_HTTP_HOST: "0.0.0.0"
+      MCP_HTTP_PORT: "8446"
+      MCP_HTTP_PATH: "/mcp"
+      MPC_AUTH_URL: "http://app"
+      MPC_AUTH_PORT: "8080"
+    ports:
+      - "127.0.0.1:8446:8446"
+    networks:
+      - local-network
+  # END mpc-config continuum-mcp-server
+
 networks:
   local-network:
     driver: bridge

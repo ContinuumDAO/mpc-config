@@ -165,6 +165,20 @@ ContinuumdaoNodeApp:
   NodeReadDiscoveryLocalBindAliases: ""
   NodeReadDiscoveryHairpinFallback: false
 
+# -----------------------------------------------------------------------------
+# Continuum MCP server (continuumdao/continuum-mcp-server)
+# Managed by process_config.sh: merged into docker-compose.yml (service "continuum-mcp").
+# Streamable HTTP MCP at HttpPath on loopback HostPort (default 127.0.0.1:8446/mcp).
+# Container reaches mpc-auth management API at http://app:<ManagementAPIsPort> on the compose network.
+# -----------------------------------------------------------------------------
+ContinuumMcpServer:
+  Enabled: true
+  Image: continuumdao/continuum-mcp-server
+  Tag: latest
+  HostPort: 8446
+  Port: 8446
+  HttpPath: /mcp
+
 # Ignore client signature check (set to true for testing/development only)
 # Controls signature verification for CLIENT signatures used in MPC coordination
 # When nodes communicate during signing operations, they verify each other's signatures using client keys

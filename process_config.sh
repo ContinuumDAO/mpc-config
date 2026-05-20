@@ -3922,6 +3922,7 @@ configure_docker_compose() {
             apply_docker_compose_mpc_auth_image "$docker_compose_file" "$app_image_override"
         fi
         apply_docker_compose_continuumdao_node_app "$docker_compose_file" "$configs_yaml_path" || true
+        apply_docker_compose_continuum_mcp_server "$docker_compose_file" "$configs_yaml_path" || true
         apply_docker_compose_agent_llm_config_env "$docker_compose_file" "${5:-1}" || true
         process_config_repo_take_if_sudo_invoker "$docker_compose_file"
         shopt -s nullglob
@@ -4207,6 +4208,180 @@ PYNA
             ;;
         *)
             print_warning "Unexpected ContinuumdaoNodeApp compose merge result: ${_na_action}"
+            ;;
+    esac
+}
+
+# Replace the marked continuum-mcp-server block in docker-compose.yml from ContinuumMcpServer in configs.yaml.
+apply_docker_compose_continuum_mcp_server() {
+    local file="$1"
+    local config_file="${2:-}"
+    if [ -z "$config_file" ] || [ ! -f "$config_file" ]; then
+        print_warning "Skipping continuum-mcp-server compose merge (missing configs.yaml path)."
+        return 0
+    fi
+    if [ ! -f "$file" ]; then
+        print_warning "Skipping continuum-mcp-server compose merge (compose file missing)."
+        return 0
+    fi
+    if ! command -v python3 &>/dev/null; then
+        print_warning "python3 not found — could not merge ContinuumMcpServer into docker-compose.yml"
+        return 1
+    fi
+    local _mcp_action
+    _mcp_action=$(
+        MPC_MCP_COMPOSE_PATH="$file" MPC_MCP_CONFIG_PATH="$config_file" python3 <<'PYMCP'
+import os
+import sys
+
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    print("no_ruamel", flush=True)
+    sys.exit(1)
+
+path_c = os.environ.get("MPC_MCP_CONFIG_PATH", "")
+path_compose = os.environ.get("MPC_MCP_COMPOSE_PATH", "")
+if not path_c or not path_compose:
+    print("skip", flush=True)
+    sys.exit(0)
+
+BEGIN = "  # BEGIN mpc-config continuum-mcp-server\n"
+END = "  # END mpc-config continuum-mcp-server\n"
+
+y = YAML()
+with open(path_c, encoding="utf-8") as f:
+    d = y.load(f) or {}
+
+if not isinstance(d, dict):
+    d = {}
+
+
+def scalar_int(val, default):
+    if val is None:
+        return default
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def scalar_bool(val, default):
+    if val is None:
+        return default
+    if isinstance(val, bool):
+        return val
+    s = str(val).strip().lower()
+    if s in ("0", "false", "no", "off", ""):
+        return False
+    if s in ("1", "true", "yes", "on"):
+        return True
+    return default
+
+
+mcp = d.get("ContinuumMcpServer")
+enabled = True
+image = "continuumdao/continuum-mcp-server"
+tag = "latest"
+host_port = 8446
+container_port = 8446
+http_path = "/mcp"
+
+if mcp is None:
+    pass
+elif isinstance(mcp, dict):
+    enabled = scalar_bool(mcp.get("Enabled"), True)
+    image = (mcp.get("Image") or image).strip() or image
+    tag = (mcp.get("Tag") or tag).strip() or tag
+    host_port = scalar_int(mcp.get("HostPort"), host_port)
+    container_port = scalar_int(mcp.get("Port"), host_port)
+    http_path = (mcp.get("HttpPath") or http_path).strip() or http_path
+else:
+    enabled = False
+
+mgt_port = scalar_int(d.get("ManagementAPIsPort"), 8080)
+
+if host_port <= 0 or host_port > 65535:
+    host_port = 8446
+if container_port <= 0 or container_port > 65535:
+    container_port = host_port
+if not http_path.startswith("/"):
+    http_path = "/" + http_path
+
+
+def yaml_sq(s):
+    return "'" + str(s).replace("'", "''") + "'"
+
+
+try:
+    with open(path_compose, encoding="utf-8") as f:
+        text = f.read()
+except OSError:
+    print("error_read", flush=True)
+    sys.exit(1)
+
+if BEGIN not in text or END not in text:
+    print("no_marker", flush=True)
+    sys.exit(0)
+
+i0 = text.index(BEGIN)
+i1 = text.index(END) + len(END)
+
+if enabled:
+    block = (
+        f"{BEGIN}"
+        f"  continuum-mcp:\n"
+        f'    image: {yaml_sq(image + ":" + tag)}\n'
+        f"    restart: unless-stopped\n"
+        f"    depends_on:\n"
+        f"      app:\n"
+        f"        condition: service_started\n"
+        f"    environment:\n"
+        f'      MCP_HTTP_HOST: "0.0.0.0"\n'
+        f'      MCP_HTTP_PORT: "{container_port}"\n'
+        f'      MCP_HTTP_PATH: {yaml_sq(http_path)}\n'
+        f'      MPC_AUTH_URL: "http://app"\n'
+        f'      MPC_AUTH_PORT: "{mgt_port}"\n'
+        f"    ports:\n"
+        f'      - "127.0.0.1:{host_port}:{container_port}"\n'
+        f"    networks:\n"
+        f"      - local-network\n"
+        f"{END}"
+    )
+    new_text = text[:i0] + block + text[i1:]
+    action = "ok_on"
+else:
+    new_text = text[:i0] + text[i1:]
+    action = "ok_off"
+
+try:
+    with open(path_compose, "w", encoding="utf-8") as f:
+        f.write(new_text)
+except OSError:
+    print("error_write", flush=True)
+    sys.exit(1)
+print(action, flush=True)
+PYMCP
+    )
+    case "$_mcp_action" in
+        ok_on)
+            print_success "docker-compose.yml: continuum-mcp-server enabled from configs.yaml."
+            ;;
+        ok_off)
+            print_info "docker-compose.yml: continuum-mcp-server disabled (ContinuumMcpServer.Enabled: false)."
+            ;;
+        skip) ;;
+        no_marker)
+            print_warning "docker-compose.yml: no continuum-mcp-server markers — update templates or regenerate compose."
+            ;;
+        no_ruamel)
+            print_warning "python3 ruamel.yaml missing — ContinuumMcpServer compose merge skipped."
+            ;;
+        error_read | error_write)
+            print_warning "Could not merge ContinuumMcpServer into docker-compose.yml (${_mcp_action})."
+            ;;
+        *)
+            print_warning "Unexpected ContinuumMcpServer compose merge result: ${_mcp_action}"
             ;;
     esac
 }
@@ -5522,8 +5697,8 @@ PY
     fi
 }
 
-# Sync ContinuumdaoNodeApp image/tag + dashboard container name into /etc/default/mpc-auth-docker so
-# mpc-auth-docker-update.sh can pull the companion image when mpc-auth is updated.
+# Sync ContinuumdaoNodeApp + ContinuumMcpServer image/tag and compose container names into /etc/default/mpc-auth-docker
+# so mpc-auth-docker-update.sh can pull companion images when mpc-auth is updated.
 _process_config_sync_mpc_auth_docker_dashboard_keys() {
     local config_file="$1"
     local cfg=/etc/default/mpc-auth-docker
@@ -5541,7 +5716,7 @@ _process_config_sync_mpc_auth_docker_dashboard_keys() {
         return 0
     fi
     if ! sudo -n true 2>/dev/null && ! sudo true; then
-        print_warning "sudo required to sync ContinuumdaoNodeApp keys in ${cfg} — companion image pull on systemd update may be skipped."
+        print_warning "sudo required to sync companion image keys in ${cfg} — dashboard/MCP pull on systemd update may be skipped."
         return 0
     fi
     # shellcheck disable=SC2310
@@ -5608,6 +5783,36 @@ else:
         "NODE_APP_CONTAINER_NAME": proj + "-dashboard-1",
     }
 
+mcp = d.get("ContinuumMcpServer")
+mcp_enabled = True
+mcp_image = "continuumdao/continuum-mcp-server"
+mcp_tag = "latest"
+if mcp is None:
+    pass
+elif isinstance(mcp, dict):
+    mcp_enabled = scalar_bool(mcp.get("Enabled"), True)
+    mcp_image = (mcp.get("Image") or mcp_image).strip() or mcp_image
+    mcp_tag = (mcp.get("Tag") or mcp_tag).strip() or mcp_tag
+else:
+    mcp_enabled = False
+
+if mcp_enabled:
+    keys.update({
+        "MPC_AUTH_UPDATE_MCP_SERVER": "1",
+        "MCP_SERVER_IMAGE": mcp_image,
+        "MCP_SERVER_TAG": mcp_tag,
+        "MPC_AUTH_MCP_SERVER_COMPOSE_SERVICE": "continuum-mcp",
+        "MCP_SERVER_CONTAINER_NAME": proj + "-continuum-mcp-1",
+    })
+else:
+    keys.update({
+        "MPC_AUTH_UPDATE_MCP_SERVER": "0",
+        "MCP_SERVER_IMAGE": "",
+        "MCP_SERVER_TAG": "",
+        "MPC_AUTH_MCP_SERVER_COMPOSE_SERVICE": "continuum-mcp",
+        "MCP_SERVER_CONTAINER_NAME": proj + "-continuum-mcp-1",
+    })
+
 text = cfg_path.read_text(encoding="utf-8", errors="replace")
 lines = text.splitlines(keepends=True)
 known = list(keys.keys())
@@ -5637,9 +5842,9 @@ for k in known:
 cfg_path.write_text("".join(out), encoding="utf-8")
 PYDASH
     then
-        print_success "Synced ContinuumdaoNodeApp → ${cfg} (NODE_APP_* for mpc-auth-docker-update.sh)."
+        print_success "Synced companion images → ${cfg} (NODE_APP_* / MCP_SERVER_* for mpc-auth-docker-update.sh)."
     else
-        print_warning "Could not merge ContinuumdaoNodeApp keys into ${cfg} (missing ruamel.yaml or write failed)."
+        print_warning "Could not merge companion image keys into ${cfg} (missing ruamel.yaml or write failed)."
     fi
 }
 
