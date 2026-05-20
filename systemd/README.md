@@ -6,6 +6,29 @@ These units complement the mpc-auth **maintenance** HTTP API (`POST /maintenance
 
 **You do not need to edit `/etc/default/mpc-auth-docker` on every upgrade.** The update script accepts **`registryDigest` as the second argument** (see [Run](#run)). Only persist **`MPC_AUTH_EXPECTED_DIGEST`** in `/etc/default` if you prefer **`systemctl start mpc-auth-docker-update@TAG.service`** alone (that unit does not pass digest on the command line—use **script** invocation for one-shot digests).
 
+## Why `POST /updateMpcAuth` can fail (and leave mpc-auth down)
+
+The host update script runs as a **systemd oneshot** with cwd `/`, not your compose directory. It needs either:
+
+| Requirement | Purpose |
+|-------------|---------|
+| **`MPC_AUTH_COMPOSE_WORKDIR`** | Absolute path to the directory containing **`docker-compose.yml`** (e.g. `/home/mpcnode/mpc-config`) |
+| **or `MPC_AUTH_POST_UPDATE_CMD`** | Full shell command instead of default `docker compose up …` |
+
+If **`MPC_AUTH_COMPOSE_WORKDIR` is empty**, older **`mpc-auth-docker-update.sh`** versions could **stop/remove** the `app` container, then fail at compose — leaving Mongo/dashboard/MCP up but **no mpc-auth** (what you saw).
+
+**Prevention on new nodes:** run **`./process_config.sh`** (syncs workdir) and/or **`sudo ./install-mpc-auth-docker-systemd.sh`** from this repo (installer now sets **`MPC_AUTH_COMPOSE_WORKDIR`** to the mpc-config parent of **`systemd/`** and skips enabling **`pending-update.path`** until workdir is valid). Current **`mpc-auth-docker-update.sh`** checks workdir **before** stop/rm.
+
+**Existing hosts:** set workdir once, then `docker compose up -d --no-deps --force-recreate app`, or re-run install after `git pull`:
+
+```bash
+cd /path/to/mpc-config/systemd
+sudo ./install-mpc-auth-docker-systemd.sh --no-env-backup   # refreshes scripts; sets workdir if installing env
+# or keep env and only sync workdir:
+grep MPC_AUTH_COMPOSE_WORKDIR /etc/default/mpc-auth-docker
+sudo systemctl enable --now mpc-auth-docker-pending-update.path
+```
+
 ## Fully automated upgrades (recommended)
 
 **Preferred:** **`systemd.path`** + **bind mount** — the mpc-auth process **never** holds the Docker socket. After a successful **`POST /updateMpcAuth`**, **mpc-auth** writes one JSON file **atomically** to **`/var/lib/mpc-auth-docker/pending-update.json`** (same inode on host + container). **`mpc-auth-docker-pending-update.path`** starts **`mpc-auth-docker-pending-update.service`**, which runs **`mpc-auth-apply-pending-update.sh`**: it **`mv`** claims the file, sets **`MPC_AUTH_PENDING_RESTART_ONLY`** / **`MPC_AUTH_PENDING_FORCE_RECREATE`** from the JSON, and runs **`mpc-auth-docker-update.sh`** with **tag** and **digest** (digest may be empty when **`restartOnly`** is true). Install enables the path unit; **`docker-compose*.yml`** mounts **`/var/lib/mpc-auth-docker:/var/lib/mpc-auth-docker`** (see templates in this repo).

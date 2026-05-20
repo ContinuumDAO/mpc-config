@@ -55,6 +55,14 @@ if [[ "$INSTALL_ENV" == true ]]; then
 		echo "Backed up existing $DEFAULT_ENV"
 	fi
 	install -m 0644 "$HERE/mpc-auth-docker.env" "$DEFAULT_ENV"
+	# Default compose project root = parent of systemd/ (this mpc-config checkout).
+	COMPOSE_ROOT="$(cd "$HERE/.." && pwd)"
+	if [[ -f "${COMPOSE_ROOT}/docker-compose.yml" || -f "${COMPOSE_ROOT}/docker-compose.client.yml" || -f "${COMPOSE_ROOT}/docker-compose.relay.yml" ]]; then
+		sed -i "s|^MPC_AUTH_COMPOSE_WORKDIR=.*|MPC_AUTH_COMPOSE_WORKDIR=${COMPOSE_ROOT}|" "$DEFAULT_ENV"
+		echo "Set MPC_AUTH_COMPOSE_WORKDIR=${COMPOSE_ROOT} in $DEFAULT_ENV"
+	else
+		echo "WARNING: no docker-compose.yml next to ${COMPOSE_ROOT} — set MPC_AUTH_COMPOSE_WORKDIR in $DEFAULT_ENV before POST /updateMpcAuth." >&2
+	fi
 	echo "Installed $DEFAULT_ENV"
 fi
 
@@ -74,8 +82,32 @@ chmod 0755 /var/lib/mpc-auth-docker /var/lib/mpc-auth-docker/applied || true
 
 systemctl daemon-reload
 
-systemctl enable mpc-auth-docker-pending-update.path
-systemctl restart mpc-auth-docker-pending-update.path || systemctl start mpc-auth-docker-pending-update.path
+_mpc_auth_auto_update_ready() {
+	local w explicit
+	if [[ ! -r "$DEFAULT_ENV" ]]; then
+		return 1
+	fi
+	# shellcheck source=/dev/null
+	. "$DEFAULT_ENV"
+	w="${MPC_AUTH_COMPOSE_WORKDIR:-${MPC_AUTH_COMPOSE_DIR:-}}"
+	w="${w#"${w%%[![:space:]]*}"}"
+	w="${w%"${w##*[![:space:]]}"}"
+	explicit="${MPC_AUTH_POST_UPDATE_CMD:-}"
+	explicit="${explicit#"${explicit%%[![:space:]]*}"}"
+	explicit="${explicit%"${explicit##*[![:space:]]}"}"
+	[[ -n "$explicit" ]] && return 0
+	[[ -n "$w" && -d "$w" ]] && return 0
+	return 1
+}
+
+if _mpc_auth_auto_update_ready; then
+	systemctl enable mpc-auth-docker-pending-update.path
+	systemctl restart mpc-auth-docker-pending-update.path || systemctl start mpc-auth-docker-pending-update.path
+else
+	echo "WARNING: MPC_AUTH_COMPOSE_WORKDIR unset or missing — NOT enabling mpc-auth-docker-pending-update.path." >&2
+	echo "  Set MPC_AUTH_COMPOSE_WORKDIR in $DEFAULT_ENV (or MPC_AUTH_POST_UPDATE_CMD), then:" >&2
+	echo "  sudo systemctl enable --now mpc-auth-docker-pending-update.path" >&2
+fi
 
 systemctl enable mpc-auth-docker-pending-reboot.path
 systemctl restart mpc-auth-docker-pending-reboot.path || systemctl start mpc-auth-docker-pending-reboot.path

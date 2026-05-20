@@ -5979,6 +5979,7 @@ _process_config_prompt_mpc_auth_systemd_helpers() {
         if sudo -n true 2>/dev/null || sudo true; then
             if sudo bash "$ins_script" "$@"; then
                 print_success "mpc-auth systemd installer finished."
+                _process_config_sync_mpc_auth_docker_compose_workdir
                 return 0
             fi
             print_warning "mpc-auth systemd installer exited with an error."
@@ -6294,6 +6295,8 @@ main() {
 
     # Optional mpc-auth Docker systemd installs/restarts (orthogonal to Relayer connectivity). Runs *before*
     # validate_relayer_api_connection so Relayer/network failures cannot skip these prompts entirely.
+    # Sync workdir before install so a fresh /etc/default gets COMPOSE_WORKDIR even if install overwrites the file.
+    _process_config_sync_mpc_auth_docker_compose_workdir
     _process_config_prompt_mpc_auth_systemd_helpers "$SKIP_SYSTEMD" "$INSTALL_MPC_AUTH_SYSTEMD"
     _process_config_sync_mpc_auth_docker_compose_workdir
     _process_config_sync_mpc_auth_docker_dashboard_keys "$CONFIG_FILE"

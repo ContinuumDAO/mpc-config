@@ -199,6 +199,11 @@ if [[ "$RESTART_ONLY" == "1" ]]; then
 	exit 0
 fi
 
+# Fail before stop/rm/pull so a misconfigured host does not leave mpc-auth down (MPC_AUTH_COMPOSE_WORKDIR empty).
+if [[ -z "$(mpc_auth_trim "${MPC_AUTH_POST_UPDATE_CMD:-}")" ]]; then
+	mpc_auth_require_compose_workdir
+fi
+
 OLD_IMAGE=""
 if docker container inspect "$CONTAINER" &>/dev/null; then
 	OLD_IMAGE="$(docker inspect -f '{{.Config.Image}}' "$CONTAINER")"
