@@ -33,6 +33,80 @@ mpc_auth_trim() {
 RESTART_ONLY="$(mpc_auth_trim "${MPC_AUTH_PENDING_RESTART_ONLY:-0}")"
 FORCE_RECREATE="$(mpc_auth_trim "${MPC_AUTH_PENDING_FORCE_RECREATE:-0}")"
 
+mpc_auth_image_id() {
+	local ref="$1"
+	docker image inspect "$ref" --format '{{.Id}}' 2>/dev/null || true
+}
+
+mpc_auth_keep_ids_contains() {
+	local needle="$1"
+	shift || true
+	local k
+	for k in "$@"; do
+		[[ -n "$k" && "$k" == "$needle" ]] && return 0
+	done
+	return 1
+}
+
+mpc_auth_image_in_use() {
+	local img_id="$1"
+	local used
+	used="$(docker ps -a --filter "ancestor=${img_id}" -q 2>/dev/null | head -n 1 || true)"
+	[[ -n "$used" ]]
+}
+
+# After a successful pull/recreate: remove old tagged/dangling images for REPO, keeping refs passed as args
+# (e.g. continuumdao/mpc-auth:v1.2.7 and :latest). Skips images still referenced by any container.
+# Disable with MPC_AUTH_PRUNE_OLD_IMAGES=0 in /etc/default/mpc-auth-docker.
+mpc_auth_prune_unused_repo_images() {
+	case "${MPC_AUTH_PRUNE_OLD_IMAGES:-1}" in
+	0 | false | FALSE | no | NO) return 0 ;;
+	esac
+
+	local repo="$1"
+	shift || true
+	local -a keep_refs=("$@")
+	local -a keep_ids=()
+	local ref id rep tag display
+
+	repo="$(mpc_auth_trim "$repo")"
+	[[ -z "$repo" ]] && return 0
+
+	for ref in "${keep_refs[@]}"; do
+		ref="$(mpc_auth_trim "$ref")"
+		[[ -z "$ref" ]] && continue
+		id="$(mpc_auth_image_id "$ref")"
+		[[ -z "$id" ]] && continue
+		if ! mpc_auth_keep_ids_contains "$id" "${keep_ids[@]}"; then
+			keep_ids+=("$id")
+		fi
+	done
+
+	if [[ "${#keep_ids[@]}" -eq 0 ]]; then
+		echo "warning: prune skipped for ${repo} — no keep refs resolved." >&2
+		return 0
+	fi
+
+	while IFS=$'\t' read -r id rep tag; do
+		[[ -z "$id" || "$rep" != "$repo" ]] && continue
+		if mpc_auth_keep_ids_contains "$id" "${keep_ids[@]}"; then
+			continue
+		fi
+		if mpc_auth_image_in_use "$id"; then
+			display="${rep}:${tag}"
+			[[ "$tag" == "<none>" ]] && display="${rep} (${id#sha256:})"
+			echo "Skipping prune (in use by a container): ${display}"
+			continue
+		fi
+		display="${rep}:${tag}"
+		[[ "$tag" == "<none>" ]] && display="${rep} (${id#sha256:})"
+		echo "Pruning unused ${repo} image: ${display}"
+		docker rmi --force "$id" || true
+	done < <(docker images --no-trunc --format '{{.ID}}\t{{.Repository}}\t{{.Tag}}' "$repo" 2>/dev/null || true)
+
+	return 0
+}
+
 # systemd oneshots often have WorkingDirectory=/; never run "docker compose" from cwd without an explicit project dir.
 mpc_auth_compose_workdir_resolve() {
 	printf '%s' "$(mpc_auth_trim "${MPC_AUTH_COMPOSE_WORKDIR:-${MPC_AUTH_COMPOSE_DIR:-}}")"
@@ -346,5 +420,21 @@ fi
 
 mpc_auth_companion_dashboard_pull_and_recreate || true
 mpc_auth_companion_mcp_server_pull_and_recreate || true
+
+mpc_auth_prune_unused_repo_images "$REPO" "$NEW_REF" "$retag_target" || true
+
+_node_app_image="$(mpc_auth_trim "${NODE_APP_IMAGE:-}")"
+if [[ -n "$_node_app_image" ]]; then
+	_node_app_tag="$(mpc_auth_trim "${NODE_APP_TAG:-latest}")"
+	[[ -z "$_node_app_tag" ]] && _node_app_tag="latest"
+	mpc_auth_prune_unused_repo_images "$_node_app_image" "${_node_app_image}:${_node_app_tag}" || true
+fi
+
+_mcp_server_image="$(mpc_auth_trim "${MCP_SERVER_IMAGE:-}")"
+if [[ -n "$_mcp_server_image" ]]; then
+	_mcp_server_tag="$(mpc_auth_trim "${MCP_SERVER_TAG:-latest}")"
+	[[ -z "$_mcp_server_tag" ]] && _mcp_server_tag="latest"
+	mpc_auth_prune_unused_repo_images "$_mcp_server_image" "${_mcp_server_image}:${_mcp_server_tag}" || true
+fi
 
 echo "Update complete for $NEW_REF."
