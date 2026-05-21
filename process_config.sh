@@ -4342,6 +4342,9 @@ if enabled:
         f'      MCP_HTTP_PATH: {yaml_sq(http_path)}\n'
         f'      MPC_AUTH_URL: "http://app"\n'
         f'      MPC_AUTH_PORT: "{mgt_port}"\n'
+        f'      KEY_ROOT: /app/.mpa\n'
+        f"    volumes:\n"
+        f"      - ./.mpa/management_keys:/app/.mpa/management_keys\n"
         f"    ports:\n"
         f'      - "127.0.0.1:{host_port}:{container_port}"\n'
         f"    networks:\n"

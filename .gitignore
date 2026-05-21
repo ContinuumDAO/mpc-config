@@ -26,6 +26,9 @@ database_backups/
 # Agent LLM config (may contain API key material in agent-llm-config.json)
 agent_llm_config/
 
+# Ed25519 management private keys (POST /addManagementKey; bind-mounted into app + continuum-mcp)
+.mpa/management_keys/
+
 # POST /restoreDatabase pre-restore mongodump snapshots (operators may copy off-host)
 .mongodump/
 

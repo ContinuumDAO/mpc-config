@@ -111,8 +111,8 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getPublicMgtKey`](#get-getpublicmgtkey) - List allowed Ed25519 public keys (plain `[]string`, 64 hex); same allow-list as above. **Also served on `PublicDiscoveryPort`** (see [Public discovery HTTP](#public-discovery-http)) alongside `GET /getNodeMgtKey`.
 - [`GET /getPublicMgtKeyNonce`](#get-getpublicmgtkeynonce) - Get current nonce for an Ed25519 key (optional `?publicKey=` for added keys)
 - [`POST /verifyMgtKey`](#post-verifymgtkey) - Verify Ed25519 management key (attach-time proof; no other side effects)
-- [`POST /addManagementKey`](#post-addmanagementkey) - Add another Ed25519 management public key (authorize with Ed25519 `sig`, **or** with EIP‑191 `NodeMgtKey` using `signedMessage` + `clientSig` — canonical JSON matches Ed25519 mode)
-- [`POST /removeManagementKey`](#post-removemanagementkey) - Soft-remove an added Ed25519 key (**same dual auth**; Ed25519 signer must be allowed and ≠ key removed)
+- [`POST /addManagementKey`](#post-addmanagementkey) - Generate a new Ed25519 management key pair on the node, register its public key, and write local key files (`added_key_<N>` + `.pub`; continuum-mcp-server layout). Authorize with Ed25519 `sig` or EIP‑191 `NodeMgtKey` (`signedMessage` + `clientSig`).
+- [`POST /removeManagementKey`](#post-removemanagementkey) - Soft-remove an added Ed25519 key and delete its local `added_key_<N>` files (**same dual auth**; Ed25519 signer must be allowed and ≠ key removed)
 - [`GET /getAllowedKeyTypes`](#get-getallowedkeytypes) - Get allowed key types
 - [`GET /getAllowedMsgCheckTypes`](#get-getallowedmsgchecktypes) - Get allowed message check types
 - [`GET /getSuccessRate`](#get-getsuccessrate) - Get success rate statistics
@@ -217,7 +217,7 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 - [`POST /reboot`](#post-reboot) — while **draining**, signed `{"nonce", "sig"}`; writes **`pending-reboot.json`** for **`mpc-auth-docker-pending-reboot.path`** when **`MPC_AUTH_PENDING_REBOOT_FILE`** / **`MpcAuthPendingRebootPath`** is set (same bind mount as pending Docker updates); host runs **`systemctl reboot`**. See **`systemd/README.md`**.
 - [`POST /updateMpcAuth`](#post-updatempcauth) — while **draining**, signed request with target **tag** (e.g. `latest`, `v1.1`, or another published tag); node queries **Docker Hub** for **`registryDigest`** (`sha256:…`) for **`MpcAuthDockerRepo`**. Response includes **`previousVersion`** / **`previousVersionDate`** and **`newVersionRequested`**. The API does **not** run Docker on the host; apply the digest with **`mpc-auth-docker-update.sh TAG digest`** (no `/etc/default` edit required for one shot)—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host) and **`systemd/README.md`**.
 - [`POST /backupDatabase`](#post-backupdatabase) — encrypted MongoDB backup file under `database_backups/` (**deterministic** `nodeKey` + `bootstrap_key` only; management-signed). Requires **`mongodump`** on the node host.
-- [`POST /listDatabaseBackups`](#post-listdatabasebackups) — lists backups for this node (`backupId`, `backupUtc`, `notes`); management-signed; same eligibility as backup.
+- [`GET /listDatabaseBackups`](#get-listdatabasebackups) — lists backups for this node (`backupId`, `backupUtc`, `notes`); read-only; **no** management signature (like [`GET /checkDatabase`](#get-checkdatabase)).
 - [`POST /fetchDatabaseBackup`](#post-fetchdatabasebackup) — **streams** the encrypted backup file to the client (**HTTPS** or **loopback** only, same transport rule as **`fetchBootstrapKey`**); management-signed; supports **HTTP Range** for resumable downloads.
 - [`POST /postDatabaseBackup`](#post-postdatabasebackup) — **upload** encrypted backup JSON from an operator workstation into **`database_backups/`** (**`multipart/form-data`**: signed JSON field **`meta`** + raw file **`file`**); **`contentSha256`** in **`meta`** must match **`file`**; server validates envelope and proves decrypt with **bootstrap**; same eligibility and **maintenance quiescence** as **`POST /backupDatabase`** / **`POST /restoreDatabase`**.
 - [`POST /restoreDatabase`](#post-restoredatabase) — destructive **`mongorestore --drop`** from an encrypted backup produced by this node (same eligibility as backup). Caller supplies **`backupId`** (filename) or **`backupPath`** (see below).
@@ -378,7 +378,7 @@ Other finding codes are **skipped** until a repair is implemented. Failed repair
 <a id="database-backup-maintenance"></a>
 ## MongoDB backup, restore, and bootstrap key (maintenance)
 
-These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or allowed **Ed25519** keys). **Additional gate:** the node’s stored **`nodeKey`** must match the **P-256 public key** derived from **`configs.yaml` `PublicMgtKey`** and the on-disk **`bootstrap_key/ed25519_private.hex`** (see **`DeterministicNodeKey`** in **`mpc-auth`** and **`docs-internal/DATABASE_BACKUP_RESTORE_PLAN.md`**). Legacy **random** `nodeKey` nodes receive **403** on **`POST /backupDatabase`**, **`POST /listDatabaseBackups`**, **`POST /fetchDatabaseBackup`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, **`POST /fetchBootstrapKey`**, and **`POST /fixDatabase`**.
+These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or allowed **Ed25519** keys). **Additional gate:** the node’s stored **`nodeKey`** must match the **P-256 public key** derived from **`configs.yaml` `PublicMgtKey`** and the on-disk **`bootstrap_key/ed25519_private.hex`** (see **`DeterministicNodeKey`** in **`mpc-auth`** and **`docs-internal/DATABASE_BACKUP_RESTORE_PLAN.md`**). Legacy **random** `nodeKey` nodes receive **403** on **`POST /backupDatabase`**, **`POST /fetchDatabaseBackup`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, **`POST /fetchBootstrapKey`**, and **`POST /fixDatabase`**. **`GET /listDatabaseBackups`** is read-only metadata only and does **not** require a management signature or this eligibility gate.
 
 **Bootstrap file install/remove (separate):** **`POST /postBootstrapKey`** and **`POST /removeBootstrapKey`** are management-signed writes/deletes of **`bootstrap_key/ed25519_private.hex`** (see below). They use **`VerifyMgtKeySig`** but **not** the same deterministic-node / backup eligibility gate as the routes in the preceding paragraph, and they are **excluded** from [restart draining](#restart-quiescence-maintenance-detail) (no **503** while **`draining`**).
 
@@ -398,10 +398,10 @@ These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or all
 
 **Success `data`:** includes **`backupId`** (backup filename), **`path`** (full path written), `backupUtc`, `ciphertextSha256`, `ciphertextByteLength`, `backupFileSizeBytes`, plus identifying fields (`notes`, filter, etc.).
 
-<a id="post-listdatabasebackups"></a>
-#### `POST /listDatabaseBackups`
+<a id="get-listdatabasebackups"></a>
+#### `GET /listDatabaseBackups`
 
-**Body:** management-signed JSON (`nonce`, `sig`, optional `nodeKey`), same pattern as other maintenance POSTs.
+**Auth:** none (read-only metadata; same class as [`GET /checkDatabase`](#get-checkdatabase)). Returns only **`backupId`**, **`backupUtc`**, and operator **`notes`** from envelope headers — not ciphertext or bootstrap material.
 
 **Success `data`:** `{ "backups": [ { "backupId", "backupUtc", "notes" }, ... ] }` sorted **newest first** (by envelope `backupUtc`, with filename tie-break). Only files named `{first 20 chars of nodeKeyPublic}.backup.*.json` under **`database_backups/`** are listed (legacy `{full nodeKeyPublic}.backup.*.json` still recognized). Malformed files are skipped.
 
@@ -451,7 +451,7 @@ These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or all
 
 **Body:** management-signed JSON with **exactly one** of **`backupId`** or **`backupPath`**, plus optional Mongo credentials as above.
 
-- **`backupId`:** the backup **filename only** (no `/` or `..`), e.g. the **`backupId`** from **`POST /backupDatabase`** or **`POST /listDatabaseBackups`**.
+- **`backupId`:** the backup **filename only** (no `/` or `..`), e.g. the **`backupId`** from **`POST /backupDatabase`** or **`GET /listDatabaseBackups`**.
 - **`backupPath`:** legacy form — relative to **`database_backups/`** or absolute path still constrained to that directory.
 
 **Semantics:** **`mongorestore --archive --drop`** from decrypted payload — **destructive** for databases present in the backup. **`publicMgtKey`** / **`nodeKeyPublic`** in the envelope must match this node.
@@ -857,16 +857,25 @@ Verify-only endpoint for Ed25519 management key ownership. Accepts `Nonce` and `
 
 <a id="post-addmanagementkey"></a>
 #### `POST /addManagementKey`
-Adds a new Ed25519 public key to the allowed set used for Ed25519 management signatures (alongside bootstrap **`PublicMgtKey`** in `configs.yaml` and keys already added via this endpoint). Any **currently allowed** signer may authorize — **either** an allowed **Ed25519** management key **or** the configured **`NodeMgtKey`** (EIP‑191), as below.
+Generates a **new Ed25519 key pair on the node**, adds its public key to the allowed set used for Ed25519 management signatures (alongside bootstrap **`PublicMgtKey`** in `configs.yaml` and keys already added via this endpoint), and writes local key material for automation (**continuum-mcp-server** layout):
 
-At least **one** Ed25519 allowance must exist on the node (bootstrap **`PublicMgtKey`** and/or previously added keys) so the extra-key subsystem can persist the new row.
+| File | Content | Mode |
+|------|---------|------|
+| `KEY_ROOT/management_keys/added_key_<N>` | PKCS#8 PEM private key | `0600` |
+| `KEY_ROOT/management_keys/added_key_<N>.pub` | 64-hex public key + newline | `0644` |
+
+`<N>` is the **Added key N** slot (1-based index among Mongo **`ExtraPublicMgtKeys`** rows, including soft-removed slots). **`KEY_ROOT`** resolves from env **`MPA_PATH`** or **`KEY_ROOT`**, default **`~/.mpa`**. In **Docker** (mpc-config compose), keys are bind-mounted at **`./.mpa/management_keys`** in the repo with **`MPA_PATH=/app/.mpa`** (app) and **`KEY_ROOT=/app/.mpa`** (continuum-mcp).
+
+The client **does not** supply `newPublicKey` or a private key. Any **currently allowed** signer may authorize — **either** an allowed **Ed25519** management key **or** the configured **`NodeMgtKey`** (EIP‑191), as below.
+
+At least **one** Ed25519 allowance must exist on the node (bootstrap **`PublicMgtKey`** and/or previously added keys).
 
 ##### Canonical payload (same bytes for Ed25519 and EIP‑191 modes)
 
-Compute the canonical UTF‑8 JSON string (**field order**, lowercase `newPublicKey` hex, **`sig`** exactly **`""`**):
+Compute the canonical UTF‑8 JSON string (**field order**, **`sig`** exactly **`""`**):
 
 ```json
-{"newPublicKey":"<64_hex_lowercase>","nonce":N,"sig":""}
+{"nonce":N,"sig":""}
 ```
 
 Optional **`nodeKey`** (MPC node 128‑hex pubkey) follows the same rules as other management POSTs when you include it server-side — your client MUST match mpc-auth’s emitted JSON exactly (omit `nodeKey` if unused).
@@ -883,9 +892,8 @@ Example POST shape:
 
 ```json
 {
-  "newPublicKey":"<64_hex_of_key_being_added_lowercase>",
-  "nonce":7,
-  "sig":"<128_hex>"
+  "nonce": 7,
+  "sig": "<128_hex>"
 }
 ```
 
@@ -895,7 +903,7 @@ Example POST shape:
 
 2. Obtain **`nonce`** from [`GET /getNodeMgtKeyNonce`](#get-getnodemgtkeynonce).
 
-3. Set **`signedMessage`** to the **exact** canonical UTF‑8 string (must byte‑match mpc-auth — i.e. the same UTF‑8 as Go `encoding/json.Marshal` would emit for **`{newPublicKey, nonce, sig: "", …}`**, with optional **`nodeKey`** only if present in the marshal output).
+3. Set **`signedMessage`** to the **exact** canonical UTF‑8 string (must byte‑match mpc-auth — i.e. the same UTF‑8 as Go `encoding/json.Marshal` would emit for **`{nonce, sig: "", …}`**, with optional **`nodeKey`** only if present in the marshal output).
 
 4. Set **`clientSig`** to EIP‑191 **`personal_sign(signedMessage)`** (`0x` prefix allowed).
 
@@ -905,22 +913,34 @@ Example POST shape:
 
 ```json
 {
-  "newPublicKey":"<64_hex_lowercase>",
-  "nonce":3,
-  "signedMessage":"{\"newPublicKey\":\"…\",\"nonce\":3,\"sig\":\"\"}",
-  "clientSig":"0x..."
+  "nonce": 3,
+  "signedMessage": "{\"nonce\":3,\"sig\":\"\"}",
+  "clientSig": "0x..."
 }
 ```
 
 **Swagger:** **`#/definitions/node.AddManagementKeyPost`**
 
-**Response (success):** [`APIResponse`](#response-format) **`code`** `0`; **`data`** includes **`addedPublicKey`** (64‑hex lowercase). Confirm via [`GET /getAllowedEd25519MgtKeys`](#get-getalloweded25519mgtkeys) / [`GET /getPublicMgtKey`](#get-getpublicmgtkey).
+**Response (success):** [`APIResponse`](#response-format) **`code`** `0`; **`data`** includes:
 
-**Response (failure):** invalid body, malformed/new duplicate key, **`signedMessage`** not equal canonical JSON (EIP‑191 mode), wrong nonce bucket, **`NodeMgtKey`** missing while using EIP‑191, ambiguous **`sig`**+**`clientSig`**, or signer not authorized.
+| Field | Description |
+|-------|-------------|
+| `addedPublicKey` | 64-hex lowercase public key (server-generated) |
+| `keySlot` | Added key N slot (`N` in `added_key_<N>`) |
+| `fileName` | Base name (e.g. `added_key_1`) |
+| `privateKeyPath` | Absolute path to PKCS#8 PEM file |
+| `publicKeyPath` | Absolute path to `.pub` file |
+| `privateKeyPem` | PKCS#8 PEM of the new private key (returned once in the API response so the operator can save a local backup; also written to `privateKeyPath`) |
+
+Confirm via [`GET /getAllowedEd25519MgtKeys`](#get-getalloweded25519mgtkeys) / [`GET /getPublicMgtKey`](#get-getpublicmgtkey).
+
+**Response (failure):** invalid body, **`signedMessage`** not equal canonical JSON (EIP‑191 mode), wrong nonce bucket, **`NodeMgtKey`** missing while using EIP‑191, ambiguous **`sig`**+**`clientSig`**, signer not authorized, or filesystem error writing key files.
 
 <a id="post-removemanagementkey"></a>
 #### `POST /removeManagementKey`
 Soft-removes an Ed25519 public key **only among keys previously added via** [`POST /addManagementKey`](#post-addmanagementkey). The Mongo row keeps its **Added key N** label: **`publicKey`** clears, **`removedPublicKey`** retains the retired 64‑hex. The bootstrap **`PublicMgtKey`** from `configs.yaml` **cannot** be removed here.
+
+Also deletes **`KEY_ROOT/management_keys/added_key_<N>`** and **`added_key_<N>.pub`** when present (same `<N>` as the slot; no error if files are already missing).
 
 **Auth:** Dual pattern **identical conceptually** to [`POST /addManagementKey`](#post-addmanagementkey):
 
@@ -942,7 +962,15 @@ Use **`GET /getNodeMgtKeyNonce`**; **`signedMessage`** canonical string must mat
 
 **Swagger:** **`#/definitions/node.RemoveManagementKeyPost`**
 
-**Response (success):** **`data.removedPublicKey`** (64‑hex lowercase).
+**Response (success):** **`data`** includes **`removedPublicKey`** (64‑hex lowercase) and, when the slot was resolved:
+
+| Field | Description |
+|-------|-------------|
+| `keySlot` | Added key N slot |
+| `fileName` | Base name (e.g. `added_key_1`) |
+| `privateKeyPath` | Path to PEM file that was removed (or expected path) |
+| `publicKeyPath` | Path to `.pub` file |
+| `privateKeyRemoved` | `true` if at least one local file was deleted |
 
 **Errors:** **`404`** — target hex not currently present as an active added key (`PublicMgtKey` / wrong hex / soft-already‑removed races); **`401`** — signing rules failed (wrong signer pairing in Ed25519 mode, mismatching **`signedMessage`**, etc.).
 
