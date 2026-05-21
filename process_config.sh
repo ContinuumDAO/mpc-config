@@ -1069,6 +1069,9 @@ PYEOF
             exit 1
         fi
         print_success "InitiatePreSigning validation passed: $initiate_presigning"
+        if [ "$initiate_presigning" = "true" ]; then
+            print_info "InitiatePreSigning: automatic presign applies only to FROST keys (ed25519, bitcoin-taproot); CGGMP24 secp256k1 is skipped"
+        fi
     fi
     
     print_success "Presign configuration validation passed"

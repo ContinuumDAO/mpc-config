@@ -197,10 +197,14 @@ DisableDocs: false
 
 # Allowed key types for MPC operations
 # List of cryptographic key types this node supports
-# Supported values: "secp256k1" (Bitcoin/Ethereum), "ed25519" (Edwards curve)
+# Supported values:
+#   "secp256k1"       — EVM ECDSA (CGGMP24; default for new secp256k1 keys; requires mpc-auth -tags rust)
+#   "ed25519"         — FROST Schnorr via givre (Solana, Stellar, NEAR, TON, etc.; requires -tags rust)
+#   "bitcoin-taproot" — FROST BIP-340 Taproot key-path (bc1p… when derivable; requires -tags rust)
 AllowedKeyTypeList:
   - "secp256k1"
   - "ed25519"
+  - "bitcoin-taproot"
 
 # Allowed message check types
 # Types of message validation that can be performed
@@ -233,7 +237,7 @@ BloomFilterHashCount: 4
 # 
 # The ping check ensures:
 #   - The first node (relay channel) is online (required for MQTT communication)
-#   - At least (threshold + 1) nodes are online (required for signing)
+#   - At least MPC quorum t nodes are online (t = keygen threshold; see API_IMPLEMENTATION.md)
 #   - Only online nodes are used for the signing operation
 # 
 # If insufficient nodes are online, the signing request fails immediately
@@ -292,7 +296,8 @@ PreSigningVerification:
 # Controls whether the MPC group automatically creates and maintains presign requests
 # Enable automatic presign request creation
 # If true, the background worker will automatically create presign requests
-# for all key groups when they are missing or cache is low
+# for FROST key groups (ed25519, bitcoin-taproot) when cache is low.
+# CGGMP24 secp256k1 keys are skipped (presign not supported for ECDSA).
 # If false, presign requests must be created manually via /presignRequest API
 # Default: false
 InitiatePreSigning: false
@@ -313,12 +318,8 @@ PreSigningMinThreshold: 2
 # If Cggmp24AuxPrimePoolMaxSize is omitted, default is 2. If Cggmp24AuxPrimePoolMaxAge is omitted and pool size > 0, default is "1h".
 # Set MaxSize to 0 explicitly to disable the pool (cold primegen each aux). MaxAge "" or "0" means no staleness (size limit only).
 
-# Maximum number of batch sign TSS rounds that can run concurrently (per node)
-# When a batch sign request has N messages, only this many TSS signing workers run at once;
-# as each completes, the next message in the batch is started until all N are done.
-# Reduces CPU/memory load and channel pressure for large batches.
-# Default: 2 if not set or <= 0
-MaxConcurrentBatchSignatures: 1
+# Deprecated: ignored by the node. All batch indices run TSS in parallel.
+# MaxConcurrentBatchSignatures: 1
 
 # Pre-configured MPC groups
 # Each node should only include groups it belongs to

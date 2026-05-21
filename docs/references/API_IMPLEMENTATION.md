@@ -4,7 +4,7 @@
 
 The Distributed Auth Management API provides a RESTful interface for managing MPC (Multi-Party Computation) nodes, key generation, signing operations, and system monitoring. The API is implemented using the Gin web framework and follows a consistent response format.
 
-**CGGMP24 / Rust:** For **`ecdsaMpcProtocol`** on **`POST /keyGenRequest`**, **`GET /version`** `cggmp24UpstreamGitRev`, **`POST /keyGenEjectRequest`** / **`POST /getEthereumPrivateKey`** / **`POST /getBitcoinPrivateKey`** (reconstruction needs a **`rust`** / CGGMP24 FFI build on nodes that finalize eject), and optional **`‑tags rust`** builds, see **[`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)**.
+**CGGMP24 / FROST (givre) / Rust:** For **`ecdsaMpcProtocol`** on **`POST /keyGenRequest`**, **`GET /version`** (`cggmp24UpstreamGitRev`, **`givreUpstreamGitRev`**), FROST **ed25519** / **bitcoin-taproot** keygen/sign/presign, **`POST /keyGenEjectRequest`** / **`POST /getEthereumPrivateKey`** / **`POST /getBitcoinPrivateKey`**, and optional **`-tags rust`** builds, see **[`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)** and sibling repo **mpc-auth** `docs-internal/FROST_ROADMAP.md`.
 
 ## Architecture
 
@@ -40,10 +40,14 @@ All endpoints return a standardized `APIResponse` structure:
 
 Keygen and sign **GET** responses include **`effectiveEcdsaMpcProtocol`** when the implementation can classify the key’s secp256k1 MPC stack:
 
-- **`"gg18"`** or **`"cggmp24"`** for **secp256k1** (derived from the stored keygen payload and defaults).
-- **Omitted or empty** for **ed25519** and other non-ECDSA key types.
+- **`"cggmp24"`** for **secp256k1** (default for new keys; omit `ecdsaMpcProtocol` or set `"cggmp24"` at keygen).
+- **`"gg18"`** only for **legacy Mongo rows** created before GG18 removal — new keygen rejects `"gg18"`; signing/presign on legacy keys fail closed (mandatory re-key).
 
-This field is **computed for JSON only** (not stored as its own MongoDB column). The keygen request body may still carry **`ecdsaMpcProtocol`** as sent at **`POST /keyGenRequest`**; use **`effectiveEcdsaMpcProtocol`** in clients when branching on which MPC runtime applies.
+**Omitted or empty** for **ed25519**, **bitcoin-taproot**, and other non-ECDSA key types.
+
+Schnorr keys also expose **`effectiveSchnorrMpcProtocol`**: **`"givre"`** for **ed25519** and **bitcoin-taproot** (Lockness FROST). Empty for secp256k1.
+
+This field is **computed for JSON only** (not stored as its own MongoDB column). The keygen request body may still carry **`ecdsaMpcProtocol`** as sent at **`POST /keyGenRequest`**; use **`effectiveEcdsaMpcProtocol`** / **`effectiveSchnorrMpcProtocol`** in clients when branching on which MPC runtime applies.
 
 **Where it appears:** [`GET /listKeyGenRequests`](#get-listkeygenrequests), [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid), [`GET /getKeyGenResultById`](#get-getkeygenresultbyid), **`GET /getGlobalNonceByKeyGenId`** (inside **`data`**), **`GET /listSignRequests`**, **`GET /getSignRequestById`**, **`GET /listSignRequestsReady`**, **`GET /getSignResultById`**, **`GET /listSignResults`**.
 
@@ -61,6 +65,33 @@ For **secp256k1** keygen results whose **`pubkeyhex`** is present, [`GET /getKey
 | **`bitcoinp2wpkhsignet`** | Bitcoin Signet | **`tb1…`** in this stack (SigNet witness HRP **`tb`** in **btcd** — for a given pubkey the string often **matches** **`bitcoinp2wpkhtestnet`** exactly; discriminate by context / params, not by Bech32 HRP alone) |
 
 Regtest is **not** exposed as a dedicated API field. **Low-`s`** normalization for ECDSA completions follows the node’s Bitcoin compatibility layer so encodings remain spendable where low-`s` is required.
+
+<a id="ed25519-derived-addresses"></a>
+### ed25519 derived addresses (`solanaaddress`, `sorobanaddress`, `nearaddress`, `tonaddress`, `suiaddress`) (read-only)
+
+For **`ed25519`** FROST keygen results, [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) and **`GET /getAllGroupIds`** `keyGens[]` may include:
+
+| JSON field | Chain | Format |
+|-----------|--------|--------|
+| **`solanaaddress`** | Solana | Base58-encoded 32-byte ed25519 pubkey |
+| **`sorobanaddress`** | Stellar / Soroban | Stellar strkey account (`G…`) |
+| **`nearaddress`** | NEAR | Implicit account — lowercase 64-hex pubkey |
+| **`tonaddress`** | TON | Wallet v4-style base64url address |
+| **`suiaddress`** | Sui | `0x` + 64 hex — BLAKE2b-256 of `0x00 \|\| pubkey` (Ed25519 scheme flag) |
+
+All are derived from **`pubkeyhex`** (64 hex) at keygen save and backfilled on GET when missing. Omitted or empty for **secp256k1** and **bitcoin-taproot** keys.
+
+<a id="bitcoin-p2tr-mainnet-address"></a>
+### Bitcoin Taproot derived addresses (`bitcoinp2trmainnet`, `taprootinternalpubkeyhex`) (read-only)
+
+For **`bitcoin-taproot`** FROST keygen results, [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) and **`GET /getAllGroupIds`** may include:
+
+| JSON field | Meaning |
+|-----------|---------|
+| **`taprootinternalpubkeyhex`** | x-only internal key *P* (64 hex) from DKG |
+| **`bitcoinp2trmainnet`** | Pay-to-Taproot output key *Q* (x-only, 64 hex) after BIP-341 tap tweak with empty script tree; mainnet **`bc1p…`** address when derivable |
+
+Signing uses the **BIP-340** digest of the spend (32-byte message hash). Requires mpc-auth built with **`-tags rust`** and givre FFI.
 
 ### Logging
 
@@ -510,7 +541,7 @@ Returns the current **application release** version (semver string) and the date
 
 Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is split from **ManagementAPIsPort**. **Not** registered on **Browser HTTPS** (**8443**); use discovery or management URL (no JWT for this route).
 
-**Diagnostics:** `data.cggmp24UpstreamGitRev` is the git revision of the **cggmp24** Rust dependency pinned in the build (via CGO FFI). It is **non-empty** only when the binary was built with **`-tags rust`** and the FFI library is linked; default builds omit it (empty string). Use it to confirm which Lockness/cggmp revision a node was built against.
+**Diagnostics:** `data.cggmp24UpstreamGitRev` and **`data.givreUpstreamGitRev`** are git revisions of the Lockness **cggmp21** and **givre** crates pinned in the build (via CGO FFI). Each is **non-empty** only when the binary was built with **`-tags rust`** and the corresponding FFI library is linked; default builds omit them (empty string). Use them to confirm which upstream revision an image was compiled against.
 
 **Response:**
 ```json
@@ -520,7 +551,8 @@ Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is sp
   "data": {
     "version": "v1.1",
     "versionDate": "2024-01-15",
-    "cggmp24UpstreamGitRev": ""
+    "cggmp24UpstreamGitRev": "",
+    "givreUpstreamGitRev": ""
   }
 }
 ```
@@ -528,7 +560,8 @@ Also served on **PublicDiscoveryPort** (e.g. **18080**) when that listener is sp
 **Field Descriptions:**
 - `version`: The current node **application** version string (e.g. **`v1.12`**) — from the running binary, not necessarily the Docker image tag (`latest`, `v1.0`, etc.).
 - `versionDate`: The date when this version was set/changed (ISO 8601 date format, e.g., "2024-01-15")
-- `cggmp24UpstreamGitRev`: Pinned upstream git revision for the cggmp24 Rust stack when built with **`-tags rust`**; otherwise `""` (see **Diagnostics** above).
+- `cggmp24UpstreamGitRev`: Pinned upstream git revision for the CGGMP24 Rust stack when built with **`-tags rust`**; otherwise `""` (see **Diagnostics** above).
+- `givreUpstreamGitRev`: Pinned upstream git revision for the FROST/givre Rust stack when built with **`-tags rust`**; otherwise `""`.
 
 <a id="get-getmachineinfo"></a>
 #### `GET /getMachineInfo`
@@ -1144,7 +1177,7 @@ Returns list of allowed key types supported by the node.
 {
   "code": 0,
   "error": "",
-  "data": ["secp256k1", "ed25519"]
+  "data": ["secp256k1", "ed25519", "bitcoin-taproot"]
 }
 ```
 
@@ -1154,8 +1187,11 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getAllowedKeyTypes"
 ```
 
 **Key Types:**
-- `secp256k1`: Used for EVM chains (Ethereum, BSC, Polygon, etc.)
-- `ed25519`: Used for Solana, Stellar, NEAR, TON
+- `secp256k1`: EVM ECDSA (CGGMP24 MPC); also yields Bitcoin P2WPKH derived addresses
+- `ed25519`: FROST Schnorr (givre) — Solana, Stellar/Soroban, NEAR, TON, Sui, etc.
+- `bitcoin-taproot`: FROST BIP-340 Taproot key-path (givre); **`bc1p…`** P2TR when derivable
+
+Nodes only accept key types listed in **`AllowedKeyTypeList`** in `configs.yaml`. FROST types require a **`-tags rust`** mpc-auth image with givre FFI linked.
 
 <a id="get-getallowedmsgchecktypes"></a>
 #### `GET /getAllowedMsgCheckTypes`
@@ -2898,7 +2934,7 @@ Same behavior, query parameters, and response as [`GET /getGroupResultById`](#ge
 | **`pending`** | Waiting for more nodes to complete the agreement: the request exists, but **not every** key in the group’s **`KeyList`** has a non-empty signature in **`SigList`** yet (peers still need to call `keyGenRequestAgree`, or the initiator is still merging partial `KEYGENREQUESTREPLY` updates). New requests are saved with this status. |
 | **`agree`** | **All** group nodes have signed the keygen request off-chain. Set when **`KEYGENREQUESTREPLY`** / **`KEYGENREQUESTCONFIRMSUCCESS`** / **`POST /keyGenRequestAgree`** reflects a full **`SigList`**. The keygen **request** row can remain **`agree`** until TSS finishes; **`success`** is written when encrypted **`SaveData`** is stored on the keygen result. |
 | **`success`** | TSS completed on this node: the keygen **result** document has non-nil **`savedata`** (encrypted share). The server sets **`status`** to **`success`** on the keygen request when **`UpdateKeyGenResultSaveDataFull`** / **`UpdateEDKeyGenResultSaveDataFull`** completes. |
-| **`failed`** | Terminal failure: e.g. TSS/worker error or timeout, expiry of a long-pending request, or fewer than **MPC quorum** KEYGENRESULT confirmations within the configured window (**GG18/ed25519:** *d+1* parties; **CGGMP24:** *t* parties; see **`threshold`** on keygen)—the keygen **result** may be removed; the **request** row can remain with this status. |
+| **`failed`** | Terminal failure: e.g. TSS/worker error or timeout, expiry of a long-pending request, or fewer than **MPC quorum** KEYGENRESULT confirmations within the configured window (**CGGMP24 / FROST:** *t* parties; see **`threshold`** on keygen)—the keygen **result** may be removed; the **request** row can remain with this status. |
 | **`ejected`** | **Effective** status only (derived from the keygen **result** row, not the request document): [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) returns **`status`** **`ejected`** when **`keygenresultstatus`** is **`ejected`**; [`GET /listKeyGenRequests`](#get-listkeygenrequests) / [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid) surface the same effective **`status`** for the request list/detail. MPC shares are cleared; see [Key eject](#post-keygenejectrequest). |
 
 **Initiator (`originator`):** The node that created the keygen request is stored as **`MsgPb.From`** on the keygen request document; [`GET /listKeyGenRequests`](#get-listkeygenrequests) and [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid) return it as the JSON field **`originator`**.
@@ -2921,7 +2957,7 @@ Creates a new key generation request. **Requires management key authentication.*
   "groupId": "566633a647306335d3ad6ab49829dcfad9abe1f4d1275e4ea3c3f8c292e20ee9",
   "msgCheck": "multi-agree",
   "keyType": "secp256k1",
-  "ecdsaMpcProtocol": "gg18"
+  "ecdsaMpcProtocol": "cggmp24"
 }
 ```
 
@@ -2929,13 +2965,13 @@ Creates a new key generation request. **Requires management key authentication.*
 - `nonce` (required): Current nonce from `/getNodeMgtKeyNonce`
 - `sig` (required): Management key signature over the request body (excluding `sig` field)
 - `clientPk` (required): Client public key (128 hex characters)
-- `threshold` (required): Depends on ECDSA MPC mode (`ecdsaMpcProtocol`) and key type — **stored as-is** on the keygen payload. **GG18** (secp256k1 omit or `gg18`) **and Ed25519:** Shamir polynomial **degree** *d*; MPC signing requires *d+1* parties (validate: *d* strictly less than *n*, group size *n*). **CGGMP24** (secp256k1 with `ecdsaMpcProtocol` `cggmp24`): **`threshold`** is the signing quorum *t* (validate: *2≤t≤n*). Multi-agree and signing flows use **MPC quorum**: GG18/ed25519 = *d+1*, CGGMP24 = *t*.
+- `threshold` (required): Signing quorum **t** — **stored as-is** on the keygen payload. For **secp256k1** (CGGMP24), **ed25519**, and **bitcoin-taproot** (FROST/givre): validate **2 ≤ t ≤ n** (*n* = group size). Multi-agree, signing, and keygen confirmation flows use **MPC quorum = t**.
 - `groupId` (required): Group ID where key generation will occur
 - `msgCheck` (optional): Message check type, default is "multi-agree". Must be in allowed types from `/getAllowedMsgCheckTypes`
-- `keyType` (required): Key type - `"secp256k1"` for EVM chains or `"ed25519"` for Solana/Stellar/NEAR/TON
-- `ecdsaMpcProtocol` (optional): **secp256k1 only.** Selects the ECDSA MPC stack for this key: omit or **`"gg18"`** for the default **GG18-style** ECDSA DKG in vendored tss-lib; **`"cggmp24"`** selects the **CGGMP24** runtime path (integration is staged—keygen worker may not start and presign/sign APIs reject until fully wired). **Ignored for `ed25519`**. Invalid non-empty values (other than `gg18` / `cggmp24`) return **400** for secp256k1. The field must be part of the signed JSON whenever sent (same as other body fields).
+- `keyType` (required): `"secp256k1"` (EVM / CGGMP24 ECDSA), `"ed25519"` (FROST Schnorr), or `"bitcoin-taproot"` (FROST BIP-340 Taproot key-path)
+- `ecdsaMpcProtocol` (optional): **secp256k1 only.** Omit or **`"cggmp24"`** for the default **CGGMP24** ECDSA DKG (Lockness, requires **`-tags rust`** build). Explicit **`"gg18"`** is **rejected** on new keygen (legacy Mongo keys fail closed). **Ignored for `ed25519` and `bitcoin-taproot`**. Invalid values return **400**. Include in the signed JSON when sent.
 
-**Protocol note:** The choice is persisted on the **`KEYGENREQUEST`** payload (`KeyGenRequestDataPb`) and flows with MQTT/relay so all parties run the same mode. **Ed25519** continues to use the **EdDSA** multiparty keygen path (not GG18 ECDSA).
+**Protocol note:** The choice is persisted on the **`KEYGENREQUEST`** payload (`KeyGenRequestDataPb`) and flows with MQTT/relay so all parties run the same mode. **ed25519** and **bitcoin-taproot** use **FROST via givre** (Lockness); **`ecdsaMpcProtocol`** does not apply.
 
 **Response:**
 ```json
@@ -2963,7 +2999,9 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/keyGenRequest \
 
 **Deduplication:** Nodes treat duplicate `KEYGENREQUEST` MQTT deliveries for the same `requestId` within a short window as a single processed message for throughput; a later delivery (e.g. operator [`POST /keyGenRequestRetry`](#post-keygenrequestretry)) still **merges** into the same DB row without wiping `SigList` / `ClientKeys` entries peers already stored.
 
-**CGGMP24 (optional path):** Until CGGMP24 keygen and signing are fully implemented, prefer omitting `ecdsaMpcProtocol` or using **`"gg18"`** for production secp256k1 keys. Keys eventually created under **`"cggmp24"`** will not support **presign** or **sign** APIs until those flows are implemented.
+**CGGMP24 secp256k1:** Default for new keys. Signing requires a completed distributed **KeyShare** (aux_info_gen + merge). **Presign is not supported** for CGGMP24 ECDSA keys.
+
+**FROST (ed25519 / bitcoin-taproot):** Requires mpc-auth built with **`-tags rust`**. Supports interactive sign, batch sign (via `multiSignRequest`), and **presign** (see [Pre-Signing](#7-pre-signing)).
 
 **Optional recovery:** If a peer never received **`KEYGENREQUEST`** after [`POST /keyGenRequest`](#post-keygenrequest), the initiator may call [`POST /keyGenRequestRetry`](#post-keygenrequestretry) for that peer’s public key (see that section for guards). If the first delivery was processed very recently, MQTT dedupe may drop a duplicate until a later retry or until the short window passes.
 
@@ -3011,9 +3049,9 @@ Lists all key generation requests with filtering and pagination.
 - `GroupId`: Group identifier (hash of sorted keyList)
 - `KeyType`: Key type, e.g. `"secp256k1"` or `"ed25519"`
 - `MsgCheck`: Message check type, e.g. `"tx-check"` or `"multi-agree"`
-- `EcdsaMpcProtocol` (when present): For **secp256k1** keygen requests, the stored ECDSA MPC mode (`gg18` / `cggmp24`). Omitted or empty means GG18 (default). **ed25519** requests omit this field.
+- `EcdsaMpcProtocol` (when present): For **secp256k1** keygen requests, the stored ECDSA MPC mode (`cggmp24`; legacy rows may show `gg18`). Omitted or empty means **CGGMP24** (default). **ed25519** / **bitcoin-taproot** requests omit this field.
 - `SigList`: Map of node public key (128 hex) to signature (hex) for nodes that agreed
-- `Threshold`: Stored **threshold** field from keygen: for **GG18/ed25519** this is polynomial degree *d* (MPC signing quorum = *d+1*); for **CGGMP24** it is the quorum *t* (MPC signing quorum = *t*). See [`POST /keyGenRequest`](#post-keygenrequest) `threshold`.
+- `Threshold`: Stored signing quorum **t** from keygen (MPC quorum = **t** for CGGMP24 and FROST). See [`POST /keyGenRequest`](#post-keygenrequest) `threshold`.
 - `timepoint`: Timestamp when the request was recorded (with optional fractional seconds)
 - `originator`: Node public key (128 hex characters) of the node that created the keygen **request**—the same value as **`MsgPb.From`** on the stored **`KEYGENREQUEST`** document. Omitted when empty.
 
@@ -3086,7 +3124,7 @@ Agrees to a key generation request. **Requires management key authentication.**
 #### `POST /keyGenEjectRequest`
 Starts a **multi-agree key eject** for a **`secp256k1` CGGMP24** key so the committee can export the **full secp256k1 private key** (64-hex scalar; same key as **`ethereumaddress`** and **`bitcoinp2wpkhmainnet`**), verify it against **`pubkeyhex`** / derived addresses, then **tombstone** MPC for that key (**`keygenresultstatus`** → **`ejected`**, **`savedata`** and **`cggmp24aux`** cleared on nodes that finalize). **Requires management key authentication** (same **`Nonce` / `Sig`** pattern as other signed POST bodies; optional **`nodeKey`** binding per [Management signatures](#management-signatures-nodekey)).
 
-**Eligibility (server-enforced):** **`msgCheck`** on the keygen must be **`multi-agree`**; effective protocol must be **CGGMP24** (see **`effectiveEcdsaMpcProtocol`** from [`GET /getKeyGenResultById`](#get-getkeygenresultbyid)). **GG18** and **ed25519** keygens are **not** eligible.
+**Eligibility (server-enforced):** **`msgCheck`** on the keygen must be **`multi-agree`**; effective protocol must be **CGGMP24** (see **`effectiveEcdsaMpcProtocol`** from [`GET /getKeyGenResultById`](#get-getkeygenresultbyid)). **FROST** keygens and **legacy GG18** keys are **not** eligible.
 
 **Governance:** **M-of-N accepts** use the **same quorum semantics as signing** for that key (**`KeyGenMpcSigningQuorumFromStored`** / stored threshold vs **`KeyList`**). **Reject** votes (**`POST /keyGenEjectAgree`** with **`accept`:** **`false`**) are **audit-only** and do **not** block completion once enough parties have accepted.
 
@@ -3288,7 +3326,7 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/getBitcoinPrivateKey" \
 
 Returns the **keygen result** for one **`requestid`** (same id as the keygen request): public key, derived addresses, **`keylist`**, and lifecycle fields such as **`status`** (including **`ejected`** after key export). There is **no** `filter` query parameter—only **`id`**. To **list** all ejected keygens, use [`GET /listKeyGenRequests`](#get-listkeygenrequests) with **`filter=ejected`**; each item’s effective **`status`** matches this endpoint’s semantics for that request.
 
-A result is returned (Code 0) when either **(a)** this node completed the TSS and still has a local share (**`savedata`** present), **or (b)** the key was **ejected** on this node (**`keygenresultstatus`** **`ejected`**) so **`savedata`** / **`cggmp24aux`** were cleared but public metadata and tombstone state remain. In the usual case, **(a)** also requires at least the **MPC quorum** (**GG18/ed25519:** polynomial degree plus one parties; **CGGMP24:** *t* parties) to have sent KEYGENRESULTCONFIRMSUCCESS within 7 days. If fewer parties completed by then, the keygen is useless for signing (cannot produce a signature); the result is then deleted and the keygen request is marked failed. If this node did not complete (e.g. worker timed out) and the key is not **ejected**, it returns Code 1 "not ready". If one node returns "not ready" and another had completed, the client may need to call `getKeyGenResultById` on another node—but if fewer than the quorum completed overall, no node will keep the result (all will delete it after the 7-day timeout).
+A result is returned (Code 0) when either **(a)** this node completed the TSS and still has a local share (**`savedata`** present), **or (b)** the key was **ejected** on this node (**`keygenresultstatus`** **`ejected`**) so **`savedata`** / **`cggmp24aux`** were cleared but public metadata and tombstone state remain. In the usual case, **(a)** also requires at least the **MPC quorum** (*t* parties for CGGMP24 and FROST) to have sent KEYGENRESULTCONFIRMSUCCESS within 7 days. If fewer parties completed by then, the keygen is useless for signing (cannot produce a signature); the result is then deleted and the keygen request is marked failed. If this node did not complete (e.g. worker timed out) and the key is not **ejected**, it returns Code 1 "not ready". If one node returns "not ready" and another had completed, the client may need to call `getKeyGenResultById` on another node—but if fewer than the quorum completed overall, no node will keep the result (all will delete it after the 7-day timeout).
 
 **Query Parameters:**
 - `id` (required): Key generation request ID
@@ -3310,16 +3348,17 @@ A result is returned (Code 0) when either **(a)** this node completed the TSS an
     "sorobanaddress": "",
     "nearaddress": "",
     "tonaddress": "",
+    "suiaddress": "",
     "savedata": "HIDE ENCRYPTED DATA",
     "timepoint": "2026-01-11T00:37:20.999Z",
     "globalnonce": 0,
     "status": "agree",
-    "effectiveEcdsaMpcProtocol": "gg18"
+    "effectiveEcdsaMpcProtocol": "cggmp24"
   }
 }
 ```
 
-**Note:** The `keylist` field contains all node keys that participated in key generation. **globalnonce** is the number of sign results created for this keyGen (secp256k1); it is also available via `GET /getGlobalNonceByKeyGenId`. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration. **`effectiveEcdsaMpcProtocol`** summarizes the secp256k1 MPC runtime for this key (`gg18` or `cggmp24`); see [effectiveEcdsaMpcProtocol](#effective-ecdsa-mpc-protocol). For secp256k1 keys, **Bitcoin SegWit v0 P2WPKH** fields (**`bitcoinp2wpkhmainnet`**, **`bitcoinp2wpkhtestnet`**, **`bitcoinp2wpkhsignet`**) are returned when derivable; see [bitcoinp2wpkh fields](#bitcoin-p2wpkh-mainnet-address). After **eject**, **`savedata`** / **`cggmp24aux`** are absent; responses may include **`keygenresultstatus`**, **`ejectedat`**, and redacted **`ejectedprivatekey`**; use [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) or [`POST /getBitcoinPrivateKey`](#post-getbitcoinprivatekey) for export on nodes that stored the ciphertext.
+**Note:** The `keylist` field contains all node keys that participated in key generation. **globalnonce** is the number of sign results created for this keyGen (secp256k1); it is also available via `GET /getGlobalNonceByKeyGenId`. If it's `null` in the database, the endpoint will attempt to populate it from the group configuration. **`effectiveEcdsaMpcProtocol`** summarizes the secp256k1 MPC runtime for this key (`cggmp24`; legacy rows may show `gg18`); see [effectiveEcdsaMpcProtocol](#effective-ecdsa-mpc-protocol). **`effectiveSchnorrMpcProtocol`** is **`givre`** for ed25519 / bitcoin-taproot. For secp256k1 keys, **Bitcoin SegWit v0 P2WPKH** fields (**`bitcoinp2wpkhmainnet`**, **`bitcoinp2wpkhtestnet`**, **`bitcoinp2wpkhsignet`**) are returned when derivable; see [bitcoinp2wpkh fields](#bitcoin-p2wpkh-mainnet-address). For **ed25519**, see [ed25519 derived addresses](#ed25519-derived-addresses). For **bitcoin-taproot**, see [Bitcoin Taproot derived addresses](#bitcoin-p2tr-mainnet-address). After **eject**, **`savedata`** / **`cggmp24aux`** are absent; responses may include **`keygenresultstatus`**, **`ejectedat`**, and redacted **`ejectedprivatekey`**; use [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) or [`POST /getBitcoinPrivateKey`](#post-getbitcoinprivatekey) for export on nodes that stored the ciphertext.
 
 **`status`:** Same **effective** lifecycle as the keygen request (see [KeyGen request `status` field (stored values)](#keygen-request-status-values)): not stored on the keygen result row; if **`keygenresultstatus`** is **`ejected`**, responses force **`status`** **`ejected`**. Otherwise, if the request is still **`agree`** but this node has **`savedata`**, responses return **`success`**. Omitted if the request record cannot be loaded.
 
@@ -3342,12 +3381,12 @@ Returns the **globalNonce** for a keyGen result. The `id` is the keyGen result i
   "error": "",
   "data": {
     "globalnonce": 5,
-    "effectiveEcdsaMpcProtocol": "gg18"
+    "effectiveEcdsaMpcProtocol": "cggmp24"
   }
 }
 ```
 
-For keyGen results that are not secp256k1 (e.g. ed25519), the endpoint returns `globalnonce: 0`, **`keytype`**, and **`effectiveEcdsaMpcProtocol`** (empty when not applicable).
+For keyGen results that are not secp256k1 (e.g. ed25519, bitcoin-taproot), the endpoint returns `globalnonce: 0`, **`keytype`**, empty **`effectiveEcdsaMpcProtocol`**, and **`effectiveSchnorrMpcProtocol`: `"givre"`** when applicable.
 
 **Example:**
 ```bash
@@ -3437,6 +3476,7 @@ Gets all configured GroupIds and their associated keyGen results.
     - `sorobanaddress`: Soroban/Stellar address (for ed25519 keys)
     - `nearaddress`: NEAR address (for ed25519 keys)
     - `tonaddress`: TON address (for ed25519 keys)
+    - `suiaddress`: Sui account address (for ed25519 keys; see [ed25519 derived addresses](#ed25519-derived-addresses))
     - `groupid`: Group ID (redundant but included for convenience)
     - `threshold`: Signing threshold
     - `keytype`: Key type (`"secp256k1"` or `"ed25519"`)
@@ -3546,9 +3586,15 @@ Deletes multiple messages (and trees); originator-only per message. **Requires m
 
 ### 7. Pre-Signing
 
+Presign accelerates **FROST** signing for **`ed25519`** and **`bitcoin-taproot`** keys (givre). Each presignature stores a **round-1 nonce commitment** locally at generation time; at sign time the node runs a **presign-finish** worker (commitments + partial signatures + aggregate) instead of a full interactive FROST sign.
+
+**Not supported:** **CGGMP24 secp256k1** keys (`presign is not implemented for CGGMP24 (ecdsa) keys`). **Legacy GG18** keys fail closed.
+
+When **`InitiatePreSigning: true`** in `configs.yaml`, the background worker auto-creates presign requests only for eligible FROST key groups.
+
 <a id="post-presignrequest"></a>
 #### `POST /presignRequest`
-Creates a new pre-signing request. **Requires management key authentication.**
+Creates a new pre-signing request. **Requires management key authentication.** **FROST keys only** (`ed25519`, `bitcoin-taproot`).
 
 **Request Body:**
 ```json
@@ -3568,7 +3614,9 @@ Creates a new pre-signing request. **Requires management key authentication.**
 - `keyList` (required): Array of node keys that will participate in presigning
 - `presignAmt` (required): Number of presignatures to generate
 
-**CGGMP24 secp256k1 keys:** If the MPC key was created with **`ecdsaMpcProtocol: "cggmp24"`** at keygen, **`POST /presignRequest`** returns an error (GG18-style presign only today). Use keys created with GG18 (omit the field or use **`"gg18"`**).
+**CGGMP24 secp256k1 keys:** **`POST /presignRequest`** returns an error. Use FROST keys for presign, or sign interactively without `presignId`.
+
+**Sign with presign:** Pass the presign result id as **`presignId`** on **`POST /signRequest`** or **`POST /multiSignRequest`** (single-message only). **`keyList`** must be **`null`**. Batch **`multiSignRequest`** does **not** use presign — each batch leg runs a full interactive sign in parallel.
 
 **Response:**
 ```json
@@ -3749,7 +3797,8 @@ Creates a new signing request. **Requires relayer authentication.**
   - Signature verification uses exact JSON structure matching mpc-auth's `SignRequestPost`
   - Case-sensitive: `relayerPublicKey` must match exactly what's stored in the database
 - **Key type:** SignRequest only accepts keys with MsgCheck type `tx-check`. For keys with MsgCheck `multi-agree`, use `POST /multiSignRequest` instead.
-- **CGGMP24 secp256k1 keys:** Keys created with **`ecdsaMpcProtocol: "cggmp24"`** cannot create signing requests yet (API returns an error until CGGMP24 signing is implemented). Standard GG18 secp256k1 keys are unaffected.
+- **CGGMP24 secp256k1 keys:** Signing requires a completed distributed **KeyShare**. If aux merge is incomplete, sign creation returns an error (see **`docs-internal/CGGMP24_ROADMAP.md`** in mpc-auth). **Presign is not available** for CGGMP24 ECDSA.
+- **FROST presign:** When **`presignId`** is set, signing uses presign-finish (see [Pre-Signing](#7-pre-signing)).
 - **Client sig for tx-check:** For `tx-check` (relayer) keys, `clientSig` is **not** verified. Relayer authentication (relayerPublicKey + relayerSignature) is sufficient. Tx-check keys are often created with a placeholder client key at keygen; the relayer is the authorized party. You may send an empty or placeholder `clientSig` for SignRequest. For `multi-agree` keys (multiSignRequest), client sig is still verified.
 
 **Relayer-facing endpoints (no client-sig failure for tx-check flow):**
@@ -3803,9 +3852,9 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/signRequest \
 #### `POST /multiSignRequest`
 Creates a new signing request for **multi-agree keys only**. No relayer authentication; uses the same internal sign flow as `signRequest`. Nodes in the same GroupId must agree via `POST /signRequestAgree`; when enough nodes have agreed, the message(s) are signed. Supports **single** (one message) and **batch** (N messages in one request: one agree, one trigger, one SignResult with N signatures). Supports **gas token (native transfer) requests**: use optional `sendGas` and `value` for "Send gas" flows; they are part of the signed payload and stored in `ExtraJSON` so all nodes see them in `getSignRequestById` and `listSignRequests`.
 
-**CGGMP24:** Keys whose keygen used **`ecdsaMpcProtocol: "cggmp24"`** are rejected by this endpoint until CGGMP24 signing is implemented (same as `POST /signRequest`).
+**CGGMP24 secp256k1:** Same KeyShare completion requirement as `POST /signRequest`. **Presign is not used** for batch requests — N parallel full-sign workers run (one per batch index).
 
-**Single vs batch:** For a **single** message, send `msgHash` (required) and optional `msgRaw`. For a **batch** of N messages (e.g. a sequence of transactions), send `messageHashes` (array of N hex strings, length ≥ 2) and optionally `messageRawBatch` (length 0 or N); do not send `msgHash`/`msgRaw` for batch. One agree and one trigger then produce one SignResult whose `batchSignatures` array holds the N signatures (see `GET /getSignResultById`).
+**Single vs batch:** For a **single** message, send `msgHash` (required) and optional `msgRaw`. For a **batch** of N messages (e.g. a sequence of transactions), send `messageHashes` (array of N hex strings, length ≥ 2) and optionally `messageRawBatch` (length 0 or N); do not send `msgHash`/`msgRaw` for batch. One agree and one trigger then produce one SignResult whose `batchSignatures` array holds the N signatures (see `GET /getSignResultById`). Optional **`presignId`** applies to **single-message** requests only.
 
 **Client signature (`clientSig`), `signedMessage`, and `purpose` in the signed payload:**
 
@@ -4230,7 +4279,7 @@ Lists **multi-agree** sign requests that are **ready to trigger**: this node is 
 
 **Response:** Same structure as `GET /listSignRequests` (array of sign request objects, including `KeyGenRequestId`). Only includes requests that are ready and where this node is in **SigList**.
 
-**Rejections and keyGen:** Rejecting a sign request (`POST /signRequestAgree` with `accept: false`) only adds this node to **RejectedBy**; it does **not** remove or alter the keyGen request or keyGen result. "Ready" is based solely on **SigList** (agreeing nodes): if **SigList** reaches the **MPC quorum** for this key (**GG18/ed25519:** degree+1; **CGGMP24:** *t*), the request is ready regardless of **RejectedBy** (unless blocked by remaining-participant logic). If a quorum-ready agreement does **not** appear in `listSignRequestsReady` or `triggerSignRequestById` fails with "keygen result for pubkey ... not found", the **keyGen result** is missing on this node. The keyGen result is only deleted when **keygen** failed: fewer than **MPC quorum** parties sent KEYGENRESULTCONFIRMSUCCESS within 7 days; then the result is deleted and the keyGen **request** is marked `"failed"` (the request document is not deleted). In that case the key is unusable for signing. The keyGen request remains in the DB with status `"failed"`; only the keyGen **result** (the actual key material) is removed.
+**Rejections and keyGen:** Rejecting a sign request (`POST /signRequestAgree` with `accept: false`) only adds this node to **RejectedBy**; it does **not** remove or alter the keyGen request or keyGen result. "Ready" is based solely on **SigList** (agreeing nodes): if **SigList** reaches the **MPC quorum** for this key (**t** parties for CGGMP24 and FROST), the request is ready regardless of **RejectedBy** (unless blocked by remaining-participant logic). If a quorum-ready agreement does **not** appear in `listSignRequestsReady` or `triggerSignRequestById` fails with "keygen result for pubkey ... not found", the **keyGen result** is missing on this node. The keyGen result is only deleted when **keygen** failed: fewer than **MPC quorum** parties sent KEYGENRESULTCONFIRMSUCCESS within 7 days; then the result is deleted and the keyGen **request** is marked `"failed"` (the request document is not deleted). In that case the key is unusable for signing. The keyGen request remains in the DB with status `"failed"`; only the keyGen **result** (the actual key material) is removed.
 
 **Example:**
 ```bash
@@ -4863,9 +4912,9 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSignResultById?id=Sign20260111003720999c
 
 ### 3. Multi-Agree Signing (Ready / Trigger Flow)
 
-For **multi-agree** keys, nodes agree via `POST /signRequestAgree`. Once **SigList** reaches the **MPC quorum** for this key (**GG18/ed25519:** degree+1; **CGGMP24:** *t*), **only the originator** (the node whose key is the key in the Purpose map, i.e. the one that created the request via multiSignRequest) may call `POST /triggerSignRequestById` to trigger signature generation. Use `GET /getSignResultById` to poll for the signature. The originator can then call `POST /updateSignResultStatusById` to set status to `"executed"` (with transaction hash) or `"shelved"` (transaction will not be broadcast); these fields appear in `getSignResultById`. The originator can also call `POST /shelveSignRequest` to set the **sign request** status to `"shelved"` (e.g. to cancel or defer the request before triggering); this status appears in `getSignRequestById` and `listSignRequests` and is propagated to all nodes.
+For **multi-agree** keys, nodes agree via `POST /signRequestAgree`. Once **SigList** reaches the **MPC quorum** for this key (**t** parties for CGGMP24 and FROST), **only the originator** (the node whose key is the key in the Purpose map, i.e. the one that created the request via multiSignRequest) may call `POST /triggerSignRequestById` to trigger signature generation. Use `GET /getSignResultById` to poll for the signature. The originator can then call `POST /updateSignResultStatusById` to set status to `"executed"` (with transaction hash) or `"shelved"` (transaction will not be broadcast); these fields appear in `getSignResultById`. The originator can also call `POST /shelveSignRequest` to set the **sign request** status to `"shelved"` (e.g. to cancel or defer the request before triggering); this status appears in `getSignRequestById` and `listSignRequests` and is propagated to all nodes.
 
-**Batch sign request:** To request N signatures in one go (e.g. a sequence of transactions), call `POST /multiSignRequest` with `messageHashes` (array of N hex hashes) and optionally `messageRawBatch`. One `POST /signRequestAgree` agrees to the entire batch. After trigger, `GET /getSignResultById` returns one result with `batchSignResult: true`, `batchSize: N`, and `batchSignatures` (array of N entries: `messagehash`, `sigr`, `sigs`, `sigrecover`, `signaturehex`, `ethereumsignature`). Use `data.batchSignatures[i]` for the i-th signature and execute transactions in order (e.g. consecutive nonces on EVM).
+**Batch sign request:** To request N signatures in one go (e.g. a sequence of transactions), call `POST /multiSignRequest` with `messageHashes` (array of N hex hashes) and optionally `messageRawBatch`. One `POST /signRequestAgree` agrees to the entire batch. After trigger, `GET /getSignResultById` returns one result with `batchSignResult: true`, `batchSize: N`, and `batchSignatures` (array of N entries: `messagehash`, `sigr`, `sigs`, `sigrecover`, `signaturehex`, `ethereumsignature`). Use `data.batchSignatures[i]` for the i-th signature and execute transactions in order (e.g. consecutive nonces on EVM). Batch signing does **not** use presign; each message runs a full interactive sign worker in parallel.
 
 ```bash
 # Step 1: Create multi-agree sign request (e.g. from dApp)

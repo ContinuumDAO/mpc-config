@@ -9,7 +9,7 @@
     "paths": {
         "/version": {
             "get": {
-                "description": "Returns APIResponse data object with version (app semver), versionDate, and cggmp24UpstreamGitRev (pinned cggmp24/Lockness git revision when the binary is built with -tags rust and the FFI is linked; otherwise \"\"). Unauthenticated on public discovery and management ports.",
+                "description": "Application version, versionDate, cggmp24UpstreamGitRev, and givreUpstreamGitRev (Lockness git pins when built with -tags rust; otherwise empty). See mpc-config docs/references/API_IMPLEMENTATION.md (GET /version).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1776,7 +1776,7 @@
         },
         "/presignRequest": {
             "post": {
-                "description": "send presign request",
+                "description": "Creates a presign cache request for ed25519 or bitcoin-taproot (FROST/givre) keys. Each node runs round1 commit locally on PRESIGNSTART; secrets are encrypted at rest. CGGMP24 secp256k1 keys reject presign. See mpc-config docs/references/API_IMPLEMENTATION.md (POST /presignRequest).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1786,7 +1786,7 @@
                 "tags": [
                     "Pre Sign"
                 ],
-                "summary": "send presign request",
+                "summary": "Create FROST nonce-commitment presign request",
                 "parameters": [
                     {
                         "description": "request",
@@ -2051,7 +2051,7 @@
         },
         "/multiSignRequest": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /multiSignRequest).",
+                "description": "Multi-agree keys only. Single-tx (msgHash) or batch (messageHashes length ≥ 2): one agree, one trigger, one SignResult. Batch uses full interactive MPC per leg — no presignId / presign-finish path. Supports secp256k1 (CGGMP24), ed25519, and bitcoin-taproot (FROST). See mpc-config docs/references/API_IMPLEMENTATION.md (POST /multiSignRequest).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2061,7 +2061,7 @@
                 "tags": [
                     "Sign"
                 ],
-                "summary": "POST multiSignRequest",
+                "summary": "Create multi-agree sign request (single or batch)",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -4039,7 +4039,7 @@
         },
         "node.EffectiveEcdsaMpcProtocol": {
             "type": "string",
-            "description": "Runtime secp256k1 ECDSA MPC variant for this key/request: \"gg18\" or \"cggmp24\". Empty for non-secp256k1 keys. API-only (JSON); stored request field remains ecdsaMpcProtocol on the keygen payload. Returned on keygen/sign GET and list responses and on GET /getGlobalNonceByKeyGenId data."
+            "description": "Runtime secp256k1 ECDSA MPC variant: \"cggmp24\" (default) or \"gg18\" (legacy Mongo rows only). Empty for Schnorr key types. API-only JSON on keygen/sign GET responses."
         },
         "node.KeyGenResultData": {
             "type": "object",
@@ -4098,6 +4098,40 @@
                 "ejectedprivatekey": {
                     "type": "string",
                     "description": "Omitted or redacted as HIDE ENCRYPTED DATA in list/get unless decrypted internally."
+                },
+                "solanaaddress": {
+                    "type": "string",
+                    "description": "Solana address (base58 ed25519 pubkey) when keytype is ed25519"
+                },
+                "sorobanaddress": {
+                    "type": "string",
+                    "description": "Stellar/Soroban strkey (G…) when keytype is ed25519"
+                },
+                "nearaddress": {
+                    "type": "string",
+                    "description": "NEAR implicit account (64-char lowercase hex pubkey) when keytype is ed25519"
+                },
+                "tonaddress": {
+                    "type": "string",
+                    "description": "TON wallet address when keytype is ed25519"
+                },
+                "suiaddress": {
+                    "type": "string",
+                    "description": "Sui account address (0x + 64 hex; BLAKE2b-256 of 0x00||pubkey) when keytype is ed25519"
+                },
+                "bitcoinp2trmainnet": {
+                    "type": "string",
+                    "description": "Bitcoin mainnet P2TR bc1p… when keytype is bitcoin-taproot"
+                },
+                "taprootinternalpubkeyhex": {
+                    "type": "string",
+                    "description": "x-only internal Taproot key P (64 hex) for bitcoin-taproot"
+                },
+                "effectiveSchnorrMpcProtocol": {
+                    "type": "string",
+                    "description": {
+                        "$ref": "#/definitions/node.EffectiveSchnorrMpcProtocol"
+                    }
                 }
             }
         },
@@ -4130,13 +4164,14 @@
                 },
                 "ecdsaMpcProtocol": {
                     "type": "string",
-                    "description": "Optional. secp256k1 only — MPC ECDSA variant for this key (\"gg18\" or omit = GG18 DKG; \"cggmp24\" = CGGMP24 path when implemented). Ignored for ed25519. Invalid non-empty values are rejected for secp256k1. Must be included in the management-key signed JSON when sent."
+                    "description": "Optional. secp256k1 only. Omit or \"cggmp24\" (default) for CGGMP24 ECDSA DKG/sign. Explicit \"gg18\" is rejected on new keygen (legacy Mongo keys fail closed). Ignored for ed25519 and bitcoin-taproot (FROST via givre). Must be in the management-key signed JSON when sent."
                 },
                 "groupId": {
                     "type": "string"
                 },
                 "keyType": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "secp256k1 (EVM ECDSA / CGGMP24), ed25519 (FROST Schnorr), or bitcoin-taproot (FROST BIP-340 Taproot key-path). FROST key types require a rust-tagged mpc-auth build (-tags rust + givre FFI)."
                 },
                 "msgCheck": {
                     "type": "string"
@@ -4153,7 +4188,7 @@
                 },
                 "threshold": {
                     "type": "integer",
-                    "description": "Interpretation depends on ECDSA MPC mode (see ecdsaMpcProtocol) and key type. GG18 (secp256k1 default / omit) and Ed25519: Shamir polynomial degree d; MPC signing needs d+1 parties; require d strictly less than n (n = group size). CGGMP24 (secp256k1 with ecdsaMpcProtocol \"cggmp24\"): literal signing quorum t; MPC signing needs t parties; require 2 ≤ t ≤ n."
+                    "description": "Signing quorum stored on the keygen payload. secp256k1 (CGGMP24, default): literal quorum t; MPC signing needs t parties; require 2 ≤ t ≤ n (n = group size). ed25519 and bitcoin-taproot (FROST / givre): literal quorum t; MPC signing needs t parties; require 2 ≤ t ≤ n. Legacy GG18 secp256k1 keys (Mongo only) used polynomial degree d with quorum d+1 — new keygen rejects gg18."
                 }
             }
         },
@@ -5001,6 +5036,10 @@
                     "description": "Keygen request id"
                 }
             }
+        },
+        "node.EffectiveSchnorrMpcProtocol": {
+            "type": "string",
+            "description": "Runtime Schnorr MPC variant for ed25519 / bitcoin-taproot: \"givre\" (FROST). Empty for secp256k1. API-only JSON on keygen/sign GET responses."
         }
     }
 }
