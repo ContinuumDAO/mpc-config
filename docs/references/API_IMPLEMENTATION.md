@@ -175,9 +175,14 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - `GET /fetchNodeDataByPublicKey` - Fetch node data by public key
 
 ### Local Chain Config
-- [`POST /postChainDetails`](#post-postchaindetails) - Store chain config on this node only (requires mgt key)
-- [`GET /getChainDetails`](#get-getchaindetails) - Get chain config(s); optional `chain_id` query for single chain
-- [`POST /removeChainDetails`](#post-removechaindetails) - Remove chain config for one chain (requires mgt key)
+- [`POST /postChainDetails`](#post-postchaindetails) - Store EVM chain config on this node only (requires mgt key)
+- [`GET /getChainDetails`](#get-getchaindetails) - Get EVM chain config(s); optional `chain_id` query for single chain
+- [`POST /removeChainDetails`](#post-removechaindetails) - Remove EVM chain config for one chain (requires mgt key)
+
+### Local Non-EVM Chain Config
+- [`POST /postNonEvmChainDetails`](#post-postnonevmchaindetails) - Store non-EVM chain config (Solana, NEAR, Sui, TON, Stellar) on this node only (requires mgt key)
+- [`GET /getNonEvmChainDetails`](#get-getnonevmchaindetails) - Get non-EVM chain config(s); optional `chain_type` and `chain_id` query filters
+- [`POST /removeNonEvmChainDetails`](#post-removenonevmchaindetails) - Remove non-EVM chain config for one `(chainType, chainId)` (requires mgt key)
 
 ### Local Token Config
 - [`POST /addToken`](#post-addtoken) - Add a token contract for a chain (this node only; requires mgt key)
@@ -2088,6 +2093,95 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/removeChainDetails \
     "signedMessage": "{\"nonce\":2,\"chainId\":\"1\",\"action\":\"removeChainDetails\"}",
     "clientSig": "0x..."
   }'
+```
+
+### Local Non-EVM Chain Config
+
+Non-EVM chain config is stored on the local node only (not propagated). Used for Solana, NEAR, Sui, TON, and Stellar networks. Identity is **`(chainType, chainId)`** — the same model as [`getTokens`](#get-gettokens) and [`getKnownAddresses`](#get-getknownaddresses). `chainId` is a string network id (e.g. `mainnet-beta` for Solana mainnet, `public` for Stellar).
+
+<a id="post-postnonevmchaindetails"></a>
+#### `POST /postNonEvmChainDetails`
+Stores or updates non-EVM chain config for one network on this node. Requires management key signature over the message. Both **Ethereum (`NodeMgtKey`)** and **Ed25519** management keys are supported.
+
+**Request Body (PostNonEvmChainDetailsPost):**
+```json
+{
+  "nonce": 1,
+  "chainType": "solana",
+  "chainId": "mainnet-beta",
+  "chainName": "Solana",
+  "rpcGateway": "https://api.mainnet-beta.solana.com",
+  "endpointKind": "json-rpc",
+  "explorer": "https://solscan.io",
+  "testnet": false,
+  "nativeSymbol": "SOL",
+  "nativeDecimals": 9,
+  "signingDefaults": { "commitment": "confirmed" },
+  "signedMessage": "{\"nonce\":1,\"chainType\":\"solana\",\"chainId\":\"mainnet-beta\",\"chainName\":\"Solana\",\"rpcGateway\":\"https://api.mainnet-beta.solana.com\",\"endpointKind\":\"json-rpc\",\"testnet\":false,\"nativeSymbol\":\"SOL\",\"nativeDecimals\":9}",
+  "clientSig": "0x..."
+}
+```
+
+**Field Descriptions:**
+- `nonce` (required): Current nonce from `/getNodeMgtKeyNonce` (or `/getPublicMgtKeyNonce` for Ed25519).
+- `chainType` (required): One of `solana`, `near`, `sui`, `ton`, `stellar` (stored lowercase).
+- `chainId` (required): Network id within `chainType` (string, e.g. `mainnet-beta`, `testnet`, `devnet`, `public`).
+- `chainName` (required): Human-readable name (e.g. "Solana", "Solana testnet").
+- `rpcGateway` (required): Primary HTTPS endpoint (JSON-RPC, Horizon REST, or TON HTTP depending on `endpointKind`).
+- `endpointKind` (required): `json-rpc` | `horizon` | `ton-http`.
+- `explorer` (optional): Block explorer base URL.
+- `testnet` (optional): `true` for test/dev networks; defaults to `false`.
+- `nativeSymbol` (required): Native gas token symbol (e.g. `SOL`, `NEAR`, `XLM`).
+- `nativeDecimals` (required): Native token decimals for balance display (e.g. `9` for SOL, `24` for NEAR, `7` for XLM).
+- `wsGateway` (optional): WebSocket URL (e.g. Solana subscriptions).
+- `tonVendor` (optional): For TON HTTP endpoints: `toncenter` | `tonapi` | `custom`.
+- `signingDefaults` (optional): Chain-specific fee/priority defaults for compose/sign (object). Examples: Solana `{ "commitment": "confirmed", "computeUnitLimit": 200000, "priorityFeeMicroLamports": 1000 }`; Stellar `{ "baseFeeStroops": 100 }`.
+- `signedMessage` (required): Exact string signed by the management key.
+- `clientSig` (required): Ethereum wallet (0x-prefixed) or Ed25519 (128 hex) signature.
+
+**Response:**
+```json
+{ "code": 0, "error": "", "data": "Non-EVM chain config stored" }
+```
+
+<a id="get-getnonevmchaindetails"></a>
+#### `GET /getNonEvmChainDetails`
+Returns non-EVM chain configs stored on this node.
+
+**Query Parameters:**
+- `chain_type` (optional): Filter by chain family (e.g. `solana`).
+- `chain_id` (optional): Filter by network id within the chain type.
+
+When **both** `chain_type` and `chain_id` are set, returns a single object or **404**. When omitted, returns all matching configs (array).
+
+**Response data fields (per chain):**
+- `chainType`, `chainId`, `chainName`, `rpcGateway`, `endpointKind`, `explorer`, `testnet`, `nativeSymbol`, `nativeDecimals`, `wsGateway`, `tonVendor`, `signingDefaults`, `updatedAt`.
+
+**Examples:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNonEvmChainDetails"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNonEvmChainDetails?chain_type=solana"
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNonEvmChainDetails?chain_type=solana&chain_id=mainnet-beta"
+```
+
+<a id="post-removenonevmchaindetails"></a>
+#### `POST /removeNonEvmChainDetails`
+Removes stored non-EVM chain config for one `(chainType, chainId)`. Requires management key signature.
+
+**Request Body (RemoveNonEvmChainDetailsPost):**
+```json
+{
+  "nonce": 2,
+  "chainType": "solana",
+  "chainId": "mainnet-beta",
+  "signedMessage": "{\"nonce\":2,\"chainType\":\"solana\",\"chainId\":\"mainnet-beta\",\"action\":\"removeNonEvmChainDetails\"}",
+  "clientSig": "0x..."
+}
+```
+
+**Response:**
+```json
+{ "code": 0, "error": "", "data": "Non-EVM chain config removed" }
 ```
 
 ### Local Token Config
