@@ -464,7 +464,7 @@
         },
         "/getAllowedKeyTypes": {
             "get": {
-                "description": "get allowed keytypes of node",
+                "description": "Returns allowed KeyGen key types from configs.yaml AllowedKeyTypeList (e.g. secp256k1, ed25519, bitcoin-taproot). FROST types require mpc-auth built with -tags rust. See mpc-config docs/references/API_IMPLEMENTATION.md GET /getAllowedKeyTypes.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1324,7 +1324,7 @@
         },
         "/keyGenEjectRequest": {
             "post": {
-                "description": "Start CGGMP24 key eject (returns ejectRequestId). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenEjectRequest). Schema: #/definitions/node.KeyGenEjectRequestPost.",
+                "description": "Start multi-agree key eject (returns ejectRequestId). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenEjectRequest). Schema: #/definitions/node.KeyGenEjectRequestPost.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1334,7 +1334,7 @@
                 "tags": [
                     "Key Generation"
                 ],
-                "summary": "Start CGGMP24 key eject (returns ejectRequestId)",
+                "summary": "Start multi-agree key eject (returns ejectRequestId)",
                 "responses": {
                     "200": {
                         "description": "OK (`code`: 0 in APIResponse)",
@@ -1436,7 +1436,7 @@
                 "tags": [
                     "Key Generation"
                 ],
-                "summary": "List CGGMP24 key eject flows for this node",
+                "summary": "List key eject flows for this node",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1470,7 +1470,7 @@
         },
         "/getKeyGenEjectRequestById": {
             "get": {
-                "description": "Get one CGGMP24 key eject flow by requestid. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getKeyGenEjectRequestById). Schema: #/definitions/node.KeyGenEjectRequestResult.",
+                "description": "Get one key eject flow by requestid (secp256k1, ed25519, or bitcoin-taproot). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getKeyGenEjectRequestById). Schema: #/definitions/node.KeyGenEjectRequestResult.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1565,7 +1565,7 @@
         },
         "/getBitcoinPrivateKey": {
             "post": {
-                "description": "Get exported Bitcoin mainnet private key (compressed WIF) after eject. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /getBitcoinPrivateKey). Schema: #/definitions/node.GetBitcoinPrivateKeyPost.",
+                "description": "Get exported Bitcoin mainnet private key (compressed WIF) after secp256k1 eject. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /getBitcoinPrivateKey). Schema: #/definitions/node.GetBitcoinPrivateKeyPost.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1575,7 +1575,7 @@
                 "tags": [
                     "Key Generation"
                 ],
-                "summary": "Get exported Bitcoin mainnet private key (compressed WIF) after eject",
+                "summary": "Get exported Bitcoin mainnet private key (compressed WIF) after secp256k1 eject",
                 "responses": {
                     "200": {
                         "description": "OK (`code`: 0 in APIResponse)",
@@ -1621,6 +1621,132 @@
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/node.GetBitcoinPrivateKeyPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/getEd25519PrivateKey": {
+            "post": {
+                "description": "Get exported Ed25519 seed and chain wallet import formats after ed25519 eject. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /getEd25519PrivateKey). Schema: #/definitions/node.GetEd25519PrivateKeyPost.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Key Generation"
+                ],
+                "summary": "Get exported Ed25519 seed and chain wallet import formats after ed25519 eject",
+                "responses": {
+                    "200": {
+                        "description": "OK (`code`: 0 in APIResponse)",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation or eligibility error",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid management or client signature",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "This node not in keygen KeyList",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Keygen not found or no export blob on this node",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.GetEd25519PrivateKeyPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/getTaprootPrivateKey": {
+            "post": {
+                "description": "Get exported Taproot internal key and P2TR metadata after bitcoin-taproot eject. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /getTaprootPrivateKey). Schema: #/definitions/node.GetTaprootPrivateKeyPost.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Key Generation"
+                ],
+                "summary": "Get exported Taproot internal key and P2TR metadata after bitcoin-taproot eject",
+                "responses": {
+                    "200": {
+                        "description": "OK (`code`: 0 in APIResponse)",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation or eligibility error",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid management or client signature",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "This node not in keygen KeyList",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Keygen not found or no export blob on this node",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.GetTaprootPrivateKeyPost"
                         }
                     }
                 ]
@@ -4089,7 +4215,7 @@
                 },
                 "keygenresultstatus": {
                     "type": "string",
-                    "description": "When **ejected**, MPC shares are cleared; use POST /getEthereumPrivateKey or POST /getBitcoinPrivateKey for export on this node."
+                    "description": "When **ejected**, MPC shares are cleared; use POST /getEthereumPrivateKey or POST /getBitcoinPrivateKey (secp256k1), POST /getEd25519PrivateKey (ed25519), or POST /getTaprootPrivateKey (bitcoin-taproot) for export on this node."
                 },
                 "ejectedat": {
                     "type": "string",
@@ -4863,7 +4989,7 @@
         },
         "node.KeyGenEjectRequestPost": {
             "type": "object",
-            "description": "POST /keyGenEjectRequest. Starts multi-agree eject for a **CGGMP24** secp256k1 key only (`keyGenId` = keygen request id). Requires management proof: verify with **Sig** cleared over canonical JSON including **Nonce**, **keyGenId**, optional **purpose**, optional **nodeKey**. GG18 and ed25519 keygens are rejected. See mpc-config docs/references/API_IMPLEMENTATION.md.",
+            "description": "POST /keyGenEjectRequest. Starts multi-agree eject for a completed keygen (`keyGenId` = keygen request id). Supported key types: secp256k1 (CGGMP24), ed25519 (FROST/givre), bitcoin-taproot (FROST/givre). Requires msgCheck multi-agree. Rejects tx-check, legacy GG18 secp256k1, and already-ejected keygens. Requires management proof: verify with **Sig** cleared over canonical JSON including **Nonce**, **keyGenId**, optional **purpose**, optional **nodeKey**. Finalization requires mpc-auth built with -tags rust. See mpc-config docs/references/API_IMPLEMENTATION.md.",
             "required": [
                 "Nonce",
                 "Sig",
@@ -4951,7 +5077,7 @@
         },
         "node.KeyGenEjectRequestResult": {
             "type": "object",
-            "description": "One CGGMP24 key eject flow returned by GET /listKeyGenEjectRequests and GET /getKeyGenEjectRequestById. Only ejects where this node's key appears in KeyList are listed.",
+            "description": "One key eject flow returned by GET /listKeyGenEjectRequests and GET /getKeyGenEjectRequestById (secp256k1, ed25519, or bitcoin-taproot multi-agree keygens). Only ejects where this node's key appears in KeyList are listed.",
             "properties": {
                 "requestid": {
                     "type": "string",
@@ -5014,7 +5140,7 @@
         },
         "node.GetBitcoinPrivateKeyPost": {
             "type": "object",
-            "description": "POST /getBitcoinPrivateKey. Returns Bitcoin mainnet compressed **privateKeyWif** for the ejected secp256k1 scalar (same underlying key as POST /getEthereumPrivateKey). Also returns **privateKeyHex** and **bitcoinP2WPKHMainnet**. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node.",
+            "description": "POST /getBitcoinPrivateKey. Returns Bitcoin mainnet compressed **privateKeyWif** for the ejected secp256k1 scalar (same underlying key as POST /getEthereumPrivateKey). Also returns **privateKeyHex** and **bitcoinP2WPKHMainnet**. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node. **secp256k1 only.**",
             "required": [
                 "Nonce",
                 "Sig",
@@ -5040,6 +5166,56 @@
         "node.EffectiveSchnorrMpcProtocol": {
             "type": "string",
             "description": "Runtime Schnorr MPC variant for ed25519 / bitcoin-taproot: \"givre\" (FROST). Empty for secp256k1. API-only JSON on keygen/sign GET responses."
+        },
+        "node.GetEd25519PrivateKeyPost": {
+            "type": "object",
+            "description": "POST /getEd25519PrivateKey. Returns decrypted **64-hex Ed25519 seed** after successful FROST ed25519 eject, plus Solana, NEAR, Stellar/Soroban, TON, and Sui wallet import fields when derivable. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen **keytype** must be **ed25519**; **keygenresultstatus** must be **ejected** on this node.",
+            "required": [
+                "Nonce",
+                "Sig",
+                "keyGenId"
+            ],
+            "properties": {
+                "Nonce": {
+                    "type": "integer"
+                },
+                "Sig": {
+                    "type": "string"
+                },
+                "nodeKey": {
+                    "type": "string",
+                    "description": "Optional (recommended) 128-hex MPC node id binding"
+                },
+                "keyGenId": {
+                    "type": "string",
+                    "description": "Keygen request id"
+                }
+            }
+        },
+        "node.GetTaprootPrivateKeyPost": {
+            "type": "object",
+            "description": "POST /getTaprootPrivateKey. Returns Taproot internal key scalar, internal/output x-only pubkeys, P2TR addresses, and optional Bitcoin mainnet WIF after successful FROST bitcoin-taproot eject. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen **keytype** must be **bitcoin-taproot**; **keygenresultstatus** must be **ejected** on this node.",
+            "required": [
+                "Nonce",
+                "Sig",
+                "keyGenId"
+            ],
+            "properties": {
+                "Nonce": {
+                    "type": "integer"
+                },
+                "Sig": {
+                    "type": "string"
+                },
+                "nodeKey": {
+                    "type": "string",
+                    "description": "Optional (recommended) 128-hex MPC node id binding"
+                },
+                "keyGenId": {
+                    "type": "string",
+                    "description": "Keygen request id"
+                }
+            }
         }
     }
 }

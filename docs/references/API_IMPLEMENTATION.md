@@ -4,7 +4,7 @@
 
 The Distributed Auth Management API provides a RESTful interface for managing MPC (Multi-Party Computation) nodes, key generation, signing operations, and system monitoring. The API is implemented using the Gin web framework and follows a consistent response format.
 
-**CGGMP24 / FROST (givre) / Rust:** For **`ecdsaMpcProtocol`** on **`POST /keyGenRequest`**, **`GET /version`** (`cggmp24UpstreamGitRev`, **`givreUpstreamGitRev`**), FROST **ed25519** / **bitcoin-taproot** keygen/sign/presign, **`POST /keyGenEjectRequest`** / **`POST /getEthereumPrivateKey`** / **`POST /getBitcoinPrivateKey`**, and optional **`-tags rust`** builds, see **[`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)** and sibling repo **mpc-auth** `docs-internal/FROST_ROADMAP.md`.
+**CGGMP24 / FROST (givre) / Rust:** For **`ecdsaMpcProtocol`** on **`POST /keyGenRequest`**, **`GET /version`** (`cggmp24UpstreamGitRev`, **`givreUpstreamGitRev`**), FROST **ed25519** / **bitcoin-taproot** keygen/sign/presign, **`POST /keyGenEjectRequest`** (secp256k1 CGGMP24, FROST **ed25519**, FROST **bitcoin-taproot**), and export routes **`POST /getEthereumPrivateKey`**, **`POST /getBitcoinPrivateKey`**, **`POST /getEd25519PrivateKey`**, **`POST /getTaprootPrivateKey`**, and optional **`-tags rust`** builds, see **[`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)** and sibling repo **mpc-auth** `docs-internal/FROST_ROADMAP.md`.
 
 ## Architecture
 
@@ -51,7 +51,16 @@ This field is **computed for JSON only** (not stored as its own MongoDB column).
 
 **Where it appears:** [`GET /listKeyGenRequests`](#get-listkeygenrequests), [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid), [`GET /getKeyGenResultById`](#get-getkeygenresultbyid), **`GET /getGlobalNonceByKeyGenId`** (inside **`data`**), **`GET /listSignRequests`**, **`GET /getSignRequestById`**, **`GET /listSignRequestsReady`**, **`GET /getSignResultById`**, **`GET /listSignResults`**.
 
-For **ejected** CGGMP24 keys, [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) still returns public metadata, **`status`**: **`ejected`**, persisted **`keygenresultstatus`**: **`ejected`**, and **`ejectedat`** when present; **`savedata`** / **`cggmp24aux`** are cleared. The raw scalar is not returned on this GET; use **`POST /getEthereumPrivateKey`** or **`POST /getBitcoinPrivateKey`** on a node that stored the export. See [Key eject (CGGMP24)](#post-keygenejectrequest). On [`GET /listKeyGenRequests`](#get-listkeygenrequests) / [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid), the request row’s effective **`status`** is also **`ejected`** when the result row is tombstoned; use **`filter=ejected`** to list those requests.
+<a id="key-eject-export-endpoints"></a>
+For **ejected** keys ([`POST /keyGenEjectRequest`](#post-keygenejectrequest)), [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) still returns public metadata, **`status`**: **`ejected`**, persisted **`keygenresultstatus`**: **`ejected`**, and **`ejectedat`** when present; MPC share material (**`savedata`**, and for secp256k1 **`cggmp24aux`**) is cleared on nodes that finalized. The raw scalar is not returned on this GET — use the key-type-specific export POST for a node that stored the export blob:
+
+| Key type | Export endpoint |
+|----------|-----------------|
+| **`secp256k1`** (CGGMP24) | [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey), [`POST /getBitcoinPrivateKey`](#post-getbitcoinprivatekey) |
+| **`ed25519`** (FROST/givre) | [`POST /getEd25519PrivateKey`](#post-geted25519privatekey) |
+| **`bitcoin-taproot`** (FROST/givre) | [`POST /getTaprootPrivateKey`](#post-gettaprootprivatekey) |
+
+On [`GET /listKeyGenRequests`](#get-listkeygenrequests) / [`GET /getKeyGenRequestById`](#get-getkeygenrequestbyid), the request row’s effective **`status`** is also **`ejected`** when the result row is tombstoned; use **`filter=ejected`** to list those requests.
 
 <a id="bitcoin-p2wpkh-mainnet-address"></a>
 ### Bitcoin P2WPKH derived addresses (`bitcoinp2wpkhmainnet`, `bitcoinp2wpkhtestnet`, `bitcoinp2wpkhsignet`) (read-only)
@@ -219,12 +228,14 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /keyGenRequestRetry`](#post-keygenrequestretry) - Retry `KEYGENREQUEST` MQTT to one peer (originator only; requires mgt key)
 - [`POST /keyGenRequestAgree`](#post-keygenrequestagree) - Agree to key generation request (requires mgt key)
 - [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) - Get key generation result by ID
-- [`POST /keyGenEjectRequest`](#post-keygenejectrequest) - Start **CGGMP24** multi-agree key eject (export full Ethereum key; requires mgt key)
+- [`POST /keyGenEjectRequest`](#post-keygenejectrequest) - Start **multi-agree key eject** (CGGMP24 **secp256k1**, FROST **ed25519**, FROST **bitcoin-taproot**; requires mgt key)
 - [`POST /keyGenEjectAgree`](#post-keygenejectagree) - Vote accept/reject on key eject (client-signed, same pattern as `signRequestAgree`)
-- [`GET /listKeyGenEjectRequests`](#get-listkeygenejectrequests) - List CGGMP24 key eject flows for this node
+- [`GET /listKeyGenEjectRequests`](#get-listkeygenejectrequests) - List in-progress or completed key eject flows for this node
 - [`GET /getKeyGenEjectRequestById`](#get-getkeygenejectrequestbyid) - Get one key eject flow by eject request id
-- [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) - Read exported **64-hex** secp256k1 scalar after eject (also returns Bitcoin mainnet WIF when derivable; requires mgt key; this node must hold export material)
-- [`POST /getBitcoinPrivateKey`](#post-getbitcoinprivatekey) - Read exported **Bitcoin mainnet compressed WIF** for the same ejected scalar (requires mgt key; this node must hold export material)
+- [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) - After eject: read exported **64-hex** secp256k1 scalar (**secp256k1** only; also returns Bitcoin mainnet WIF when derivable)
+- [`POST /getBitcoinPrivateKey`](#post-getbitcoinprivatekey) - After eject: read exported **Bitcoin mainnet compressed WIF** for the same ejected secp256k1 scalar
+- [`POST /getEd25519PrivateKey`](#post-geted25519privatekey) - After eject: read exported **Ed25519 seed** and chain wallet import formats (**ed25519** only)
+- [`POST /getTaprootPrivateKey`](#post-gettaprootprivatekey) - After eject: read exported **Taproot internal key scalar** and P2TR metadata (**bitcoin-taproot** only)
 - [`GET /getGlobalNonceByKeyGenId`](#get-getglobalnoncebykeygenid) - Get globalNonce by keyGen result id
 - [`GET /getKeyGenGroupId`](#get-getkeygengroupid) - Get key generation result and GroupId by keyGen ID
 - [`GET /getAllGroupIds`](#get-getallgroupids) - Get all GroupIds with their keyGens
@@ -1192,6 +1203,16 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getAllowedKeyTypes"
 - `bitcoin-taproot`: FROST BIP-340 Taproot key-path (givre); **`bc1p…`** P2TR when derivable
 
 Nodes only accept key types listed in **`AllowedKeyTypeList`** in `configs.yaml`. FROST types require a **`-tags rust`** mpc-auth image with givre FFI linked.
+
+**Example `configs.yaml` (all three types enabled):**
+```yaml
+AllowedKeyTypeList:
+  - "secp256k1"
+  - "ed25519"
+  - "bitcoin-taproot"
+```
+
+After changing `AllowedKeyTypeList`, restart the node so `GET /getAllowedKeyTypes` and `POST /keyGenRequest` pick up the new list. To use Bitcoin Taproot in Multi-Sign Compose, create a **multi-agree** KeyGen with `keyType: "bitcoin-taproot"` (separate from `ed25519`, which targets Solana/Sui/NEAR-style chains).
 
 <a id="get-getallowedmsgchecktypes"></a>
 #### `GET /getAllowedMsgCheckTypes`
@@ -3122,9 +3143,17 @@ Agrees to a key generation request. **Requires management key authentication.**
 
 <a id="post-keygenejectrequest"></a>
 #### `POST /keyGenEjectRequest`
-Starts a **multi-agree key eject** for a **`secp256k1` CGGMP24** key so the committee can export the **full secp256k1 private key** (64-hex scalar; same key as **`ethereumaddress`** and **`bitcoinp2wpkhmainnet`**), verify it against **`pubkeyhex`** / derived addresses, then **tombstone** MPC for that key (**`keygenresultstatus`** → **`ejected`**, **`savedata`** and **`cggmp24aux`** cleared on nodes that finalize). **Requires management key authentication** (same **`Nonce` / `Sig`** pattern as other signed POST bodies; optional **`nodeKey`** binding per [Management signatures](#management-signatures-nodekey)).
+Starts a **multi-agree key eject** so the committee can export the **full private key** for that keygen, verify it against stored public metadata, then **tombstone** MPC for that key (**`keygenresultstatus`** → **`ejected`**, **`savedata`** cleared on nodes that finalize; secp256k1 also clears **`cggmp24aux`**). **Requires management key authentication** (same **`Nonce` / `Sig`** pattern as other signed POST bodies; optional **`nodeKey`** binding per [Management signatures](#management-signatures-nodekey)).
 
-**Eligibility (server-enforced):** **`msgCheck`** on the keygen must be **`multi-agree`**; effective protocol must be **CGGMP24** (see **`effectiveEcdsaMpcProtocol`** from [`GET /getKeyGenResultById`](#get-getkeygenresultbyid)). **FROST** keygens and **legacy GG18** keys are **not** eligible.
+**Supported key types (server-enforced):**
+
+| Key type | MPC stack | Exported secret |
+|----------|-----------|-----------------|
+| **`secp256k1`** | **CGGMP24** (`effectiveEcdsaMpcProtocol`: **`cggmp24`**) | 64-hex secp256k1 scalar (same as **`ethereumaddress`** / **`bitcoinp2wpkhmainnet`**) |
+| **`ed25519`** | **FROST/givre** (`effectiveSchnorrMpcProtocol`: **`givre`**) | 32-byte Ed25519 seed (64 hex) |
+| **`bitcoin-taproot`** | **FROST/givre** (`effectiveSchnorrMpcProtocol`: **`givre`**) | Taproot internal key scalar (64 hex; verified against **`taprootinternalpubkeyhex`**) |
+
+**Eligibility (all types):** **`msgCheck`** on the keygen must be **`multi-agree`**. **Not eligible:** **`tx-check`** keygens; **legacy GG18** secp256k1 keys; keygens already **`ejected`**.
 
 **Governance:** **M-of-N accepts** use the **same quorum semantics as signing** for that key (**`KeyGenMpcSigningQuorumFromStored`** / stored threshold vs **`KeyList`**). **Reject** votes (**`POST /keyGenEjectAgree`** with **`accept`:** **`false`**) are **audit-only** and do **not** block completion once enough parties have accepted.
 
@@ -3150,7 +3179,7 @@ Starts a **multi-agree key eject** for a **`secp256k1` CGGMP24** key so the comm
 }
 ```
 
-The node propagates eject protocol traffic over MQTT (`KEYGENEJECT*` message types). Finalization requires a **Rust / CGGMP24 FFI** build on participating nodes (see [`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)). Product-level notes: sibling repo **mpc-auth** [`docs-internal/ETHEREUM_KEY_EJECT_EVALUATION.md`](../../mpc-auth/docs-internal/ETHEREUM_KEY_EJECT_EVALUATION.md) (clone layout: **mpc-config** and **mpc-auth** as sibling directories).
+The node propagates eject protocol traffic over MQTT (`KEYGENEJECT*` message types). Finalization requires mpc-auth built with **`-tags rust`** (CGGMP24 and FROST/givre share reconstruction FFI). After finalize, fetch export material with the key-type-specific POST in the [ejected key export endpoints](#key-eject-export-endpoints) table. Product-level notes: sibling repo **mpc-auth** [`docs-internal/ETHEREUM_KEY_EJECT_EVALUATION.md`](../../mpc-auth/docs-internal/ETHEREUM_KEY_EJECT_EVALUATION.md) (clone layout: **mpc-config** and **mpc-auth** as sibling directories).
 
 <a id="post-keygenejectagree"></a>
 #### `POST /keyGenEjectAgree`
@@ -3174,7 +3203,7 @@ Use **`accept`:** **`false`** for a logged reject (does not veto quorum). Omit *
 
 <a id="get-listkeygenejectrequests"></a>
 #### `GET /listKeyGenEjectRequests`
-Lists **CGGMP24 key eject** flows visible to **this node** (the caller’s **`GET /getNodeKey`** must appear in the eject **`KeyList`**). Use this to drive Pending Keys UI rows while an eject is in progress and to inspect completed flows.
+Lists **key eject** flows visible to **this node** (the caller’s **`GET /getNodeKey`** must appear in the eject **`KeyList`**). Applies to **secp256k1**, **ed25519**, and **bitcoin-taproot** multi-agree keygens. Use this to drive Pending Keys UI rows while an eject is in progress and to inspect completed flows.
 
 **Query Parameters:**
 - `filter` (optional, default: **`pending`**): **`all`**, **`pending`**, or **`done`**
@@ -3317,6 +3346,62 @@ Typical errors: same as [`POST /getEthereumPrivateKey`](#post-getethereumprivate
 **Example:**
 ```bash
 curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/getBitcoinPrivateKey" \
+  -H "Content-Type: application/json" \
+  -d '{"Nonce":43,"Sig":"<management signature>","keyGenId":"KeyGen20260111003720999cf104d0f"}'
+```
+
+<a id="post-geted25519privatekey"></a>
+#### `POST /getEd25519PrivateKey`
+Returns the **exported Ed25519 seed** and chain-specific wallet import formats after a successful **FROST ed25519** eject. **Requires management key authentication** over **`Nonce`**, **`Sig`** (with **`Sig`** cleared for verification), **`keyGenId`**, and optional **`nodeKey`**.
+
+**Preconditions:** Target keygen **`keytype`** is **`ed25519`**; this node must appear in the keygen **`keylist`**; stored result must have **`keygenresultstatus`** **`ejected`**; this node must have persisted the encrypted export blob after finalize.
+
+**Request body:** Same shape as [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) (`keyGenId` identifies the keygen request).
+
+**Success response (`data` fields):**
+
+| Field | Description |
+|-------|-------------|
+| **`privateKeyHex`** / **`ed25519SeedHex`** | 32-byte Ed25519 seed (**64 hex**, no `0x`) |
+| **`publicKeyHex`** | Stored **`pubkeyhex`** |
+| **`solanaPrivateKeyBase58`** | Base58-encoded 64-byte keypair (seed‖pub) |
+| **`nearPrivateKey`**, **`nearPrivateKeyBase58`** | NEAR import formats |
+| **`stellarSecretKey`**, **`sorobanPrivateKey`** | Stellar/Soroban **S…** strkey |
+| **`tonPrivateKeyHex`**, **`suiPrivateKeyHex`** | TON seed hex; Sui **`0x` + seed** |
+| **`solanaaddress`**, **`sorobanaddress`**, etc. | Derived addresses when present on the keygen result |
+
+Typical errors: **`400`** if the key is not **`ejected`** or wrong **`keytype`**; **`403`** if this node is not in **`KeyList`**; **`404`** if there is no export material on this node.
+
+**Example:**
+```bash
+curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/getEd25519PrivateKey" \
+  -H "Content-Type: application/json" \
+  -d '{"Nonce":43,"Sig":"<management signature>","keyGenId":"KeyGen20260111003720999cf104d0f"}'
+```
+
+<a id="post-gettaprootprivatekey"></a>
+#### `POST /getTaprootPrivateKey`
+Returns the **exported Taproot internal key scalar** and P2TR metadata after a successful **FROST bitcoin-taproot** eject. **Requires management key authentication** over **`Nonce`**, **`Sig`** (with **`Sig`** cleared for verification), **`keyGenId`**, and optional **`nodeKey`**.
+
+**Preconditions:** Target keygen **`keytype`** is **`bitcoin-taproot`**; this node must appear in the keygen **`keylist`**; stored result must have **`keygenresultstatus`** **`ejected`**; this node must have persisted the encrypted export blob after finalize.
+
+**Request body:** Same shape as [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) (`keyGenId` identifies the keygen request).
+
+**Success response (`data` fields):**
+
+| Field | Description |
+|-------|-------------|
+| **`privateKeyHex`** | Taproot **internal key** scalar (**64 hex**, no `0x`) |
+| **`taprootInternalPubKeyHex`** | x-only internal key *P* (**64 hex**) |
+| **`outputPubKeyHex`** | On-chain Taproot output key *Q* (**64 hex**; same as **`pubkeyhex`**) |
+| **`bitcoinp2trmainnet`**, **`bitcoinp2trtestnet`**, **`bitcoinp2trsignet`** | **bc1p…** / testnet / signet P2TR addresses when derivable |
+| **`bitcoinPrivateKeyWif`** | Bitcoin mainnet compressed WIF for the internal scalar (when derivable) |
+
+Typical errors: same as [`POST /getEd25519PrivateKey`](#post-geted25519privatekey).
+
+**Example:**
+```bash
+curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/getTaprootPrivateKey" \
   -H "Content-Type: application/json" \
   -d '{"Nonce":43,"Sig":"<management signature>","keyGenId":"KeyGen20260111003720999cf104d0f"}'
 ```
