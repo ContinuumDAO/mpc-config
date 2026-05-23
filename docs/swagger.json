@@ -4836,24 +4836,29 @@
         },
         "node.NodeMgtKeySig": {
             "type": "object",
+            "required": [
+                "nonce",
+                "clientSig",
+                "nodeKey"
+            ],
             "properties": {
-                "Nonce": {
+                "nonce": {
                     "type": "integer",
-                    "description": "Anti-replay nonce from GET /getNodeMgtKeyNonce"
+                    "description": "Anti-replay nonce from GET /getNodeMgtKeyNonce or GET /getPublicMgtKeyNonce"
                 },
-                "Sig": {
+                "clientSig": {
                     "type": "string",
-                    "description": "Management signature over canonical JSON with Sig cleared"
+                    "description": "Management signature over canonical JSON with clientSig cleared (Ed25519 128 hex or EIP-191)"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional: this node's MPC public key (hex); binds the signature to this node"
+                    "description": "Required. This node's MPC public key (128 hex from GET /getNodeKey); binds the signature to this node"
                 }
             }
         },
         "node.BackupDatabasePost": {
             "type": "object",
-            "description": "POST /backupDatabase signed body (verify with Sig cleared).",
+            "description": "POST /backupDatabase signed body (verify with clientSig cleared).",
             "allOf": [
                 {
                     "$ref": "#/definitions/node.NodeMgtKeySig"
@@ -4919,7 +4924,7 @@
         },
         "node.FetchBootstrapKeyPost": {
             "type": "object",
-            "description": "POST /fetchBootstrapKey signed body (typically Nonce + Sig only).",
+            "description": "POST /fetchBootstrapKey signed body (nonce, clientSig, nodeKey).",
             "allOf": [
                 {
                     "$ref": "#/definitions/node.NodeMgtKeySig"
@@ -4988,7 +4993,7 @@
         },
         "node.PostBootstrapKeyPost": {
             "type": "object",
-            "description": "POST /postBootstrapKey signed body (verify with Sig cleared). 32-byte Ed25519 seed as 64 hex chars (same as fetchBootstrapKey ed25519PrivateSeedHex). If configs.yaml PublicMgtKey is set, seed must match it.",
+            "description": "POST /postBootstrapKey signed body (verify with clientSig cleared). 32-byte Ed25519 seed as 64 hex chars (same as fetchBootstrapKey ed25519PrivateSeedHex). If configs.yaml PublicMgtKey is set, seed must match it.",
             "allOf": [
                 {
                     "$ref": "#/definitions/node.NodeMgtKeySig"
@@ -5010,7 +5015,7 @@
         },
         "node.RemoveBootstrapKeyPost": {
             "type": "object",
-            "description": "POST /removeBootstrapKey signed body (typically Nonce + Sig only).",
+            "description": "POST /removeBootstrapKey signed body (nonce, clientSig, nodeKey).",
             "allOf": [
                 {
                     "$ref": "#/definitions/node.NodeMgtKeySig"
@@ -5019,38 +5024,36 @@
         },
         "node.AddManagementKeyPost": {
             "type": "object",
-            "description": "Canonical UTF-8 string to sign: JSON `{\"nonce\":N,\"sig\":\"\"}` (optional `nodeKey` per server encoding). The node generates an Ed25519 key pair and writes PKCS#8 PEM plus `.pub` files under `KEY_ROOT/management_keys/added_key_<N>` (continuum-mcp-server layout). **Ed25519:** set `sig` to 128 hex (allowed bootstrap or added Ed25519 management key); omit `signedMessage` and `clientSig`. Nonce from `GET /getPublicMgtKeyNonce` (add `?publicKey=` when signer is not the default config key). **Ethereum:** `signedMessage` must equal that exact canonical string byte-for-byte; `clientSig` is EIP-191 `personal_sign` from `configs.yaml` `NodeMgtKey`; omit `sig`. Nonce from `GET /getNodeMgtKeyNonce`. Do not send both `sig` and `clientSig`. Requires `NodeMgtKey` on node for Ethereum mode.",
+            "description": "Canonical UTF-8 string to sign: JSON `{\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}`. The node generates an Ed25519 key pair and writes PKCS#8 PEM plus `.pub` files under `KEY_ROOT/management_keys/added_key_<N>` (continuum-mcp-server layout). **Ed25519:** set `clientSig` to 128 hex (allowed bootstrap or added Ed25519 management key); omit `signedMessage`. Nonce from `GET /getPublicMgtKeyNonce` (add `?publicKey=` when signer is not the default config key). **Ethereum:** `signedMessage` must equal that exact canonical string byte-for-byte; `clientSig` is EIP-191 `personal_sign` from `configs.yaml` `NodeMgtKey`. Nonce from `GET /getNodeMgtKeyNonce`. Requires `nodeKey` (GET /getNodeKey). Requires `NodeMgtKey` on node for Ethereum mode.",
             "required": [
-                "nonce"
+                "nonce",
+                "nodeKey"
             ],
             "properties": {
                 "nonce": {
                     "type": "integer",
                     "description": "Anti-replay nonce."
                 },
-                "sig": {
+                "clientSig": {
                     "type": "string",
-                    "description": "Ed25519 — 128 hex. Omit when using EIP-191 `signedMessage` + `clientSig`."
+                    "description": "Ed25519 128 hex, or EIP-191 when signedMessage is set."
                 },
                 "signedMessage": {
                     "type": "string",
-                    "description": "Must equal canonical JSON exactly."
-                },
-                "clientSig": {
-                    "type": "string",
-                    "description": "EIP-191 output for signedMessage."
+                    "description": "Must equal canonical JSON exactly (Ethereum)."
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional MPC node public key binding."
+                    "description": "Required MPC node public key (128 hex from GET /getNodeKey)."
                 }
             }
         },
         "node.RemoveManagementKeyPost": {
             "type": "object",
-            "description": "Canonical UTF-8 string to sign: JSON `{\"publicKey\":\"<64-hex-lowercase-target>\",\"nonce\":N,\"sig\":\"\"}` (optional `nodeKey`). Also removes `KEY_ROOT/management_keys/added_key_<N>` and `added_key_<N>.pub` when present. **Ed25519:** `sig` 128 hex from an allowed key **other than** `publicKey`; nonce from `GET /getPublicMgtKeyNonce` for the **signer**. **Ethereum:** `signedMessage` must equal canonical string; `clientSig` EIP-191 from `NodeMgtKey`; omit `sig`; nonce from `GET /getNodeMgtKeyNonce`. Do not combine `sig` with `clientSig`.",
+            "description": "Canonical UTF-8 string to sign: JSON `{\"publicKey\":\"<64-hex-lowercase-target>\",\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}`. Also removes `KEY_ROOT/management_keys/added_key_<N>` and `added_key_<N>.pub` when present. **Ed25519:** `clientSig` 128 hex from an allowed key **other than** `publicKey`; nonce from `GET /getPublicMgtKeyNonce` for the **signer**. **Ethereum:** `signedMessage` must equal canonical string; `clientSig` EIP-191 from `NodeMgtKey`; nonce from `GET /getNodeMgtKeyNonce`.",
             "required": [
-                "publicKey"
+                "publicKey",
+                "nodeKey"
             ],
             "properties": {
                 "publicKey": {
@@ -5061,43 +5064,41 @@
                     "type": "integer",
                     "description": "Anti-replay nonce."
                 },
-                "sig": {
+                "clientSig": {
                     "type": "string",
-                    "description": "Ed25519 — 128 hex. Omit for Ethereum body."
+                    "description": "Ed25519 128 hex, or EIP-191 when signedMessage is set."
                 },
                 "signedMessage": {
                     "type": "string",
-                    "description": "Canonical JSON exactly."
-                },
-                "clientSig": {
-                    "type": "string",
-                    "description": "EIP-191 for signedMessage."
+                    "description": "Canonical JSON exactly (Ethereum)."
                 },
                 "nodeKey": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Required MPC node public key (128 hex from GET /getNodeKey)."
                 }
             }
         },
         "node.KeyGenEjectRequestPost": {
             "type": "object",
-            "description": "POST /keyGenEjectRequest. Starts multi-agree eject for a completed keygen (`keyGenId` = keygen request id). Supported key types: secp256k1 (CGGMP24), ed25519 (FROST/givre), bitcoin-taproot (FROST/givre). Requires msgCheck multi-agree. Rejects tx-check, legacy GG18 secp256k1, and already-ejected keygens. Requires management proof: verify with **Sig** cleared over canonical JSON including **Nonce**, **keyGenId**, optional **purpose**, optional **nodeKey**. Finalization requires mpc-auth built with -tags rust. See mpc-config docs/references/API_IMPLEMENTATION.md.",
+            "description": "POST /keyGenEjectRequest. Starts multi-agree eject for a completed keygen (`keyGenId` = keygen request id). Supported key types: secp256k1 (CGGMP24), ed25519 (FROST/givre), bitcoin-taproot (FROST/givre). Requires msgCheck multi-agree. Rejects tx-check, legacy GG18 secp256k1, and already-ejected keygens. Requires management proof: verify with **clientSig** cleared over canonical JSON including **nonce**, **nodeKey**, **keyGenId**, optional **purpose**. Finalization requires mpc-auth built with -tags rust. See mpc-config docs/references/API_IMPLEMENTATION.md.",
             "required": [
-                "Nonce",
-                "Sig",
+                "nonce",
+                "clientSig",
+                "nodeKey",
                 "keyGenId"
             ],
             "properties": {
-                "Nonce": {
+                "nonce": {
                     "type": "integer",
                     "description": "Anti-replay nonce from GET /getNodeMgtKeyNonce or GET /getPublicMgtKeyNonce"
                 },
-                "Sig": {
+                "clientSig": {
                     "type": "string",
-                    "description": "Management signature over canonical JSON with Sig as empty string"
+                    "description": "Management signature over canonical JSON with clientSig as empty string"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey — binds signature to this node."
+                    "description": "Required. 128-hex MPC node id from GET /getNodeKey — binds signature to this node."
                 },
                 "keyGenId": {
                     "type": "string",
@@ -5143,22 +5144,23 @@
         },
         "node.GetEthereumPrivateKeyPost": {
             "type": "object",
-            "description": "POST /getEthereumPrivateKey. Returns decrypted **64-hex** secp256k1 scalar after successful eject, plus Bitcoin mainnet **privateKeyWif** / **bitcoinPrivateKeyWif** (compressed WIF) and **bitcoinP2WPKHMainnet** when derivable from the same scalar. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node. After eject, each KeyList participant stores export ciphertext locally (encrypted to that node's key); use POST /getEthereumPrivateKey on any participant that completed local finalize.",
+            "description": "POST /getEthereumPrivateKey. Returns decrypted **64-hex** secp256k1 scalar after successful eject, plus Bitcoin mainnet **privateKeyWif** / **bitcoinPrivateKeyWif** (compressed WIF) and **bitcoinP2WPKHMainnet** when derivable from the same scalar. Requires management proof (nonce, clientSig with clientSig cleared, nodeKey). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node. After eject, each KeyList participant stores export ciphertext locally (encrypted to that node's key); use POST /getEthereumPrivateKey on any participant that completed local finalize.",
             "required": [
-                "Nonce",
-                "Sig",
+                "nonce",
+                "clientSig",
+                "nodeKey",
                 "keyGenId"
             ],
             "properties": {
-                "Nonce": {
+                "nonce": {
                     "type": "integer"
                 },
-                "Sig": {
+                "clientSig": {
                     "type": "string"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended) 128-hex MPC node id binding"
+                    "description": "Required 128-hex MPC node id binding"
                 },
                 "keyGenId": {
                     "type": "string",
@@ -5231,22 +5233,23 @@
         },
         "node.GetBitcoinPrivateKeyPost": {
             "type": "object",
-            "description": "POST /getBitcoinPrivateKey. Returns Bitcoin mainnet compressed **privateKeyWif** for the ejected secp256k1 scalar (same underlying key as POST /getEthereumPrivateKey). Also returns **privateKeyHex** and **bitcoinP2WPKHMainnet**. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node. **secp256k1 only.**",
+            "description": "POST /getBitcoinPrivateKey. Returns Bitcoin mainnet compressed **privateKeyWif** for the ejected secp256k1 scalar (same underlying key as POST /getEthereumPrivateKey). Also returns **privateKeyHex** and **bitcoinP2WPKHMainnet**. Requires management proof (nonce, clientSig with clientSig cleared, nodeKey). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node. **secp256k1 only.**",
             "required": [
-                "Nonce",
-                "Sig",
+                "nonce",
+                "clientSig",
+                "nodeKey",
                 "keyGenId"
             ],
             "properties": {
-                "Nonce": {
+                "nonce": {
                     "type": "integer"
                 },
-                "Sig": {
+                "clientSig": {
                     "type": "string"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended) 128-hex MPC node id binding"
+                    "description": "Required 128-hex MPC node id binding"
                 },
                 "keyGenId": {
                     "type": "string",
@@ -5260,22 +5263,23 @@
         },
         "node.GetEd25519PrivateKeyPost": {
             "type": "object",
-            "description": "POST /getEd25519PrivateKey. Returns decrypted **64-hex Ed25519 seed** after successful FROST ed25519 eject, plus Solana, NEAR, Stellar/Soroban, TON, and Sui wallet import fields when derivable. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen **keytype** must be **ed25519**; **keygenresultstatus** must be **ejected** on this node.",
+            "description": "POST /getEd25519PrivateKey. Returns decrypted **64-hex Ed25519 seed** after successful FROST ed25519 eject, plus Solana, NEAR, Stellar/Soroban, TON, and Sui wallet import fields when derivable. Requires management proof (nonce, clientSig with clientSig cleared, nodeKey). Caller node must be in the keygen **KeyList**; keygen **keytype** must be **ed25519**; **keygenresultstatus** must be **ejected** on this node.",
             "required": [
-                "Nonce",
-                "Sig",
+                "nonce",
+                "clientSig",
+                "nodeKey",
                 "keyGenId"
             ],
             "properties": {
-                "Nonce": {
+                "nonce": {
                     "type": "integer"
                 },
-                "Sig": {
+                "clientSig": {
                     "type": "string"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended) 128-hex MPC node id binding"
+                    "description": "Required 128-hex MPC node id binding"
                 },
                 "keyGenId": {
                     "type": "string",
@@ -5285,22 +5289,23 @@
         },
         "node.GetTaprootPrivateKeyPost": {
             "type": "object",
-            "description": "POST /getTaprootPrivateKey. Returns Taproot internal key scalar, internal/output x-only pubkeys, P2TR addresses, and optional Bitcoin mainnet WIF after successful FROST bitcoin-taproot eject. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen **keytype** must be **bitcoin-taproot**; **keygenresultstatus** must be **ejected** on this node.",
+            "description": "POST /getTaprootPrivateKey. Returns Taproot internal key scalar, internal/output x-only pubkeys, P2TR addresses, and optional Bitcoin mainnet WIF after successful FROST bitcoin-taproot eject. Requires management proof (nonce, clientSig with clientSig cleared, nodeKey). Caller node must be in the keygen **KeyList**; keygen **keytype** must be **bitcoin-taproot**; **keygenresultstatus** must be **ejected** on this node.",
             "required": [
-                "Nonce",
-                "Sig",
+                "nonce",
+                "clientSig",
+                "nodeKey",
                 "keyGenId"
             ],
             "properties": {
-                "Nonce": {
+                "nonce": {
                     "type": "integer"
                 },
-                "Sig": {
+                "clientSig": {
                     "type": "string"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended) 128-hex MPC node id binding"
+                    "description": "Required 128-hex MPC node id binding"
                 },
                 "keyGenId": {
                     "type": "string",

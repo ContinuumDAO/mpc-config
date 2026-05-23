@@ -110,26 +110,27 @@ Client: <IP> Called API: <package>.<function>
 ```
 
 <a id="management-signatures-nodekey"></a>
-### Management signatures and replay binding (`nodeKey`)
+### Management signatures (`nonce`, `clientSig`, `nodeKey`)
 
-**Historical behavior (still accepted):** For most authenticated management calls, the server verifies:
+Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this JSON envelope (field names are **lowercase**):
 
-- Proof that you hold **`NodeMgtKey`** (Ethereum wallet **`personal_sign`**) **or** an allowed **Ed25519** management key, and  
-- **`nonce`** (anti-reuse for the same operator key),
+```json
+{
+  "nonce": 0,
+  "clientSig": "",
+  "nodeKey": "<128-hex from GET /getNodeKey>"
+}
+```
 
-over a payload that traditionally did **not** name the MPC node (the node's **128-hex “node key”**, i.e. the P2P / TSS id returned by **`GET /getNodeKey`**). The **management key** proves who signed, but the message alone did **not** always bind to **which node's management endpoint** must accept it. Where one operator identity maps to a single physical node this is harmless; **if the same management key controls multiple nodes**, a blob signed once could be replayed toward another node's API unless the payload distinguishes the target.
+- **`nonce`**: anti-replay counter from **`GET /getNodeMgtKeyNonce`** (Ethereum **NodeMgtKey**) or **`GET /getPublicMgtKeyNonce`** (Ed25519; add **`?publicKey=`** for added keys).
+- **`clientSig`**: management proof. For verification the server marshals the **same JSON with `clientSig` cleared** (`""`), then checks the signature you send in **`clientSig`**. **Ed25519:** 128 hex from an allowed management key. **Ethereum:** EIP‑191 **`personal_sign`** on **`signedMessage`** when the endpoint supports that dual mode (e.g. **`POST /addManagementKey`**).
+- **`nodeKey`**: **required** on JSON payloads. Must equal this node's MPC public key from **`GET /getNodeKey`** (128 hex, no **`0x`**). Binds the signature to this node so it cannot be replayed on another node that shares the same management key.
 
-**New (recommended):** Clients **SHOULD** include a JSON property **`nodeKey`** in the **exact UTF-8 string that is hashed/signed** (**same bytes** the server verifies):
+**Legacy `Nonce` / `Sig` / `sig` field names are no longer accepted** on **`NodeMgtKeySig`** routes.
 
-- **`nodeKey`**: value from **`GET /getNodeKey`** for **this** node (128 hexadecimal characters; no **`0x`** prefix).
+**Non-JSON `signedMessage`:** Some endpoints sign an opaque string (e.g. **`POST /configUpdateImplement`** prefixed line, PEM for **`POST /postMSQTTKey`**). **`nodeKey` JSON binding is skipped** when the signed bytes are not JSON; those flows still require **`nonce` + management proof** via their documented fields.
 
-**Backward compatibility:** If the payload parses as JSON and **`nodeKey` is omitted**, the request remains **accepted**; the server logs a **deprecation warning**. If **`nodeKey` is present**, it **must** match this server's node key **`or`** the handler returns **`403 Forbidden`**.
-
-**Non-JSON `signedMessage`:** Some endpoints sign an opaque string (e.g. **`POST /configUpdateImplement`** prefixed line, PEM for **`POST /postMSQTTKey`**). These are **not** JSON-parseable **`nodeKey`** binding is **skipped**; they continue to rely on **nonce + key proof** alone until an API revision introduces a backwards-compatible signed envelope.
-
-**Swagger:** **`nodeKey`** appears on **`NodeMgtKeySig`-style bodies and documented `signedMessage` JSON patterns** in `swagger.yaml`; see also this section.
-
-**Future:** **`nodeKey` may become mandatory** on JSON payloads; migrate clients early.
+**Swagger:** **`node.NodeMgtKeySig`** and endpoint schemas in **`swagger.yaml`** / **`docs/swagger.json`** (mpc-auth and mpc-config).
 
 <a id="browser-https-and-loopback-http-jwt"></a>
 ### Browser HTTPS and loopback HTTP (JWT)
@@ -151,7 +152,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getPublicMgtKey`](#get-getpublicmgtkey) - List allowed Ed25519 public keys (plain `[]string`, 64 hex); same allow-list as above. **Also served on `PublicDiscoveryPort`** (see [Public discovery HTTP](#public-discovery-http)) alongside `GET /getNodeMgtKey`.
 - [`GET /getPublicMgtKeyNonce`](#get-getpublicmgtkeynonce) - Get current nonce for an Ed25519 key (optional `?publicKey=` for added keys)
 - [`POST /verifyMgtKey`](#post-verifymgtkey) - Verify Ed25519 management key (attach-time proof; no other side effects)
-- [`POST /addManagementKey`](#post-addmanagementkey) - Generate a new Ed25519 management key pair on the node, register its public key, and write local key files (`added_key_<N>` + `.pub`; continuum-mcp-server layout). Authorize with Ed25519 `sig` or EIP‑191 `NodeMgtKey` (`signedMessage` + `clientSig`).
+- [`POST /addManagementKey`](#post-addmanagementkey) - Generate a new Ed25519 management key pair on the node, register its public key, and write local key files (`added_key_<N>` + `.pub`; continuum-mcp-server layout). Authorize with Ed25519 **`clientSig`** or EIP‑191 **NodeMgtKey** (`signedMessage` + **`clientSig`**).
 - [`POST /removeManagementKey`](#post-removemanagementkey) - Soft-remove an added Ed25519 key and delete its local `added_key_<N>` files (**same dual auth**; Ed25519 signer must be allowed and ≠ key removed)
 - [`GET /getAllowedKeyTypes`](#get-getallowedkeytypes) - Get allowed key types
 - [`GET /getAllowedMsgCheckTypes`](#get-getallowedmsgchecktypes) - Get allowed message check types
@@ -247,7 +248,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /listGroupResults`](#get-listgroupresults) - List configured groups and member node keys (`nodeKeys`); optional filters `node_key`, `exclude_node_key`
 
 ### KeyGen Messaging
-KeyGen messaging is documented in `./API_KEYGEN_MESSAGING.md`. Response format and conventions follow this document (`./API_IMPLEMENTATION.md`). **sendMessage, markMessageRead, multiMarkMessagesRead, deleteMessage, and multiDeleteMessages require a management key signature** (Ethereum wallet / NodeMgtKey or Ed25519, depending on the client key in the keyGen); see API_KEYGEN_MESSAGING.md for Nonce/Sig and getMessageToSign / getNodeMgtKeyNonce / getAllowedEd25519MgtKeys. For **Open Claw** (or similar), a poll-and-mark-read helper that uses `listMessages` + `multiMarkMessagesRead` is `$MPA_PATH/scripts/keygen_messaging_agent_poll.py`; scheduling and env are described in `../skill/SKILL.md` (**KeyGen inbox poll**). Ed25519 management signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`.
+KeyGen messaging is documented in `./API_KEYGEN_MESSAGING.md`. Response format and conventions follow this document (`./API_IMPLEMENTATION.md`). **sendMessage, markMessageRead, multiMarkMessagesRead, deleteMessage, and multiDeleteMessages require a management key signature** (Ethereum wallet / NodeMgtKey or Ed25519, depending on the client key in the keyGen); see API_KEYGEN_MESSAGING.md for **`nonce` / `clientSig` / `nodeKey`** and getMessageToSign / getNodeMgtKeyNonce / getAllowedEd25519MgtKeys. For **Open Claw** (or similar), a poll-and-mark-read helper that uses `listMessages` + `multiMarkMessagesRead` is `$MPA_PATH/scripts/keygen_messaging_agent_poll.py`; scheduling and env are described in `../skill/SKILL.md` (**KeyGen inbox poll**). Ed25519 management signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`.
 - [`POST /sendMessage`](#post-sendmessage) - Send a message (top-level or reply) in a keyGen channel (mgt key required)
 - [`GET /listMessages`](#get-listmessages) - List messages (with unread, time range, top_level, pagination)
 - [`GET /getMessageById`](#get-getmessagebyid) - Get a single message by id
@@ -322,7 +323,7 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 <a id="post-maintenance-requestrestartprep"></a>
 #### `POST /maintenance/requestRestartPrep`
 
-**Signing:** `POST /maintenance/requestRestartPrep` accepts JSON `{"nonce": <int>, "sig": "<hex>", "nodeKey": "<optional 128-hex from GET /getNodeKey>"}`. The server verifies **`VerifyMgtKeySig`** over canonical JSON with **`sig` emptied** (same semantics as other management-signed POSTs); see [Management signatures and replay binding (`nodeKey`)](#management-signatures-nodekey). Verification uses **`configs.yaml` on disk** when present for **`NodeMgtKey`** and **`IgnoreMgtKeySigCheck`**, matching `POST /configUpdatePlan`.
+**Signing:** `POST /maintenance/requestRestartPrep` accepts JSON `{"nonce": <int>, "clientSig": "<hex>", "nodeKey": "<128-hex from GET /getNodeKey>"}`. The server verifies **`VerifyMgtKeySig`** over canonical JSON with **`clientSig` cleared** (same semantics as other management-signed POSTs); see [Management signatures (`nonce`, `clientSig`, `nodeKey`)](#management-signatures-nodekey).
 
 <a id="get-maintenance-restartgate"></a>
 #### `GET /maintenance/restartGate`
@@ -401,7 +402,7 @@ These checks from **`GET /checkDatabase`** are **reports only** — that handler
 
 **When to use:** After **`GET /checkDatabase`** shows repairable issue codes and you have entered [**maintenance draining**](#restart-quiescence-maintenance-detail) (`POST /maintenance/requestRestartPrep`, poll **`GET /maintenance/restartGate`** until **`readyForProcessExit`**).
 
-**Signing:** Canonical JSON with **`Sig`** cleared for **`VerifyMgtKeySig`** — same **`Nonce` / `Sig` / optional `nodeKey`** pattern as **`POST /backupDatabase`** ([management signatures](#management-signatures-nodekey)).
+**Signing:** Canonical JSON with **`clientSig`** cleared for **`VerifyMgtKeySig`** — same **`nonce` / `clientSig` / `nodeKey`** pattern as **`POST /backupDatabase`** ([management signatures](#management-signatures-nodekey)).
 
 **Body:**
 
@@ -480,7 +481,7 @@ These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or all
 
 **Request:** **`multipart/form-data`** with:
 
-- **`meta`:** string holding management-signed JSON (**`PostDatabaseBackupPost`**): **`Nonce`**, **`Sig`**, **`contentSha256`** (hex **SHA-256** of the raw bytes sent in **`file`**), optional **`nodeKey`** (same binding pattern as other management POSTs).
+- **`meta`:** string holding management-signed JSON (**`PostDatabaseBackupPost`**): **`nonce`**, **`clientSig`**, **`nodeKey`**, **`contentSha256`** (hex **SHA-256** of the raw bytes sent in **`file`**).
 - **`file`:** the backup **`.json`** file (UTF-8), unchanged from download or from another node that shares the same **`PublicMgtKey`** / **`bootstrap_key`** identity.
 
 **Validation:** The server checks **`contentSha256`** matches **`file`**, verifies **`VerifyMgtKeySig`** on **`meta`**, then parses the envelope and applies the same logical checks as **`POST /restoreDatabase`** through successful **AES-GCM decrypt** with this node’s **bootstrap** seed (without writing to Mongo yet). **`publicMgtKey`** / **`nodeKeyPublic`** in the envelope must match this node.
@@ -521,7 +522,7 @@ These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or all
 
 **Quiescence:** **None** — this route is **not** in **`maintenancePathsCritical`**; it is **not** refused with **503** while **`draining`**.
 
-**Body:** management-signed JSON (**`PostBootstrapKeyPost`**): **`Nonce`**, **`Sig`**, **`ed25519PrivateSeedHex`** (64 hex chars, 32-byte seed; optional **`nodeKey`** per [management signatures](#management-signatures-nodekey)). Canonical JSON for verification uses **`Sig`** cleared. If **`configs.yaml` `PublicMgtKey`** is non-empty, the seed must correspond to that public key (same check as other bootstrap provisioning).
+**Body:** management-signed JSON (**`PostBootstrapKeyPost`**): **`nonce`**, **`clientSig`**, **`nodeKey`**, **`ed25519PrivateSeedHex`** (64 hex chars, 32-byte seed). Canonical JSON for verification uses **`clientSig` cleared.
 
 **Success when absent:** writes the file with mode **`0600`** (and creates the directory **`0700`** if needed). **`data`:** **`path`**, **`wrote: true`**, **`alreadyPresent: false`**.
 
@@ -536,7 +537,7 @@ These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or all
 
 **Quiescence:** **None** — same as **`POST /postBootstrapKey`** (not tracked for restart draining).
 
-**Body:** management-signed JSON (**`RemoveBootstrapKeyPost`**): **`Nonce`**, **`Sig`**, optional **`nodeKey`**.
+**Body:** management-signed JSON (**`RemoveBootstrapKeyPost`**): **`nonce`**, **`clientSig`**, **`nodeKey`**.
 
 **Success when file existed:** **`data`:** **`path`**, **`removed: true`**, **`message`** **`Bootstrap key file removed`**.
 
@@ -892,17 +893,18 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPublicMgtKeyNonce?publicKey=YOUR_64_HEX_
 
 <a id="post-verifymgtkey"></a>
 #### `POST /verifyMgtKey`
-Verify-only endpoint for Ed25519 management key ownership. Accepts `Nonce` and `Sig` (128-hex Ed25519 signature over the exact JSON `{"Nonce":<nonce>,"Sig":""}`). The node verifies the signature with one of the allowed Ed25519 keys (config `PublicMgtKey` or keys added via `addManagementKey`), consumes the nonce (same semantics as other management endpoints), and returns `code: 0` on success. No other state is changed. Used by the continuumdao-node-app when the user clicks "Attach with Ed25519" to prove key ownership at attach time without performing any other action.
+Verify-only endpoint for Ed25519 management key ownership. Accepts **`nonce`**, **`clientSig`**, and **`nodeKey`** (128-hex Ed25519 signature over the exact JSON `{"nonce":<n>,"clientSig":"","nodeKey":"<128-hex>"}`). The node verifies the signature with one of the allowed Ed25519 keys (config `PublicMgtKey` or keys added via `addManagementKey`), consumes the nonce (same semantics as other management endpoints), and returns `code: 0` on success. No other state is changed. Used by the continuumdao-node-app when the user clicks "Attach with Ed25519" to prove key ownership at attach time without performing any other action.
 
 **Request body:**
-- `Nonce` (required): Current nonce from `GET /getPublicMgtKeyNonce` (or `?publicKey=<your_key>`).
-- `Sig` (required): Ed25519 signature, 128 hex characters, over the exact message `{"Nonce":<that_nonce>,"Sig":""}` (same nonce as in the body). Sign with the private key that matches an allowed Ed25519 management key.
+- `nonce` (required): Current nonce from `GET /getPublicMgtKeyNonce` (or `?publicKey=<your_key>`).
+- `clientSig` (required): Ed25519 signature, 128 hex characters, over the exact message with `clientSig` cleared (same nonce and `nodeKey` as in the body).
+- `nodeKey` (required): This node's MPC public key from `GET /getNodeKey` (128 hex).
 
 **Response (success):** `{ "code": 0, "error": "", "data": null }`
 
-**Response (failure):** `code` non-zero, `error` describes the reason (e.g. invalid signature, nonce mismatch, nonce already used, or no Ed25519 key configured).
+**Response (failure):** `code` non-zero, `error` describes the reason (e.g. invalid signature, nonce mismatch, nonce already used, missing/wrong `nodeKey`, or no Ed25519 key configured).
 
-**Example flow:** 1) `GET /getPublicMgtKeyNonce` → get nonce. 2) Build message `{"Nonce":<nonce>,"Sig":""}` and sign with your Ed25519 private key. 3) `POST /verifyMgtKey` with body `{"Nonce":<nonce>,"Sig":"<128_hex_signature>"}`.
+**Example flow:** 1) `GET /getNodeKey` and `GET /getPublicMgtKeyNonce` → get `nodeKey` and nonce. 2) Build message `{"nonce":<n>,"clientSig":"","nodeKey":"<128-hex>"}` and sign with your Ed25519 private key. 3) `POST /verifyMgtKey` with body including `clientSig`.
 
 <a id="post-addmanagementkey"></a>
 #### `POST /addManagementKey`
@@ -921,28 +923,27 @@ At least **one** Ed25519 allowance must exist on the node (bootstrap **`PublicMg
 
 ##### Canonical payload (same bytes for Ed25519 and EIP‑191 modes)
 
-Compute the canonical UTF‑8 JSON string (**field order**, **`sig`** exactly **`""`**):
+Compute the canonical UTF‑8 JSON string (**field order**, **`clientSig`** exactly **`""`**, **`nodeKey`** required):
 
 ```json
-{"nonce":N,"sig":""}
+{"nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
 ```
-
-Optional **`nodeKey`** (MPC node 128‑hex pubkey) follows the same rules as other management POSTs when you include it server-side — your client MUST match mpc-auth’s emitted JSON exactly (omit `nodeKey` if unused).
 
 ##### Mode A — Ed25519 signer
 
 1. Obtain **`nonce`** from [`GET /getPublicMgtKeyNonce`](#get-getpublicmgtkeynonce); add **`?publicKey=<your_64_hex_signer>`** when the signer is an **Added key** rather than the default config key.
 
-2. Set **`sig`** to the raw Ed25519 signature (**128 hex**, optional **`0x`** stripped).
+2. Set **`clientSig`** to the raw Ed25519 signature (**128 hex**, optional **`0x`** stripped).
 
-3. **Do not** set **`signedMessage`** or **`clientSig`**.
+3. **Do not** set **`signedMessage`**.
 
 Example POST shape:
 
 ```json
 {
   "nonce": 7,
-  "sig": "<128_hex>"
+  "clientSig": "<128_hex>",
+  "nodeKey": "<128-hex>"
 }
 ```
 
@@ -952,18 +953,17 @@ Example POST shape:
 
 2. Obtain **`nonce`** from [`GET /getNodeMgtKeyNonce`](#get-getnodemgtkeynonce).
 
-3. Set **`signedMessage`** to the **exact** canonical UTF‑8 string (must byte‑match mpc-auth — i.e. the same UTF‑8 as Go `encoding/json.Marshal` would emit for **`{nonce, sig: "", …}`**, with optional **`nodeKey`** only if present in the marshal output).
+3. Set **`signedMessage`** to the **exact** canonical UTF‑8 string (must byte‑match mpc-auth — i.e. the same UTF‑8 as Go `encoding/json.Marshal` would emit for **`{nonce, clientSig: "", nodeKey}`**).
 
 4. Set **`clientSig`** to EIP‑191 **`personal_sign(signedMessage)`** (`0x` prefix allowed).
-
-5. **`Omit` `sig`** from the POST body when using EIP‑191 (`sig` empty is allowed). Do not send meaningful **`sig`** (128‑hex Ed25519) together with **`clientSig`**.
 
 Example POST shape:
 
 ```json
 {
   "nonce": 3,
-  "signedMessage": "{\"nonce\":3,\"sig\":\"\"}",
+  "nodeKey": "<128-hex>",
+  "signedMessage": "{\"nonce\":3,\"clientSig\":\"\",\"nodeKey\":\"...\"}",
   "clientSig": "0x..."
 }
 ```
@@ -996,18 +996,18 @@ Also deletes **`KEY_ROOT/management_keys/added_key_<N>`** and **`added_key_<N>.p
 ##### Canonical UTF‑8 string
 
 ```json
-{"publicKey":"<64_hex_lowercase_of_key_being_removed>","nonce":N,"sig":""}
+{"publicKey":"<64_hex_lowercase_of_key_being_removed>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
 ```
 
 ##### Mode A — Ed25519
 
 The **signer must be allowed** AND **≠** **`publicKey`** (you cannot authorize removal by signing **as** the key you are retiring). Nonce comes from **`GET /getPublicMgtKeyNonce?publicKey=<signer_hex>`**.
 
-Post `{ publicKey, nonce, sig:<128_hex> }` (omit **`signedMessage`**, **`clientSig`**).
+Post `{ publicKey, nonce, clientSig, nodeKey }` (omit **`signedMessage`**).
 
 ##### Mode B — Ethereum `NodeMgtKey`
 
-Use **`GET /getNodeMgtKeyNonce`**; **`signedMessage`** canonical string must match server encoding; **`clientSig`** EIP‑191; omit **`sig`**.
+Use **`GET /getNodeMgtKeyNonce`**; **`signedMessage`** canonical string must match server encoding; **`clientSig`** EIP‑191; include **`nodeKey`**.
 
 **Swagger:** **`#/definitions/node.RemoveManagementKeyPost`**
 
