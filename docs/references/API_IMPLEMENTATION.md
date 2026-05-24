@@ -17,7 +17,7 @@ The Distributed Auth Management API provides a RESTful interface for managing MP
 
 <a id="public-discovery-http"></a>
 ### Public discovery HTTP
-If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /getPreferredSigner`**, **`GET /health`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`$MANAGEMENT_PORT`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
+If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /getPreferredSigner`**, **`GET /getPreferredKeyGen`**, **`GET /health`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`$MANAGEMENT_PORT`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
 
 **`GET /getNodeMgtKey`** returns the configured **`NodeMgtKey`** (Ethereum management address from `configs.yaml` / env) as a JSON string in **`data`**. No authentication on this listener; use it with **`GET /getNodeMgtKeyNonce`** for Ethereum wallet management signing (`personal_sign`).
 
@@ -128,7 +128,7 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 **Legacy `Nonce` / `Sig` / `sig` field names are no longer accepted** on **`NodeMgtKeySig`** routes.
 
-**Non-JSON `signedMessage`:** Some endpoints sign an opaque string (e.g. **`POST /configUpdateImplement`** prefixed line, PEM for **`POST /postMSQTTKey`**). **`nodeKey` JSON binding is skipped** when the signed bytes are not JSON; those flows still require **`nonce` + management proof** via their documented fields.
+**Non-JSON signed payloads:** Some endpoints sign an opaque string (e.g. **`POST /configUpdateImplement`** prefixed line, **`caCertPem`** for **`POST /postMSQTTKey`**). Include **`nodeKey`** in the JSON request body (validated separately); the signed bytes are not JSON.
 
 **Swagger:** **`node.NodeMgtKeySig`** and endpoint schemas in **`swagger.yaml`** / **`docs/swagger.json`** (mpc-auth and mpc-config).
 
@@ -198,6 +198,10 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 ### Agent preferred signer (local node only)
 - [`GET /getPreferredSigner`](#get-getpreferredsigner) - Get the default Ed25519 public key for agent signing if still an active management key. **Also on `PublicDiscoveryPort`** when split from **`ManagementAPIsPort`** (see [Public discovery HTTP](#public-discovery-http)).
 - [`POST /setPreferredSigner`](#post-setpreferredsigner) - Store an **active** allowed Ed25519 management key as default for agents (requires mgt key)
+
+### Agent preferred KeyGen (local node only)
+- [`GET /getPreferredKeyGen`](#get-getpreferredkeygen) - Get the default multi-agree KeyGen for agent **`POST /multiSignRequest`** if still eligible. **Also on `PublicDiscoveryPort`** when split from **`ManagementAPIsPort`** (see [Public discovery HTTP](#public-discovery-http)).
+- [`POST /postPreferredKeyGen`](#post-postpreferredkeygen) - Store a multi-agree KeyGen request id as the agent default for composing multiSignRequest payloads (requires mgt key)
 
 ### Agent LLM config (local filesystem)
 - [`GET /agentLlmConfigStatus`](#get-agentllmconfigstatus) - Read agent LLM settings for the node agent (masked API key; **read JWT** on Browser HTTPS / loopback)
@@ -1434,7 +1438,7 @@ curl -H "Authorization: Bearer <JWT>" "https://localhost:8443/getWebTLSKey"
 <a id="post-postmqttkey"></a>
 #### `POST /postMSQTTKey`
 
-**Auth:** Management key (`clientSig`), same family as **`POST /postChainDetails`**. **`signedMessage`** must equal **`caCertPem`** (trimmed). **`caCertPem`:** valid X.509 **CERTIFICATE** PEM, max **512 KiB**.
+**Auth:** Management key (`clientSig`), same family as **`POST /postChainDetails`**. Sign the **`caCertPem`** bytes (opaque PEM, not JSON). Include **`nonce`**, **`clientSig`**, and **`nodeKey`** (128 hex from `GET /getNodeKey`) in the JSON body. **`caCertPem`:** valid X.509 **CERTIFICATE** PEM, max **512 KiB**.
 
 **`data` on success:** `{ "path", "message" }` (e.g. `"MQTT broker CA PEM written"`). Write is atomic; parent directories may be created. Service reload is **not** automatic.
 
@@ -1443,9 +1447,9 @@ curl -H "Authorization: Bearer <JWT>" "https://localhost:8443/getWebTLSKey"
 ```json
 {
   "nonce": 0,
-  "caCertPem": "-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\n",
-  "signedMessage": "-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\n",
-  "clientSig": "0x... or 128-hex Ed25519"
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
+  "caCertPem": "-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\n"
 }
 ```
 
@@ -1453,7 +1457,7 @@ curl -H "Authorization: Bearer <JWT>" "https://localhost:8443/getWebTLSKey"
 ```bash
 curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postMSQTTKey" \
   -H "Content-Type: application/json" \
-  -d '{"nonce":0,"caCertPem":"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n","signedMessage":"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n","clientSig":"..."}'
+  -d '{"nonce":0,"clientSig":"...","nodeKey":"<128-hex>","caCertPem":"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n"}'
 ```
 
 **Why `configUpdatePlan` and `configUpdateImplement`?** mpc-auth uses two steps on purpose:
@@ -1549,7 +1553,7 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postMSQTTKey" \
 
 **Rotation fields:** **`rotationPublicMgtKeyClientSig`** is **required** when the plan introduces the **first** **`PublicMgtKey`** (was empty in `configs.yaml`). **`rotationNodeMgtKeyClientSig`** is **optional** when **`NodeMgtKey`** changes: if present, it must be **`personal_sign(signedMessage)`** from the **new** Ethereum address; if omitted, **`clientSig`** alone (e.g. Ed25519 from an allowed key) is sufficient. See **`preview.implementSignSteps`** for bootstrap **`PublicMgtKey`** and the primary **`clientSig`** step.
 
-**Body:** `plannedYaml` (**exact** string from **`configUpdatePlan`**), `nonce`, `clientSig`, `signedMessage`; **`rotationPublicMgtKeyClientSig`** when bootstrapping Ed25519; **`rotationNodeMgtKeyClientSig`** only if you supply the optional extra proof.
+**Body:** `plannedYaml` (**exact** string from **`configUpdatePlan`**), `nonce`, `clientSig`, `nodeKey`, `signedMessage` (opaque `configUpdateImplement|<sha256>` line); **`rotationPublicMgtKeyClientSig`** when bootstrapping Ed25519; **`rotationNodeMgtKeyClientSig`** only if you supply the optional extra proof.
 
 **Example:**
 
@@ -1558,6 +1562,7 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postMSQTTKey" \
   "plannedYaml": "NodeMgtKey: …\nMPCGroups:\n  - …\n",
   "nonce": 10,
   "clientSig": "0x… or 128-hex-ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
   "signedMessage": "configUpdateImplement|<copy data.plannedShaMessage from plan response>",
   "rotationPublicMgtKeyClientSig": "128-hex-ed25519 (only when first PublicMgtKey in plan)",
   "rotationNodeMgtKeyClientSig": "0x… (optional when NodeMgtKey changes)"
@@ -1876,12 +1881,14 @@ Chain config details are stored on the local node only (not propagated to other 
 
 <a id="post-postchaindetails"></a>
 #### `POST /postChainDetails`
-Stores or updates chain config for one chain on this node. Requires management key signature over the message. Both **Ethereum (`NodeMgtKey`)** and **Ed25519** management keys are supported.
+Stores or updates chain config for one chain on this node. Requires management key signature ([Management signatures (`nonce`, `clientSig`, `nodeKey`)](#management-signatures-nodekey)): marshal the **full request JSON with `clientSig` cleared** and sign that string (Ed25519 128 hex or Ethereum `personal_sign`). Both **Ethereum (`NodeMgtKey`)** and **Ed25519** management keys are supported.
 
 **Request Body (PostChainDetailsPost):**
 ```json
 {
   "nonce": 1,
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
   "chainName": "Ethereum Mainnet",
   "chainId": "1",
   "rpcGateway": "https://eth.llamarpc.com",
@@ -1894,14 +1901,14 @@ Stores or updates chain config for one chain on this node. Requires management k
   "priorityFee": 2,
   "baseFeeMultiplier": 200,
   "gasPrice": 25,
-  "defaultGetSigFeeSpeed": "normal",
-  "signedMessage": "{\"nonce\":1,\"chainName\":\"Ethereum Mainnet\",\"chainId\":\"1\",\"rpcGateway\":\"https://eth.llamarpc.com\",\"legacy\":false,\"testnet\":false,\"gasName\":\"ETH\"}",
-  "clientSig": "0x..."
+  "defaultGetSigFeeSpeed": "normal"
 }
 ```
 
 **Field Descriptions:**
 - `nonce` (required): Current nonce from `/getNodeMgtKeyNonce` (or `/getPublicMgtKeyNonce` for Ed25519).
+- `clientSig` (required): Management signature over canonical JSON with `clientSig` cleared (see [Management signatures](#management-signatures-nodekey)).
+- `nodeKey` (required): This node's MPC public key (128 hex from `GET /getNodeKey`); binds the signature to this node.
 - `chainName` (required): Human-readable chain name.
 - `chainId` (required): Chain ID (number or string in JSON; stored as string).
 - `rpcGateway` (required): RPC URL (e.g. HTTPS).
@@ -1916,8 +1923,6 @@ Stores or updates chain config for one chain on this node. Requires management k
 - `gasMultiplier` (optional): Gas multiplier for legacy chains.
 - `gasPrice` (optional): Gas price in gwei for legacy chains.
 - `defaultGetSigFeeSpeed` (optional): Default fee tier for the Execute tab **Get Sig / Get Sigs** step on this chain: `slow`, `normal`, or `fast` (RPC `eth_feeHistory`–based). Omit on older nodes; clients should treat missing as `normal`. Not used for `advanced` (user-edited gwei).
-- `signedMessage` (required): The exact string that was signed (e.g. JSON of nonce, chainName, chainId, rpcGateway, explorer, legacy, testnet, gasName, and optional gas fields).
-- `clientSig` (required): Signature from management key. **Ethereum wallet:** sign `signedMessage` with `personal_sign` (NodeMgtKey address), send 0x-prefixed signature. **Ed25519:** sign the same `signedMessage` with an allowed Ed25519 key (config PublicMgtKey or added via addManagementKey), send 128-hex signature.
 
 **Response:**
 ```json
@@ -1925,28 +1930,29 @@ Stores or updates chain config for one chain on this node. Requires management k
 ```
 
 **Error Responses:**
-- `400 Bad Request`: Missing required fields (chainName, rpcGateway, chainId).
+- `400 Bad Request`: Missing required fields (chainName, rpcGateway, chainId, nodeKey).
 - `401 Unauthorized`: Invalid or missing management key signature / nonce.
 - `500 Internal Server Error`: Database error.
 
 **Example (Ethereum wallet flow):**
 ```bash
-# 1. Get nonce
+# 1. Get nonce and nodeKey
 curl -s "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKeyNonce" | jq .data
+curl -s "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeKey" | jq .data
 
-# 2. Build message (same as signedMessage), sign with Ethereum wallet personal_sign, then:
+# 2. Build JSON body (clientSig ""), personal_sign the canonical string, then POST full body with clientSig filled in:
 curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/postChainDetails \
   -H "Content-Type: application/json" \
   -d '{
     "nonce": 1,
+    "clientSig": "0x...",
+    "nodeKey": "<128-hex>",
     "chainName": "Ethereum Mainnet",
     "chainId": "1",
     "rpcGateway": "https://eth.llamarpc.com",
     "legacy": false,
     "testnet": false,
-    "gasName": "ETH",
-    "signedMessage": "{\"nonce\":1,\"chainName\":\"Ethereum Mainnet\",\"chainId\":\"1\",\"rpcGateway\":\"https://eth.llamarpc.com\",\"legacy\":false,\"testnet\":false,\"gasName\":\"ETH\"}",
-    "clientSig": "0x..."
+    "gasName": "ETH"
   }'
 ```
 
@@ -2050,23 +2056,21 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getChainDetails?chain_id=1"
 
 <a id="post-removechaindetails"></a>
 #### `POST /removeChainDetails`
-Removes the stored chain config for one chain on this node. Requires management key signature over the message. Same signature types as `POST /postChainDetails` (Ethereum wallet `personal_sign` or Ed25519).
+Removes the stored chain config for one chain on this node. Requires management key signature (same [`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey) pattern as `POST /postChainDetails`).
 
 **Request Body (RemoveChainDetailsPost):**
 ```json
 {
   "nonce": 2,
-  "chainId": "1",
-  "signedMessage": "{\"nonce\":2,\"chainId\":\"1\",\"action\":\"removeChainDetails\"}",
-  "clientSig": "0x..."
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
+  "chainId": "1"
 }
 ```
 
 **Field Descriptions:**
-- `nonce` (required): Current nonce from `/getNodeMgtKeyNonce` (or `/getPublicMgtKeyNonce` for Ed25519).
+- `nonce`, `clientSig`, `nodeKey` (required): Management signature envelope (sign full JSON with `clientSig` cleared).
 - `chainId` (required): Chain ID to remove (number or string in JSON).
-- `signedMessage` (required): The exact string that was signed (e.g. JSON with nonce, chainId, and optionally action `"removeChainDetails"`).
-- `clientSig` (required): Signature from management key (same as postChainDetails).
 
 **Response:**
 ```json
@@ -2074,24 +2078,20 @@ Removes the stored chain config for one chain on this node. Requires management 
 ```
 
 **Error Responses:**
-- `400 Bad Request`: Missing required fields (e.g. chainId).
+- `400 Bad Request`: Missing required fields (e.g. chainId, nodeKey).
 - `401 Unauthorized`: Invalid or missing management key signature / nonce.
 - `404 Not Found`: No chain config exists for the given chainId.
 - `500 Internal Server Error`: Database error.
 
 **Example:**
 ```bash
-# 1. Get nonce
-curl -s "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNodeMgtKeyNonce" | jq .data
-
-# 2. Build message, sign with Ethereum wallet personal_sign (or Ed25519), then:
 curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/removeChainDetails \
   -H "Content-Type: application/json" \
   -d '{
     "nonce": 2,
-    "chainId": "1",
-    "signedMessage": "{\"nonce\":2,\"chainId\":\"1\",\"action\":\"removeChainDetails\"}",
-    "clientSig": "0x..."
+    "clientSig": "0x...",
+    "nodeKey": "<128-hex>",
+    "chainId": "1"
   }'
 ```
 
@@ -2101,12 +2101,14 @@ Non-EVM chain config is stored on the local node only (not propagated). Used for
 
 <a id="post-postnonevmchaindetails"></a>
 #### `POST /postNonEvmChainDetails`
-Stores or updates non-EVM chain config for one network on this node. Requires management key signature over the message. Both **Ethereum (`NodeMgtKey`)** and **Ed25519** management keys are supported.
+Stores or updates non-EVM chain config for one network on this node. Requires management key signature ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey) — sign full JSON with `clientSig` cleared).
 
 **Request Body (PostNonEvmChainDetailsPost):**
 ```json
 {
   "nonce": 1,
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
   "chainType": "solana",
   "chainId": "mainnet-beta",
   "chainName": "Solana",
@@ -2116,14 +2118,12 @@ Stores or updates non-EVM chain config for one network on this node. Requires ma
   "testnet": false,
   "nativeSymbol": "SOL",
   "nativeDecimals": 9,
-  "signingDefaults": { "commitment": "confirmed" },
-  "signedMessage": "{\"nonce\":1,\"chainType\":\"solana\",\"chainId\":\"mainnet-beta\",\"chainName\":\"Solana\",\"rpcGateway\":\"https://api.mainnet-beta.solana.com\",\"endpointKind\":\"json-rpc\",\"testnet\":false,\"nativeSymbol\":\"SOL\",\"nativeDecimals\":9}",
-  "clientSig": "0x..."
+  "signingDefaults": { "commitment": "confirmed" }
 }
 ```
 
 **Field Descriptions:**
-- `nonce` (required): Current nonce from `/getNodeMgtKeyNonce` (or `/getPublicMgtKeyNonce` for Ed25519).
+- `nonce`, `clientSig`, `nodeKey` (required): Management signature envelope.
 - `chainType` (required): One of `solana`, `near`, `sui`, `ton`, `stellar` (stored lowercase).
 - `chainId` (required): Network id within `chainType` (string, e.g. `mainnet-beta`, `testnet`, `devnet`, `public`).
 - `chainName` (required): Human-readable name (e.g. "Solana", "Solana testnet").
@@ -2136,8 +2136,6 @@ Stores or updates non-EVM chain config for one network on this node. Requires ma
 - `wsGateway` (optional): WebSocket URL (e.g. Solana subscriptions).
 - `tonVendor` (optional): For TON HTTP endpoints: `toncenter` | `tonapi` | `custom`.
 - `signingDefaults` (optional): Chain-specific fee/priority defaults for compose/sign (object). Examples: Solana `{ "commitment": "confirmed", "computeUnitLimit": 200000, "priorityFeeMicroLamports": 1000 }`; Stellar `{ "baseFeeStroops": 100 }`.
-- `signedMessage` (required): Exact string signed by the management key.
-- `clientSig` (required): Ethereum wallet (0x-prefixed) or Ed25519 (128 hex) signature.
 
 **Response:**
 ```json
@@ -2166,16 +2164,16 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getNonEvmChainDetails?chain_type=solana&cha
 
 <a id="post-removenonevmchaindetails"></a>
 #### `POST /removeNonEvmChainDetails`
-Removes stored non-EVM chain config for one `(chainType, chainId)`. Requires management key signature.
+Removes stored non-EVM chain config for one `(chainType, chainId)`. Requires management key signature ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey)).
 
 **Request Body (RemoveNonEvmChainDetailsPost):**
 ```json
 {
   "nonce": 2,
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
   "chainType": "solana",
-  "chainId": "mainnet-beta",
-  "signedMessage": "{\"nonce\":2,\"chainType\":\"solana\",\"chainId\":\"mainnet-beta\",\"action\":\"removeNonEvmChainDetails\"}",
-  "clientSig": "0x..."
+  "chainId": "mainnet-beta"
 }
 ```
 
@@ -2190,12 +2188,14 @@ Token contracts are stored on the local node only (not propagated). Used so the 
 
 <a id="post-addtoken"></a>
 #### `POST /addToken`
-Adds a token contract for the given `chainType`, `chainId` and `tokenType`. Requires management key signature (Ethereum wallet / NodeMgtKey or Ed25519, same as postChainDetails).
+Adds a token contract for the given `chainType`, `chainId` and `tokenType`. Requires management key signature ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey) — sign full JSON with `clientSig` cleared).
 
 **Request Body (AddTokenPost):**
 ```json
 {
   "nonce": 1,
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
   "chainType": "ethereum",
   "chainId": 1234,
   "tokenType": "ERC20",
@@ -2204,14 +2204,12 @@ Adds a token contract for the given `chainType`, `chainId` and `tokenType`. Requ
     "name": "My Token",
     "symbol": "MTK",
     "symbolURL": "https://example.com/icon.png"
-  },
-  "signedMessage": "{\"nonce\":1,\"chainType\":\"ethereum\",\"chainId\":\"1234\",\"tokenType\":\"ERC20\",\"action\":\"addToken\"}",
-  "clientSig": "0x..."
+  }
 }
 ```
 
 **Field Descriptions:**
-- `nonce` (required): From `/getNodeMgtKeyNonce` or `/getPublicMgtKeyNonce`.
+- `nonce`, `clientSig`, `nodeKey` (required): Management signature envelope.
 - `chainType` (required): e.g. `ethereum`, `solana`, `NEAR`, `stellar`, `TON` (stored lowercase for lookup).
 - `chainId` (required): Number (Ethereum) or string; normalized to string when stored.
 - `tokenType` (required): e.g. `ERC20`, `ERC721`, `CTMERC20`, `CTMRWA1`.
@@ -2220,8 +2218,6 @@ Adds a token contract for the given `chainType`, `chainId` and `tokenType`. Requ
   - **ERC721**: `name`, `symbol`, `tokenURI`, and `tokenId` (required; identifies the specific NFT). If the same (contractAddress, tokenId) already exists for that chain/token type, that entry is updated; otherwise a new contract entry is appended.
   - **CTMRWA1**: same as ERC20/ERC721 plus any RWA-specific fields (transfer sigs are set by server).
 - `transferSig`, `transferNames` (optional): Used when creating a new token-type entry; omitted for known types (server uses defaults).
-- `signedMessage` (required): Exact string signed by management key.
-- `clientSig` (required): Ethereum wallet (0x-prefixed) or Ed25519 (128 hex) signature.
 
 **Response:** `{ "code": 0, "error": "", "data": "Token added" }`
 
@@ -2229,36 +2225,36 @@ Adds a token contract for the given `chainType`, `chainId` and `tokenType`. Requ
 
 <a id="post-removetoken"></a>
 #### `POST /removeToken`
-Removes the token contract with the given `contractAddress` for `chainType`, `chainId` and `tokenType`. For **ERC721**, `tokenId` is required so that only the specific (contractAddress, tokenId) entry is removed. Requires management key signature.
+Removes the token contract with the given `contractAddress` for `chainType`, `chainId` and `tokenType`. For **ERC721**, `tokenId` is required so that only the specific (contractAddress, tokenId) entry is removed. Requires management key signature ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey)).
 
 **Request Body (RemoveTokenPost):**
-- `nonce`, `chainType`, `chainId`, `tokenType`, `contractAddress`, `signedMessage`, `clientSig` (all required).
+- `nonce`, `clientSig`, `nodeKey`, `chainType`, `chainId`, `tokenType`, `contractAddress` (all required).
 - **`tokenId`** (required for ERC721): The token ID of the NFT to remove. Omit or leave empty for ERC20 and other token types.
 
 Example (ERC20):
 ```json
 {
   "nonce": 2,
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
   "chainType": "ethereum",
   "chainId": "1234",
   "tokenType": "ERC20",
-  "contractAddress": "0x1234567890123456789012345678901234567890",
-  "signedMessage": "{\"nonce\":2,\"chainType\":\"ethereum\",\"chainId\":\"1234\",\"tokenType\":\"ERC20\",\"contractAddress\":\"0x1234...\",\"action\":\"removeToken\"}",
-  "clientSig": "0x..."
+  "contractAddress": "0x1234567890123456789012345678901234567890"
 }
 ```
 
-Example (ERC721; `tokenId` must appear in both the body and the signed message):
+Example (ERC721):
 ```json
 {
   "nonce": 2,
+  "clientSig": "0x...",
+  "nodeKey": "<128-hex>",
   "chainType": "ethereum",
   "chainId": "1234",
   "tokenType": "ERC721",
   "contractAddress": "0x221EC90B3B083A8501A37bdeb7035CeaedF3C31f",
-  "tokenId": "18",
-  "signedMessage": "{\"nonce\":2,\"chainType\":\"ethereum\",\"chainId\":\"1234\",\"tokenType\":\"ERC721\",\"contractAddress\":\"0x221EC90B3B083A8501A37bdeb7035CeaedF3C31f\",\"tokenId\":\"18\",\"action\":\"removeToken\"}",
-  "clientSig": "0x..."
+  "tokenId": "18"
 }
 ```
 
@@ -2283,31 +2279,29 @@ Known addresses are stored on the local node only (not propagated). Each entry i
 
 <a id="post-addknownaddress"></a>
 #### `POST /addKnownAddress`
-Adds or updates a known address for the given `chainType`. Requires management key signature (Ethereum wallet / NodeMgtKey or Ed25519, same as postChainDetails).
+Adds or updates a known address for the given `chainType`. Requires management key signature ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey)).
 
 **Request Body (AddKnownAddressPost):**
 ```json
 {
   "nonce": 1,
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
   "chainType": "ethereum",
   "address": "0x1234567890123456789012345678901234567890",
   "name": "My Wallet",
   "chainIds": ["1", "137"],
-  "isContract": false,
-  "signedMessage": "{\"nonce\":1,\"chainType\":\"ethereum\",\"address\":\"0x1234...\",\"action\":\"addKnownAddress\"}",
-  "clientSig": "0x..."
+  "isContract": false
 }
 ```
 
 **Field Descriptions:**
-- `nonce` (required): From `/getNodeMgtKeyNonce` or `/getPublicMgtKeyNonce`.
+- `nonce`, `clientSig`, `nodeKey` (required): Management signature envelope.
 - `chainType` (required): e.g. `ethereum`, `solana` (stored lowercase).
 - `address` (required): The address; normalized server-side (e.g. lowercase for 0x-prefixed).
 - `name` (optional): Display name for the address.
 - `chainIds` (optional): Array of chain IDs this address is valid on. **Omit or empty = no restrictions** (valid on all chains of that type).
 - `isContract` (optional, default false): `true` = contract address, `false` = EOA.
-- `signedMessage` (required): Exact string signed by management key.
-- `clientSig` (required): Ethereum wallet (0x-prefixed) or Ed25519 (128 hex) signature.
 
 **Response:** `{ "code": 0, "error": "", "data": "Known address added" }`
 
@@ -2315,19 +2309,19 @@ Adds or updates a known address for the given `chainType`. Requires management k
 
 <a id="post-removeknownaddress"></a>
 #### `POST /removeKnownAddress`
-Removes the known address for the given `chainType` and `address`. Requires management key signature.
+Removes the known address for the given `chainType` and `address`. Requires management key signature ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey)).
 
 **Request Body (RemoveKnownAddressPost):**
-- `nonce`, `chainType`, `address`, `signedMessage`, `clientSig` (all required).
+- `nonce`, `clientSig`, `nodeKey`, `chainType`, `address` (all required).
 
 Example:
 ```json
 {
   "nonce": 2,
+  "clientSig": "0x...",
+  "nodeKey": "<128-hex>",
   "chainType": "ethereum",
-  "address": "0x1234567890123456789012345678901234567890",
-  "signedMessage": "{\"nonce\":2,\"chainType\":\"ethereum\",\"address\":\"0x1234...\",\"action\":\"removeKnownAddress\"}",
-  "clientSig": "0x..."
+  "address": "0x1234567890123456789012345678901234567890"
 }
 ```
 
@@ -2381,15 +2375,15 @@ curl "http://localhost:18080/getPreferredSigner"   # when PublicDiscoveryPort is
 <a id="post-setpreferredsigner"></a>
 #### `POST /setPreferredSigner`
 
-**Auth:** Management key (`signedMessage` + `clientSig`), same pattern as **`POST /postChainDetails`** (Ethereum wallet `personal_sign` or Ed25519 128-hex `clientSig`). **`nonce`** from **`GET /getNodeMgtKeyNonce`** or **`GET /getPublicMgtKeyNonce`** when using Ed25519.
+**Auth:** Management key ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey) — sign full JSON with `clientSig` cleared).
 
 **Request body (SetPreferredSignerPost):**
 ```json
 {
   "nonce": 1,
-  "publicKey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "signedMessage": "<exact string signed by management key>",
-  "clientSig": "0x... or 128-hex Ed25519"
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
+  "publicKey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 }
 ```
 
@@ -2405,7 +2399,75 @@ curl "http://localhost:18080/getPreferredSigner"   # when PublicDiscoveryPort is
 ```bash
 curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/setPreferredSigner" \
   -H "Content-Type: application/json" \
-  -d '{"nonce":1,"publicKey":"<64-hex>","signedMessage":"...","clientSig":"..."}'
+  -d '{"nonce":1,"publicKey":"<64-hex>","clientSig":"...","nodeKey":"<128-hex>"}'
+```
+
+### Agent preferred KeyGen (local node only)
+
+Operators can persist a single **multi-agree KeyGen request id** (`requestid`, same value as **`GET /getKeyGenResultById?id=`**) per MPC node process that automation (for example AI agents composing **`POST /multiSignRequest`**) should treat as the default key. The value is stored in MongoDB on this node only; it is **not** propagated to peers. **`keyGenId` must refer to a KeyGen that is eligible for multiSignRequest:** the keygen request must exist with **`MsgCheck`** **`multi-agree`**, the keygen **result** must exist with a non-empty **`pubkeyhex`**, and the result must **not** be **ejected**. **`GET /getPreferredKeyGen`** (served on **`ManagementAPIsPort`** and **`PublicDiscoveryPort`** when split — see below) returns **`keyGenId`**, **`pubKey`**, and **`keyType` only while the stored KeyGen is still eligible**; if the key was ejected, deleted, or is otherwise invalid, the response uses empty strings.
+
+<a id="get-getpreferredkeygen"></a>
+#### `GET /getPreferredKeyGen`
+
+**Where served:** **`ManagementAPIsPort`** and, when **`PublicDiscoveryPort`** is split from it, the same handler on **`PublicDiscoveryPort`** (e.g. **18080**) — see [Public discovery HTTP](#public-discovery-http). **Not** a substitute for **`POST /postPreferredKeyGen`** (that remains management-only with signed auth).
+
+**Auth:** None (same class as `GET /getPreferredSigner`).
+
+**Response:**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": {
+    "keyGenId": "",
+    "pubKey": "",
+    "keyType": ""
+  }
+}
+```
+
+| Field | Notes |
+|-------|--------|
+| `keyGenId` | KeyGen request id when stored **and** still eligible (multi-agree, non-ejected, public key present). Empty when nothing is stored or the stored id is no longer valid. |
+| `pubKey` | **`pubkeyhex`** from the keygen result when eligible; empty otherwise. Agents can pass this as **`pubKey`** on **`POST /multiSignRequest`**. |
+| `keyType` | Key type from the keygen request/result (e.g. `secp256k1`, `ed25519`, `bitcoin-taproot`) when eligible; empty otherwise. |
+
+**Example:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPreferredKeyGen"
+curl "http://localhost:18080/getPreferredKeyGen"   # when PublicDiscoveryPort is split (e.g. 18080)
+```
+
+<a id="post-postpreferredkeygen"></a>
+#### `POST /postPreferredKeyGen`
+
+**Auth:** Management key ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey) — sign full JSON with `clientSig` cleared).
+
+**Request body (PostPreferredKeyGenPost):**
+```json
+{
+  "nonce": 1,
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
+  "keyGenId": "KeyGen20260111003720999cf104d0f"
+}
+```
+
+**Validation:**
+- `keyGenId` (required): KeyGen **request id** (same as [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) `id` query parameter).
+- The keygen request must exist with **`MsgCheck`** **`multi-agree`**.
+- The keygen **result** must exist on this node with a non-empty public key (**`pubkeyhex`**).
+- **Ejected** keys are rejected → **`400`**.
+
+**Response:** `{ "code": 0, "error": "", "data": "Preferred KeyGen stored" }`
+
+**Errors:** `400` invalid body or KeyGen not eligible; `401` invalid management signature; `500` database error.
+
+**Example:**
+```bash
+curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postPreferredKeyGen" \
+  -H "Content-Type: application/json" \
+  -d '{"nonce":1,"keyGenId":"KeyGen20260111003720999cf104d0f","clientSig":"...","nodeKey":"<128-hex>"}'
 ```
 
 ### Agent LLM config (local filesystem)
@@ -2463,52 +2525,52 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/agentLlmConfigStatus"   # plain management 
 
 **Does not include `apiKey`.** Use **`POST /agentLlmApiKey`** to set or clear the secret.
 
-**Auth:** Management key (`signedMessage` + `clientSig`), same pattern as **`POST /postChainDetails`**. **`nonce`** from **`GET /getNodeMgtKeyNonce`** or **`GET /getPublicMgtKeyNonce`** (Ed25519).
+**Auth:** Management key ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey)). Sign canonical JSON (see below) with `clientSig` cleared.
 
 **Request body (AgentLlmConfigPost):**
 ```json
 {
   "nonce": 42,
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
   "provider": "openai",
   "model": "gpt-4.1",
-  "baseUrl": null,
-  "signedMessage": "{\"action\":\"agentLlmConfig\",\"baseUrl\":null,\"model\":\"gpt-4.1\",\"nonce\":42,\"provider\":\"openai\",\"sig\":\"\"}",
-  "clientSig": "0x... or 128-hex Ed25519"
+  "baseUrl": null
 }
 ```
 
-**Canonical `signedMessage`:** Server verifies `signedMessage` equals exactly:
+**Canonical signed bytes:** Server verifies signature over exactly:
 ```json
-{"action":"agentLlmConfig","baseUrl":<string|null>,"model":"<model>","nonce":<int>,"provider":"<provider>","sig":""}
+{"action":"agentLlmConfig","baseUrl":<string|null>,"clientSig":"","model":"<model>","nonce":<int>,"nodeKey":"<128-hex>","provider":"<provider>"}
 ```
-Field order must match (as produced by `JSON.stringify` in continuumdao-node-app / the Go marshaller). `baseUrl` is `null` when omitted or empty.
+Field order must match (as produced by the Go marshaller / continuumdao-node-app). `baseUrl` is `null` when omitted or empty.
 
 **Behavior:** Read-merge-write `agent-llm-config.json`; updates `provider`, `model`, `baseUrl` only; **preserves** existing `apiKey` unless **`POST /agentLlmApiKey`** runs.
 
 **Response:** `{ "code": 0, "error": "", "data": { ...same shape as GET /agentLlmConfigStatus... } }`
 
-**Errors:** `400` invalid body or `signedMessage` mismatch; `401` invalid management signature; `500` filesystem error.
+**Errors:** `400` invalid body or nodeKey mismatch; `401` invalid management signature; `500` filesystem error.
 
 <a id="post-agentllmapikey"></a>
 #### `POST /agentLlmApiKey`
 
-**Auth:** Management signature (same as **`POST /agentLlmConfig`**).
+**Auth:** Management signature (same as **`POST /agentLlmConfig`** — [`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey)).
 
 **Request body (AgentLlmApiKeyPost):**
 ```json
 {
   "nonce": 43,
-  "apiKey": "sk-…",
-  "signedMessage": "{\"action\":\"agentLlmApiKey\",\"apiKey\":\"sk-…\",\"nonce\":43,\"sig\":\"\"}",
-  "clientSig": "0x... or 128-hex Ed25519"
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
+  "apiKey": "sk-…"
 }
 ```
 
 **Clear key:** Same route with **`"apiKey": ""`** (exact empty string). Whitespace-only values are rejected. There is **no** `DELETE` route.
 
-**Canonical `signedMessage`:**
+**Canonical signed bytes:**
 ```json
-{"action":"agentLlmApiKey","apiKey":"<string>","nonce":<int>,"sig":""}
+{"action":"agentLlmApiKey","apiKey":"<string>","clientSig":"","nonce":<int>,"nodeKey":"<128-hex>"}
 ```
 For clear, `apiKey` in both body and signed JSON is `""`.
 
@@ -2520,7 +2582,7 @@ For clear, `apiKey` in both body and signed JSON is `""`.
 ```bash
 curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/agentLlmApiKey" \
   -H "Content-Type: application/json" \
-  -d '{"nonce":44,"apiKey":"","signedMessage":"{\"action\":\"agentLlmApiKey\",\"apiKey\":\"\",\"nonce\":44,\"sig\":\"\"}","clientSig":"..."}'
+  -d '{"nonce":44,"apiKey":"","clientSig":"...","nodeKey":"<128-hex>"}'
 ```
 
 <a id="post-agentchat"></a>

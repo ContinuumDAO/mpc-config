@@ -90,6 +90,21 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/node.APIResponse'
+  /getPreferredKeyGen:
+    get:
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getPreferredKeyGen).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: GET getPreferredKeyGen
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
   /health:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /health).
@@ -1890,8 +1905,7 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
+          $ref: '#/definitions/node.RemoveChainDetailsPost'
   /postNonEvmChainDetails:
     post:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postNonEvmChainDetails).
@@ -1912,8 +1926,7 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          $ref: '#/definitions/node.PostNonEvmChainDetailsPost'
   /getNonEvmChainDetails:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getNonEvmChainDetails).
@@ -1949,8 +1962,7 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          $ref: '#/definitions/node.RemoveNonEvmChainDetailsPost'
   /addToken:
     post:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /addToken).
@@ -1971,8 +1983,7 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
+          $ref: '#/definitions/node.AddTokenPost'
   /removeToken:
     post:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeToken).
@@ -1993,8 +2004,7 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
+          $ref: '#/definitions/node.RemoveTokenPost'
   /getTokens:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getTokens).
@@ -2039,8 +2049,7 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
+          $ref: '#/definitions/node.AddKnownAddressPost'
   /removeKnownAddress:
     post:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeKnownAddress).
@@ -2061,8 +2070,7 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
+          $ref: '#/definitions/node.RemoveKnownAddressPost'
   /getKnownAddresses:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getKnownAddresses).
@@ -2112,8 +2120,28 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          description: Request JSON — see docs/API_IMPLEMENTATION.md
+          $ref: '#/definitions/node.SetPreferredSignerPost'
+  /postPreferredKeyGen:
+    post:
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postPreferredKeyGen).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: POST postPreferredKeyGen
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.PostPreferredKeyGenPost'
   /agentLlmConfigStatus:
     get:
       description: 'Agent LLM config status (masked API key; read JWT on Browser HTTPS / loopback) Full detail: mpc-config
@@ -2157,30 +2185,7 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          required:
-          - nonce
-          - provider
-          - model
-          - signedMessage
-          - clientSig
-          properties:
-            nonce:
-              type: integer
-            provider:
-              type: string
-              description: e.g. openai, anthropic
-            model:
-              type: string
-            baseUrl:
-              type: string
-              description: Optional custom API base URL; omit or null for provider default
-            signedMessage:
-              type: string
-              description: 'Exact JSON signed: {"action":"agentLlmConfig","baseUrl":...,"model":"...","nonce":N,"provider":"...","sig":""}'
-            clientSig:
-              type: string
-              description: 128-hex Ed25519 or Ethereum personal_sign hex
+          $ref: '#/definitions/node.AgentLlmConfigPost'
   /agentLlmApiKey:
     post:
       description: 'Set or clear agent LLM API key only (management-signed; apiKey "" clears) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
@@ -2202,23 +2207,7 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          required:
-          - nonce
-          - apiKey
-          - signedMessage
-          - clientSig
-          properties:
-            nonce:
-              type: integer
-            apiKey:
-              type: string
-              description: Non-empty to set/rotate; exactly "" (empty string) to clear stored key
-            signedMessage:
-              type: string
-              description: 'Exact JSON signed: {"action":"agentLlmApiKey","apiKey":"...","nonce":N,"sig":""}'
-            clientSig:
-              type: string
+          $ref: '#/definitions/node.AgentLlmApiKeyPost'
   /getMSQTTKey:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMSQTTKey).
@@ -2254,8 +2243,7 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
+          $ref: '#/definitions/node.PostMSQTTKeyPost'
   /getWebTLSKey:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getWebTLSKey).
@@ -2355,8 +2343,7 @@ paths:
         name: body
         required: true
         schema:
-          type: object
-          description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
+          $ref: '#/definitions/node.ConfigUpdateImplementPost'
   /maintenance/requestRestartPrep:
     post:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /maintenance/requestRestartPrep).
@@ -3177,67 +3164,49 @@ definitions:
         description: 'Batch only: optional; length must match messageHashes when both sent'
   node.PostChainDetailsPost:
     type: object
-    description: POST /postChainDetails body. See docs/API_IMPLEMENTATION.md (POST /postChainDetails).
-    required:
-    - nonce
-    - chainName
-    - chainId
-    - rpcGateway
-    - signedMessage
-    - clientSig
-    properties:
-      nonce:
-        type: integer
-        description: Management key nonce (see GET /getNodeMgtKeyNonce or /getPublicMgtKeyNonce for Ed25519)
-      chainName:
-        type: string
-      chainId:
-        description: Chain id (number or string in JSON; stored as string)
-        type: string
-      rpcGateway:
-        type: string
-      explorer:
-        type: string
-        description: Optional blockchain explorer URL (http/https)
-      legacy:
-        type: boolean
-      testnet:
-        type: boolean
-      gasName:
-        type: string
-      gasLimit:
-        type: number
-      baseFee:
-        type: number
-        description: EIP-1559 base fee (gwei); omit or null to leave unset for client refetch
-      priorityFee:
-        type: number
-        description: EIP-1559 priority fee (gwei); omit or null to leave unset for client refetch
-      baseFeeMultiplier:
-        type: number
-        description: 'EIP-1559: percentage for base component of maxFeePerGas (e.g. 200 = 2× base); should be ≥ 100'
-      gasMultiplier:
-        type: number
-      gasPrice:
-        type: number
-        description: 'Legacy: gas price in gwei'
-      defaultGetSigFeeSpeed:
-        type: string
-        description: 'Optional. Default Get Sig / Get Sigs fee tier (eth_feeHistory-based): slow, normal, or fast. Omitted
-          = leave unset; clients default to normal.'
-        enum:
-        - slow
-        - normal
-        - fast
-      signedMessage:
-        type: string
-        description: Exact string signed (MetaMask personal_sign or Ed25519). If you use a JSON payload, include "nodeKey"
-          set to this node's 128-hex MPC public key (GET /getNodeKey) so the signature cannot be replayed on another node;
-          omitting nodeKey in JSON is deprecated. Not applicable when signedMessage is opaque non-JSON (e.g. some MQTT CA
-          flows).
-      clientSig:
-        type: string
-        description: 'MetaMask: 0x-prefixed; Ed25519: 128 hex characters'
+    allOf:
+    - &id001
+      $ref: '#/definitions/node.NodeMgtKeySig'
+    - type: object
+      description: POST /postChainDetails. Sign JSON with clientSig cleared (includes nodeKey).
+      required:
+      - chainName
+      - chainId
+      - rpcGateway
+      properties:
+        chainName:
+          type: string
+        chainId:
+          type: string
+          description: Chain id (number or string in JSON; stored as string)
+        rpcGateway:
+          type: string
+        explorer:
+          type: string
+        legacy:
+          type: boolean
+        testnet:
+          type: boolean
+        gasName:
+          type: string
+        gasLimit:
+          type: number
+        baseFee:
+          type: number
+        priorityFee:
+          type: number
+        baseFeeMultiplier:
+          type: number
+        gasMultiplier:
+          type: number
+        gasPrice:
+          type: number
+        defaultGetSigFeeSpeed:
+          type: string
+          enum:
+          - slow
+          - normal
+          - fast
   node.LocalChainConfigDoc:
     type: object
     description: Local chain config returned in GET /getChainDetails `data` (one object) or as elements of the array when
@@ -3644,3 +3613,235 @@ definitions:
       keyGenId:
         type: string
         description: Keygen request id
+  node.RemoveChainDetailsPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - chainId
+      properties:
+        chainId:
+          type: string
+  node.PostNonEvmChainDetailsPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - chainType
+      - chainId
+      - chainName
+      - rpcGateway
+      - endpointKind
+      - nativeSymbol
+      - nativeDecimals
+      properties:
+        chainType:
+          type: string
+        chainId:
+          type: string
+        chainName:
+          type: string
+        rpcGateway:
+          type: string
+        endpointKind:
+          type: string
+          enum:
+          - json-rpc
+          - horizon
+          - ton-http
+        explorer:
+          type: string
+        testnet:
+          type: boolean
+        nativeSymbol:
+          type: string
+        nativeDecimals:
+          type: integer
+        wsGateway:
+          type: string
+        tonVendor:
+          type: string
+        signingDefaults:
+          type: object
+  node.RemoveNonEvmChainDetailsPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - chainType
+      - chainId
+      properties:
+        chainType:
+          type: string
+        chainId:
+          type: string
+  node.AddTokenPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - chainType
+      - chainId
+      - tokenType
+      - contract
+      properties:
+        chainType:
+          type: string
+        chainId:
+          type: string
+        tokenType:
+          type: string
+        contract:
+          type: object
+        transferSig:
+          type: string
+        transferNames:
+          type: array
+          items:
+            type: string
+  node.RemoveTokenPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - chainType
+      - chainId
+      - tokenType
+      - contractAddress
+      properties:
+        chainType:
+          type: string
+        chainId:
+          type: string
+        tokenType:
+          type: string
+        contractAddress:
+          type: string
+        tokenId:
+          type: string
+          description: Required for ERC721
+  node.AddKnownAddressPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - chainType
+      - address
+      properties:
+        chainType:
+          type: string
+        address:
+          type: string
+        name:
+          type: string
+        chainIds:
+          type: array
+          items:
+            type: string
+        isContract:
+          type: boolean
+        addressSubtype:
+          type: string
+  node.RemoveKnownAddressPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - chainType
+      - address
+      properties:
+        chainType:
+          type: string
+        address:
+          type: string
+  node.PostMSQTTKeyPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      description: Sign caCertPem (opaque PEM). nodeKey in body binds to this node.
+      required:
+      - caCertPem
+      properties:
+        caCertPem:
+          type: string
+          description: X.509 CERTIFICATE PEM (max 512 KiB)
+  node.SetPreferredSignerPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - publicKey
+      properties:
+        publicKey:
+          type: string
+          description: 64-hex Ed25519 public key (active management key)
+  node.AgentLlmConfigPost:
+    type: object
+    description: POST /agentLlmConfig. Sign canonical JSON {"action":"agentLlmConfig","baseUrl":...,"clientSig":"","model":"...","nonce":N,"nodeKey":"<128-hex>","provider":"..."}.
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - provider
+      - model
+      properties:
+        provider:
+          type: string
+        model:
+          type: string
+        baseUrl:
+          type: string
+          description: Optional; omit or null for provider default
+  node.AgentLlmApiKeyPost:
+    type: object
+    description: POST /agentLlmApiKey. Sign canonical JSON {"action":"agentLlmApiKey","apiKey":"...","clientSig":"","nonce":N,"nodeKey":"<128-hex>"}.
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - apiKey
+      properties:
+        apiKey:
+          type: string
+          description: Non-empty to set; "" to clear
+  node.ConfigUpdateImplementPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      description: POST /configUpdateImplement. signedMessage is opaque configUpdateImplement|<sha256>; nodeKey in body binds
+        to this node (not inside signedMessage).
+      required:
+      - plannedYaml
+      - signedMessage
+      properties:
+        plannedYaml:
+          type: string
+        signedMessage:
+          type: string
+          description: Must equal configUpdateImplement|<sha256-hex-of-plannedYaml>
+        rotationNodeMgtKeyClientSig:
+          type: string
+        rotationPublicMgtKeyClientSig:
+          type: string
+  node.PostPreferredKeyGenPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - keyGenId
+      properties:
+        keyGenId:
+          type: string
+          description: KeyGen request id (same as GET /getKeyGenResultById id); must be multi-agree, non-ejected, with public
+            key

@@ -122,6 +122,29 @@
                 }
             }
         },
+        "/getPreferredKeyGen": {
+            "get": {
+                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getPreferredKeyGen).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "GET getPreferredKeyGen",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /health).",
@@ -2815,8 +2838,7 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "$ref": "#/definitions/node.RemoveChainDetailsPost"
                         }
                     }
                 ]
@@ -2849,8 +2871,7 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                            "$ref": "#/definitions/node.PostNonEvmChainDetailsPost"
                         }
                     }
                 ]
@@ -2906,8 +2927,7 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                            "$ref": "#/definitions/node.RemoveNonEvmChainDetailsPost"
                         }
                     }
                 ]
@@ -2940,8 +2960,7 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "$ref": "#/definitions/node.AddTokenPost"
                         }
                     }
                 ]
@@ -2974,8 +2993,7 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "$ref": "#/definitions/node.RemoveTokenPost"
                         }
                     }
                 ]
@@ -3045,8 +3063,7 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "$ref": "#/definitions/node.AddKnownAddressPost"
                         }
                     }
                 ]
@@ -3079,8 +3096,7 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "$ref": "#/definitions/node.RemoveKnownAddressPost"
                         }
                     }
                 ]
@@ -3157,8 +3173,40 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                            "$ref": "#/definitions/node.SetPreferredSignerPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/postPreferredKeyGen": {
+            "post": {
+                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postPreferredKeyGen).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "POST postPreferredKeyGen",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.PostPreferredKeyGenPost"
                         }
                     }
                 ]
@@ -3223,38 +3271,7 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "required": [
-                                "nonce",
-                                "provider",
-                                "model",
-                                "signedMessage",
-                                "clientSig"
-                            ],
-                            "properties": {
-                                "nonce": {
-                                    "type": "integer"
-                                },
-                                "provider": {
-                                    "type": "string",
-                                    "description": "e.g. openai, anthropic"
-                                },
-                                "model": {
-                                    "type": "string"
-                                },
-                                "baseUrl": {
-                                    "type": "string",
-                                    "description": "Optional custom API base URL; omit or null for provider default"
-                                },
-                                "signedMessage": {
-                                    "type": "string",
-                                    "description": "Exact JSON signed: {\"action\":\"agentLlmConfig\",\"baseUrl\":...,\"model\":\"...\",\"nonce\":N,\"provider\":\"...\",\"sig\":\"\"}"
-                                },
-                                "clientSig": {
-                                    "type": "string",
-                                    "description": "128-hex Ed25519 or Ethereum personal_sign hex"
-                                }
-                            }
+                            "$ref": "#/definitions/node.AgentLlmConfigPost"
                         }
                     }
                 ]
@@ -3287,29 +3304,7 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "required": [
-                                "nonce",
-                                "apiKey",
-                                "signedMessage",
-                                "clientSig"
-                            ],
-                            "properties": {
-                                "nonce": {
-                                    "type": "integer"
-                                },
-                                "apiKey": {
-                                    "type": "string",
-                                    "description": "Non-empty to set/rotate; exactly \"\" (empty string) to clear stored key"
-                                },
-                                "signedMessage": {
-                                    "type": "string",
-                                    "description": "Exact JSON signed: {\"action\":\"agentLlmApiKey\",\"apiKey\":\"...\",\"nonce\":N,\"sig\":\"\"}"
-                                },
-                                "clientSig": {
-                                    "type": "string"
-                                }
-                            }
+                            "$ref": "#/definitions/node.AgentLlmApiKeyPost"
                         }
                     }
                 ]
@@ -3365,8 +3360,7 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "$ref": "#/definitions/node.PostMSQTTKeyPost"
                         }
                     }
                 ]
@@ -3513,8 +3507,7 @@
                         "name": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "$ref": "#/definitions/node.ConfigUpdateImplementPost"
                         }
                     }
                 ]
@@ -4696,83 +4689,70 @@
         },
         "node.PostChainDetailsPost": {
             "type": "object",
-            "description": "POST /postChainDetails body. See docs/API_IMPLEMENTATION.md (POST /postChainDetails).",
-            "required": [
-                "nonce",
-                "chainName",
-                "chainId",
-                "rpcGateway",
-                "signedMessage",
-                "clientSig"
-            ],
-            "properties": {
-                "nonce": {
-                    "type": "integer",
-                    "description": "Management key nonce (see GET /getNodeMgtKeyNonce or /getPublicMgtKeyNonce for Ed25519)"
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
                 },
-                "chainName": {
-                    "type": "string"
-                },
-                "chainId": {
-                    "description": "Chain id (number or string in JSON; stored as string)",
-                    "type": "string"
-                },
-                "rpcGateway": {
-                    "type": "string"
-                },
-                "explorer": {
-                    "type": "string",
-                    "description": "Optional blockchain explorer URL (http/https)"
-                },
-                "legacy": {
-                    "type": "boolean"
-                },
-                "testnet": {
-                    "type": "boolean"
-                },
-                "gasName": {
-                    "type": "string"
-                },
-                "gasLimit": {
-                    "type": "number"
-                },
-                "baseFee": {
-                    "type": "number",
-                    "description": "EIP-1559 base fee (gwei); omit or null to leave unset for client refetch"
-                },
-                "priorityFee": {
-                    "type": "number",
-                    "description": "EIP-1559 priority fee (gwei); omit or null to leave unset for client refetch"
-                },
-                "baseFeeMultiplier": {
-                    "type": "number",
-                    "description": "EIP-1559: percentage for base component of maxFeePerGas (e.g. 200 = 2× base); should be ≥ 100"
-                },
-                "gasMultiplier": {
-                    "type": "number"
-                },
-                "gasPrice": {
-                    "type": "number",
-                    "description": "Legacy: gas price in gwei"
-                },
-                "defaultGetSigFeeSpeed": {
-                    "type": "string",
-                    "description": "Optional. Default Get Sig / Get Sigs fee tier (eth_feeHistory-based): slow, normal, or fast. Omitted = leave unset; clients default to normal.",
-                    "enum": [
-                        "slow",
-                        "normal",
-                        "fast"
-                    ]
-                },
-                "signedMessage": {
-                    "type": "string",
-                    "description": "Exact string signed (MetaMask personal_sign or Ed25519). If you use a JSON payload, include \"nodeKey\" set to this node's 128-hex MPC public key (GET /getNodeKey) so the signature cannot be replayed on another node; omitting nodeKey in JSON is deprecated. Not applicable when signedMessage is opaque non-JSON (e.g. some MQTT CA flows)."
-                },
-                "clientSig": {
-                    "type": "string",
-                    "description": "MetaMask: 0x-prefixed; Ed25519: 128 hex characters"
+                {
+                    "type": "object",
+                    "description": "POST /postChainDetails. Sign JSON with clientSig cleared (includes nodeKey).",
+                    "required": [
+                        "chainName",
+                        "chainId",
+                        "rpcGateway"
+                    ],
+                    "properties": {
+                        "chainName": {
+                            "type": "string"
+                        },
+                        "chainId": {
+                            "type": "string",
+                            "description": "Chain id (number or string in JSON; stored as string)"
+                        },
+                        "rpcGateway": {
+                            "type": "string"
+                        },
+                        "explorer": {
+                            "type": "string"
+                        },
+                        "legacy": {
+                            "type": "boolean"
+                        },
+                        "testnet": {
+                            "type": "boolean"
+                        },
+                        "gasName": {
+                            "type": "string"
+                        },
+                        "gasLimit": {
+                            "type": "number"
+                        },
+                        "baseFee": {
+                            "type": "number"
+                        },
+                        "priorityFee": {
+                            "type": "number"
+                        },
+                        "baseFeeMultiplier": {
+                            "type": "number"
+                        },
+                        "gasMultiplier": {
+                            "type": "number"
+                        },
+                        "gasPrice": {
+                            "type": "number"
+                        },
+                        "defaultGetSigFeeSpeed": {
+                            "type": "string",
+                            "enum": [
+                                "slow",
+                                "normal",
+                                "fast"
+                            ]
+                        }
+                    }
                 }
-            }
+            ]
         },
         "node.LocalChainConfigDoc": {
             "type": "object",
@@ -4836,24 +4816,29 @@
         },
         "node.NodeMgtKeySig": {
             "type": "object",
+            "required": [
+                "nonce",
+                "clientSig",
+                "nodeKey"
+            ],
             "properties": {
-                "Nonce": {
+                "nonce": {
                     "type": "integer",
-                    "description": "Anti-replay nonce from GET /getNodeMgtKeyNonce"
+                    "description": "Anti-replay nonce from GET /getNodeMgtKeyNonce or GET /getPublicMgtKeyNonce"
                 },
-                "Sig": {
+                "clientSig": {
                     "type": "string",
-                    "description": "Management signature over canonical JSON with Sig cleared"
+                    "description": "Management signature over canonical JSON with clientSig cleared (Ed25519 128 hex or EIP-191)"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional: this node's MPC public key (hex); binds the signature to this node"
+                    "description": "Required. This node's MPC public key (128 hex from GET /getNodeKey); binds the signature to this node"
                 }
             }
         },
         "node.BackupDatabasePost": {
             "type": "object",
-            "description": "POST /backupDatabase signed body (verify with Sig cleared).",
+            "description": "POST /backupDatabase signed body (verify with clientSig cleared).",
             "allOf": [
                 {
                     "$ref": "#/definitions/node.NodeMgtKeySig"
@@ -4919,7 +4904,7 @@
         },
         "node.FetchBootstrapKeyPost": {
             "type": "object",
-            "description": "POST /fetchBootstrapKey signed body (typically Nonce + Sig only).",
+            "description": "POST /fetchBootstrapKey signed body (nonce, clientSig, nodeKey).",
             "allOf": [
                 {
                     "$ref": "#/definitions/node.NodeMgtKeySig"
@@ -4988,7 +4973,7 @@
         },
         "node.PostBootstrapKeyPost": {
             "type": "object",
-            "description": "POST /postBootstrapKey signed body (verify with Sig cleared). 32-byte Ed25519 seed as 64 hex chars (same as fetchBootstrapKey ed25519PrivateSeedHex). If configs.yaml PublicMgtKey is set, seed must match it.",
+            "description": "POST /postBootstrapKey signed body (verify with clientSig cleared). 32-byte Ed25519 seed as 64 hex chars (same as fetchBootstrapKey ed25519PrivateSeedHex). If configs.yaml PublicMgtKey is set, seed must match it.",
             "allOf": [
                 {
                     "$ref": "#/definitions/node.NodeMgtKeySig"
@@ -5010,7 +4995,7 @@
         },
         "node.RemoveBootstrapKeyPost": {
             "type": "object",
-            "description": "POST /removeBootstrapKey signed body (typically Nonce + Sig only).",
+            "description": "POST /removeBootstrapKey signed body (nonce, clientSig, nodeKey).",
             "allOf": [
                 {
                     "$ref": "#/definitions/node.NodeMgtKeySig"
@@ -5019,38 +5004,36 @@
         },
         "node.AddManagementKeyPost": {
             "type": "object",
-            "description": "Canonical UTF-8 string to sign: JSON `{\"nonce\":N,\"sig\":\"\"}` (optional `nodeKey` per server encoding). The node generates an Ed25519 key pair and writes PKCS#8 PEM plus `.pub` files under `KEY_ROOT/management_keys/added_key_<N>` (continuum-mcp-server layout). **Ed25519:** set `sig` to 128 hex (allowed bootstrap or added Ed25519 management key); omit `signedMessage` and `clientSig`. Nonce from `GET /getPublicMgtKeyNonce` (add `?publicKey=` when signer is not the default config key). **Ethereum:** `signedMessage` must equal that exact canonical string byte-for-byte; `clientSig` is EIP-191 `personal_sign` from `configs.yaml` `NodeMgtKey`; omit `sig`. Nonce from `GET /getNodeMgtKeyNonce`. Do not send both `sig` and `clientSig`. Requires `NodeMgtKey` on node for Ethereum mode.",
+            "description": "Canonical UTF-8 string to sign: JSON `{\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}`. The node generates an Ed25519 key pair and writes PKCS#8 PEM plus `.pub` files under `KEY_ROOT/management_keys/added_key_<N>` (continuum-mcp-server layout). **Ed25519:** set `clientSig` to 128 hex (allowed bootstrap or added Ed25519 management key); omit `signedMessage`. Nonce from `GET /getPublicMgtKeyNonce` (add `?publicKey=` when signer is not the default config key). **Ethereum:** `signedMessage` must equal that exact canonical string byte-for-byte; `clientSig` is EIP-191 `personal_sign` from `configs.yaml` `NodeMgtKey`. Nonce from `GET /getNodeMgtKeyNonce`. Requires `nodeKey` (GET /getNodeKey). Requires `NodeMgtKey` on node for Ethereum mode.",
             "required": [
-                "nonce"
+                "nonce",
+                "nodeKey"
             ],
             "properties": {
                 "nonce": {
                     "type": "integer",
                     "description": "Anti-replay nonce."
                 },
-                "sig": {
+                "clientSig": {
                     "type": "string",
-                    "description": "Ed25519 — 128 hex. Omit when using EIP-191 `signedMessage` + `clientSig`."
+                    "description": "Ed25519 128 hex, or EIP-191 when signedMessage is set."
                 },
                 "signedMessage": {
                     "type": "string",
-                    "description": "Must equal canonical JSON exactly."
-                },
-                "clientSig": {
-                    "type": "string",
-                    "description": "EIP-191 output for signedMessage."
+                    "description": "Must equal canonical JSON exactly (Ethereum)."
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional MPC node public key binding."
+                    "description": "Required MPC node public key (128 hex from GET /getNodeKey)."
                 }
             }
         },
         "node.RemoveManagementKeyPost": {
             "type": "object",
-            "description": "Canonical UTF-8 string to sign: JSON `{\"publicKey\":\"<64-hex-lowercase-target>\",\"nonce\":N,\"sig\":\"\"}` (optional `nodeKey`). Also removes `KEY_ROOT/management_keys/added_key_<N>` and `added_key_<N>.pub` when present. **Ed25519:** `sig` 128 hex from an allowed key **other than** `publicKey`; nonce from `GET /getPublicMgtKeyNonce` for the **signer**. **Ethereum:** `signedMessage` must equal canonical string; `clientSig` EIP-191 from `NodeMgtKey`; omit `sig`; nonce from `GET /getNodeMgtKeyNonce`. Do not combine `sig` with `clientSig`.",
+            "description": "Canonical UTF-8 string to sign: JSON `{\"publicKey\":\"<64-hex-lowercase-target>\",\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}`. Also removes `KEY_ROOT/management_keys/added_key_<N>` and `added_key_<N>.pub` when present. **Ed25519:** `clientSig` 128 hex from an allowed key **other than** `publicKey`; nonce from `GET /getPublicMgtKeyNonce` for the **signer**. **Ethereum:** `signedMessage` must equal canonical string; `clientSig` EIP-191 from `NodeMgtKey`; nonce from `GET /getNodeMgtKeyNonce`.",
             "required": [
-                "publicKey"
+                "publicKey",
+                "nodeKey"
             ],
             "properties": {
                 "publicKey": {
@@ -5061,43 +5044,41 @@
                     "type": "integer",
                     "description": "Anti-replay nonce."
                 },
-                "sig": {
+                "clientSig": {
                     "type": "string",
-                    "description": "Ed25519 — 128 hex. Omit for Ethereum body."
+                    "description": "Ed25519 128 hex, or EIP-191 when signedMessage is set."
                 },
                 "signedMessage": {
                     "type": "string",
-                    "description": "Canonical JSON exactly."
-                },
-                "clientSig": {
-                    "type": "string",
-                    "description": "EIP-191 for signedMessage."
+                    "description": "Canonical JSON exactly (Ethereum)."
                 },
                 "nodeKey": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Required MPC node public key (128 hex from GET /getNodeKey)."
                 }
             }
         },
         "node.KeyGenEjectRequestPost": {
             "type": "object",
-            "description": "POST /keyGenEjectRequest. Starts multi-agree eject for a completed keygen (`keyGenId` = keygen request id). Supported key types: secp256k1 (CGGMP24), ed25519 (FROST/givre), bitcoin-taproot (FROST/givre). Requires msgCheck multi-agree. Rejects tx-check, legacy GG18 secp256k1, and already-ejected keygens. Requires management proof: verify with **Sig** cleared over canonical JSON including **Nonce**, **keyGenId**, optional **purpose**, optional **nodeKey**. Finalization requires mpc-auth built with -tags rust. See mpc-config docs/references/API_IMPLEMENTATION.md.",
+            "description": "POST /keyGenEjectRequest. Starts multi-agree eject for a completed keygen (`keyGenId` = keygen request id). Supported key types: secp256k1 (CGGMP24), ed25519 (FROST/givre), bitcoin-taproot (FROST/givre). Requires msgCheck multi-agree. Rejects tx-check, legacy GG18 secp256k1, and already-ejected keygens. Requires management proof: verify with **clientSig** cleared over canonical JSON including **nonce**, **nodeKey**, **keyGenId**, optional **purpose**. Finalization requires mpc-auth built with -tags rust. See mpc-config docs/references/API_IMPLEMENTATION.md.",
             "required": [
-                "Nonce",
-                "Sig",
+                "nonce",
+                "clientSig",
+                "nodeKey",
                 "keyGenId"
             ],
             "properties": {
-                "Nonce": {
+                "nonce": {
                     "type": "integer",
                     "description": "Anti-replay nonce from GET /getNodeMgtKeyNonce or GET /getPublicMgtKeyNonce"
                 },
-                "Sig": {
+                "clientSig": {
                     "type": "string",
-                    "description": "Management signature over canonical JSON with Sig as empty string"
+                    "description": "Management signature over canonical JSON with clientSig as empty string"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey — binds signature to this node."
+                    "description": "Required. 128-hex MPC node id from GET /getNodeKey — binds signature to this node."
                 },
                 "keyGenId": {
                     "type": "string",
@@ -5143,22 +5124,23 @@
         },
         "node.GetEthereumPrivateKeyPost": {
             "type": "object",
-            "description": "POST /getEthereumPrivateKey. Returns decrypted **64-hex** secp256k1 scalar after successful eject, plus Bitcoin mainnet **privateKeyWif** / **bitcoinPrivateKeyWif** (compressed WIF) and **bitcoinP2WPKHMainnet** when derivable from the same scalar. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node. After eject, each KeyList participant stores export ciphertext locally (encrypted to that node's key); use POST /getEthereumPrivateKey on any participant that completed local finalize.",
+            "description": "POST /getEthereumPrivateKey. Returns decrypted **64-hex** secp256k1 scalar after successful eject, plus Bitcoin mainnet **privateKeyWif** / **bitcoinPrivateKeyWif** (compressed WIF) and **bitcoinP2WPKHMainnet** when derivable from the same scalar. Requires management proof (nonce, clientSig with clientSig cleared, nodeKey). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node. After eject, each KeyList participant stores export ciphertext locally (encrypted to that node's key); use POST /getEthereumPrivateKey on any participant that completed local finalize.",
             "required": [
-                "Nonce",
-                "Sig",
+                "nonce",
+                "clientSig",
+                "nodeKey",
                 "keyGenId"
             ],
             "properties": {
-                "Nonce": {
+                "nonce": {
                     "type": "integer"
                 },
-                "Sig": {
+                "clientSig": {
                     "type": "string"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended) 128-hex MPC node id binding"
+                    "description": "Required 128-hex MPC node id binding"
                 },
                 "keyGenId": {
                     "type": "string",
@@ -5231,22 +5213,23 @@
         },
         "node.GetBitcoinPrivateKeyPost": {
             "type": "object",
-            "description": "POST /getBitcoinPrivateKey. Returns Bitcoin mainnet compressed **privateKeyWif** for the ejected secp256k1 scalar (same underlying key as POST /getEthereumPrivateKey). Also returns **privateKeyHex** and **bitcoinP2WPKHMainnet**. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node. **secp256k1 only.**",
+            "description": "POST /getBitcoinPrivateKey. Returns Bitcoin mainnet compressed **privateKeyWif** for the ejected secp256k1 scalar (same underlying key as POST /getEthereumPrivateKey). Also returns **privateKeyHex** and **bitcoinP2WPKHMainnet**. Requires management proof (nonce, clientSig with clientSig cleared, nodeKey). Caller node must be in the keygen **KeyList**; keygen result **keygenresultstatus** must be **ejected** on this node. **secp256k1 only.**",
             "required": [
-                "Nonce",
-                "Sig",
+                "nonce",
+                "clientSig",
+                "nodeKey",
                 "keyGenId"
             ],
             "properties": {
-                "Nonce": {
+                "nonce": {
                     "type": "integer"
                 },
-                "Sig": {
+                "clientSig": {
                     "type": "string"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended) 128-hex MPC node id binding"
+                    "description": "Required 128-hex MPC node id binding"
                 },
                 "keyGenId": {
                     "type": "string",
@@ -5260,22 +5243,23 @@
         },
         "node.GetEd25519PrivateKeyPost": {
             "type": "object",
-            "description": "POST /getEd25519PrivateKey. Returns decrypted **64-hex Ed25519 seed** after successful FROST ed25519 eject, plus Solana, NEAR, Stellar/Soroban, TON, and Sui wallet import fields when derivable. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen **keytype** must be **ed25519**; **keygenresultstatus** must be **ejected** on this node.",
+            "description": "POST /getEd25519PrivateKey. Returns decrypted **64-hex Ed25519 seed** after successful FROST ed25519 eject, plus Solana, NEAR, Stellar/Soroban, TON, and Sui wallet import fields when derivable. Requires management proof (nonce, clientSig with clientSig cleared, nodeKey). Caller node must be in the keygen **KeyList**; keygen **keytype** must be **ed25519**; **keygenresultstatus** must be **ejected** on this node.",
             "required": [
-                "Nonce",
-                "Sig",
+                "nonce",
+                "clientSig",
+                "nodeKey",
                 "keyGenId"
             ],
             "properties": {
-                "Nonce": {
+                "nonce": {
                     "type": "integer"
                 },
-                "Sig": {
+                "clientSig": {
                     "type": "string"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended) 128-hex MPC node id binding"
+                    "description": "Required 128-hex MPC node id binding"
                 },
                 "keyGenId": {
                     "type": "string",
@@ -5285,28 +5269,411 @@
         },
         "node.GetTaprootPrivateKeyPost": {
             "type": "object",
-            "description": "POST /getTaprootPrivateKey. Returns Taproot internal key scalar, internal/output x-only pubkeys, P2TR addresses, and optional Bitcoin mainnet WIF after successful FROST bitcoin-taproot eject. Requires management proof (Nonce, Sig with Sig cleared). Caller node must be in the keygen **KeyList**; keygen **keytype** must be **bitcoin-taproot**; **keygenresultstatus** must be **ejected** on this node.",
+            "description": "POST /getTaprootPrivateKey. Returns Taproot internal key scalar, internal/output x-only pubkeys, P2TR addresses, and optional Bitcoin mainnet WIF after successful FROST bitcoin-taproot eject. Requires management proof (nonce, clientSig with clientSig cleared, nodeKey). Caller node must be in the keygen **KeyList**; keygen **keytype** must be **bitcoin-taproot**; **keygenresultstatus** must be **ejected** on this node.",
             "required": [
-                "Nonce",
-                "Sig",
+                "nonce",
+                "clientSig",
+                "nodeKey",
                 "keyGenId"
             ],
             "properties": {
-                "Nonce": {
+                "nonce": {
                     "type": "integer"
                 },
-                "Sig": {
+                "clientSig": {
                     "type": "string"
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended) 128-hex MPC node id binding"
+                    "description": "Required 128-hex MPC node id binding"
                 },
                 "keyGenId": {
                     "type": "string",
                     "description": "Keygen request id"
                 }
             }
+        },
+        "node.RemoveChainDetailsPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "chainId"
+                    ],
+                    "properties": {
+                        "chainId": {
+                            "type": "string"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.PostNonEvmChainDetailsPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "chainType",
+                        "chainId",
+                        "chainName",
+                        "rpcGateway",
+                        "endpointKind",
+                        "nativeSymbol",
+                        "nativeDecimals"
+                    ],
+                    "properties": {
+                        "chainType": {
+                            "type": "string"
+                        },
+                        "chainId": {
+                            "type": "string"
+                        },
+                        "chainName": {
+                            "type": "string"
+                        },
+                        "rpcGateway": {
+                            "type": "string"
+                        },
+                        "endpointKind": {
+                            "type": "string",
+                            "enum": [
+                                "json-rpc",
+                                "horizon",
+                                "ton-http"
+                            ]
+                        },
+                        "explorer": {
+                            "type": "string"
+                        },
+                        "testnet": {
+                            "type": "boolean"
+                        },
+                        "nativeSymbol": {
+                            "type": "string"
+                        },
+                        "nativeDecimals": {
+                            "type": "integer"
+                        },
+                        "wsGateway": {
+                            "type": "string"
+                        },
+                        "tonVendor": {
+                            "type": "string"
+                        },
+                        "signingDefaults": {
+                            "type": "object"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.RemoveNonEvmChainDetailsPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "chainType",
+                        "chainId"
+                    ],
+                    "properties": {
+                        "chainType": {
+                            "type": "string"
+                        },
+                        "chainId": {
+                            "type": "string"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.AddTokenPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "chainType",
+                        "chainId",
+                        "tokenType",
+                        "contract"
+                    ],
+                    "properties": {
+                        "chainType": {
+                            "type": "string"
+                        },
+                        "chainId": {
+                            "type": "string"
+                        },
+                        "tokenType": {
+                            "type": "string"
+                        },
+                        "contract": {
+                            "type": "object"
+                        },
+                        "transferSig": {
+                            "type": "string"
+                        },
+                        "transferNames": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "node.RemoveTokenPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "chainType",
+                        "chainId",
+                        "tokenType",
+                        "contractAddress"
+                    ],
+                    "properties": {
+                        "chainType": {
+                            "type": "string"
+                        },
+                        "chainId": {
+                            "type": "string"
+                        },
+                        "tokenType": {
+                            "type": "string"
+                        },
+                        "contractAddress": {
+                            "type": "string"
+                        },
+                        "tokenId": {
+                            "type": "string",
+                            "description": "Required for ERC721"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.AddKnownAddressPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "chainType",
+                        "address"
+                    ],
+                    "properties": {
+                        "chainType": {
+                            "type": "string"
+                        },
+                        "address": {
+                            "type": "string"
+                        },
+                        "name": {
+                            "type": "string"
+                        },
+                        "chainIds": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "isContract": {
+                            "type": "boolean"
+                        },
+                        "addressSubtype": {
+                            "type": "string"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.RemoveKnownAddressPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "chainType",
+                        "address"
+                    ],
+                    "properties": {
+                        "chainType": {
+                            "type": "string"
+                        },
+                        "address": {
+                            "type": "string"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.PostMSQTTKeyPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "description": "Sign caCertPem (opaque PEM). nodeKey in body binds to this node.",
+                    "required": [
+                        "caCertPem"
+                    ],
+                    "properties": {
+                        "caCertPem": {
+                            "type": "string",
+                            "description": "X.509 CERTIFICATE PEM (max 512 KiB)"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.SetPreferredSignerPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "publicKey"
+                    ],
+                    "properties": {
+                        "publicKey": {
+                            "type": "string",
+                            "description": "64-hex Ed25519 public key (active management key)"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.AgentLlmConfigPost": {
+            "type": "object",
+            "description": "POST /agentLlmConfig. Sign canonical JSON {\"action\":\"agentLlmConfig\",\"baseUrl\":...,\"clientSig\":\"\",\"model\":\"...\",\"nonce\":N,\"nodeKey\":\"<128-hex>\",\"provider\":\"...\"}.",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "provider",
+                        "model"
+                    ],
+                    "properties": {
+                        "provider": {
+                            "type": "string"
+                        },
+                        "model": {
+                            "type": "string"
+                        },
+                        "baseUrl": {
+                            "type": "string",
+                            "description": "Optional; omit or null for provider default"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.AgentLlmApiKeyPost": {
+            "type": "object",
+            "description": "POST /agentLlmApiKey. Sign canonical JSON {\"action\":\"agentLlmApiKey\",\"apiKey\":\"...\",\"clientSig\":\"\",\"nonce\":N,\"nodeKey\":\"<128-hex>\"}.",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "apiKey"
+                    ],
+                    "properties": {
+                        "apiKey": {
+                            "type": "string",
+                            "description": "Non-empty to set; \"\" to clear"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.ConfigUpdateImplementPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "description": "POST /configUpdateImplement. signedMessage is opaque configUpdateImplement|<sha256>; nodeKey in body binds to this node (not inside signedMessage).",
+                    "required": [
+                        "plannedYaml",
+                        "signedMessage"
+                    ],
+                    "properties": {
+                        "plannedYaml": {
+                            "type": "string"
+                        },
+                        "signedMessage": {
+                            "type": "string",
+                            "description": "Must equal configUpdateImplement|<sha256-hex-of-plannedYaml>"
+                        },
+                        "rotationNodeMgtKeyClientSig": {
+                            "type": "string"
+                        },
+                        "rotationPublicMgtKeyClientSig": {
+                            "type": "string"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.PostPreferredKeyGenPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "keyGenId"
+                    ],
+                    "properties": {
+                        "keyGenId": {
+                            "type": "string",
+                            "description": "KeyGen request id (same as GET /getKeyGenResultById id); must be multi-agree, non-ejected, with public key"
+                        }
+                    }
+                }
+            ]
         }
     }
 }
