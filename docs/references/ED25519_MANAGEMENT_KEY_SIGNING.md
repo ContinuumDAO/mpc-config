@@ -39,7 +39,7 @@ If none of your keys match, you cannot sign management **`POST`**s on this node 
 
 **Every** **`POST`** to the management API requires **management** authentication: **Ed25519** (this doc) or **Ethereum** **`NodeMgtKey`** / **`personal_sign`** (EIP-191), depending on what the node accepts (see **`./API_IMPLEMENTATION.md`** § *Using an Ethereum wallet or Ed25519 for Management API Authentication*).
 
-- **`clientSig`** on **`POST /multiSignRequest`** signs the **canonical `messageToSign`** string with the **management** key (not the MPC key). Details and **`signedMessage`** rules: **`./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`** and **`./AI_AGENT_FORGE_SIGNREQUEST.md`**.
+- **`clientSig`** on **`POST /multiSignRequest`** and **`POST /signRequestAgree`** signs the canonical JSON body (with **`clientSig`** cleared) using the **management** key, together with **`nonce`** and **`nodeKey`**. Details: **`./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`** and **`./API_IMPLEMENTATION.md`**.
 
 Do **not** confuse **management signatures** (per-node HTTP auth) with **MPC signatures** (threshold signing for the shared wallet).
 
@@ -64,8 +64,7 @@ Among **Ed25519** management keys, **each distinct keypair** (each **64-hex publ
 
 ### Where the nonce appears
 
-- **Endpoints that use `nonce` + `sig` (or `Nonce` + `Sig`)** — e.g. **`POST /keyGenRequest`**, **`POST /keyGenRequestAgree`**, **`POST /triggerSignRequestById`**, **`POST /updateSignResultStatusById`**, **`POST /shelveSignRequest`**, **`POST /sendMessage`**, **`POST /markMessageRead`**, and other KeyGen messaging **`POST`**s per **`./API_KEYGEN_MESSAGING.md`** — you **must** fetch the current value from **`GET /getPublicMgtKeyNonce`** (Ed25519) immediately before building the body, embed that integer in the JSON, then produce **`sig`/`Sig`** over the canonical JSON with that field left empty (exact layout per **`./API_IMPLEMENTATION.md`** for that route).
-- **`POST /multiSignRequest`** and **`POST /signRequestAgree`** — use **`clientSig`** over the **documented** JSON body ( **`messageToSign`** / compact JSON without **`clientSig`** for **`multiSignRequest`**). They do **not** use the same **`nonce`** field as **`getPublicMgtKeyNonce`** in the body; replay protection is via the signed payload. Still use **`getPublicMgtKeyNonce`** for **`triggerSignRequestById`**, **`sendMessage`**, etc.
+- **Endpoints that use `nonce` + `clientSig` (management signature)** — e.g. **`POST /keyGenRequest`**, **`POST /keyGenRequestAgree`**, **`POST /multiSignRequest`**, **`POST /signRequestAgree`**, **`POST /keyGenEjectAgree`**, **`POST /triggerSignRequestById`**, **`POST /updateSignResultStatusById`**, **`POST /shelveSignRequest`**, **`POST /sendMessage`**, **`POST /markMessageRead`**, and other KeyGen messaging **`POST`**s per **`./API_KEYGEN_MESSAGING.md`** — you **must** fetch the current value from **`GET /getPublicMgtKeyNonce`** (Ed25519) immediately before building the body, embed that integer in the JSON together with **`nodeKey`** (128 hex from **`GET /getNodeKey`**), then produce **`clientSig`** over the canonical JSON with that field left empty (exact layout per **`./API_IMPLEMENTATION.md`** for that route).
 
 ### Do not confuse management nonces with **`globalNonce`**
 

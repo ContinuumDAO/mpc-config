@@ -239,7 +239,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /keyGenRequestAgree`](#post-keygenrequestagree) - Agree to key generation request (requires mgt key)
 - [`GET /getKeyGenResultById`](#get-getkeygenresultbyid) - Get key generation result by ID
 - [`POST /keyGenEjectRequest`](#post-keygenejectrequest) - Start **multi-agree key eject** (CGGMP24 **secp256k1**, FROST **ed25519**, FROST **bitcoin-taproot**; requires mgt key)
-- [`POST /keyGenEjectAgree`](#post-keygenejectagree) - Vote accept/reject on key eject (client-signed, same pattern as `signRequestAgree`)
+- [`POST /keyGenEjectAgree`](#post-keygenejectagree) - Vote accept/reject on key eject (requires mgt key; same pattern as `signRequestAgree`)
 - [`GET /listKeyGenEjectRequests`](#get-listkeygenejectrequests) - List in-progress or completed key eject flows for this node
 - [`GET /getKeyGenEjectRequestById`](#get-getkeygenejectrequestbyid) - Get one key eject flow by eject request id
 - [`POST /getEthereumPrivateKey`](#post-getethereumprivatekey) - After eject: read exported **64-hex** secp256k1 scalar (**secp256k1** only; also returns Bitcoin mainnet WIF when derivable)
@@ -295,7 +295,7 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 - [`POST /multiSignRequest`](#post-multisignrequest) - Create multi-agree sign request (no relayer)
 - [`GET /listSignRequests`](#get-listsignrequests) - List sign requests
 - [`GET /getSignRequestById`](#get-getsignrequestbyid) - Get sign request by ID
-- [`POST /signRequestAgree`](#post-signrequestagree) - Agree to sign request
+- [`POST /signRequestAgree`](#post-signrequestagree) - Agree to sign request (requires mgt key for multi-agree)
 - [`GET /isSignRequestReadyById`](#get-issignrequestreadybyid) - Check if multi-agree sign request is ready to trigger
 - [`GET /listSignRequestsReady`](#get-listsignrequestsready) - List multi-agree sign requests ready to trigger (with pagenum/pagesize)
 - [`POST /triggerSignRequestById`](#post-triggersignrequestbyid) - Trigger signature generation for multi-agree (requires mgt key)
@@ -3339,17 +3339,17 @@ The node propagates eject protocol traffic over MQTT (`KEYGENEJECT*` message typ
 
 <a id="post-keygenejectagree"></a>
 #### `POST /keyGenEjectAgree`
-Records a committee member **accept** or **reject** for an eject started with [`POST /keyGenEjectRequest`](#post-keygenejectrequest). **Client signature** policy matches **`signRequestAgree`**: EIP-191 **`signedMessage`** + **`clientSig`** (and optional **`signerAddress`**) or Ed25519 paths; optional **`thoughts`** (max 256 characters). **No management `Nonce`/`Sig`** on this endpoint—the voting node proves intent with the **client** key associated with the keygen / group policy (`verifySignRequestAgreeClientSig`).
+Records a committee member **accept** or **reject** for an eject started with [`POST /keyGenEjectRequest`](#post-keygenejectrequest). **Requires management key authentication** (same pattern as **`signRequestAgree`**, **`triggerSignRequestById`**, etc.): fetch nonce from **`GET /getPublicMgtKeyNonce`** (Ed25519) or **`GET /getNodeMgtKeyNonce`** (Ethereum **`NodeMgtKey`**), build JSON with **`nonce`**, **`nodeKey`** (128 hex from **`GET /getNodeKey`**), and other fields, sign with **`clientSig` cleared**, send as **`clientSig`**. Optional **`thoughts`** (max 256 characters).
 
 **Request body:**
 ```json
 {
   "ejectRequestId": "<from keyGenEjectRequest data>",
+  "nonce": 1,
+  "nodeKey": "<128-hex MPC node key from GET /getNodeKey>",
+  "clientSig": "<management signature>",
   "accept": true,
-  "thoughts": "optional",
-  "signedMessage": "...",
-  "clientSig": "...",
-  "signerAddress": "0x..."
+  "thoughts": "optional"
 }
 ```
 
@@ -4097,20 +4097,20 @@ Creates a new signing request for **multi-agree keys only**. No relayer authenti
 
 **Single vs batch:** For a **single** message, send `msgHash` (required) and optional `msgRaw`. For a **batch** of N messages (e.g. a sequence of transactions), send `messageHashes` (array of N hex strings, length ≥ 2) and optionally `messageRawBatch` (length 0 or N); do not send `msgHash`/`msgRaw` for batch. One agree and one trigger then produce one SignResult whose `batchSignatures` array holds the N signatures (see `GET /getSignResultById`). Optional **`presignId`** applies to **single-message** requests only.
 
-**Client signature (`clientSig`), `signedMessage`, and `purpose` in the signed payload:**
+**Management signature (`nonce`, `nodeKey`, `clientSig`), and `purpose` in the signed payload:**
 
-The node verifies `clientSig` using the **KeyGen `ClientKeys`** entry for this node (and/or **PublicMgtKey** / **NodeMgtKey** where applicable), with the same key-type rules as mpc-auth (`VerifyMultiSignRequestPostSigFlex` and management-key paths).
+Requires **management key authentication** (Ethereum **`NodeMgtKey`** / **`personal_sign`** or Ed25519 **`PublicMgtKey`** / added keys). Fetch the current nonce from **`GET /getPublicMgtKeyNonce`** (Ed25519) or **`GET /getNodeMgtKeyNonce`** (Ethereum) immediately before building the body. The signed message is **`json.Marshal`** of the full POST body with **`clientSig`** and **`signedMessage`** cleared (same pattern as **`POST /triggerSignRequestById`**). **`nodeKey`** (128 hex from **`GET /getNodeKey`**) is **required** and binds the signature to this MPC node.
 
-- **`purpose` in JSON:** The `purpose` field is **always present** in the Go request struct’s JSON encoding: `encoding/json` emits **`"purpose"`** even when the value is `""`. Any **`messageToSign` / compact JSON** you build for **`signedMessage`** (compose helpers, agents) **must include the `purpose` key** (string, possibly empty). Omitting `purpose` from the bytes you sign will not match what the node verifies. This aligns with the stored **Purpose** map (creator node key → text, including empty text).
-- **P256 (128-hex client key in ClientKeys):** The signed payload uses **deterministic JSON** (sorted object keys), with `clientSig` cleared; it **includes `"purpose"`** (possibly `"purpose":""`).
-- **Ed25519 (64-hex client key):** If **`signedMessage`** is non-empty, verification uses that exact UTF-8 string. If **`signedMessage`** is **omitted or empty** and the node verifies via **PublicMgtKey** (or the ClientKeys Ed25519 path with canonical JSON), the node uses **`json.Marshal`** of the POST body with **`clientSig` and `signedMessage` set to empty strings** — that canonical string **always contains `"purpose"`**. Compose flows should either include `purpose` in `messageToSign` or match the node’s canonical marshal.
-- **Ethereum address (`NodeMgtKey`):** **`signedMessage` is required** (non-empty). It must be the exact string passed to **`personal_sign`**. That JSON **must include `"purpose"`** (`""` if unused). The node returns **`400`** if `signedMessage` is empty on this path.
+- **`purpose` in JSON:** The `purpose` field is **always present** in the Go request struct’s JSON encoding: `encoding/json` emits **`"purpose"`** even when the value is `""`. The signed payload **must include the `purpose` key** (string, possibly empty). This aligns with the stored **Purpose** map (creator node key → text, including empty text).
+- **Ethereum (`NodeMgtKey`):** `personal_sign` over the canonical JSON string (with `clientSig` cleared).
+- **Ed25519 (`PublicMgtKey` or added key):** Sign the same canonical JSON string (128-hex signature).
 
 **Request Body (single):**
 ```json
 {
-  "clientSig": "<client signature over signedMessage (same scheme as keyGenRequest)>",
-  "signedMessage": "<exact UTF-8 string signed; same as messageToSign from compose helpers — must include \"purpose\">",
+  "nonce": 1,
+  "nodeKey": "<128-hex MPC node key from GET /getNodeKey>",
+  "clientSig": "<management signature over JSON with clientSig cleared>",
   "keyList": ["node1_key", "node2_key", "node3_key"],
   "pubKey": "08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de",
   "msgHash": "751f68b43977269a16128143fa15e0e7ab3c15ba52484fe8278796561505698b",
@@ -4127,6 +4127,8 @@ The node verifies `clientSig` using the **KeyGen `ClientKeys`** entry for this n
 **Request Body (batch):** Same as above but use `messageHashes` and optional `messageRawBatch` instead of `msgHash`/`msgRaw`:
 ```json
 {
+  "nonce": 1,
+  "nodeKey": "<128-hex MPC node key>",
   "clientSig": "...",
   "keyList": ["node1_key", "node2_key", "node3_key"],
   "pubKey": "08caf...",
@@ -4138,8 +4140,9 @@ The node verifies `clientSig` using the **KeyGen `ClientKeys`** entry for this n
 ```
 
 **Field Descriptions:**
-- `clientSig` (required): Client signature over the management-auth message; see **Client signature (`clientSig`), `signedMessage`, and `purpose` in the signed payload** above.
-- `signedMessage` (required for Ethereum **`NodeMgtKey`**; optional for some **Ed25519** paths): Exact UTF-8 string that was signed — typically the same compact JSON as the request fields **without** `clientSig` / `signedMessage` (compose helpers expose this as **`messageToSign`**). **Must include the `purpose` key** (string, possibly `""`) so the signed bytes match the node. **Ethereum wallet:** `personal_sign` over `signedMessage`; empty `signedMessage` → **`400`**. **Ed25519 via PublicMgtKey:** if `signedMessage` is empty, the node verifies over **canonical JSON** of the full body (with `clientSig` / `signedMessage` cleared), which always includes `"purpose"`.
+- `nonce` (required): Anti-replay nonce from **`GET /getPublicMgtKeyNonce`** or **`GET /getNodeMgtKeyNonce`** (must match the signing key).
+- `nodeKey` (required): This node's MPC public key (128 hex from **`GET /getNodeKey`**); binds the management signature to this node.
+- `clientSig` (required): Management signature over the canonical JSON body with **`clientSig`** and **`signedMessage`** cleared; see **Management signature** above.
 - `keyList` (required): Array of node keys in the same GroupId that may participate; can be empty array `[]` to use keyList from KeyGenResult
 - `pubKey` (required): Public key (128 hex characters) from key generation (must be multi-agree key)
 - `msgHash` (required for **single**): Keccak256 hash of the message to sign. Omit when using `messageHashes` (batch). **EVM broadcast:** For secp256k1 keys, if the client will build a signed tx and call `eth_sendRawTransaction`, the recovered signer must match the keyGen's `ethereumaddress`. That only holds when the signature is over the **transaction signing hash** (hash of the serialized unsigned EIP-1559/legacy tx). If the client sends a different hash (e.g. only `keccak256(msgRaw)`), the MPC signs it correctly, but using that (r,s,v) on the full tx yields a different recovered address; send the tx signing hash as `msgHash` and use the same nonce/gas when building the signed tx.
@@ -4314,37 +4317,37 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSignRequestById?id=Sign20260111003720999
 
 <a id="post-signrequestagree"></a>
 #### `POST /signRequestAgree`
-Agrees to or rejects a signing request.
+Agrees to or rejects a signing request. **Requires management key authentication** for **multi-agree** keys (same **`nonce` + `nodeKey` + `clientSig`** pattern as **`POST /triggerSignRequestById`**, **`POST /presignRequestAgree`**, etc.). **tx-check (relayer)** keys are unchanged: request body may be `requestId` only; no management signature is verified.
 
-- **tx-check (relayer):** Unchanged. Request body is `requestId` + `clientSig`; no `accept` or `thoughts` field. Relayer flow is not affected.
-- **multi-agree:** Optional `accept` (boolean). Omitted or `true` = agree to sign (same as before). `false` = reject: this node is recorded as having declined in **RejectedBy**. The client must sign over the same body (including `accept` and `thoughts` when present). Other nodes may still agree; rejection is per-node.
+- **tx-check (relayer):** Unchanged. Request body is `requestId` (+ optional `clientSig`); no `accept` or `thoughts` field. Relayer flow is not affected.
+- **multi-agree:** Optional `accept` (boolean). Omitted or `true` = agree to sign (same as before). `false` = reject: this node is recorded as having declined in **RejectedBy**. The client must sign the canonical JSON body (including `requestId`, `nonce`, `nodeKey`, `clientSig` empty, `accept`, and `thoughts` when present). Other nodes may still agree; rejection is per-node.
 
 **Request Body:**
 - `requestId` (required): Sign request ID
-- `clientSig` (required for multi-agree when client sig check enabled): Signature over the **exact** request body used for this call (including `requestId`, `clientSig` empty, `accept`, and `thoughts` when present). For an **Ethereum address** client key (`NodeMgtKey`), use `personal_sign`; send the same string in `signedMessage`. For P256 (128-hex client key), the backend hashes the JSON with SHA256 and verifies ECDSA P256.
+- `nonce` (required for multi-agree when management sig check enabled): From **`GET /getPublicMgtKeyNonce`** (Ed25519) or **`GET /getNodeMgtKeyNonce`** (Ethereum **`NodeMgtKey`**)
+- `nodeKey` (required for multi-agree): This node's MPC public key (128 hex from **`GET /getNodeKey`**); binds the signature to this node
+- `clientSig` (required for multi-agree when management sig check enabled): Management signature over **`json.Marshal`** of the body with **`clientSig`** and **`signedMessage`** cleared (includes `requestId`, `nonce`, `nodeKey`, `accept`, `thoughts` when present)
 - `accept` (optional, **multi-agree only**): `true` or omitted = agree to sign; `false` = reject (drops from this node's pending list). Ignored for tx-check.
 - `thoughts` (optional): Comment from this node when agreeing or rejecting, max 256 characters; stored per node key and returned in list/get and `getSignResultById`.
-- `signedMessage` (optional, **required for Ethereum / NodeMgtKey**): The exact string the client signed (e.g. the JSON body with `clientSig: ""`). Required when the key's client key is an Ethereum address (`NodeMgtKey`); optional for Ed25519 (backend can use canonical JSON if omitted). Ignored for P256.
-- `signerAddress` (optional): The connected wallet address (e.g. from your Ethereum wallet). When provided together with `signedMessage`, the node verifies that `signerAddress` matches this node's **NodeMgtKey** (config) and verifies the signature with `VerifyMessageSignature(signedMessage, clientSig, signerAddress)`. Use this when the key was created on another node so this node's ClientKeys entry may be empty or a placeholder.
 
 **Example (multi-agree agree):**
 ```json
-{ "requestId": "Sign20260111003720999cf104d0f", "clientSig": "0x...", "accept": true }
+{ "requestId": "Sign20260111003720999cf104d0f", "nonce": 1, "nodeKey": "<128-hex>", "clientSig": "0x...", "accept": true }
 ```
 
 **Example (multi-agree agree with thoughts):**
 ```json
-{ "requestId": "Sign20260111003720999cf104d0f", "clientSig": "0x...", "accept": true, "thoughts": "Verified on explorer" }
+{ "requestId": "Sign20260111003720999cf104d0f", "nonce": 1, "nodeKey": "<128-hex>", "clientSig": "0x...", "accept": true, "thoughts": "Verified on explorer" }
 ```
 
 **Example (multi-agree reject):**
 ```json
-{ "requestId": "Sign20260111003720999cf104d0f", "clientSig": "0x...", "accept": false }
+{ "requestId": "Sign20260111003720999cf104d0f", "nonce": 1, "nodeKey": "<128-hex>", "clientSig": "0x...", "accept": false }
 ```
 
 **Example (multi-agree reject with thoughts):**
 ```json
-{ "requestId": "Sign20260111003720999cf104d0f", "clientSig": "0x...", "accept": false, "thoughts": "Risk too high" }
+{ "requestId": "Sign20260111003720999cf104d0f", "nonce": 1, "nodeKey": "<128-hex>", "clientSig": "0x...", "accept": false, "thoughts": "Risk too high" }
 ```
 
 **Response:**
@@ -5173,7 +5176,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest \
 # Step 2: Each node agrees (or rejects) via signRequestAgree
 curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/signRequestAgree \
   -H "Content-Type: application/json" \
-  -d '{"requestId": "Sign20260111003720999cf104d0f", "clientSig": "0x...", "accept": true}'
+  -d '{"requestId": "Sign20260111003720999cf104d0f", "nonce": 1, "nodeKey": "<128-hex from GET /getNodeKey>", "clientSig": "0x...", "accept": true}'
 
 # Step 3: Check if ready, then trigger (any node)
 curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/isSignRequestReadyById?id=Sign20260111003720999cf104d0f"

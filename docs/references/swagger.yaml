@@ -3061,25 +3061,32 @@ definitions:
         type: string
   node.SignRequestAgreePost:
     type: object
+    description: 'POST /signRequestAgree. Multi-agree: management signature (nonce, nodeKey, clientSig). tx-check relayer
+      keys: requestId only; no management sig verified.'
+    required:
+    - requestId
+    - nonce
+    - clientSig
+    - nodeKey
     properties:
-      clientSig:
-        type: string
       requestId:
         type: string
-      accept:
-        type: boolean
-      thoughts:
-        type: string
-      signedMessage:
-        type: string
-        description: Exact string signed (MetaMask or Ed25519). If JSON, SHOULD include "nodeKey" (128 hex from GET /getNodeKey)
-          so the client signature binds to this node; omitting nodeKey in JSON is deprecated.
-      signerAddress:
-        type: string
+        description: Sign request id
+      nonce:
+        type: integer
+        description: Anti-replay nonce from GET /getPublicMgtKeyNonce or GET /getNodeMgtKeyNonce
       nodeKey:
         type: string
-        description: Optional; when using Ed25519 with an empty signedMessage, include in JSON so canonical signing includes
-          it (see API_IMPLEMENTATION.md). For MetaMask, embed "nodeKey" inside the JSON you place in signedMessage.
+        description: Required. 128-hex MPC node id from GET /getNodeKey
+      clientSig:
+        type: string
+        description: Management signature over json.Marshal body with clientSig and signedMessage cleared
+      accept:
+        type: boolean
+        description: 'Multi-agree only: false = reject; omit or true = agree'
+      thoughts:
+        type: string
+        description: Optional comment; max 256 chars
   node.SignRequestPost:
     type: object
     properties:
@@ -3451,29 +3458,33 @@ definitions:
         description: Optional originator rationale stored on the eject request.
   node.KeyGenEjectAgreePost:
     type: object
-    description: 'POST /keyGenEjectAgree. Committee member vote: **client** signature (same pattern as signRequestAgree —
-      EIP-191 **personal_sign** / **signedMessage** + **clientSig**, or Ed25519 canonical body). **Reject** (`accept`: false)
-      is recorded for audit only and does **not** veto the eject once signing-quorum accepts exist.'
+    description: 'POST /keyGenEjectAgree. Committee member vote with **management** signature (same pattern as signRequestAgree
+      — nonce, nodeKey, clientSig over json.Marshal with clientSig cleared). **Reject** (`accept`: false) is recorded for
+      audit only and does **not** veto the eject once signing-quorum accepts exist.'
     required:
     - ejectRequestId
+    - nonce
+    - clientSig
+    - nodeKey
     properties:
       ejectRequestId:
         type: string
         description: Id returned in POST /keyGenEjectRequest data.ejectRequestId
+      nonce:
+        type: integer
+        description: Anti-replay nonce from GET /getPublicMgtKeyNonce or GET /getNodeMgtKeyNonce
+      nodeKey:
+        type: string
+        description: Required. 128-hex MPC node id from GET /getNodeKey
+      clientSig:
+        type: string
+        description: Management signature over canonical JSON with clientSig cleared
       accept:
         type: boolean
         description: false = reject (audit-only); omit or true = accept
       thoughts:
         type: string
         description: Optional comment; max 256 chars server-side
-      clientSig:
-        type: string
-      signedMessage:
-        type: string
-        description: Exact UTF-8 string signed (Ethereum or Ed25519 mode)
-      signerAddress:
-        type: string
-        description: Wallet address when using MetaMask-style signing
   node.GetEthereumPrivateKeyPost:
     type: object
     description: POST /getEthereumPrivateKey. Returns decrypted **64-hex** secp256k1 scalar after successful eject, plus Bitcoin
@@ -3845,3 +3856,55 @@ definitions:
           type: string
           description: KeyGen request id (same as GET /getKeyGenResultById id); must be multi-agree, non-ejected, with public
             key
+  node.MultiSignRequestPost:
+    type: object
+    description: POST /multiSignRequest. Multi-agree keys only. Requires management signature (nonce, nodeKey, clientSig over
+      json.Marshal with clientSig and signedMessage cleared).
+    required:
+    - nonce
+    - clientSig
+    - nodeKey
+    - pubKey
+    - destinationChainID
+    - purpose
+    properties:
+      nonce:
+        type: integer
+      nodeKey:
+        type: string
+        description: 128-hex MPC node id from GET /getNodeKey
+      clientSig:
+        type: string
+      keyList:
+        type: array
+        items:
+          type: string
+      pubKey:
+        type: string
+      msgHash:
+        type: string
+      msgRaw:
+        type: string
+      messageHashes:
+        type: array
+        items:
+          type: string
+      messageRawBatch:
+        type: array
+        items:
+          type: string
+      destinationChainID:
+        type: string
+      destinationAddress:
+        type: string
+      extraJSON:
+        type: string
+      signatureText:
+        type: string
+      purpose:
+        type: string
+        description: Required JSON key (may be empty string)
+      sendGas:
+        type: boolean
+      value:
+        type: string
