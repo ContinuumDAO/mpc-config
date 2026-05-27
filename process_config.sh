@@ -176,6 +176,7 @@ _process_config_finalize_repo_ownership_after_sudo() {
     process_config_transfer_repo_path_to_invoking_user "${compose_root}/.env"
     process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/.env"
     process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/bootstrap_key"
+    process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/.mpa"
     process_config_repo_take_if_sudo_invoker "$compose_file"
     process_config_transfer_repo_path_to_invoking_user "$compose_file"
     cf_alt="${compose_root}/docker-compose.yml"
@@ -2523,6 +2524,37 @@ PYNORMSSH
     return 0
 }
 
+# Link REPO_ROOT/.mpa/bootstrap_key -> REPO_ROOT/bootstrap_key when ed25519_private.hex exists, so
+# continuum-mcp (KEY_ROOT=/app/.mpa) can discover the bootstrap seed via compose bind-mount.
+ensure_mpa_bootstrap_key_symlink() {
+    local bootstrap_dir="${REPO_ROOT}/bootstrap_key"
+    local seed="${bootstrap_dir}/ed25519_private.hex"
+    local mpa_dir="${REPO_ROOT}/.mpa"
+    local link_path="${mpa_dir}/bootstrap_key"
+
+    if [ ! -f "$seed" ]; then
+        return 0
+    fi
+
+    mkdir -p "$mpa_dir"
+
+    if [ -L "$link_path" ]; then
+        local resolved expected
+        resolved="$(readlink -f "$link_path" 2>/dev/null || true)"
+        expected="$(cd "$bootstrap_dir" && pwd)"
+        if [ -n "$resolved" ] && [ "$resolved" = "$expected" ]; then
+            return 0
+        fi
+        rm -f "$link_path"
+    elif [ -e "$link_path" ]; then
+        print_warning ".mpa/bootstrap_key exists but is not a symlink to bootstrap_key/ — leaving unchanged."
+        return 0
+    fi
+
+    ln -sfn "$bootstrap_dir" "$link_path"
+    print_info "Linked .mpa/bootstrap_key -> bootstrap_key/ (continuum-mcp bootstrap key discovery)."
+}
+
 # When PublicMgtKey is still empty after interactive prompts (or NodeMgtKey-only with skip), generate
 # bootstrap_key/ed25519_private.hex + set PublicMgtKey + DeterministicNodeKey (DATABASE_BACKUP_RESTORE_PLAN §8).
 # Also used for non-interactive installs (e.g. provision-node.sh): mpc-auth may require PublicMgtKey to derive nodeKey.
@@ -2574,6 +2606,7 @@ except Exception:
     if [ "$pk_nonempty" = "0" ]; then
         print_success "Bootstrap management key provisioned."
     fi
+    ensure_mpa_bootstrap_key_symlink
     return 0
 }
 
@@ -4223,6 +4256,7 @@ apply_docker_compose_continuum_mcp_server() {
         print_warning "Skipping continuum-mcp-server compose merge (missing configs.yaml path)."
         return 0
     fi
+    ensure_mpa_bootstrap_key_symlink
     if [ ! -f "$file" ]; then
         print_warning "Skipping continuum-mcp-server compose merge (compose file missing)."
         return 0
@@ -4348,6 +4382,7 @@ if enabled:
         f'      KEY_ROOT: /app/.mpa\n'
         f"    volumes:\n"
         f"      - ./.mpa/management_keys:/app/.mpa/management_keys\n"
+        f"      - ./.mpa/bootstrap_key:/app/.mpa/bootstrap_key:ro\n"
         f"    ports:\n"
         f'      - "127.0.0.1:{host_port}:{container_port}"\n'
         f"    networks:\n"

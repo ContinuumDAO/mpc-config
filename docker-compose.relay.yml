@@ -145,6 +145,8 @@ services:
       KEY_ROOT: /app/.mpa
     volumes:
       - ./.mpa/management_keys:/app/.mpa/management_keys
+      # Host ./.mpa/bootstrap_key symlinks to ./bootstrap_key (process_config.sh ensure_mpa_bootstrap_key_symlink).
+      - ./.mpa/bootstrap_key:/app/.mpa/bootstrap_key:ro
     ports:
       - "127.0.0.1:8446:8446"
     networks:
