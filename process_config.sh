@@ -2524,35 +2524,44 @@ PYNORMSSH
     return 0
 }
 
-# Link REPO_ROOT/.mpa/bootstrap_key -> REPO_ROOT/bootstrap_key when ed25519_private.hex exists, so
-# continuum-mcp (KEY_ROOT=/app/.mpa) can discover the bootstrap seed via compose bind-mount.
-ensure_mpa_bootstrap_key_symlink() {
+# Symlink REPO_ROOT/.mpa/management_keys/ed25519_private.hex -> bootstrap_key/ed25519_private.hex
+# so continuum-mcp sees the bootstrap seed via the existing management_keys compose bind-mount.
+ensure_management_keys_bootstrap_seed_symlink() {
     local bootstrap_dir="${REPO_ROOT}/bootstrap_key"
     local seed="${bootstrap_dir}/ed25519_private.hex"
+    local mgmt_dir="${REPO_ROOT}/.mpa/management_keys"
+    local link_path="${mgmt_dir}/ed25519_private.hex"
     local mpa_dir="${REPO_ROOT}/.mpa"
-    local link_path="${mpa_dir}/bootstrap_key"
 
     if [ ! -f "$seed" ]; then
         return 0
     fi
 
-    mkdir -p "$mpa_dir"
+    mkdir -p "$mgmt_dir"
+
+    # Remove legacy directory symlink from an earlier layout ( .mpa/bootstrap_key -> bootstrap_key/ ).
+    if [ -L "${mpa_dir}/bootstrap_key" ]; then
+        rm -f "${mpa_dir}/bootstrap_key"
+    fi
 
     if [ -L "$link_path" ]; then
         local resolved expected
         resolved="$(readlink -f "$link_path" 2>/dev/null || true)"
-        expected="$(cd "$bootstrap_dir" && pwd)"
-        if [ -n "$resolved" ] && [ "$resolved" = "$expected" ]; then
+        expected="$(readlink -f "$seed" 2>/dev/null || true)"
+        if [ -n "$resolved" ] && [ -n "$expected" ] && [ "$resolved" = "$expected" ]; then
             return 0
         fi
         rm -f "$link_path"
     elif [ -e "$link_path" ]; then
-        print_warning ".mpa/bootstrap_key exists but is not a symlink to bootstrap_key/ — leaving unchanged."
+        print_warning ".mpa/management_keys/ed25519_private.hex exists but is not a symlink to bootstrap_key/ — leaving unchanged."
         return 0
     fi
 
-    ln -sfn "$bootstrap_dir" "$link_path"
-    print_info "Linked .mpa/bootstrap_key -> bootstrap_key/ (continuum-mcp bootstrap key discovery)."
+    (
+        cd "$mgmt_dir" || exit 1
+        ln -sf "../../bootstrap_key/ed25519_private.hex" "ed25519_private.hex"
+    )
+    print_info "Linked .mpa/management_keys/ed25519_private.hex -> bootstrap_key/ed25519_private.hex (continuum-mcp bootstrap discovery)."
 }
 
 # When PublicMgtKey is still empty after interactive prompts (or NodeMgtKey-only with skip), generate
@@ -2606,7 +2615,7 @@ except Exception:
     if [ "$pk_nonempty" = "0" ]; then
         print_success "Bootstrap management key provisioned."
     fi
-    ensure_mpa_bootstrap_key_symlink
+    ensure_management_keys_bootstrap_seed_symlink
     return 0
 }
 
@@ -4256,7 +4265,7 @@ apply_docker_compose_continuum_mcp_server() {
         print_warning "Skipping continuum-mcp-server compose merge (missing configs.yaml path)."
         return 0
     fi
-    ensure_mpa_bootstrap_key_symlink
+    ensure_management_keys_bootstrap_seed_symlink
     if [ ! -f "$file" ]; then
         print_warning "Skipping continuum-mcp-server compose merge (compose file missing)."
         return 0
@@ -4382,7 +4391,6 @@ if enabled:
         f'      KEY_ROOT: /app/.mpa\n'
         f"    volumes:\n"
         f"      - ./.mpa/management_keys:/app/.mpa/management_keys\n"
-        f"      - ./.mpa/bootstrap_key:/app/.mpa/bootstrap_key:ro\n"
         f"    ports:\n"
         f'      - "127.0.0.1:{host_port}:{container_port}"\n'
         f"    networks:\n"
