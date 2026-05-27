@@ -2524,9 +2524,10 @@ PYNORMSSH
     return 0
 }
 
-# Symlink REPO_ROOT/.mpa/management_keys/ed25519_private.hex -> bootstrap_key/ed25519_private.hex
-# so continuum-mcp sees the bootstrap seed via the existing management_keys compose bind-mount.
-ensure_management_keys_bootstrap_seed_symlink() {
+# Hard-link REPO_ROOT/.mpa/management_keys/ed25519_private.hex to bootstrap_key/ed25519_private.hex
+# (same inode). Symlinks break inside Docker: only management_keys is bind-mounted, so a relative
+# symlink to ../../bootstrap_key/ does not resolve in continuum-mcp.
+ensure_management_keys_bootstrap_seed_link() {
     local bootstrap_dir="${REPO_ROOT}/bootstrap_key"
     local seed="${bootstrap_dir}/ed25519_private.hex"
     local mgmt_dir="${REPO_ROOT}/.mpa/management_keys"
@@ -2544,24 +2545,22 @@ ensure_management_keys_bootstrap_seed_symlink() {
         rm -f "${mpa_dir}/bootstrap_key"
     fi
 
-    if [ -L "$link_path" ]; then
-        local resolved expected
-        resolved="$(readlink -f "$link_path" 2>/dev/null || true)"
-        expected="$(readlink -f "$seed" 2>/dev/null || true)"
-        if [ -n "$resolved" ] && [ -n "$expected" ] && [ "$resolved" = "$expected" ]; then
+    local seed_ino link_ino
+    seed_ino="$(stat -c '%i' "$seed" 2>/dev/null || true)"
+    if [ -e "$link_path" ] && [ -n "$seed_ino" ]; then
+        link_ino="$(stat -c '%i' "$link_path" 2>/dev/null || true)"
+        if [ "$seed_ino" = "$link_ino" ]; then
             return 0
         fi
         rm -f "$link_path"
-    elif [ -e "$link_path" ]; then
-        print_warning ".mpa/management_keys/ed25519_private.hex exists but is not a symlink to bootstrap_key/ — leaving unchanged."
-        return 0
     fi
 
-    (
-        cd "$mgmt_dir" || exit 1
-        ln -sf "../../bootstrap_key/ed25519_private.hex" "ed25519_private.hex"
-    )
-    print_info "Linked .mpa/management_keys/ed25519_private.hex -> bootstrap_key/ed25519_private.hex (continuum-mcp bootstrap discovery)."
+    if ! ln "$seed" "$link_path" 2>/dev/null; then
+        print_error "Could not hard-link bootstrap_key/ed25519_private.hex into .mpa/management_keys/ (cross-filesystem?). Symlinks do not work in the continuum-mcp bind mount."
+        return 1
+    fi
+
+    print_info "Hard-linked .mpa/management_keys/ed25519_private.hex to bootstrap_key/ed25519_private.hex (visible in continuum-mcp via management_keys mount)."
 }
 
 # When PublicMgtKey is still empty after interactive prompts (or NodeMgtKey-only with skip), generate
@@ -2615,7 +2614,7 @@ except Exception:
     if [ "$pk_nonempty" = "0" ]; then
         print_success "Bootstrap management key provisioned."
     fi
-    ensure_management_keys_bootstrap_seed_symlink
+    ensure_management_keys_bootstrap_seed_link
     return 0
 }
 
@@ -4265,7 +4264,7 @@ apply_docker_compose_continuum_mcp_server() {
         print_warning "Skipping continuum-mcp-server compose merge (missing configs.yaml path)."
         return 0
     fi
-    ensure_management_keys_bootstrap_seed_symlink
+    ensure_management_keys_bootstrap_seed_link
     if [ ! -f "$file" ]; then
         print_warning "Skipping continuum-mcp-server compose merge (compose file missing)."
         return 0
