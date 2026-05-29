@@ -3381,7 +3381,7 @@ definitions:
   node.AddManagementKeyPost:
     type: object
     description: 'Canonical UTF-8 string to sign: JSON `{"nonce":N,"clientSig":"","nodeKey":"<128-hex>"}`. The node generates
-      an Ed25519 key pair and writes PKCS#8 PEM plus `.pub` files under `KEY_ROOT/added_keys/added_key_<N>` (continuum-mcp-server
+      an Ed25519 key pair and writes PKCS#8 PEM plus `.pub` files under `/app/added_keys/added_key_<N>` (continuum-mcp-server
       layout). **Ed25519:** set `clientSig` to 128 hex (allowed bootstrap or added Ed25519 management key); omit `signedMessage`.
       Nonce from `GET /getPublicMgtKeyNonce` (add `?publicKey=` when signer is not the default config key). **Ethereum:**
       `signedMessage` must equal that exact canonical string byte-for-byte; `clientSig` is EIP-191 `personal_sign` from `configs.yaml`
@@ -3406,8 +3406,8 @@ definitions:
   node.RemoveManagementKeyPost:
     type: object
     description: 'Canonical UTF-8 string to sign: JSON `{"publicKey":"<64-hex-lowercase-target>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}`.
-      Also removes `KEY_ROOT/added_keys/added_key_<N>` and `added_key_<N>.pub` when present. **Ed25519:** `clientSig` 128
-      hex from an allowed key **other than** `publicKey`; nonce from `GET /getPublicMgtKeyNonce` for the **signer**. **Ethereum:**
+      Also removes `/app/added_keys/added_key_<N>` and `added_key_<N>.pub` when present. **Ed25519:** `clientSig` 128 hex
+      from an allowed key **other than** `publicKey`; nonce from `GET /getPublicMgtKeyNonce` for the **signer**. **Ethereum:**
       `signedMessage` must equal canonical string; `clientSig` EIP-191 from `NodeMgtKey`; nonce from `GET /getNodeMgtKeyNonce`.'
     required:
     - publicKey

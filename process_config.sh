@@ -4346,7 +4346,6 @@ if enabled:
         f'      MCP_HTTP_PATH: {yaml_sq(http_path)}\n'
         f'      MPC_AUTH_URL: "http://app"\n'
         f'      MPC_AUTH_PORT: "{mgt_port}"\n'
-        f'      KEY_ROOT: /app\n'
         f"    volumes:\n"
         f"      - ./added_keys:/app/added_keys\n"
         f"      - ./bootstrap_key:/app/bootstrap_key:ro\n"

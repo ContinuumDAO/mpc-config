@@ -44,8 +44,7 @@ services:
       MPC_AUTH_PENDING_REBOOT_FILE: /var/lib/mpc-auth-docker/pending-reboot.json
       MPC_AUTH_AGENT_LLM_CONFIG_FILE: /app/agent_llm_config/agent-llm-config.json
       MPC_AGENT_MCP_SERVER_URL: "http://continuum-mcp:8446/mcp"
-      # POST /addManagementKey writes added_key_<N> (+ .pub) under /app/added_keys; shared with continuum-mcp via KEY_ROOT.
-      MPA_PATH: /app
+      # POST /addManagementKey writes added_key_<N> (+ .pub) under /app/added_keys.
       # POST /restoreDatabase: full mongodump before wipe; host path ./.mongodump next to this compose file / docker-compose.yml project dir.
       MPC_AUTH_PRE_RESTORE_MONGODUMP_DIR: /app/.mongodump
       # Optional: mongodb://user:password@mongodb:27017/DB?authSource=DB (see .env.example). Empty = YAML/default (legacy no-auth compatible).
@@ -127,7 +126,6 @@ services:
       MCP_HTTP_PATH: "/mcp"
       MPC_AUTH_URL: "http://app"
       MPC_AUTH_PORT: "8080"
-      KEY_ROOT: /app
     volumes:
       - ./added_keys:/app/added_keys
       # Bootstrap Ed25519 seed (PublicMgtKey); read-only — writes stay on app service (POST /postBootstrapKey).
