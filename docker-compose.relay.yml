@@ -62,8 +62,8 @@ services:
       MPC_AUTH_PENDING_REBOOT_FILE: /var/lib/mpc-auth-docker/pending-reboot.json
       MPC_AUTH_AGENT_LLM_CONFIG_FILE: /app/agent_llm_config/agent-llm-config.json
       MPC_AGENT_MCP_SERVER_URL: "http://continuum-mcp:8446/mcp"
-      # POST /addManagementKey writes added_key_<N> (+ .pub) here; shared with continuum-mcp via KEY_ROOT.
-      MPA_PATH: /app/.mpa
+      # POST /addManagementKey writes added_key_<N> (+ .pub) under /app/added_keys; shared with continuum-mcp via KEY_ROOT.
+      MPA_PATH: /app
       # POST /restoreDatabase: full mongodump before wipe; host path ./.mongodump next to this compose file / docker-compose.yml project dir.
       MPC_AUTH_PRE_RESTORE_MONGODUMP_DIR: /app/.mongodump
       # Optional: mongodb://user:password@mongodb:27017/DB?authSource=DB (see .env.example). Empty = YAML/default (legacy no-auth compatible).
@@ -94,8 +94,8 @@ services:
       - ./database_backups:/app/database_backups
       # Agent LLM settings (agent-llm-config.json); host ./agent_llm_config (AgentLlmConfigDir in configs.yaml).
       - ./agent_llm_config:/app/agent_llm_config
-      # Ed25519 management keys (POST /addManagementKey); host ./.mpa/management_keys, shared with continuum-mcp.
-      - ./.mpa/management_keys:/app/.mpa/management_keys
+      # Ed25519 management keys (POST /addManagementKey); host ./added_keys, shared with continuum-mcp.
+      - ./added_keys:/app/added_keys
       # POST /restoreDatabase pre-restore mongodump (README + pre_restore_<UTC>/); ./.mongodump:/app/.mongodump must match env.
       - ./.mongodump:/app/.mongodump
       # mpc-config ruamel merge script (rename-or-copy vs bind-mounted configs.yaml; see README).
@@ -142,9 +142,11 @@ services:
       MCP_HTTP_PATH: "/mcp"
       MPC_AUTH_URL: "http://app"
       MPC_AUTH_PORT: "8080"
-      KEY_ROOT: /app/.mpa
+      KEY_ROOT: /app
     volumes:
-      - ./.mpa/management_keys:/app/.mpa/management_keys
+      - ./added_keys:/app/added_keys
+      # Bootstrap Ed25519 seed (PublicMgtKey); read-only — writes stay on app service (POST /postBootstrapKey).
+      - ./bootstrap_key:/app/bootstrap_key:ro
     ports:
       - "127.0.0.1:8446:8446"
     networks:

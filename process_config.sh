@@ -176,7 +176,7 @@ _process_config_finalize_repo_ownership_after_sudo() {
     process_config_transfer_repo_path_to_invoking_user "${compose_root}/.env"
     process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/.env"
     process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/bootstrap_key"
-    process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/.mpa"
+    process_config_transfer_repo_path_to_invoking_user "${REPO_ROOT}/added_keys"
     process_config_repo_take_if_sudo_invoker "$compose_file"
     process_config_transfer_repo_path_to_invoking_user "$compose_file"
     cf_alt="${compose_root}/docker-compose.yml"
@@ -2524,45 +2524,6 @@ PYNORMSSH
     return 0
 }
 
-# Hard-link REPO_ROOT/.mpa/management_keys/ed25519_private.hex to bootstrap_key/ed25519_private.hex
-# (same inode). Symlinks break inside Docker: only management_keys is bind-mounted, so a relative
-# symlink to ../../bootstrap_key/ does not resolve in continuum-mcp.
-ensure_management_keys_bootstrap_seed_link() {
-    local bootstrap_dir="${REPO_ROOT}/bootstrap_key"
-    local seed="${bootstrap_dir}/ed25519_private.hex"
-    local mgmt_dir="${REPO_ROOT}/.mpa/management_keys"
-    local link_path="${mgmt_dir}/ed25519_private.hex"
-    local mpa_dir="${REPO_ROOT}/.mpa"
-
-    if [ ! -f "$seed" ]; then
-        return 0
-    fi
-
-    mkdir -p "$mgmt_dir"
-
-    # Remove legacy directory symlink from an earlier layout ( .mpa/bootstrap_key -> bootstrap_key/ ).
-    if [ -L "${mpa_dir}/bootstrap_key" ]; then
-        rm -f "${mpa_dir}/bootstrap_key"
-    fi
-
-    local seed_ino link_ino
-    seed_ino="$(stat -c '%i' "$seed" 2>/dev/null || true)"
-    if [ -e "$link_path" ] && [ -n "$seed_ino" ]; then
-        link_ino="$(stat -c '%i' "$link_path" 2>/dev/null || true)"
-        if [ "$seed_ino" = "$link_ino" ]; then
-            return 0
-        fi
-        rm -f "$link_path"
-    fi
-
-    if ! ln "$seed" "$link_path" 2>/dev/null; then
-        print_error "Could not hard-link bootstrap_key/ed25519_private.hex into .mpa/management_keys/ (cross-filesystem?). Symlinks do not work in the continuum-mcp bind mount."
-        return 1
-    fi
-
-    print_info "Hard-linked .mpa/management_keys/ed25519_private.hex to bootstrap_key/ed25519_private.hex (visible in continuum-mcp via management_keys mount)."
-}
-
 # When PublicMgtKey is still empty after interactive prompts (or NodeMgtKey-only with skip), generate
 # bootstrap_key/ed25519_private.hex + set PublicMgtKey + DeterministicNodeKey (DATABASE_BACKUP_RESTORE_PLAN §8).
 # Also used for non-interactive installs (e.g. provision-node.sh): mpc-auth may require PublicMgtKey to derive nodeKey.
@@ -2614,7 +2575,6 @@ except Exception:
     if [ "$pk_nonempty" = "0" ]; then
         print_success "Bootstrap management key provisioned."
     fi
-    ensure_management_keys_bootstrap_seed_link
     return 0
 }
 
@@ -4264,7 +4224,6 @@ apply_docker_compose_continuum_mcp_server() {
         print_warning "Skipping continuum-mcp-server compose merge (missing configs.yaml path)."
         return 0
     fi
-    ensure_management_keys_bootstrap_seed_link
     if [ ! -f "$file" ]; then
         print_warning "Skipping continuum-mcp-server compose merge (compose file missing)."
         return 0
@@ -4387,9 +4346,10 @@ if enabled:
         f'      MCP_HTTP_PATH: {yaml_sq(http_path)}\n'
         f'      MPC_AUTH_URL: "http://app"\n'
         f'      MPC_AUTH_PORT: "{mgt_port}"\n'
-        f'      KEY_ROOT: /app/.mpa\n'
+        f'      KEY_ROOT: /app\n'
         f"    volumes:\n"
-        f"      - ./.mpa/management_keys:/app/.mpa/management_keys\n"
+        f"      - ./added_keys:/app/added_keys\n"
+        f"      - ./bootstrap_key:/app/bootstrap_key:ro\n"
         f"    ports:\n"
         f'      - "127.0.0.1:{host_port}:{container_port}"\n'
         f"    networks:\n"

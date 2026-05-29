@@ -916,10 +916,10 @@ Generates a **new Ed25519 key pair on the node**, adds its public key to the all
 
 | File | Content | Mode |
 |------|---------|------|
-| `KEY_ROOT/management_keys/added_key_<N>` | PKCS#8 PEM private key | `0600` |
-| `KEY_ROOT/management_keys/added_key_<N>.pub` | 64-hex public key + newline | `0644` |
+| `KEY_ROOT/added_keys/added_key_<N>` | PKCS#8 PEM private key | `0600` |
+| `KEY_ROOT/added_keys/added_key_<N>.pub` | 64-hex public key + newline | `0644` |
 
-`<N>` is the **Added key N** slot (1-based index among Mongo **`ExtraPublicMgtKeys`** rows, including soft-removed slots). **`KEY_ROOT`** resolves from env **`MPA_PATH`** or **`KEY_ROOT`**, default **`~/.mpa`**. In **Docker** (mpc-config compose), keys are bind-mounted at **`./.mpa/management_keys`** in the repo with **`MPA_PATH=/app/.mpa`** (app) and **`KEY_ROOT=/app/.mpa`** (continuum-mcp).
+`<N>` is the **Added key N** slot (1-based index among Mongo **`ExtraPublicMgtKeys`** rows, including soft-removed slots). **`KEY_ROOT`** resolves from env **`MPA_PATH`** or **`KEY_ROOT`**, default **`~/.mpa`**. In **Docker** (mpc-config compose), **`app`** bind-mounts **`./added_keys`** and **`./bootstrap_key`** with **`MPA_PATH=/app`**; **`continuum-mcp`** bind-mounts the same host dirs at **`/app/added_keys`** and **`/app/bootstrap_key`** (bootstrap read-only) with **`KEY_ROOT=/app`** so the SDK can sign with bootstrap **`PublicMgtKey`** or **`added_key_<N>`** files.
 
 The client **does not** supply `newPublicKey` or a private key. Any **currently allowed** signer may authorize — **either** an allowed **Ed25519** management key **or** the configured **`NodeMgtKey`** (EIP‑191), as below.
 
@@ -993,7 +993,7 @@ Confirm via [`GET /getAllowedEd25519MgtKeys`](#get-getalloweded25519mgtkeys) / [
 #### `POST /removeManagementKey`
 Soft-removes an Ed25519 public key **only among keys previously added via** [`POST /addManagementKey`](#post-addmanagementkey). The Mongo row keeps its **Added key N** label: **`publicKey`** clears, **`removedPublicKey`** retains the retired 64‑hex. The bootstrap **`PublicMgtKey`** from `configs.yaml` **cannot** be removed here.
 
-Also deletes **`KEY_ROOT/management_keys/added_key_<N>`** and **`added_key_<N>.pub`** when present (same `<N>` as the slot; no error if files are already missing).
+Also deletes **`KEY_ROOT/added_keys/added_key_<N>`** and **`added_key_<N>.pub`** when present (same `<N>` as the slot; no error if files are already missing).
 
 **Auth:** Dual pattern **identical conceptually** to [`POST /addManagementKey`](#post-addmanagementkey):
 

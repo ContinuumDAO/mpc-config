@@ -27,9 +27,7 @@ database_backups/
 agent_llm_config/
 
 # Ed25519 management private keys (POST /addManagementKey; bind-mounted into app + continuum-mcp)
-.mpa/management_keys/
-# Hard link to bootstrap_key/ed25519_private.hex (ensure_management_keys_bootstrap_seed_link in process_config.sh)
-.mpa/management_keys/ed25519_private.hex
+added_keys/
 
 # POST /restoreDatabase pre-restore mongodump snapshots (operators may copy off-host)
 .mongodump/
