@@ -43,6 +43,7 @@ services:
       MPC_AUTH_DOCKER_PENDING_UPDATE_FILE: /var/lib/mpc-auth-docker/pending-update.json
       MPC_AUTH_PENDING_REBOOT_FILE: /var/lib/mpc-auth-docker/pending-reboot.json
       MPC_AUTH_AGENT_LLM_CONFIG_FILE: /app/agent_llm_config/agent-llm-config.json
+      MPC_AUTH_USER_FOLDER: /app/user_folder
       MPC_AGENT_MCP_SERVER_URL: "http://continuum-mcp:8446/mcp"
       # POST /addManagementKey writes added_key_<N> (+ .pub) under /app/added_keys.
       # POST /restoreDatabase: full mongodump before wipe; host path ./.mongodump next to this compose file / docker-compose.yml project dir.
@@ -75,6 +76,8 @@ services:
       - ./database_backups:/app/database_backups
       # Agent LLM settings (agent-llm-config.json); host ./agent_llm_config (AgentLlmConfigDir in configs.yaml).
       - ./agent_llm_config:/app/agent_llm_config
+      # Writable agent/MCP artefacts (scripts, Foundry workspace under ~/.mcp-foundry-workspace when useUserFolder).
+      - ./user_folder:/app/user_folder
       # Ed25519 management keys (POST /addManagementKey); host ./added_keys, shared with continuum-mcp.
       - ./added_keys:/app/added_keys
       # POST /restoreDatabase pre-restore mongodump (README + pre_restore_<UTC>/); ./.mongodump:/app/.mongodump must match env.

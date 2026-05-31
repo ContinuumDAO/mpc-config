@@ -3310,6 +3310,366 @@
                 ]
             }
         },
+        "/listEnvironmentVariables": {
+            "get": {
+                "description": "List MCP agent environment variables stored on this node (local MongoDB) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /listEnvironmentVariables).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "List MCP agent environment variables stored on this node (local MongoDB)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/getEnvironmentVariable": {
+            "get": {
+                "description": "Get one MCP agent environment variable by name query param Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getEnvironmentVariable).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "Get one MCP agent environment variable by name query param",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "name",
+                        "in": "query",
+                        "required": true
+                    }
+                ]
+            }
+        },
+        "/addEnvironmentVariable": {
+            "post": {
+                "description": "Add or update MCP agent environment variable (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /addEnvironmentVariable).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "Add or update MCP agent environment variable (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.AddEnvironmentVariablePost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/removeEnvironmentVariable": {
+            "post": {
+                "description": "Remove MCP agent environment variable by name (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /removeEnvironmentVariable).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "Remove MCP agent environment variable by name (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.RemoveEnvironmentVariablePost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/listMcpServers": {
+            "get": {
+                "description": "List default + user MCP servers (agent_llm_config JSON files) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /listMcpServers).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "List default + user MCP servers (agent_llm_config JSON files)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/getMcpServer": {
+            "get": {
+                "description": "Get one MCP server by id query param Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getMcpServer).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "Get one MCP server by id query param",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ]
+            }
+        },
+        "/addMcpServer": {
+            "post": {
+                "description": "Add or update user MCP server in MCP_servers.json (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /addMcpServer).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "Add or update user MCP server in MCP_servers.json (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.AddMcpServerPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/removeMcpServer": {
+            "post": {
+                "description": "Remove user MCP server from MCP_servers.json (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /removeMcpServer).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "Remove user MCP server from MCP_servers.json (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.RemoveMcpServerPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/listSkills": {
+            "get": {
+                "description": "List agent skill names (agent_llm_config/Skills/) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /listSkills).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "List agent skill names (agent_llm_config/Skills/)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/getSkill": {
+            "get": {
+                "description": "Get one agent skill file by name query param Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getSkill).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Get one agent skill file by name query param",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "name",
+                        "in": "query",
+                        "required": true
+                    }
+                ]
+            }
+        },
+        "/addSkill": {
+            "post": {
+                "description": "Add or update agent skill file (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /addSkill).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Add or update agent skill file (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.AddSkillPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/removeSkill": {
+            "post": {
+                "description": "Remove agent skill by name (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /removeSkill).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Remove agent skill by name (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.RemoveSkillPost"
+                        }
+                    }
+                ]
+            }
+        },
         "/getMSQTTKey": {
             "get": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMSQTTKey).",
@@ -5759,6 +6119,202 @@
                     "type": "string"
                 }
             }
+        },
+        "node.AddEnvironmentVariablePost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "name"
+                    ],
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Uppercase A-Z, 0-9, underscore (normalized server-side)"
+                        },
+                        "value": {
+                            "type": "string",
+                            "description": "Variable value (any UTF-8 string)"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.RemoveEnvironmentVariablePost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "name"
+                    ],
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Variable name (normalized server-side)"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.AddMcpServerPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "id",
+                        "displayName"
+                    ],
+                    "properties": {
+                        "id": {
+                            "type": "string"
+                        },
+                        "displayName": {
+                            "type": "string"
+                        },
+                        "transport": {
+                            "type": "string",
+                            "enum": [
+                                "http",
+                                "stdio"
+                            ],
+                            "description": "http (default) or stdio"
+                        },
+                        "url": {
+                            "type": "string",
+                            "description": "Streamable HTTP MCP endpoint; empty only for reserved continuum id"
+                        },
+                        "command": {
+                            "type": "string",
+                            "description": "STDIO executable (e.g. npx)"
+                        },
+                        "args": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "STDIO command arguments"
+                        },
+                        "apiKey": {
+                            "type": "string",
+                            "description": "Optional HTTP bearer token (stored in MCP_servers.json)"
+                        },
+                        "apiKeyEnvVar": {
+                            "type": "string",
+                            "description": "HTTP auth from agent env var (POST /addEnvironmentVariable)"
+                        },
+                        "apiKeyHeader": {
+                            "type": "string",
+                            "description": "HTTP header for apiKeyEnvVar (omit for Bearer; e.g. x-cg-pro-api-key)"
+                        },
+                        "envVars": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "STDIO: agent environment variable names injected into child process"
+                        },
+                        "useUserFolder": {
+                            "type": "boolean",
+                            "description": "STDIO: set HOME to /app/user_folder (host ./user_folder bind mount)"
+                        },
+                        "runtime": {
+                            "type": "object",
+                            "description": "STDIO: uv tool install or requireCommands before connect (from MCP JSON catalog)"
+                        },
+                        "initialLoad": {
+                            "type": "boolean",
+                            "description": "Connect at agent chat session startup"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.RemoveMcpServerPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "id"
+                    ],
+                    "properties": {
+                        "id": {
+                            "type": "string"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.AddSkillPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "name",
+                        "content"
+                    ],
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Skill id (a-z, 0-9, hyphen, underscore)"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "Skill file body (markdown or plain text)"
+                        },
+                        "format": {
+                            "type": "string",
+                            "enum": [
+                                "md",
+                                "txt"
+                            ],
+                            "description": "File extension (default md)"
+                        },
+                        "initialLoad": {
+                            "type": "boolean",
+                            "description": "Inject into agent context at chat session startup"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.RemoveSkillPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "name"
+                    ],
+                    "properties": {
+                        "name": {
+                            "type": "string"
+                        }
+                    }
+                }
+            ]
         }
     }
 }

@@ -62,6 +62,9 @@ DatabaseBackupsDir: "database_backups"
 # (same pattern as database_backups/) so settings persist across mpc-auth image updates.
 AgentLlmConfigDir: "agent_llm_config"
 
+# Agent/MCP artefacts: mpc-config bind-mounts ./user_folder → /app/user_folder (MPC_AUTH_USER_FOLDER).
+# Foundry MCP (useUserFolder) writes under user_folder/.mcp-foundry-workspace/ on the host.
+
 # Enable in-app MCP chat (/agent/chat, Cat launcher). Set false to disable agent chat routes.
 EnableMcpChat: true
 

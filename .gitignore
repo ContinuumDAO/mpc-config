@@ -26,6 +26,10 @@ database_backups/
 # Agent LLM config (may contain API key material in agent-llm-config.json)
 agent_llm_config/
 
+# Agent/MCP user artefacts (Solidity, scripts, Foundry MCP workspace); README is tracked
+user_folder/*
+!user_folder/README.md
+
 # Ed25519 management private keys (POST /addManagementKey; bind-mounted into app + continuum-mcp)
 added_keys/
 

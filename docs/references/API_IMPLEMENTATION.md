@@ -207,6 +207,18 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /agentLlmConfigStatus`](#get-agentllmconfigstatus) - Read agent LLM settings for the node agent (masked API key; **read JWT** on Browser HTTPS / loopback)
 - [`POST /agentLlmConfig`](#post-agentllmconfig) - Update provider, model, and optional base URL (**management signature**; does not change `apiKey`)
 - [`POST /agentLlmApiKey`](#post-agentllmapikey) - Set, rotate, or clear the cloud LLM API key only (**management signature**; `apiKey: ""` clears)
+- [`GET /listEnvironmentVariables`](#get-listenvironmentvariables) - List MCP agent environment variables stored on this node (local MongoDB; not propagated)
+- [`GET /getEnvironmentVariable`](#get-getenvironmentvariable) - Get one variable by `name` query param
+- [`POST /addEnvironmentVariable`](#post-addenvironmentvariable) - Add or update one variable (**management signature**; name normalized to uppercase `A-Z`, `0-9`, `_`)
+- [`POST /removeEnvironmentVariable`](#post-removeenvironmentvariable) - Remove one variable by name (**management signature**)
+- [`GET /listMcpServers`](#get-listmcpservers) - List default + user MCP servers (`MCP_default_servers.json` + `MCP_servers.json`)
+- [`GET /getMcpServer`](#get-getmcpserver) - Get one MCP server by `id`
+- [`POST /addMcpServer`](#post-addmcpserver) - Add or update a user MCP server in `MCP_servers.json` (**management signature**)
+- [`POST /removeMcpServer`](#post-removemcpserver) - Remove a user MCP server (**management signature**)
+- [`GET /listSkills`](#get-listskills) - List agent skill names (`agent_llm_config/Skills/`)
+- [`GET /getSkill`](#get-getskill) - Get one skill file by `name`
+- [`POST /addSkill`](#post-addskill) - Add or update a skill file (**management signature**)
+- [`POST /removeSkill`](#post-removeskill) - Remove a skill by name (**management signature**)
 - [`POST /agent/chat`](#post-agentchat) - Stream one assistant turn (LLM + MCP **tools/call** loop; **read JWT** on Browser HTTPS / loopback)
 - [`GET /agent/chat`](#get-agentchat) - Load persisted conversation history by `conversationId` (**read JWT** when JWT applies)
 - [`POST /agent/chat/cancel`](#post-agentchatcancel) - Cancel in-flight turn for `conversationId` (**read JWT**)
@@ -2584,6 +2596,154 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/agentLlmApiKey" \
   -H "Content-Type: application/json" \
   -d '{"nonce":44,"apiKey":"","clientSig":"...","nodeKey":"<128-hex>"}'
 ```
+
+### Agent environment variables (local MongoDB)
+
+Stored in the base MongoDB database collection **`LocalAgentEnvironmentVariables`** (local node only; not propagated). Used to inject environment variables into the **continuum-mcp** Docker service.
+
+<a id="get-listenvironmentvariables"></a>
+#### `GET /listEnvironmentVariables`
+
+**Auth:** None on management port (same class as **`GET /getChainDetails`**). Browser HTTPS / loopback: no read JWT required.
+
+**Response data:**
+```json
+{ "variables": [ { "name": "MY_API_KEY", "value": "…", "updatedAt": "…" } ] }
+```
+
+<a id="get-getenvironmentvariable"></a>
+#### `GET /getEnvironmentVariable`
+
+**Query:** `name` (required). Normalized to uppercase server-side.
+
+**Response data:** `{ "name": "MY_API_KEY", "value": "…", "updatedAt": "…" }` or **`404`** if not found.
+
+<a id="post-addenvironmentvariable"></a>
+#### `POST /addEnvironmentVariable`
+
+**Auth:** Management signature ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey)) over JSON with **`clientSig` cleared** before verify (same as **`POST /addKnownAddress`**).
+
+**Request body:**
+```json
+{ "nonce": 45, "clientSig": "…", "nodeKey": "<128-hex>", "name": "my_api_key", "value": "secret" }
+```
+
+**Name rules:** Trimmed and uppercased; must match `^[A-Z][A-Z0-9_]*$` (max 128 chars). **Value:** any string (max 8192 chars).
+
+**Behavior:** Upsert by `name`.
+
+<a id="post-removeenvironmentvariable"></a>
+#### `POST /removeEnvironmentVariable`
+
+**Auth:** Management signature (same as add).
+
+**Request body:** `{ "nonce", "clientSig", "nodeKey", "name" }`
+
+**Response:** `{ "code": 0, "data": "Environment variable removed" }` or **`404`** if not found.
+
+### Agent user artefacts (`user_folder`)
+
+| | |
+|--|--|
+| **Default host path** | `<compose-project>/user_folder/` (beside **`configs.yaml`**, same layout as **`agent_llm_config/`**) |
+| **Container path** | `/app/user_folder` |
+| **Docker** | **`./user_folder`** bind-mounted to **`/app/user_folder`**; env **`MPC_AUTH_USER_FOLDER=/app/user_folder`** |
+| **Provisioning** | **`process_config.sh`** creates **`./user_folder/`** on provision |
+
+STDIO MCP servers with **`useUserFolder`: true** (default **foundry**) run with **`HOME`** set to **`MPC_AUTH_USER_FOLDER`** so tools persist files on the host (e.g. Foundry MCP workspace at **`user_folder/.mcp-foundry-workspace/`** on the VPS).
+
+### Agent MCP servers (local filesystem)
+
+| File | Purpose |
+|------|---------|
+| **`agent_llm_config/MCP_default_servers.json`** | **Source of truth** for default MCP servers (copied from **mpc-config** on provision); not writable via API; **no Go embedded fallback** |
+| **`agent_llm_config/MCP_servers.json`** | User-added servers (**POST /addMcpServer**, **POST /removeMcpServer**) |
+
+Each server entry: `id`, `displayName`, `initialLoad` (connect at chat startup), optional `apiKey` (HTTP auth, stored in `MCP_servers.json`), optional `apiKeyEnvVar` (HTTP auth loaded from agent environment variables), optional **`apiKeyHeader`** (HTTP header name when using `apiKeyEnvVar`; default Bearer), optional `envVars` (STDIO: inject named variables into the child process), optional **`useUserFolder`** (STDIO: set **`HOME`** to **`/app/user_folder`** for persistent artefacts), optional **`runtime`** (STDIO: install/check before connect or on **POST /addMcpServer**).
+
+**`runtime` object (optional):**
+
+| Field | Purpose |
+|-------|---------|
+| **`uvToolPackage`** | PyPI package installed at runtime via `uv tool install` (can take several minutes on first use). Marker under **`user_folder/.mcp-runtime/<id>/`**. |
+| **`uvPython`** | Python version for uv (default `3.13`). |
+| **`requireCommands`** | Commands that must exist on `PATH` before connect (e.g. `forge`, `npx`). Image must still provide heavy binaries (Foundry, Node); only **uv-installed** tools are fetched from JSON. |
+
+The mpc-auth image ships **uv**, **Node**, **Foundry**, and **Heimdall** as platform tools; per-server PyPI installs are driven by JSON when a server is **added** or **loaded**.
+
+**HTTP** (`transport`: `http`, default): `url` — Streamable HTTP MCP endpoint; empty `url` on default **continuum** uses compose **continuum-mcp** URL. Auth: inline `apiKey` and/or `apiKeyEnvVar` (e.g. default **etherscan** uses `https://mcp.etherscan.io/mcp` with `apiKeyEnvVar`: `ETHERSCAN_API_KEY` — set the key via **`POST /addEnvironmentVariable`**). Default **coingecko** ([public MCP](https://mcp.api.coingecko.com/)) uses `https://mcp.api.coingecko.com/mcp` with no API key (shared rate limits). Default **coingecko-pro** ([Pro MCP](https://mcp.pro-api.coingecko.com/)) uses `https://mcp.pro-api.coingecko.com/mcp` with `apiKeyEnvVar`: `COINGECKO_API_KEY` and `apiKeyHeader`: `x-cg-pro-api-key` ([CoinGecko Pro auth](https://docs.coingecko.com/reference/authentication)). Optional **`apiKeyHeader`** on HTTP servers: custom header instead of `Authorization: Bearer`.
+
+**STDIO** (`transport`: `stdio`): `command` (executable, e.g. `npx`) and optional `args` (e.g. `["-y", "duckduckgo-mcp-server"]`). Optional **`envVars`**: names of agent environment variables injected into the child process (all listed names must be set before load). Example default **x** ([DataWhisker/x-mcp-server](https://github.com/DataWhisker/x-mcp-server)): OAuth 1.0a via `TWITTER_API_KEY`, `TWITTER_API_SECRET`, `TWITTER_ACCESS_TOKEN`, `TWITTER_ACCESS_SECRET` from the [X Developer Portal](https://developer.x.com/en/portal/dashboard). Media upload may additionally need OAuth 2.0 vars (`TWITTER_OAUTH2_ACCESS_TOKEN` or `TWITTER_CLIENT_ID` / `TWITTER_CLIENT_SECRET` / `TWITTER_OAUTH2_REFRESH_TOKEN`) — add those via **Variables** and extend `envVars` on a user server entry if needed.
+
+**Agent chat tools (runtime):**
+
+- `agent_add_mcp_server` — proposes a new user MCP server; the chat UI shows an approval dialog and the operator must **management-sign** `POST /addMcpServer` before the agent continues (elicitation `kind`: `add_mcp_server`).
+- `agent_load_mcp_server` / `agent_unload_mcp_server` — argument `serverId`; load or unload servers for the current conversation.
+- `agent_load_skill` — argument `name`; inject a skill file into session context when not loaded at startup.
+- MCP tools from loaded servers are exposed to the LLM as `{serverId}__{toolName}`.
+
+<a id="get-listmcpservers"></a>
+#### `GET /listMcpServers`
+
+**Response data:** `{ "defaultServers": [...], "userServers": [...], "servers": [...] }` — list items include masked `apiKey`, `source` (`default` \| `user`), `removable`.
+
+<a id="get-getmcpserver"></a>
+#### `GET /getMcpServer`
+
+**Query:** `id` (required).
+
+<a id="post-addmcpserver"></a>
+#### `POST /addMcpServer`
+
+**Auth:** Management signature (JSON with `clientSig` cleared, same as **POST /addKnownAddress**).
+
+**Body:** `{ "id", "displayName", "transport?", "url?", "command?", "args?", "apiKey?", "apiKeyEnvVar?", "envVars?", "useUserFolder?", "initialLoad", "nonce", "clientSig", "nodeKey" }` — upserts **MCP_servers.json**; cannot use an id reserved in **MCP_default_servers.json**. For HTTP auth without storing a secret in the file, set **`apiKeyEnvVar`** to the variable name (e.g. `ETHERSCAN_API_KEY`) and set the value via **`POST /addEnvironmentVariable`**. **`useUserFolder`** (STDIO only): sets **`HOME`** to **`/app/user_folder`** so MCP tools persist files on the host **`./user_folder`** bind mount.
+
+<a id="post-removemcpserver"></a>
+#### `POST /removeMcpServer`
+
+**Auth:** Management signature.
+
+**Body:** `{ "id", "nonce", "clientSig", "nodeKey" }` — removes from **MCP_servers.json** only.
+
+### Agent skills (local files)
+
+Skills are markdown or plain-text guidance stored under **`agent_llm_config/Skills/`** (manifest **`skills.json`** plus one file per skill, `.md` or `.txt`). They are **not** propagated between nodes.
+
+| Path | Role |
+|------|------|
+| **`agent_llm_config/Skills/skills.json`** | Manifest: `name`, `filename`, `initialLoad` |
+| **`agent_llm_config/Skills/<name>.md`** or **`.txt`** | Skill body |
+
+Each skill: **`initialLoad`** — when true, content is injected as a **system** message at chat startup; when false, the agent may load it with **`agent_load_skill`** during the session (or the operator enables **Initial load** in the UI).
+
+<a id="get-listskills"></a>
+#### `GET /listSkills`
+
+**Auth:** Management API (same as **GET /listMcpServers**).
+
+**Response data:** `{ "names": ["skill-a", "skill-b"] }` — names only (no file content).
+
+<a id="get-getskill"></a>
+#### `GET /getSkill`
+
+**Query:** `name` (required).
+
+**Response data:** `{ "name", "content", "initialLoad", "format": "md"|"txt", "updatedAt"? }`.
+
+<a id="post-addskill"></a>
+#### `POST /addSkill`
+
+**Auth:** Management signature.
+
+**Body:** `{ "name", "content", "format?", "initialLoad", "nonce", "clientSig", "nodeKey" }` — upserts manifest and file. **`format`**: `md` (default) or `txt`. Max content **512 KiB**.
+
+<a id="post-removeskill"></a>
+#### `POST /removeSkill`
+
+**Auth:** Management signature.
+
+**Body:** `{ "name", "nonce", "clientSig", "nodeKey" }`.
 
 <a id="post-agentchat"></a>
 #### `POST /agent/chat`

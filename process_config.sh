@@ -90,6 +90,25 @@ DEFAULT_SCANNER_API_URLS=(
 # Agent LLM settings directory beside configs.yaml (bind-mounted ./agent_llm_config; see API_IMPLEMENTATION.md).
 DEFAULT_AGENT_LLM_CONFIG_DIR="agent_llm_config"
 DEFAULT_AGENT_LLM_CONFIG_CONTAINER_FILE="/app/agent_llm_config/agent-llm-config.json"
+DEFAULT_USER_FOLDER_DIR="user_folder"
+DEFAULT_USER_FOLDER_CONTAINER_PATH="/app/user_folder"
+DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME="MCP_default_servers.json"
+
+# Copy bundled MCP default server catalog into the node's agent_llm_config/ (once).
+_seed_agent_mcp_default_servers_file() {
+    local cfg_parent="$1"
+    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME}"
+    local dest="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME}"
+    if [ ! -f "$src" ]; then
+        return 0
+    fi
+    if [ -f "$dest" ]; then
+        return 0
+    fi
+    if cp "$src" "$dest" 2>/dev/null; then
+        print_success "agent_llm_config: installed ${DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME}"
+    fi
+}
 
 # Functions
 print_error() {
@@ -6240,6 +6259,9 @@ main() {
         _agent_llm_merge_result=$(configs_yaml_merge_agent_llm_config_dir "$CONFIG_FILE" "$DEFAULT_AGENT_LLM_CONFIG_DIR") || exit 1
         _cfg_parent="$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
         mkdir -p "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}" 2>/dev/null || true
+        mkdir -p "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/Skills" 2>/dev/null || true
+        mkdir -p "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}" 2>/dev/null || true
+        _seed_agent_mcp_default_servers_file "${_cfg_parent}" || true
         case "$_agent_llm_merge_result" in
             merged)
                 print_success "configs.yaml: set AgentLlmConfigDir → ${DEFAULT_AGENT_LLM_CONFIG_DIR} (host: ${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/)"
