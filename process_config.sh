@@ -93,12 +93,14 @@ DEFAULT_AGENT_LLM_CONFIG_CONTAINER_FILE="/app/agent_llm_config/agent-llm-config.
 DEFAULT_USER_FOLDER_DIR="user_folder"
 DEFAULT_USER_FOLDER_CONTAINER_PATH="/app/user_folder"
 DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME="MCP_default_servers.json"
+DEFAULT_AGENT_MCP_SERVERS_BASENAME="MCP_servers.json"
 
-# Copy bundled MCP default server catalog into the node's agent_llm_config/ (once).
-_seed_agent_mcp_default_servers_file() {
+# Copy bundled MCP JSON catalogs into the node's agent_llm_config/ (once per file).
+_seed_agent_mcp_json_file() {
     local cfg_parent="$1"
-    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME}"
-    local dest="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME}"
+    local basename="$2"
+    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${basename}"
+    local dest="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${basename}"
     if [ ! -f "$src" ]; then
         return 0
     fi
@@ -106,8 +108,16 @@ _seed_agent_mcp_default_servers_file() {
         return 0
     fi
     if cp "$src" "$dest" 2>/dev/null; then
-        print_success "agent_llm_config: installed ${DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME}"
+        print_success "agent_llm_config: installed ${basename}"
     fi
+}
+
+_seed_agent_mcp_default_servers_file() {
+    _seed_agent_mcp_json_file "$1" "${DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME}"
+}
+
+_seed_agent_mcp_servers_file() {
+    _seed_agent_mcp_json_file "$1" "${DEFAULT_AGENT_MCP_SERVERS_BASENAME}"
 }
 
 # Functions
@@ -6262,6 +6272,7 @@ main() {
         mkdir -p "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/Skills" 2>/dev/null || true
         mkdir -p "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}" 2>/dev/null || true
         _seed_agent_mcp_default_servers_file "${_cfg_parent}" || true
+        _seed_agent_mcp_servers_file "${_cfg_parent}" || true
         case "$_agent_llm_merge_result" in
             merged)
                 print_success "configs.yaml: set AgentLlmConfigDir → ${DEFAULT_AGENT_LLM_CONFIG_DIR} (host: ${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/)"

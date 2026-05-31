@@ -2656,8 +2656,8 @@ STDIO MCP servers with **`useUserFolder`: true** (default **foundry**) run with 
 
 | File | Purpose |
 |------|---------|
-| **`agent_llm_config/MCP_default_servers.json`** | **Source of truth** for default MCP servers (copied from **mpc-config** on provision); not writable via API; **no Go embedded fallback** |
-| **`agent_llm_config/MCP_servers.json`** | User-added servers (**POST /addMcpServer**, **POST /removeMcpServer**) |
+| **`agent_llm_config/MCP_default_servers.json`** | **Source of truth** for built-in MCP servers (copied from **mpc-config** on provision); not writable via API; **no Go embedded fallback**. Ships **continuum** only. |
+| **`agent_llm_config/MCP_servers.json`** | Bundled optional MCP catalog (copied from **mpc-config** on first provision) plus user edits (**POST /addMcpServer**, **POST /removeMcpServer**). Entries are removable in the UI. |
 
 Each server entry: `id`, `displayName`, `initialLoad` (connect at chat startup), optional `apiKey` (HTTP auth, stored in `MCP_servers.json`), optional `apiKeyEnvVar` (HTTP auth loaded from agent environment variables), optional **`apiKeyHeader`** (HTTP header name when using `apiKeyEnvVar`; default Bearer), optional `envVars` (STDIO: inject named variables into the child process), optional **`useUserFolder`** (STDIO: set **`HOME`** to **`/app/user_folder`** for persistent artefacts), optional **`runtime`** (STDIO: install/check before connect or on **POST /addMcpServer**).
 

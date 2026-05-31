@@ -1,0 +1,10 @@
+{
+  "servers": [
+    {
+      "id": "continuum",
+      "displayName": "Continuum node MCP",
+      "url": "",
+      "initialLoad": true
+    }
+  ]
+}
