@@ -27,14 +27,17 @@ if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ] && id -u "$SUDO_USER" &
     PROCESS_CONFIG_REPO_UID=$(id -u "$SUDO_USER")
     PROCESS_CONFIG_REPO_GID=$(id -g "$SUDO_USER")
     PROCESS_CONFIG_REPO_OWNER="$SUDO_USER"
+    PROCESS_CONFIG_REPO_GROUP="$(id -gn "$SUDO_USER")"
 elif [ "${EUID:-0}" -ne 0 ]; then
     PROCESS_CONFIG_REPO_UID=$(id -u)
     PROCESS_CONFIG_REPO_GID=$(id -g)
     PROCESS_CONFIG_REPO_OWNER="$(id -un)"
+    PROCESS_CONFIG_REPO_GROUP="$(id -gn)"
 else
     PROCESS_CONFIG_REPO_UID=$(id -u)
     PROCESS_CONFIG_REPO_GID=$(id -g)
     PROCESS_CONFIG_REPO_OWNER="$(id -un)"
+    PROCESS_CONFIG_REPO_GROUP="$(id -gn)"
 fi
 
 CERT_DIR="${REPO_ROOT}/mosquitto/config/certs"
@@ -212,6 +215,38 @@ process_config_repo_take_if_sudo_invoker() {
     chown "${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID}" "$target" 2>/dev/null || true
 }
 
+# Create a directory as the invoking user (uid + primary group), not root, when run via sudo.
+_process_config_mkdir_owned_by_invoking_user() {
+    local dir="$1"
+    [ -n "$dir" ] || return 0
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ] && [ "${EUID:-0}" -eq 0 ]; then
+        install -d -o "${PROCESS_CONFIG_REPO_UID}" -g "${PROCESS_CONFIG_REPO_GID}" -m 0750 "$dir" 2>/dev/null \
+            || mkdir -p "$dir" 2>/dev/null \
+            || true
+        chown -R "${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID}" "$dir" 2>/dev/null || true
+    else
+        mkdir -p "$dir" 2>/dev/null || true
+    fi
+}
+
+# agent_llm_config/ and user_folder/ beside configs.yaml: user + primary group (git pull, editor).
+_process_config_ensure_path_owned_by_invoking_user() {
+    local target="$1"
+    [ -n "$target" ] || return 0
+    [ -e "$target" ] || return 0
+    [ "${PROCESS_CONFIG_REPO_OWNER:-root}" = "root" ] && return 0
+    process_config_transfer_repo_path_to_invoking_user "$target"
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+        if [ "${EUID:-0}" -eq 0 ]; then
+            chown -R "${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID}" "$target" 2>/dev/null || true
+        else
+            sudo chown -R "${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID}" "$target" 2>/dev/null || true
+        fi
+        return 0
+    fi
+    _process_config_chown_repo_tree_if_sudo_root "$target"
+}
+
 # openssl leaves root-owned keys/certs under the repo when the script runs via sudo — normalize regardless of parent dir ownership.
 _process_config_chown_repo_tree_if_sudo_root() {
     local dir="$1"
@@ -254,6 +289,8 @@ _process_config_finalize_repo_ownership_after_sudo() {
     shopt -u nullglob
     process_config_transfer_repo_path_to_invoking_user "$CERT_DIR"
     _process_config_chown_repo_tree_if_sudo_root "$WEB_TLS_HOST_DIR"
+    _process_config_ensure_path_owned_by_invoking_user "${compose_root}/${DEFAULT_AGENT_LLM_CONFIG_DIR}"
+    _process_config_ensure_path_owned_by_invoking_user "${compose_root}/${DEFAULT_USER_FOLDER_DIR}"
 }
 
 # Writes use ruamel.yaml (round-trip, preserves comments). Reads use yq when possible; Python fallbacks use ruamel.yaml only — not PyYAML (no python3-yaml package).
@@ -6295,12 +6332,14 @@ main() {
         local _agent_llm_merge_result
         _agent_llm_merge_result=$(configs_yaml_merge_agent_llm_config_dir "$CONFIG_FILE" "$DEFAULT_AGENT_LLM_CONFIG_DIR") || exit 1
         _cfg_parent="$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
-        mkdir -p "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}" 2>/dev/null || true
-        mkdir -p "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/Skills" 2>/dev/null || true
-        mkdir -p "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}" 2>/dev/null || true
+        _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}"
+        _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/Skills"
+        _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
         _seed_agent_mcp_default_servers_file "${_cfg_parent}" || true
         _seed_agent_mcp_servers_file "${_cfg_parent}" || true
         _seed_agent_skills_catalog "${_cfg_parent}" || true
+        _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}"
+        _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
         case "$_agent_llm_merge_result" in
             merged)
                 print_success "configs.yaml: set AgentLlmConfigDir → ${DEFAULT_AGENT_LLM_CONFIG_DIR} (host: ${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/)"

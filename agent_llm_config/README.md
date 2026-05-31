@@ -2,6 +2,8 @@
 
 Tracked files in this directory are copied into the node’s runtime `agent_llm_config/` folder beside `configs.yaml` when you run **`process_config.sh`** (or **`scripts/provision-node.sh`**). Runtime secrets and operator edits stay gitignored.
 
+If you run **`process_config.sh` with `sudo`**, the script creates **`agent_llm_config/`** and **`user_folder/`** as that user’s uid **and primary group** (`chown -R user:group`) so **`git pull`** and local edits are not blocked by root-owned paths.
+
 | File | On the node | Purpose |
 |------|-------------|---------|
 | **`MCP_default_servers.json`** | Same name | Built-in MCP servers (not removable via API). Ships **continuum** only. |
