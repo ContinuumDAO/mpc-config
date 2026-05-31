@@ -2708,7 +2708,7 @@ The mpc-auth image ships **uv**, **Node**, **Foundry**, and **Heimdall** as plat
 
 ### Agent skills (local files)
 
-Skills are markdown or plain-text guidance stored under **`agent_llm_config/Skills/`** (manifest **`skills.json`** plus one file per skill, `.md` or `.txt`). They are **not** propagated between nodes.
+Skills are markdown or plain-text guidance stored under **`agent_llm_config/Skills/`** (manifest **`skills.json`** plus one file per skill, `.md` or `.txt`). They are **not** propagated between nodes. **`process_config.sh`** seeds **`Skills/skills.json`** and any bundled **`.md`** / **`.txt`** files from **mpc-config** once per file if missing (catalog may be empty).
 
 | Path | Role |
 |------|------|

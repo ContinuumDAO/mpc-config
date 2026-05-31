@@ -6,6 +6,7 @@ Tracked files in this directory are copied into the node’s runtime `agent_llm_
 |------|-------------|---------|
 | **`MCP_default_servers.json`** | Same name | Built-in MCP servers (not removable via API). Ships **continuum** only. |
 | **`MCP_servers.json`** | Same name | Bundled optional MCP catalog (removable/editable via UI and `POST /addMcpServer`). Seeded once if missing. |
+| **`Skills/`** | Same path | Agent skills: **`skills.json`** manifest plus **`.md`** / **`.txt`** bodies. Seeded once per file if missing (none bundled yet). |
 
 **API keys:** use **`apiKeyEnvVar`** (and optional **`apiKeyHeader`**) in these JSON files, then set values with **AI Agent → Variables** (`POST /addEnvironmentVariable`). Do not commit secrets in `agent-llm-config.json` (created at runtime).
 

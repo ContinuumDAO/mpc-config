@@ -120,6 +120,33 @@ _seed_agent_mcp_servers_file() {
     _seed_agent_mcp_json_file "$1" "${DEFAULT_AGENT_MCP_SERVERS_BASENAME}"
 }
 
+# Copy bundled agent skills (Skills/skills.json + .md/.txt) into the node agent_llm_config/ (once per file).
+_seed_agent_skills_catalog() {
+    local cfg_parent="$1"
+    local src_dir="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/Skills"
+    local dest_dir="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/Skills"
+    if [ ! -d "$src_dir" ]; then
+        return 0
+    fi
+    mkdir -p "$dest_dir" 2>/dev/null || true
+    if [ -f "${src_dir}/skills.json" ] && [ ! -f "${dest_dir}/skills.json" ]; then
+        if cp "${src_dir}/skills.json" "${dest_dir}/skills.json" 2>/dev/null; then
+            print_success "agent_llm_config: installed Skills/skills.json"
+        fi
+    fi
+    local skill_file base
+    for skill_file in "${src_dir}"/*.md "${src_dir}"/*.txt; do
+        [ -f "$skill_file" ] || continue
+        base="$(basename "$skill_file")"
+        if [ -f "${dest_dir}/${base}" ]; then
+            continue
+        fi
+        if cp "$skill_file" "${dest_dir}/${base}" 2>/dev/null; then
+            print_success "agent_llm_config: installed Skills/${base}"
+        fi
+    done
+}
+
 # Functions
 print_error() {
     echo -e "${RED}ERROR: $1${NC}" >&2
@@ -6273,6 +6300,7 @@ main() {
         mkdir -p "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}" 2>/dev/null || true
         _seed_agent_mcp_default_servers_file "${_cfg_parent}" || true
         _seed_agent_mcp_servers_file "${_cfg_parent}" || true
+        _seed_agent_skills_catalog "${_cfg_parent}" || true
         case "$_agent_llm_merge_result" in
             merged)
                 print_success "configs.yaml: set AgentLlmConfigDir → ${DEFAULT_AGENT_LLM_CONFIG_DIR} (host: ${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/)"
