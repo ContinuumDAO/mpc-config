@@ -97,6 +97,7 @@ DEFAULT_USER_FOLDER_DIR="user_folder"
 DEFAULT_USER_FOLDER_CONTAINER_PATH="/app/user_folder"
 DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME="MCP_default_servers.json"
 DEFAULT_AGENT_MCP_SERVERS_BASENAME="MCP_servers.json"
+DEFAULT_AGENT_CRON_JOBS_REL="cron/jobs.json"
 
 # Copy bundled MCP JSON catalogs into the node's agent_llm_config/ (once per file).
 _seed_agent_mcp_json_file() {
@@ -148,6 +149,51 @@ _seed_agent_skills_catalog() {
             print_success "agent_llm_config: installed Skills/${base}"
         fi
     done
+}
+
+# Seed agent cron manifest (cron/jobs.json) and runs/ directory beside configs.yaml (once if missing).
+# When EnableAgentCron is true (default), copies bundled default jobs from mpc-config; otherwise seeds empty jobs.
+_agent_cron_enabled_for_config() {
+    local config_file="$1"
+    case "${MPC_AUTH_ENABLE_AGENT_CRON:-}" in
+        0|false|FALSE|no|NO|off|OFF) return 1 ;;
+    esac
+    if [ -z "$config_file" ] || [ ! -f "$config_file" ]; then
+        return 0
+    fi
+    if command -v yq &>/dev/null; then
+        local enabled
+        enabled=$(yq eval '.EnableAgentCron // true' "$config_file" 2>/dev/null || echo true)
+        case "$(printf '%s' "$enabled" | tr '[:upper:]' '[:lower:]')" in
+            false|0|no|off) return 1 ;;
+        esac
+        return 0
+    fi
+    if grep -E '^[[:space:]]*EnableAgentCron:[[:space:]]*false([[:space:]]|$|#)' "$config_file" >/dev/null 2>&1; then
+        return 1
+    fi
+    return 0
+}
+
+_seed_agent_cron_catalog() {
+    local cfg_parent="$1"
+    local config_file="${2:-}"
+    local dest_dir="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/cron"
+    local dest="${dest_dir}/jobs.json"
+    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_CRON_JOBS_REL}"
+    mkdir -p "${dest_dir}/runs" 2>/dev/null || true
+    if [ -f "$dest" ]; then
+        return 0
+    fi
+    if _agent_cron_enabled_for_config "$config_file" && [ -f "$src" ]; then
+        if cp "$src" "$dest" 2>/dev/null; then
+            print_success "agent_llm_config: installed ${DEFAULT_AGENT_CRON_JOBS_REL} (default cron jobs)"
+            return 0
+        fi
+    fi
+    if printf '%s\n' '{"jobs":[]}' >"$dest" 2>/dev/null; then
+        print_success "agent_llm_config: created empty ${DEFAULT_AGENT_CRON_JOBS_REL}"
+    fi
 }
 
 # Functions
@@ -6334,10 +6380,13 @@ main() {
         _cfg_parent="$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}"
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/Skills"
+        _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/cron"
+        _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/cron/runs"
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
         _seed_agent_mcp_default_servers_file "${_cfg_parent}" || true
         _seed_agent_mcp_servers_file "${_cfg_parent}" || true
         _seed_agent_skills_catalog "${_cfg_parent}" || true
+        _seed_agent_cron_catalog "${_cfg_parent}" "$CONFIG_FILE" || true
         _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}"
         _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
         case "$_agent_llm_merge_result" in

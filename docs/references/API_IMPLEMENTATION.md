@@ -137,6 +137,8 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on **`GET`** requests. **`POST`** is not JWT-gated on that listener; use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same **`GET`** rules when Browser HTTPS is configured.
 
+**JWT-protected agent GET paths** include **`/agent/chat`**, **`/agent/conversations`**, **`/agent/mcp/tools`**, and cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**.
+
 ## Quick Reference: All Endpoints
 
 Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) below. Maintenance and host apply helpers: [Restart quiescence](#restart-quiescence-maintenance-detail).
@@ -219,6 +221,15 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getSkill`](#get-getskill) - Get one skill file by `name`
 - [`POST /addSkill`](#post-addskill) - Add or update a skill file (**management signature**)
 - [`POST /removeSkill`](#post-removeskill) - Remove a skill by name (**management signature**)
+- [`GET /listCronJobs`](#get-listcronjobs) - List agent cron job summaries (`agent_llm_config/cron/jobs.json`; **read JWT** on Browser HTTPS / loopback)
+- [`GET /getCronJob`](#get-getcronjob) - Get one cron job including message (**read JWT** when JWT applies)
+- [`GET /listCronJobRuns`](#get-listcronjobruns) - Recent run history for a job (**read JWT**)
+- [`POST /addCronJob`](#post-addcronjob) - Create a scheduled agent task (**management signature**)
+- [`POST /updateCronJob`](#post-updatecronjob) - Update schedule/message/metadata only (**management signature**)
+- [`POST /activateCronJob`](#post-activatecronjob) - Enable a cron job (**management signature**)
+- [`POST /deactivateCronJob`](#post-deactivatecronjob) - Disable a cron job without deleting it (**management signature**)
+- [`POST /removeCronJob`](#post-removecronjob) - Remove a cron job (**management signature**; optional `deleteConversation`)
+- [`POST /runCronJob`](#post-runcronjob) - Manual trigger (async; **management signature**)
 - [`POST /agent/chat`](#post-agentchat) - Stream one assistant turn (LLM + MCP **tools/call** loop; **read JWT** on Browser HTTPS / loopback)
 - [`GET /agent/chat`](#get-agentchat) - Load persisted conversation history by `conversationId` (**read JWT** when JWT applies)
 - [`POST /agent/chat/cancel`](#post-agentchatcancel) - Cancel in-flight turn for `conversationId` (**read JWT**)
@@ -2493,7 +2504,7 @@ Cloud LLM settings for the **node agent** (MCP chat / in-app agent) are stored i
 | **Config key** | **`AgentLlmConfigDir`** in **`configs.yaml`** (default **`agent_llm_config`**; relative paths resolve next to **`configs.yaml`**) |
 | **Env override** | **`MPC_AUTH_AGENT_LLM_CONFIG_FILE`** (wins over YAML dir resolution) |
 | **Docker** | **`./agent_llm_config`** bind-mounted to **`/app/agent_llm_config`** (same pattern as **`database_backups/`**) |
-| **Provisioning** | **`process_config.sh`** and **`scripts/provision-node.sh`** set **`AgentLlmConfigDir`**, create **`./agent_llm_config/`**, and set compose env by default; use **`--no-agent-llm-config-path`** or **`PROCESS_CONFIG_SKIP_AGENT_LLM_CONFIG_PATH=1`** to skip |
+| **Provisioning** | **`process_config.sh`** and **`scripts/provision-node.sh`** set **`AgentLlmConfigDir`**, create **`./agent_llm_config/`** (including **`Skills/`**, **`cron/`**, **`cron/runs/`**, **`conversations/`** at runtime), and set compose env by default; use **`--no-agent-llm-config-path`** or **`PROCESS_CONFIG_SKIP_AGENT_LLM_CONFIG_PATH=1`** to skip |
 | **Write** | Atomic temp file + `rename`; file mode **0640**; parent dirs **0755** |
 | **Listeners** | **ManagementAPIsPort**, **Browser HTTPS** (`:8443`), **BrowserLoopbackReadHTTP** (SSH tunnel), and plain co-located attach — same route registration as other management APIs |
 
@@ -2650,7 +2661,7 @@ Stored in the base MongoDB database collection **`LocalAgentEnvironmentVariables
 | **Docker** | **`./user_folder`** bind-mounted to **`/app/user_folder`**; env **`MPC_AUTH_USER_FOLDER=/app/user_folder`** |
 | **Provisioning** | **`process_config.sh`** creates **`./user_folder/`** on provision |
 
-STDIO MCP servers with **`useUserFolder`: true** (default **foundry**) run with **`HOME`** set to **`MPC_AUTH_USER_FOLDER`** so tools persist files on the host (e.g. Foundry MCP workspace at **`user_folder/.mcp-foundry-workspace/`** on the VPS).
+STDIO MCP servers with **`useUserFolder`: true** (default **foundry**) run with **`HOME`** set to **`MPC_AUTH_USER_FOLDER`** so tools persist files on the host (e.g. Foundry MCP workspace at **`user_folder/.mcp-foundry-workspace/`** on the VPS). The **foundry** MCP package expects Foundry at **`$HOME/.foundry/bin/`**; mpc-auth symlinks the image’s **`/usr/local/bin/{forge,cast,anvil}`** into **`user_folder/.foundry/bin/`** before connect (the image tools alone are not enough when **`HOME`** is redirected).
 
 ### Agent MCP servers (local filesystem)
 
@@ -2744,6 +2755,121 @@ Each skill: **`initialLoad`** — when true, content is injected as a **system**
 **Auth:** Management signature.
 
 **Body:** `{ "name", "nonce", "clientSig", "nodeKey" }`.
+
+### Agent cron jobs (local filesystem + in-process scheduler)
+
+Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each job stores its instruction text and schedule in **`agent_llm_config/cron/jobs.json`**. Each job is assigned a fixed **`conversationId`** at creation; every scheduled run appends to that thread (history accumulates). Run logs append to **`agent_llm_config/cron/runs/{jobId}.jsonl`** (~10 MiB size-based rotation per job).
+
+| Path | Role |
+|------|------|
+| **`agent_llm_config/cron/jobs.json`** | Job manifest: `id`, `name`, `enabled`, `schedule`, `message`, `conversationId`, run metadata |
+| **`agent_llm_config/cron/runs/{jobId}.jsonl`** | Append-only run history (`runId`, `startedAt`, `finishedAt`, `status`, `error?`, `assistantPreview?`) |
+
+**Provisioning:** **`process_config.sh`** seeds **`cron/jobs.json`** once if missing. When **`EnableAgentCron`** is true (default), copies the bundled default job **`auto-sign-and-broadcast`** (every 5 minutes; sign-ready pipeline). When cron is disabled, seeds **`{"jobs":[]}`**. mpc-auth assigns **`id`**, **`conversationId`**, and **`nextRunAt`** on first load for template jobs that omit runtime fields.
+
+**Schedule kinds:**
+
+| `schedule.kind` | Fields | Behavior |
+|-----------------|--------|----------|
+| **`cron`** | `expr` (5-field), optional `tz` (default **`UTC`**) | Standard cron expression |
+| **`every`** | `everyMs` (positive integer) | Fixed interval in milliseconds |
+| **`at`** | `at` (RFC3339) | One-shot; default **`deleteAfterRun: true`** disables or removes job after success |
+
+**Feature flags:**
+
+| Key | Default | Effect |
+|-----|---------|--------|
+| **`EnableAgentCron`** in **`configs.yaml`** | **`true`** when omitted | When **`false`**, in-process scheduler does not fire jobs; CRUD and **`POST /runCronJob`** still work |
+| **`AgentCronMaxConcurrentRuns`** | **4** | Max concurrent cron agent turns |
+| Env **`MPC_AUTH_ENABLE_AGENT_CRON=0`** | — | Disables scheduler (same as **`EnableAgentCron: false`**) |
+
+**Scheduler guardrails:** one in-flight run per job; global concurrency cap; restart catch-up runs **at most one** job per enabled task if missed within the last hour (older misses schedule forward only). Cron runs use the full agent turn (LLM + skills + MCP) but **fail immediately** if MCP elicitation would block on human input.
+
+<a id="get-listcronjobs"></a>
+#### `GET /listCronJobs`
+
+**Auth:** Read JWT on Browser HTTPS / loopback when JWT applies; plain management port has no JWT.
+
+**Response data:** `{ "jobs": [ { "id", "name", "enabled", "schedule", "conversationId", "deleteAfterRun"?, "createdAt", "updatedAt", "lastRunAt"?, "nextRunAt"?, "lastRunStatus"? } ] }` — **message body omitted** from list entries.
+
+<a id="get-getcronjob"></a>
+#### `GET /getCronJob`
+
+**Query:** `id` or `name` (one required).
+
+**Auth:** Same as **`GET /listCronJobs`**.
+
+**Response data:** Full job object including **`message`**.
+
+<a id="get-listcronjobruns"></a>
+#### `GET /listCronJobRuns`
+
+**Query:** `jobId` (required), optional `limit` (default **50**).
+
+**Auth:** Read JWT when applicable.
+
+**Response data:** `{ "jobId", "runs": [ { "runId", "startedAt", "finishedAt"?, "status", "error"?, "assistantPreview"? } ] }`.
+
+<a id="post-addcronjob"></a>
+#### `POST /addCronJob`
+
+**Auth:** Management signature.
+
+**Body:**
+```json
+{
+  "name": "morning-brief",
+  "message": "Summarize overnight chain activity.",
+  "schedule": { "kind": "cron", "expr": "0 7 * * *", "tz": "UTC" },
+  "enabled": true,
+  "deleteAfterRun": false,
+  "nonce": 0,
+  "clientSig": "...",
+  "nodeKey": "<128-hex>"
+}
+```
+
+Creates **`id`**, **`conversationId`**, and initial **`nextRunAt`**. New jobs default **`enabled: true`**. **`at`** jobs default **`deleteAfterRun: true`** unless overridden.
+
+<a id="post-updatecronjob"></a>
+#### `POST /updateCronJob`
+
+**Auth:** Management signature.
+
+**Body:** `{ "id"?, "name"?, "message"?, "schedule"?, "deleteAfterRun"?, "nonce", "clientSig", "nodeKey" }` — **`id` or `name`** required. Does **not** change **`enabled`** (use activate/deactivate).
+
+<a id="post-activatecronjob"></a>
+#### `POST /activateCronJob`
+
+**Auth:** Management signature.
+
+**Body:** `{ "id"?, "name"?, "nonce", "clientSig", "nodeKey" }` — sets **`enabled: true`** and recomputes **`nextRunAt`**.
+
+<a id="post-deactivatecronjob"></a>
+#### `POST /deactivateCronJob`
+
+**Auth:** Management signature.
+
+**Body:** same shape as activate — sets **`enabled: false`**; job, conversation, and run log are retained.
+
+<a id="post-removecronjob"></a>
+#### `POST /removeCronJob`
+
+**Auth:** Management signature.
+
+**Body:** `{ "id"?, "name"?, "deleteConversation"?: false, "nonce", "clientSig", "nodeKey" }`.
+
+- Default **`deleteConversation: false`** — removes job entry and **`runs/{jobId}.jsonl`**; keeps the linked conversation under **`conversations/`**.
+- **`deleteConversation: true`** — also deletes the conversation file.
+
+<a id="post-runcronjob"></a>
+#### `POST /runCronJob`
+
+**Auth:** Management signature.
+
+**Body:** `{ "id"?, "name"?, "nonce", "clientSig", "nodeKey" }`.
+
+**Response data:** `{ "jobId", "runId", "status": "enqueued" }` — runs asynchronously even when the job is deactivated.
 
 <a id="post-agentchat"></a>
 #### `POST /agent/chat`

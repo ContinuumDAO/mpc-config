@@ -30,6 +30,8 @@ agent_llm_config/*
 !agent_llm_config/MCP_servers.json
 !agent_llm_config/Skills/
 !agent_llm_config/Skills/**
+!agent_llm_config/cron/
+!agent_llm_config/cron/jobs.json
 
 # Agent/MCP user artefacts (Solidity, scripts, Foundry MCP workspace); README is tracked
 user_folder/*

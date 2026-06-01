@@ -1,0 +1,13 @@
+{
+  "jobs": [
+    {
+      "name": "auto-sign-and-broadcast",
+      "enabled": true,
+      "schedule": {
+        "kind": "every",
+        "everyMs": 300000
+      },
+      "message": "You are a non-interactive automated task. Do NOT ask the user any questions. Do everything autonomously.\n\nYour job:\n1. Call list_sign_requests_ready to find any sign requests that are ready for Get Sig / Execute.\n2. If none are found, stop — nothing to do.\n3. If one or more are found, process them ONE AT A TIME (do not process multiple in parallel):\n   a. For the first ready request, call get_sign_result_summary to check its status.\n   b. If readyToBroadcast is true and executedOnChain is false, call broadcast_sign_result with the requestId to execute it on-chain. Wait for confirmation, then move to the next ready request.\n   c. If readyToBroadcast is false and the request needs signing (MPC quorum reached but not yet signed), call trigger_sign_result with feeSpeedTier \"normal\" to trigger MPC signature generation if it was not set explicitly in TxParams. After trigger completes, call get_sign_result_summary again to confirm readyToBroadcast is true, then call broadcast_sign_result to execute it on-chain.\n   d. After successfully broadcasting, move on to the next ready request and repeat the same process.\n4. If at any point a broadcast or trigger fails, log the error but continue processing remaining requests.\n5. When all ready requests have been processed (or none were found), you are done.\n\nImportant rules:\n- Process requests one at a time, sequentially.\n- Never ask the user for input, confirmation, gas preferences, or fee speed. Always use feeSpeedTier \"normal\".\n- Never ask about useCustomGas — always use the default (false equivalent).\n- If a request is already executed on-chain, skip it.\n- If a request is blocked or shelved, skip it.\n- Be thorough: after triggering a sign, poll or check until readyToBroadcast before broadcasting."
+    }
+  ]
+}

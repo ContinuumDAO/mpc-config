@@ -2451,6 +2451,201 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.RemoveSkillPost'
+  /listCronJobs:
+    get:
+      description: 'List agent cron job summaries. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /listCronJobs).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: list agent cron jobs
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getCronJob:
+    get:
+      description: 'Get one agent cron job. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /getCronJob).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: get one agent cron job
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: id
+        in: query
+      - type: string
+        name: name
+        in: query
+  /listCronJobRuns:
+    get:
+      description: 'List cron job run history. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /listCronJobRuns).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: list cron job run history
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: jobId
+        in: query
+        required: true
+      - type: integer
+        name: limit
+        in: query
+  /addCronJob:
+    post:
+      description: 'Create agent cron job (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /addCronJob).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: add agent cron job
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.AddCronJobPost'
+  /updateCronJob:
+    post:
+      description: 'Update agent cron job (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /updateCronJob).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: update agent cron job
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.UpdateCronJobPost'
+  /activateCronJob:
+    post:
+      description: 'Enable agent cron job (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /activateCronJob).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: activate agent cron job
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.CronJobRefPost'
+  /deactivateCronJob:
+    post:
+      description: 'Disable agent cron job (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /deactivateCronJob).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: deactivate agent cron job
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.CronJobRefPost'
+  /removeCronJob:
+    post:
+      description: 'Remove agent cron job (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /removeCronJob).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: remove agent cron job
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.RemoveCronJobPost'
+  /runCronJob:
+    post:
+      description: 'Enqueue manual cron job run (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /runCronJob).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: run agent cron job now
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.RunCronJobPost'
   /getMSQTTKey:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMSQTTKey).
@@ -4271,5 +4466,90 @@ definitions:
       required:
       - name
       properties:
+        name:
+          type: string
+  node.agentCronSchedule:
+    type: object
+    required:
+    - kind
+    properties:
+      kind:
+        type: string
+        description: cron, every, or at
+      expr:
+        type: string
+      everyMs:
+        type: integer
+        format: int64
+      at:
+        type: string
+      tz:
+        type: string
+  node.AddCronJobPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - name
+      - message
+      - schedule
+      properties:
+        name:
+          type: string
+        message:
+          type: string
+        schedule:
+          $ref: '#/definitions/node.agentCronSchedule'
+        enabled:
+          type: boolean
+        deleteAfterRun:
+          type: boolean
+  node.UpdateCronJobPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        message:
+          type: string
+        schedule:
+          $ref: '#/definitions/node.agentCronSchedule'
+        deleteAfterRun:
+          type: boolean
+  node.CronJobRefPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+  node.RemoveCronJobPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        deleteConversation:
+          type: boolean
+  node.RunCronJobPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      properties:
+        id:
+          type: string
         name:
           type: string

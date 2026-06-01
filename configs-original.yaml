@@ -68,6 +68,13 @@ AgentLlmConfigDir: "agent_llm_config"
 # Enable in-app MCP chat (/agent/chat, Cat launcher). Set false to disable agent chat routes.
 EnableMcpChat: true
 
+# In-process agent cron scheduler (scheduled agent turns into persistent conversations).
+# Set false to disable automatic scheduling; CRUD APIs remain available for setup.
+EnableAgentCron: true
+
+# Optional: max concurrent cron agent turns (default 4 when omitted).
+# AgentCronMaxConcurrentRuns: 4
+
 # MQTT TLS configuration (CLIENT-SIDE - for mpc-auth nodes to verify broker certificates)
 # This configures how mpc-auth nodes verify the MQTT broker's TLS certificate
 # IMPORTANT: TLS certificate verification is ALWAYS enforced - cannot be disabled

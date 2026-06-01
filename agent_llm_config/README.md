@@ -9,6 +9,9 @@ If you run **`process_config.sh` with `sudo`**, the script creates **`agent_llm_
 | **`MCP_default_servers.json`** | Same name | Built-in MCP servers (not removable via API). Ships **continuum** only. |
 | **`MCP_servers.json`** | Same name | Bundled optional MCP catalog (removable/editable via UI and `POST /addMcpServer`). Seeded once if missing. |
 | **`Skills/`** | Same path | Agent skills: **`skills.json`** manifest plus **`.md`** / **`.txt`** bodies. Seeded once per file if missing (none bundled yet). |
+| **`cron/jobs.json`** | Same path | Agent cron job manifest (schedules + instructions). When **`EnableAgentCron`** is true (default), seeded once if missing with bundled default **`auto-sign-and-broadcast`** job (every 5 minutes). When cron is disabled, seeds empty **`{"jobs":[]}`**. Runtime fields (**`id`**, **`conversationId`**, timestamps, **`nextRunAt`**) are assigned by mpc-auth on first load. Run history is written at runtime to **`cron/runs/{jobId}.jsonl`** (gitignored on deployed nodes). |
+
+**Cron jobs:** each job gets a fixed **`conversationId`**; scheduled runs append to that thread. Manage via **`GET/POST /listCronJobs`**, **`/addCronJob`**, **`/activateCronJob`**, **`/deactivateCronJob`**, etc. (see **`docs/references/API_IMPLEMENTATION.md`**). Disable automatic scheduling with **`EnableAgentCron: false`** in **`configs.yaml`** (env **`MPC_AUTH_ENABLE_AGENT_CRON=0`**).
 
 **API keys:** use **`apiKeyEnvVar`** (and optional **`apiKeyHeader`**) in these JSON files, then set values with **AI Agent → Variables** (`POST /addEnvironmentVariable`). Do not commit secrets in `agent-llm-config.json` (created at runtime).
 
