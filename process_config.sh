@@ -1121,48 +1121,6 @@ _process_config_dotenv_chown_to_invoking_user() {
     chmod 0600 "$dotenv" 2>/dev/null || true
 }
 
-# Set MPC_AUTH_RUN_AS_UID/GID in compose .env so the app container writes bind mounts as the repo user (not root).
-_process_config_merge_dotenv_run_as_user() {
-    local root="$1"
-    local dotenv="${root}/.env"
-    [ -f "$dotenv" ] || return 0
-    [ -n "${PROCESS_CONFIG_REPO_UID:-}" ] || return 0
-    [ -n "${PROCESS_CONFIG_REPO_GID:-}" ] || return 0
-    if ! MPC_DOTENV_FILE="$dotenv" MPC_RUN_AS_UID="$PROCESS_CONFIG_REPO_UID" MPC_RUN_AS_GID="$PROCESS_CONFIG_REPO_GID" python3 <<'PY_MERGE_RUN_AS'
-import os
-import pathlib
-import re
-
-path = pathlib.Path(os.environ["MPC_DOTENV_FILE"])
-uid = os.environ["MPC_RUN_AS_UID"].strip()
-gid = os.environ["MPC_RUN_AS_GID"].strip()
-updates = {"MPC_AUTH_RUN_AS_UID": uid, "MPC_AUTH_RUN_AS_GID": gid}
-assign = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$")
-
-lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-out = []
-seen = set()
-for ln in lines:
-    m = assign.match(ln)
-    if m and m.group(1) in updates:
-        out.append("{}={}".format(m.group(1), updates[m.group(1)]))
-        seen.add(m.group(1))
-    else:
-        out.append(ln)
-for key, val in updates.items():
-    if key not in seen:
-        out.append("{}={}".format(key, val))
-path.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
-PY_MERGE_RUN_AS
-    then
-        print_warning "Could not set MPC_AUTH_RUN_AS_UID/GID in ${dotenv} (python3)."
-        return 1
-    fi
-    print_success ".env: mpc-auth container will run as uid:gid ${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID} (bind-mount ownership)"
-    _process_config_dotenv_chown_to_invoking_user "$root"
-    return 0
-}
-
 
 extract_ip_from_url() {
     local url="$1"
@@ -6513,7 +6471,6 @@ main() {
 
     _process_config_dotenv_chown_to_invoking_user "$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
     _process_config_maybe_materialize_dotenv_from_environment "$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
-    _process_config_merge_dotenv_run_as_user "$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
 
     configs_yaml_merge_agent_chat_and_hooks_enabled "$CONFIG_FILE" || exit 1
 

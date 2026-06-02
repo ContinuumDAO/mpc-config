@@ -6,7 +6,7 @@ Bundled defaults ship in **`agent_llm_config.defaults/`** (tracked in this repo)
 
 If you run **`process_config.sh` with `sudo`**, the script creates **`agent_llm_config/`** and **`user_folder/`** as that user’s uid **and primary group** (`chown -R user:group`) so Docker and editors are not blocked by root-owned paths.
 
-**Docker writes as root by default.** mpc-auth updates **`agent_llm_config/`** (skills, MCP JSON, cron, hooks) through the bind mount. Without **`user:`** in compose, new files are **`root:root`** on the host — **`git pull`** and **`git checkout`** as your login user then fail. **`process_config.sh`** sets **`MPC_AUTH_RUN_AS_UID`** / **`MPC_AUTH_RUN_AS_GID`** in **`.env`** and recreates the app container so future writes use your uid. To fix existing root-owned files: **`sudo ./scripts/fix-bind-mount-ownership.sh`**, then **`docker compose up -d --no-deps --force-recreate app`**.
+**Docker writes bind mounts as root** (default container user). mpc-auth updates **`agent_llm_config/`** through the mount; files may be **`root:root`** on the host. Runtime **`agent_llm_config/`** is **gitignored** after **`fe325e9`**, so **`git pull`** is not blocked; fix ownership for editing with **`sudo ./scripts/fix-bind-mount-ownership.sh`** (or **`sudo chown -R $(whoami):$(id -gn) agent_llm_config/ user_folder/`**). **`process_config.sh`** also **`chown`s `.env`** to your user when run via **`sudo`** so **`docker compose`** can read it.
 
 | File / path | Purpose |
 |-------------|---------|
