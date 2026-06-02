@@ -364,10 +364,10 @@ Prompt text is loaded from four bundled files (editable on disk):
 
 | File | When used |
 |------|-----------|
-| `MESSAGE_HOOK_SAME_NODE_TOP_LEVEL.md` | You post a new thread |
-| `MESSAGE_HOOK_SAME_NODE_REPLY.md` | You reply (often empty unless you customize) |
-| `MESSAGE_HOOK_OTHER_NODE_TOP_LEVEL.md` | Peer posts a new thread |
-| `MESSAGE_HOOK_OTHER_NODE_REPLY.md` | Peer replies |
+| `message_hook_same_node_top_level.md` | You post a new thread |
+| `message_hook_same_node_reply.md` | You reply (often empty unless you customize) |
+| `message_hook_other_node_top_level.md` | Peer posts a new thread |
+| `message_hook_other_node_reply.md` | Peer replies |
 
 Optional **`message_hook.json`** fields:
 
@@ -421,7 +421,7 @@ KeyGen message bodies support up to **16 384** UTF-8 bytes. Orchestration mani
    - UI: **New plan** (sets `conversationPurpose: plan`), or
    - API: **`POST /agent/chat`** with `"conversationPurpose": "plan"` and optional `"keyGenId"` override.
 
-The node loads the **`ORCHESTRATION_PLANNING`** skill each turn (bundled in **`agent_llm_config.defaults/Skills/`**, runtime path **`agent_llm_config/Skills/`**).
+The node loads the **`orchestration_planning`** skill each turn (bundled in **`agent_llm_config.defaults/Skills/`**, runtime path **`agent_llm_config/Skills/`**).
 
 ### What to do in Plan chat
 
@@ -432,7 +432,7 @@ The node loads the **`ORCHESTRATION_PLANNING`** skill each turn (bundled in **`a
    - **`prompts.subAgentReply`**, **`externalReply`**, **`orchestratorOnReply`** — use **`""`** to disable that reply hook.
    - Optional **`synthesis`** for a one-shot cron synthesis job.
 
-**Example manifest** (also in **`agent_llm_config.defaults/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md`**):
+**Example manifest** (also in **`agent_llm_config.defaults/hooks/orchestration_manifest_example.md`**):
 
 ````markdown
 ```mpc-orchestrate v1
@@ -575,5 +575,5 @@ Use Plan mode when the manifest is large or iterative; use manual post for fixed
 | [`references/API_IMPLEMENTATION.md`](references/API_IMPLEMENTATION.md) | Webhook CRUD, inbound HTTP, `POST /agent/plan/execute`, feature flags |
 | [`references/API_KEYGEN_MESSAGING.md`](references/API_KEYGEN_MESSAGING.md) | `sendMessage`, threading, signatures |
 | [`agent_llm_config.defaults/hooks/README.md`](../agent_llm_config.defaults/hooks/README.md) | Bundled hook files |
-| [`agent_llm_config.defaults/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md`](../agent_llm_config.defaults/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md) | Copy-paste manifest |
+| [`agent_llm_config.defaults/hooks/orchestration_manifest_example.md`](../agent_llm_config.defaults/hooks/orchestration_manifest_example.md) | Copy-paste manifest |
 | [`references/ED25519_MANAGEMENT_KEY_SIGNING.md`](references/ED25519_MANAGEMENT_KEY_SIGNING.md) | Signing `sendMessage` and management POSTs |

@@ -34,4 +34,4 @@ summary: |
   Human-readable summary for operators.
 ```
 
-**Plan mode:** draft manifests in agent chat with `conversationPurpose: "plan"` and the `ORCHESTRATION_PLANNING` skill, then **`POST /agent/plan/execute`** to post to KeyGen (uses preferred KeyGen when set).
+**Plan mode:** draft manifests in agent chat with `conversationPurpose: "plan"` and the `orchestration_planning` skill, then **`POST /agent/plan/execute`** to post to KeyGen (uses preferred KeyGen when set).

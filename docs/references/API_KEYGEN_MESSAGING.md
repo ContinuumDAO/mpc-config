@@ -245,9 +245,9 @@ When **`EnableAgentHooks`** is enabled (default), messages whose **title** or **
 | Kind | Trigger | Result |
 |------|---------|--------|
 | Top-level + **`mpc-orchestrate v1`** block | `@agent` in title/body | Multi-task orchestration (sub-agents per `tasks[]`, optional synthesis cron) |
-| Top-level (no manifest) | `@agent` | One hook turn using **`MESSAGE_HOOK_*_TOP_LEVEL.md`** |
-| Reply | `@agent` in body | Hook only if orchestration manifest **`prompts.*`** is non-empty; else preset **`MESSAGE_HOOK_*_REPLY.md`** (often empty) |
+| Top-level (no manifest) | `@agent` | One hook turn using **`message_hook_*_top_level.md`** |
+| Reply | `@agent` in body | Hook only if orchestration manifest **`prompts.*`** is non-empty; else preset **`message_hook_*_reply.md`** (often empty) |
 
-**Config:** runtime **`agent_llm_config/hooks/message_hook.json`** and four **`MESSAGE_HOOK_*.md`** files (bundled from **`agent_llm_config.defaults/hooks/`**). **Plan → execute:** agent chat with **`conversationPurpose: "plan"`** and **`POST /agent/plan/execute`** — see **[`../AGENT_HOOKS.md`](../AGENT_HOOKS.md)** (user guide) and **API_IMPLEMENTATION.md** (Agent hooks). Example manifest: **`agent_llm_config.defaults/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md`**.
+**Config:** runtime **`agent_llm_config/hooks/message_hook.json`** and four **`message_hook_*.md`** files (bundled from **`agent_llm_config.defaults/hooks/`**). **Plan → execute:** agent chat with **`conversationPurpose: "plan"`** and **`POST /agent/plan/execute`** — see **[`../AGENT_HOOKS.md`](../AGENT_HOOKS.md)** (user guide) and **API_IMPLEMENTATION.md** (Agent hooks). Example manifest: **`agent_llm_config.defaults/hooks/orchestration_manifest_example.md`**.
 
 **Body size:** KeyGen message bodies support up to **16384** UTF-8 bytes (orchestration manifests are inline in the body).

@@ -1,8 +1,8 @@
 {
   "skills": [
     {
-      "name": "ORCHESTRATION_PLANNING",
-      "filename": "ORCHESTRATION_PLANNING.md",
+      "name": "orchestration_planning",
+      "filename": "orchestration_planning.md",
       "initialLoad": false
     }
   ]

@@ -2892,11 +2892,11 @@ Bundled templates ship in **mpc-config** under **`agent_llm_config.defaults/hook
 | Path | Role |
 |------|------|
 | **`agent_llm_config/hooks/message_hook.json`** | KeyGen hook config (`enabled`, `triggerToken`, `markReadAfterRun`, optional `conversationId`, optional `promptFiles`) |
-| **`agent_llm_config/hooks/MESSAGE_HOOK_*.md`** | Four preset prompts (same/other node × top-level/reply) |
+| **`agent_llm_config/hooks/message_hook_*.md`** | Four preset prompts (same/other node × top-level/reply) |
 | **`agent_llm_config/hooks/webhooks.json`** | Webhook jobs: `name`, `type`, `prompt`, `conversationId`, `secretEnvVar` (runtime) |
 | **`agent_llm_config/hooks/runs/{webhookId}.jsonl`** | Append-only inbound run log |
 | **`agent_llm_config/hooks/orchestrations/`** | Per–top-level-message orchestration state (runtime) |
-| **`agent_llm_config/Skills/ORCHESTRATION_PLANNING.md`** | Plan-mode skill for drafting manifests |
+| **`agent_llm_config/Skills/orchestration_planning.md`** | Plan-mode skill for drafting manifests |
 
 **Feature flags (`configs.yaml`):**
 
@@ -2910,7 +2910,7 @@ Bundled templates ship in **mpc-config** under **`agent_llm_config.defaults/hook
 
 **Webhook `type` presets:** `generic`, `github`, `gmail`, `proton`, `stripe`, `slack`, `telegram`. Presets affect signature verification and body formatting; all run the job **`prompt`** plus a bounded event excerpt. **Telegram** is bidirectional: after the agent turn, replies are sent via Bot API (`sendMessage`), splitting text longer than **4096 runes**.
 
-**KeyGen orchestration:** top-level messages with `@agent` and a fenced **`mpc-orchestrate v1`** YAML block spawn sub-agent turns per `tasks[]` entry (each with `mcpServers` allowlist). Reply hooks use manifest **`prompts.*`**; empty string = no hook. **Plan → execute:** interactive chat with **`conversationPurpose: "plan"`** and **`POST /agent/plan/execute`** (see below). Operator guide: **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**. See **`docs/references/API_KEYGEN_MESSAGING.md`** and bundled **`hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md`**.
+**KeyGen orchestration:** top-level messages with `@agent` and a fenced **`mpc-orchestrate v1`** YAML block spawn sub-agent turns per `tasks[]` entry (each with `mcpServers` allowlist). Reply hooks use manifest **`prompts.*`**; empty string = no hook. **Plan → execute:** interactive chat with **`conversationPurpose: "plan"`** and **`POST /agent/plan/execute`** (see below). Operator guide: **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**. See **`docs/references/API_KEYGEN_MESSAGING.md`** and bundled **`hooks/orchestration_manifest_example.md`**.
 
 <a id="get-listwebhooks"></a>
 #### `GET /listWebhooks`
@@ -3038,7 +3038,7 @@ The hook listener binds **`127.0.0.1:18090`** by default (not Browser HTTPS **:8
 }
 ```
 
-**`conversationPurpose`:** omit or `"default"` for normal chat; **`"plan"`** loads the **`ORCHESTRATION_PLANNING`** skill each turn for manifest drafting.
+**`conversationPurpose`:** omit or `"default"` for normal chat; **`"plan"`** loads the **`orchestration_planning`** skill each turn for manifest drafting.
 
 **Response:** `Content-Type: text/event-stream` — SSE events:
 

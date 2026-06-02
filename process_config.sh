@@ -196,7 +196,7 @@ _agent_cron_enabled_for_config() {
     return 0
 }
 
-# Copy bundled agent hooks (message_hook.json, MESSAGE_HOOK_*.md, webhooks.json, examples) from agent_llm_config.defaults/ once per file.
+# Copy bundled agent hooks (message_hook.json, message_hook_*.md, webhooks.json, examples) from agent_llm_config.defaults/ once per file.
 _seed_agent_hooks_catalog() {
     local cfg_parent="$1"
     local src_dir="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/${DEFAULT_AGENT_HOOKS_REL}"
