@@ -25,8 +25,7 @@ database_backups/
 
 # Agent LLM config runtime (may contain API key material in agent-llm-config.json).
 # Bundled templates live in agent_llm_config.defaults/ (tracked); process_config.sh seeds once if missing.
-agent_llm_config/*
-!agent_llm_config/README.md
+agent_llm_config/
 
 # Agent/MCP user artefacts (Solidity, scripts, Foundry MCP workspace); README is tracked
 user_folder/*

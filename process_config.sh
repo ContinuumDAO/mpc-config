@@ -102,6 +102,24 @@ DEFAULT_AGENT_MCP_SERVERS_BASENAME="MCP_servers.json"
 DEFAULT_AGENT_CRON_JOBS_REL="cron/jobs.json"
 DEFAULT_AGENT_HOOKS_REL="hooks"
 
+DEFAULT_AGENT_LLM_RUNTIME_README_BASENAME="runtime-README.md"
+
+# Copy runtime-README.md → agent_llm_config/README.md on the node (once if missing).
+_seed_agent_llm_runtime_readme() {
+    local cfg_parent="$1"
+    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/${DEFAULT_AGENT_LLM_RUNTIME_README_BASENAME}"
+    local dest="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/README.md"
+    if [ ! -f "$src" ]; then
+        return 0
+    fi
+    if [ -f "$dest" ]; then
+        return 0
+    fi
+    if cp "$src" "$dest" 2>/dev/null; then
+        print_success "agent_llm_config: installed README.md"
+    fi
+}
+
 # Copy bundled MCP JSON catalogs from agent_llm_config.defaults/ into the node's agent_llm_config/ (once per file).
 _seed_agent_mcp_json_file() {
     local cfg_parent="$1"
@@ -6490,6 +6508,7 @@ main() {
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
         _seed_agent_mcp_default_servers_file "${_cfg_parent}" || true
         _seed_agent_mcp_servers_file "${_cfg_parent}" || true
+        _seed_agent_llm_runtime_readme "${_cfg_parent}" || true
         _seed_agent_skills_catalog "${_cfg_parent}" || true
         _seed_agent_hooks_catalog "${_cfg_parent}" || true
         _seed_agent_cron_catalog "${_cfg_parent}" "$CONFIG_FILE" || true

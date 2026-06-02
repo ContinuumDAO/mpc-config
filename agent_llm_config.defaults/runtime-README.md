@@ -1,12 +1,12 @@
 # Agent LLM config (runtime)
 
-Runtime directory beside `configs.yaml`, bind-mounted into the mpc-auth container as **`/app/agent_llm_config`**. **Gitignored** on deployed nodes — safe to edit via UI, API, or mpc-auth without blocking **`git pull`**.
+Runtime directory beside `configs.yaml`, bind-mounted into the mpc-auth container as **`/app/agent_llm_config`**. The entire **`agent_llm_config/`** tree is **gitignored** on deployed nodes (including this README) so **`git pull`** is never blocked.
 
 Bundled defaults ship in **`agent_llm_config.defaults/`** (tracked in this repo). **`process_config.sh`** copies each default file here **once if missing**; it does not overwrite live data.
 
 If you run **`process_config.sh` with `sudo`**, the script creates **`agent_llm_config/`** and **`user_folder/`** as that user’s uid **and primary group** (`chown -R user:group`) so Docker and editors are not blocked by root-owned paths.
 
-**Docker writes bind mounts as root** (default container user). mpc-auth updates **`agent_llm_config/`** through the mount; files may be **`root:root`** on the host. Runtime **`agent_llm_config/`** is **gitignored** after **`fe325e9`**, so **`git pull`** is not blocked; fix ownership for editing with **`sudo ./scripts/fix-bind-mount-ownership.sh`** (or **`sudo chown -R $(whoami):$(id -gn) agent_llm_config/ user_folder/`**). **`process_config.sh`** also **`chown`s `.env`** to your user when run via **`sudo`** so **`docker compose`** can read it.
+**Docker writes bind mounts as root** (default container user). mpc-auth updates **`agent_llm_config/`** through the mount; files may be **`root:root`** on the host. Runtime **`agent_llm_config/`** is **gitignored** (including **`README.md`**) so **`git pull`** is not blocked; fix ownership for editing with **`sudo ./scripts/fix-bind-mount-ownership.sh`** (or **`sudo chown -R $(whoami):$(id -gn) agent_llm_config/ user_folder/`**). **`process_config.sh`** also **`chown`s `.env`** to your user when run via **`sudo`** so **`docker compose`** can read it.
 
 | File / path | Purpose |
 |-------------|---------|
