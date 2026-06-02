@@ -248,6 +248,6 @@ When **`EnableAgentHooks`** is enabled (default), messages whose **title** or **
 | Top-level (no manifest) | `@agent` | One hook turn using **`MESSAGE_HOOK_*_TOP_LEVEL.md`** |
 | Reply | `@agent` in body | Hook only if orchestration manifest **`prompts.*`** is non-empty; else preset **`MESSAGE_HOOK_*_REPLY.md`** (often empty) |
 
-**Config:** `agent_llm_config/hooks/message_hook.json` and four **`MESSAGE_HOOK_*.md`** files (bundled from **mpc-config**). **Plan → execute:** agent chat with **`conversationPurpose: "plan"`** and **`POST /agent/plan/execute`** — see **[`../AGENT_HOOKS.md`](../AGENT_HOOKS.md)** (user guide) and **API_IMPLEMENTATION.md** (Agent hooks). Example manifest: **`agent_llm_config/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md`**.
+**Config:** runtime **`agent_llm_config/hooks/message_hook.json`** and four **`MESSAGE_HOOK_*.md`** files (bundled from **`agent_llm_config.defaults/hooks/`**). **Plan → execute:** agent chat with **`conversationPurpose: "plan"`** and **`POST /agent/plan/execute`** — see **[`../AGENT_HOOKS.md`](../AGENT_HOOKS.md)** (user guide) and **API_IMPLEMENTATION.md** (Agent hooks). Example manifest: **`agent_llm_config.defaults/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md`**.
 
 **Body size:** KeyGen message bodies support up to **16384** UTF-8 bytes (orchestration manifests are inline in the body).

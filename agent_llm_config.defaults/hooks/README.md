@@ -1,6 +1,6 @@
 # Agent hooks (templates)
 
-Copied into the node's `agent_llm_config/hooks/` by **`process_config.sh`** (once per file if missing). Runtime secrets and generated ids are assigned by mpc-auth on first load.
+Copied from **`agent_llm_config.defaults/hooks/`** into the node's runtime **`agent_llm_config/hooks/`** by **`process_config.sh`** (once per file if missing). Runtime secrets and generated ids are assigned by mpc-auth on first load.
 
 | File | Purpose |
 |------|---------|

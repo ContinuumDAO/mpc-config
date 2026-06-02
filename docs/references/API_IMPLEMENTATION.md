@@ -2513,7 +2513,7 @@ Cloud LLM settings for the **node agent** (MCP chat / in-app agent) are stored i
 | **Config key** | **`AgentLlmConfigDir`** in **`configs.yaml`** (default **`agent_llm_config`**; relative paths resolve next to **`configs.yaml`**) |
 | **Env override** | **`MPC_AUTH_AGENT_LLM_CONFIG_FILE`** (wins over YAML dir resolution) |
 | **Docker** | **`./agent_llm_config`** bind-mounted to **`/app/agent_llm_config`** (same pattern as **`database_backups/`**) |
-| **Provisioning** | **`process_config.sh`** and **`scripts/provision-node.sh`** set **`AgentLlmConfigDir`**, create **`./agent_llm_config/`** (including **`Skills/`**, **`cron/`**, **`cron/runs/`**, **`conversations/`** at runtime), and set compose env by default; use **`--no-agent-llm-config-path`** or **`PROCESS_CONFIG_SKIP_AGENT_LLM_CONFIG_PATH=1`** to skip |
+| **Provisioning** | **`process_config.sh`** sets **`AgentLlmConfigDir`**, creates runtime **`./agent_llm_config/`** (gitignored on nodes; seeded from **`agent_llm_config.defaults/`** once per file if missing), including **`Skills/`**, **`cron/`**, **`cron/runs/`**, **`conversations/`** at runtime), and sets compose env by default; use **`--no-agent-llm-config-path`** or **`PROCESS_CONFIG_SKIP_AGENT_LLM_CONFIG_PATH=1`** to skip |
 | **Write** | Atomic temp file + `rename`; file mode **0640**; parent dirs **0755** |
 | **Listeners** | **ManagementAPIsPort**, **Browser HTTPS** (`:8443`), **BrowserLoopbackReadHTTP** (SSH tunnel), and plain co-located attach — same route registration as other management APIs |
 
@@ -2676,8 +2676,8 @@ STDIO MCP servers with **`useUserFolder`: true** (default **foundry**) run with 
 
 | File | Purpose |
 |------|---------|
-| **`agent_llm_config/MCP_default_servers.json`** | **Source of truth** for built-in MCP servers (copied from **mpc-config** on provision); not writable via API; **no Go embedded fallback**. Ships **continuum** only. |
-| **`agent_llm_config/MCP_servers.json`** | Bundled optional MCP catalog (copied from **mpc-config** on first provision) plus user edits (**POST /addMcpServer**, **POST /removeMcpServer**). Entries are removable in the UI. |
+| **`agent_llm_config/MCP_default_servers.json`** | **Source of truth** for built-in MCP servers (seeded from **`agent_llm_config.defaults/`** on provision); not writable via API; **no Go embedded fallback**. Ships **continuum** only. |
+| **`agent_llm_config/MCP_servers.json`** | Bundled optional MCP catalog (seeded from **`agent_llm_config.defaults/`** on first provision) plus user edits (**POST /addMcpServer**, **POST /removeMcpServer**). Entries are removable in the UI. |
 
 Each server entry: `id`, `displayName`, `initialLoad` (connect at chat startup), optional `apiKey` (HTTP auth, stored in `MCP_servers.json`), optional `apiKeyEnvVar` (HTTP auth loaded from agent environment variables), optional **`apiKeyHeader`** (HTTP header name when using `apiKeyEnvVar`; default Bearer), optional `envVars` (STDIO: inject named variables into the child process), optional **`useUserFolder`** (STDIO: set **`HOME`** to **`/app/user_folder`** for persistent artefacts), optional **`runtime`** (STDIO: install/check before connect or on **POST /addMcpServer**).
 
@@ -2728,7 +2728,7 @@ The mpc-auth image ships **uv**, **Node**, **Foundry**, and **Heimdall** as plat
 
 ### Agent skills (local files)
 
-Skills are markdown or plain-text guidance stored under **`agent_llm_config/Skills/`** (manifest **`skills.json`** plus one file per skill, `.md` or `.txt`). They are **not** propagated between nodes. **`process_config.sh`** seeds **`Skills/skills.json`** and any bundled **`.md`** / **`.txt`** files from **mpc-config** once per file if missing (catalog may be empty).
+Skills are markdown or plain-text guidance stored under **`agent_llm_config/Skills/`** (manifest **`skills.json`** plus one file per skill, `.md` or `.txt`). They are **not** propagated between nodes. **`process_config.sh`** seeds **`Skills/skills.json`** and any bundled **`.md`** / **`.txt`** files from **`agent_llm_config.defaults/`** once per file if missing (runtime dir is gitignored on nodes).
 
 | Path | Role |
 |------|------|
@@ -2774,7 +2774,7 @@ Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each job
 | **`agent_llm_config/cron/jobs.json`** | Job manifest: `id`, `name`, `enabled`, `schedule`, `message`, `conversationId`, run metadata |
 | **`agent_llm_config/cron/runs/{jobId}.jsonl`** | Append-only run history (`runId`, `startedAt`, `finishedAt`, `status`, `error?`, `assistantPreview?`) |
 
-**Provisioning:** **`process_config.sh`** seeds **`cron/jobs.json`** once if missing. When **`EnableAgentCron`** is true (default), copies the bundled default job **`auto-sign-and-broadcast`** (every 5 minutes; sign-ready pipeline). When cron is disabled, seeds **`{"jobs":[]}`**. mpc-auth assigns **`id`**, **`conversationId`**, and **`nextRunAt`** on first load for template jobs that omit runtime fields.
+**Provisioning:** **`process_config.sh`** seeds **`cron/jobs.json`** into runtime **`agent_llm_config/cron/`** from **`agent_llm_config.defaults/`** once if missing. When **`EnableAgentCron`** is true (default), copies the bundled default job **`auto-sign-and-broadcast`** (every 5 minutes; sign-ready pipeline). When cron is disabled, seeds **`{"jobs":[]}`**. mpc-auth assigns **`id`**, **`conversationId`**, and **`nextRunAt`** on first load for template jobs that omit runtime fields.
 
 **Schedule kinds:**
 
@@ -2887,7 +2887,7 @@ When **`EnableAgentHooks`** is true (default), mpc-auth runs automated agent tur
 1. **KeyGen `@agent` messages** — event-driven on local `POST /sendMessage` and MQTT `KEYGENMESSAGE` (no external poll scripts).
 2. **Inbound webhooks** — external systems POST to a dedicated hook listener (default **`127.0.0.1:18090`**, path **`/hooks/inbound/{webhookId}`**).
 
-Bundled templates ship in **mpc-config** under **`agent_llm_config/hooks/`** (see **`process_config.sh`**). Secrets are **not** stored in JSON files — webhook signing values live in **Variables** as **`WEBHOOK_SECRET_<NAME>`** (and **`TELEGRAM_BOT_TOKEN`** for Telegram replies).
+Bundled templates ship in **mpc-config** under **`agent_llm_config.defaults/hooks/`** and are copied into runtime **`agent_llm_config/hooks/`** by **`process_config.sh`** (once per file if missing). Secrets are **not** stored in JSON files — webhook signing values live in **Variables** as **`WEBHOOK_SECRET_<NAME>`** (and **`TELEGRAM_BOT_TOKEN`** for Telegram replies).
 
 | Path | Role |
 |------|------|

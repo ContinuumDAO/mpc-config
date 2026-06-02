@@ -2,7 +2,7 @@
 
 This guide explains how to use **inbound webhooks**, **KeyGen `@agent` messaging**, **Plan mode**, and **multi-task orchestration** on an mpc-auth node. It is written for operators and integrators.
 
-For HTTP API field names and auth rules, see **[`docs/references/API_IMPLEMENTATION.md`](references/API_IMPLEMENTATION.md)** (Agent hooks) and **[`docs/references/API_KEYGEN_MESSAGING.md`](references/API_KEYGEN_MESSAGING.md)**. Bundled templates live under **`agent_llm_config/hooks/`** in this repo and are copied beside your node’s **`configs.yaml`** by **`process_config.sh`**.
+For HTTP API field names and auth rules, see **[`docs/references/API_IMPLEMENTATION.md`](references/API_IMPLEMENTATION.md)** (Agent hooks) and **[`docs/references/API_KEYGEN_MESSAGING.md`](references/API_KEYGEN_MESSAGING.md)**. Bundled templates live under **`agent_llm_config.defaults/hooks/`** in this repo and are copied into runtime **`agent_llm_config/hooks/`** beside your node’s **`configs.yaml`** by **`process_config.sh`** (once per file if missing).
 
 ---
 
@@ -56,7 +56,7 @@ flowchart TB
    AgentHookListenPort: 18090
    ```
 
-2. Run **`process_config.sh`** (or **`scripts/provision-node.sh`**) so **`agent_llm_config/hooks/`** is copied next to **`configs.yaml`**.
+2. Run **`process_config.sh`** (or **`scripts/provision-node.sh`**) so bundled hook files are copied into **`agent_llm_config/hooks/`** next to **`configs.yaml`** (existing files are not overwritten).
 
 3. **Restart mpc-auth** after changing hook config or adding webhooks (same pattern as MCP/cron updates in the node app).
 
@@ -421,7 +421,7 @@ KeyGen message bodies support up to **16 384** UTF-8 bytes. Orchestration mani
    - UI: **New plan** (sets `conversationPurpose: plan`), or
    - API: **`POST /agent/chat`** with `"conversationPurpose": "plan"` and optional `"keyGenId"` override.
 
-The node loads the **`ORCHESTRATION_PLANNING`** skill each turn (bundled under **`agent_llm_config/Skills/`**).
+The node loads the **`ORCHESTRATION_PLANNING`** skill each turn (bundled in **`agent_llm_config.defaults/Skills/`**, runtime path **`agent_llm_config/Skills/`**).
 
 ### What to do in Plan chat
 
@@ -432,7 +432,7 @@ The node loads the **`ORCHESTRATION_PLANNING`** skill each turn (bundled under *
    - **`prompts.subAgentReply`**, **`externalReply`**, **`orchestratorOnReply`** — use **`""`** to disable that reply hook.
    - Optional **`synthesis`** for a one-shot cron synthesis job.
 
-**Example manifest** (also in **`agent_llm_config/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md`**):
+**Example manifest** (also in **`agent_llm_config.defaults/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md`**):
 
 ````markdown
 ```mpc-orchestrate v1
@@ -574,6 +574,6 @@ Use Plan mode when the manifest is large or iterative; use manual post for fixed
 |----------|---------|
 | [`references/API_IMPLEMENTATION.md`](references/API_IMPLEMENTATION.md) | Webhook CRUD, inbound HTTP, `POST /agent/plan/execute`, feature flags |
 | [`references/API_KEYGEN_MESSAGING.md`](references/API_KEYGEN_MESSAGING.md) | `sendMessage`, threading, signatures |
-| [`agent_llm_config/hooks/README.md`](../agent_llm_config/hooks/README.md) | Bundled hook files |
-| [`agent_llm_config/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md`](../agent_llm_config/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md) | Copy-paste manifest |
+| [`agent_llm_config.defaults/hooks/README.md`](../agent_llm_config.defaults/hooks/README.md) | Bundled hook files |
+| [`agent_llm_config.defaults/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md`](../agent_llm_config.defaults/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md) | Copy-paste manifest |
 | [`references/ED25519_MANAGEMENT_KEY_SIGNING.md`](references/ED25519_MANAGEMENT_KEY_SIGNING.md) | Signing `sendMessage` and management POSTs |

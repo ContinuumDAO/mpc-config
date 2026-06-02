@@ -91,7 +91,9 @@ DEFAULT_SCANNER_API_URLS=(
 )
 
 # Agent LLM settings directory beside configs.yaml (bind-mounted ./agent_llm_config; see API_IMPLEMENTATION.md).
+# Bundled templates (tracked in git) seed into agent_llm_config/ once per file if missing.
 DEFAULT_AGENT_LLM_CONFIG_DIR="agent_llm_config"
+DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR="agent_llm_config.defaults"
 DEFAULT_AGENT_LLM_CONFIG_CONTAINER_FILE="/app/agent_llm_config/agent-llm-config.json"
 DEFAULT_USER_FOLDER_DIR="user_folder"
 DEFAULT_USER_FOLDER_CONTAINER_PATH="/app/user_folder"
@@ -100,11 +102,11 @@ DEFAULT_AGENT_MCP_SERVERS_BASENAME="MCP_servers.json"
 DEFAULT_AGENT_CRON_JOBS_REL="cron/jobs.json"
 DEFAULT_AGENT_HOOKS_REL="hooks"
 
-# Copy bundled MCP JSON catalogs into the node's agent_llm_config/ (once per file).
+# Copy bundled MCP JSON catalogs from agent_llm_config.defaults/ into the node's agent_llm_config/ (once per file).
 _seed_agent_mcp_json_file() {
     local cfg_parent="$1"
     local basename="$2"
-    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${basename}"
+    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/${basename}"
     local dest="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${basename}"
     if [ ! -f "$src" ]; then
         return 0
@@ -125,10 +127,10 @@ _seed_agent_mcp_servers_file() {
     _seed_agent_mcp_json_file "$1" "${DEFAULT_AGENT_MCP_SERVERS_BASENAME}"
 }
 
-# Copy bundled agent skills (Skills/skills.json + .md/.txt) into the node agent_llm_config/ (once per file).
+# Copy bundled agent skills (Skills/skills.json + .md/.txt) from agent_llm_config.defaults/ into agent_llm_config/ (once per file).
 _seed_agent_skills_catalog() {
     local cfg_parent="$1"
-    local src_dir="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/Skills"
+    local src_dir="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/Skills"
     local dest_dir="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/Skills"
     if [ ! -d "$src_dir" ]; then
         return 0
@@ -176,10 +178,10 @@ _agent_cron_enabled_for_config() {
     return 0
 }
 
-# Copy bundled agent hooks (message_hook.json, MESSAGE_HOOK_*.md, webhooks.json, examples) once per file.
+# Copy bundled agent hooks (message_hook.json, MESSAGE_HOOK_*.md, webhooks.json, examples) from agent_llm_config.defaults/ once per file.
 _seed_agent_hooks_catalog() {
     local cfg_parent="$1"
-    local src_dir="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_HOOKS_REL}"
+    local src_dir="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/${DEFAULT_AGENT_HOOKS_REL}"
     local dest_dir="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_HOOKS_REL}"
     if [ ! -d "$src_dir" ]; then
         return 0
@@ -203,7 +205,7 @@ _seed_agent_cron_catalog() {
     local config_file="${2:-}"
     local dest_dir="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/cron"
     local dest="${dest_dir}/jobs.json"
-    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_CRON_JOBS_REL}"
+    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/${DEFAULT_AGENT_CRON_JOBS_REL}"
     mkdir -p "${dest_dir}/runs" 2>/dev/null || true
     if [ -f "$dest" ]; then
         return 0
