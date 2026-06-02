@@ -1005,14 +1005,17 @@ _process_config_maybe_materialize_dotenv_from_environment() {
             print_success "Created ${dotenv} from .env.example (Mongo passwords set in environment)."
         else
             print_success "Created ${dotenv} from .env.example (legacy no-auth template — set passwords and MongodbUri when using Mongo auth)."
+            _process_config_dotenv_chown_to_invoking_user "$root"
             return 0
         fi
     else
         if [ "$both_mongo_secrets_set" != true ]; then
+            _process_config_dotenv_chown_to_invoking_user "$root"
             return 0
         fi
         if [ "${PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV:-0}" != "1" ]; then
             print_info ".env already exists (${dotenv}) — skipping Mongo merge from env. Set PROCESS_CONFIG_MERGE_DOTENV_FROM_ENV=1 to overwrite mongo-related keys from the current environment."
+            _process_config_dotenv_chown_to_invoking_user "$root"
             return 0
         fi
         merging=true
@@ -1103,6 +1106,19 @@ PY_MERGE_DOTENV
     if [ "$merging" = true ]; then
         print_success "Updated Mongo-related entries in ${dotenv} from the current environment."
     fi
+    _process_config_dotenv_chown_to_invoking_user "$root"
+}
+
+# .env is mode 0600; when created/updated via sudo it is root-owned and docker compose (as the login user) cannot read it.
+_process_config_dotenv_chown_to_invoking_user() {
+    local root="$1"
+    local dotenv="${root}/.env"
+    [ -f "$dotenv" ] || return 0
+    process_config_transfer_repo_path_to_invoking_user "$dotenv"
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ] && [ "${EUID:-0}" -eq 0 ]; then
+        chown "${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID}" "$dotenv" 2>/dev/null || true
+    fi
+    chmod 0600 "$dotenv" 2>/dev/null || true
 }
 
 # Set MPC_AUTH_RUN_AS_UID/GID in compose .env so the app container writes bind mounts as the repo user (not root).
@@ -1143,6 +1159,7 @@ PY_MERGE_RUN_AS
         return 1
     fi
     print_success ".env: mpc-auth container will run as uid:gid ${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID} (bind-mount ownership)"
+    _process_config_dotenv_chown_to_invoking_user "$root"
     return 0
 }
 
@@ -6494,6 +6511,7 @@ main() {
     print_success "Found config: $CONFIG_FILE"
     echo ""
 
+    _process_config_dotenv_chown_to_invoking_user "$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
     _process_config_maybe_materialize_dotenv_from_environment "$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
     _process_config_merge_dotenv_run_as_user "$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
 
