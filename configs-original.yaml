@@ -75,6 +75,15 @@ EnableAgentCron: true
 # Optional: max concurrent cron agent turns (default 4 when omitted).
 # AgentCronMaxConcurrentRuns: 4
 
+# KeyGen @agent message hooks + inbound webhooks (agent_llm_config/hooks/).
+# Set false to disable hook listener and KeyGen automation; CRUD APIs return 403.
+EnableAgentHooks: true
+
+# Inbound webhook HTTP listener (default loopback-only; expose via reverse proxy for providers).
+# AgentHookListenAddr: 127.0.0.1
+# AgentHookListenPort: 18090
+# AgentHookMaxConcurrentRuns: 4
+
 # MQTT TLS configuration (CLIENT-SIDE - for mpc-auth nodes to verify broker certificates)
 # This configures how mpc-auth nodes verify the MQTT broker's TLS certificate
 # IMPORTANT: TLS certificate verification is ALWAYS enforced - cannot be disabled

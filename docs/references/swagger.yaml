@@ -2646,6 +2646,197 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.RunCronJobPost'
+  /listWebhooks:
+    get:
+      description: 'List inbound agent webhooks (agent_llm_config/hooks/webhooks.json). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /listWebhooks).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent hooks
+      summary: list inbound webhooks
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getWebhookById:
+    get:
+      description: 'Get one inbound webhook by id query param. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /getWebhookById).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent hooks
+      summary: get inbound webhook by id
+      parameters:
+      - in: query
+        name: id
+        required: true
+        type: string
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /addWebhook:
+    post:
+      description: 'Create inbound webhook (management-signed; secret stored as WEBHOOK_SECRET_* variable). Full detail:
+        mpc-config docs/references/API_IMPLEMENTATION.md (POST /addWebhook).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent hooks
+      summary: add inbound webhook
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.AddWebhookPost'
+  /updateWebhook:
+    post:
+      description: 'Update inbound webhook prompt and/or type (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /updateWebhook).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent hooks
+      summary: update inbound webhook
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.UpdateWebhookPost'
+  /removeWebhook:
+    post:
+      description: 'Remove inbound webhook (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /removeWebhook).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent hooks
+      summary: remove inbound webhook
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.WebhookRefPost'
+  /activateWebhook:
+    post:
+      description: 'Enable inbound webhook (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /activateWebhook).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent hooks
+      summary: activate inbound webhook
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.WebhookRefPost'
+  /deactivateWebhook:
+    post:
+      description: 'Disable inbound webhook (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /deactivateWebhook).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent hooks
+      summary: deactivate inbound webhook
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.WebhookRefPost'
+  /runWebhook:
+    post:
+      description: 'Manual inbound webhook test trigger (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /runWebhook).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent hooks
+      summary: run inbound webhook test
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.WebhookRefPost'
+  /agent/plan/execute:
+    post:
+      description: 'Post mpc-orchestrate manifest from plan thread to KeyGen (read JWT). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /agent/plan/execute).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent hooks
+      summary: execute orchestration plan in KeyGen
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.AgentPlanExecutePost'
   /getMSQTTKey:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMSQTTKey).
@@ -4553,3 +4744,55 @@ definitions:
           type: string
         name:
           type: string
+  node.AddWebhookPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - name
+      - type
+      - prompt
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          description: generic, github, gmail, proton, stripe, slack, or telegram
+        prompt:
+          type: string
+        enabled:
+          type: boolean
+  node.UpdateWebhookPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+        prompt:
+          type: string
+        type:
+          type: string
+  node.WebhookRefPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+  node.AgentPlanExecutePost:
+    type: object
+    properties:
+      conversationId:
+        type: string
+      title:
+        type: string
+      keyGenId:
+        type: string

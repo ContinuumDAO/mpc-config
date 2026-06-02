@@ -137,7 +137,7 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on **`GET`** requests. **`POST`** is not JWT-gated on that listener; use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same **`GET`** rules when Browser HTTPS is configured.
 
-**JWT-protected agent GET paths** include **`/agent/chat`**, **`/agent/conversations`**, **`/agent/mcp/tools`**, and cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**.
+**JWT-protected agent GET paths** include **`/agent/chat`**, **`/agent/conversations`**, **`/agent/mcp/tools`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, and webhook read routes **`/listWebhooks`**, **`/getWebhookById`**.
 
 ## Quick Reference: All Endpoints
 
@@ -230,6 +230,15 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /deactivateCronJob`](#post-deactivatecronjob) - Disable a cron job without deleting it (**management signature**)
 - [`POST /removeCronJob`](#post-removecronjob) - Remove a cron job (**management signature**; optional `deleteConversation`)
 - [`POST /runCronJob`](#post-runcronjob) - Manual trigger (async; **management signature**)
+- [`GET /listWebhooks`](#get-listwebhooks) - List inbound webhook summaries (`agent_llm_config/hooks/webhooks.json`; **read JWT** when JWT applies)
+- [`GET /getWebhookById`](#get-getwebhookbyid) - Get one webhook including prompt (**read JWT** when JWT applies)
+- [`POST /addWebhook`](#post-addwebhook) - Create inbound webhook (**management signature**; stores secret in Variables as `WEBHOOK_SECRET_<NAME>`)
+- [`POST /updateWebhook`](#post-updatewebhook) - Update prompt and/or type (**management signature**)
+- [`POST /removeWebhook`](#post-removewebhook) - Remove webhook and delete its secret variable (**management signature**)
+- [`POST /activateWebhook`](#post-activatewebhook) - Enable webhook (**management signature**)
+- [`POST /deactivateWebhook`](#post-deactivatewebhook) - Disable webhook (**management signature**)
+- [`POST /runWebhook`](#post-runwebhook) - Manual test trigger (**management signature**)
+- [`POST /agent/plan/execute`](#post-agentplanexecute) - Post latest `mpc-orchestrate v1` manifest from a plan thread to KeyGen (**read JWT**)
 - [`POST /agent/chat`](#post-agentchat) - Stream one assistant turn (LLM + MCP **tools/call** loop; **read JWT** on Browser HTTPS / loopback)
 - [`GET /agent/chat`](#get-agentchat) - Load persisted conversation history by `conversationId` (**read JWT** when JWT applies)
 - [`POST /agent/chat/cancel`](#post-agentchatcancel) - Cancel in-flight turn for `conversationId` (**read JWT**)
@@ -2871,6 +2880,149 @@ Creates **`id`**, **`conversationId`**, and initial **`nextRunAt`**. New jobs de
 
 **Response data:** `{ "jobId", "runId", "status": "enqueued" }` — runs asynchronously even when the job is deactivated.
 
+### Agent hooks (KeyGen messages + inbound webhooks)
+
+When **`EnableAgentHooks`** is true (default), mpc-auth runs automated agent turns from:
+
+1. **KeyGen `@agent` messages** — event-driven on local `POST /sendMessage` and MQTT `KEYGENMESSAGE` (no external poll scripts).
+2. **Inbound webhooks** — external systems POST to a dedicated hook listener (default **`127.0.0.1:18090`**, path **`/hooks/inbound/{webhookId}`**).
+
+Bundled templates ship in **mpc-config** under **`agent_llm_config/hooks/`** (see **`process_config.sh`**). Secrets are **not** stored in JSON files — webhook signing values live in **Variables** as **`WEBHOOK_SECRET_<NAME>`** (and **`TELEGRAM_BOT_TOKEN`** for Telegram replies).
+
+| Path | Role |
+|------|------|
+| **`agent_llm_config/hooks/message_hook.json`** | KeyGen hook config (`enabled`, `triggerToken`, `markReadAfterRun`, optional `conversationId`, optional `promptFiles`) |
+| **`agent_llm_config/hooks/MESSAGE_HOOK_*.md`** | Four preset prompts (same/other node × top-level/reply) |
+| **`agent_llm_config/hooks/webhooks.json`** | Webhook jobs: `name`, `type`, `prompt`, `conversationId`, `secretEnvVar` (runtime) |
+| **`agent_llm_config/hooks/runs/{webhookId}.jsonl`** | Append-only inbound run log |
+| **`agent_llm_config/hooks/orchestrations/`** | Per–top-level-message orchestration state (runtime) |
+| **`agent_llm_config/Skills/ORCHESTRATION_PLANNING.md`** | Plan-mode skill for drafting manifests |
+
+**Feature flags (`configs.yaml`):**
+
+| Key | Default | Effect |
+|-----|---------|--------|
+| **`EnableAgentHooks`** | **`true`** | Master switch for webhooks + KeyGen hooks |
+| **`AgentHookListenAddr`** | **`127.0.0.1`** | Bind address for inbound HTTP |
+| **`AgentHookListenPort`** | **`18090`** | Inbound HTTP port |
+| **`AgentHookMaxConcurrentRuns`** | **4** (or cron cap) | Max concurrent hook agent turns |
+| Env **`MPC_AUTH_ENABLE_AGENT_HOOKS=0`** | — | Disables hooks |
+
+**Webhook `type` presets:** `generic`, `github`, `gmail`, `proton`, `stripe`, `slack`, `telegram`. Presets affect signature verification and body formatting; all run the job **`prompt`** plus a bounded event excerpt. **Telegram** is bidirectional: after the agent turn, replies are sent via Bot API (`sendMessage`), splitting text longer than **4096 runes**.
+
+**KeyGen orchestration:** top-level messages with `@agent` and a fenced **`mpc-orchestrate v1`** YAML block spawn sub-agent turns per `tasks[]` entry (each with `mcpServers` allowlist). Reply hooks use manifest **`prompts.*`**; empty string = no hook. **Plan → execute:** interactive chat with **`conversationPurpose: "plan"`** and **`POST /agent/plan/execute`** (see below). Operator guide: **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**. See **`docs/references/API_KEYGEN_MESSAGING.md`** and bundled **`hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md`**.
+
+<a id="get-listwebhooks"></a>
+#### `GET /listWebhooks`
+
+**Auth:** Read JWT on Browser HTTPS / loopback when JWT applies; plain management port has no JWT.
+
+**Response data:** `{ "webhooks": [ { "id", "name", "enabled", "type", "conversationId", "inboundUrl", "secretEnvVar", "secretConfigured", "telegramBotTokenEnvVar"?, "telegramBotTokenConfigured"?, "createdAt", "updatedAt", "lastTriggeredAt"? } ] }` — omits secret values.
+
+**Errors:** **403** when **`EnableAgentHooks`** is false.
+
+<a id="get-getwebhookbyid"></a>
+#### `GET /getWebhookById`
+
+**Query:** `id` (required).
+
+**Auth:** Same as **`GET /listWebhooks`**.
+
+**Response data:** `{ "webhook": { …full job including "prompt"… }, "inboundUrl": "http://…/hooks/inbound/{id}" }`.
+
+<a id="post-addwebhook"></a>
+#### `POST /addWebhook`
+
+**Auth:** Management signature.
+
+**Body:**
+```json
+{
+  "name": "my-hook",
+  "type": "generic",
+  "prompt": "Review the inbound event…",
+  "enabled": true,
+  "nonce": 0,
+  "clientSig": "...",
+  "nodeKey": "<128-hex>"
+}
+```
+
+**`type`:** `generic` | `github` | `gmail` | `proton` | `stripe` | `slack` | `telegram`.
+
+Creates **`id`**, **`conversationId`**, assigns **`secretEnvVar`** (`WEBHOOK_SECRET_<NAME>`), and stores a random secret in Variables. **Response data:** `{ "webhook", "secretEnvVar", "inboundUrl" }` — secret value is **not** returned (set via Variables UI or **`POST /addEnvironmentVariable`**).
+
+<a id="post-updatewebhook"></a>
+#### `POST /updateWebhook`
+
+**Auth:** Management signature.
+
+**Body:** `{ "id", "prompt"?, "type"?, "nonce", "clientSig", "nodeKey" }`.
+
+<a id="post-removewebhook"></a>
+#### `POST /removeWebhook`
+
+**Auth:** Management signature.
+
+**Body:** `{ "id"?, "name"?, "nonce", "clientSig", "nodeKey" }` — removes job and deletes its **`WEBHOOK_SECRET_*`** variable.
+
+<a id="post-activatewebhook"></a>
+#### `POST /activateWebhook` / [`POST /deactivateWebhook`](#post-deactivatewebhook)
+
+**Auth:** Management signature.
+
+**Body:** `{ "id"?, "name"?, "nonce", "clientSig", "nodeKey" }`.
+
+<a id="post-deactivatewebhook"></a>
+#### `POST /deactivateWebhook`
+
+Same body as activate; sets **`enabled: false`**.
+
+<a id="post-runwebhook"></a>
+#### `POST /runWebhook`
+
+**Auth:** Management signature.
+
+**Body:** `{ "id"?, "name"?, "nonce", "clientSig", "nodeKey" }`.
+
+**Response data:** `{ "status": "started" }` — enqueues a test payload asynchronously.
+
+#### Inbound HTTP (hook listener, not management port)
+
+```
+POST /hooks/inbound/{webhookId}
+Authorization: Bearer <WEBHOOK_SECRET_*>
+  — or — X-Mpc-Auth-Hook-Token: <secret>
+  — or — provider headers (GitHub, Stripe, Slack, Telegram secret token, …)
+```
+
+- Max body **256 KiB**; disabled or unknown webhooks return **401**.
+- **Slack** URL verification challenges return **200** with `{ "challenge": "…" }`.
+- **Telegram** returns **200** `{ "ok": true }` immediately and replies after the agent turn.
+- Other types return **202 Accepted** after enqueueing the agent turn.
+
+The hook listener binds **`127.0.0.1:18090`** by default (not Browser HTTPS **:8443**). There is no built-in public CA-trusted URL; expose **`AgentHookListenPort`** via a relay, tunnel, or operator reverse proxy (see **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**).
+
+<a id="post-agentplanexecute"></a>
+#### `POST /agent/plan/execute`
+
+**Auth:** Read JWT when applicable (same as **`POST /agent/chat`**).
+
+**Request body:**
+```json
+{
+  "conversationId": "<plan-thread-uuid>",
+  "title": "optional KeyGen subject",
+  "keyGenId": "optional override"
+}
+```
+
+**Behavior:** Requires **`conversationPurpose: "plan"`** on the thread. Extracts the latest valid **`mpc-orchestrate v1`** fenced block from the conversation, resolves **`keyGenId`** (body override → conversation override → **`GET /getPreferredKeyGen`**), then **`POST /sendMessage`** as this node with `@agent` + manifest. Triggers KeyGen message hooks / orchestration.
+
+**Response data:** `{ "messageId", "keyGenId" }`.
+
+**Errors:** **400** (not a plan thread, no manifest, invalid YAML, no resolvable KeyGen), **403** when MCP chat disabled.
+
 <a id="post-agentchat"></a>
 #### `POST /agent/chat`
 
@@ -2878,8 +3030,15 @@ Creates **`id`**, **`conversationId`**, and initial **`nextRunAt`**. New jobs de
 
 **Request body:**
 ```json
-{ "conversationId": "<uuid or empty for new>", "message": "user text" }
+{
+  "conversationId": "<uuid or empty for new>",
+  "message": "user text",
+  "conversationPurpose": "plan",
+  "keyGenId": "optional override for plan/implement flows"
+}
 ```
+
+**`conversationPurpose`:** omit or `"default"` for normal chat; **`"plan"`** loads the **`ORCHESTRATION_PLANNING`** skill each turn for manifest drafting.
 
 **Response:** `Content-Type: text/event-stream` — SSE events:
 

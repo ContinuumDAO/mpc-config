@@ -98,6 +98,7 @@ DEFAULT_USER_FOLDER_CONTAINER_PATH="/app/user_folder"
 DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME="MCP_default_servers.json"
 DEFAULT_AGENT_MCP_SERVERS_BASENAME="MCP_servers.json"
 DEFAULT_AGENT_CRON_JOBS_REL="cron/jobs.json"
+DEFAULT_AGENT_HOOKS_REL="hooks"
 
 # Copy bundled MCP JSON catalogs into the node's agent_llm_config/ (once per file).
 _seed_agent_mcp_json_file() {
@@ -173,6 +174,28 @@ _agent_cron_enabled_for_config() {
         return 1
     fi
     return 0
+}
+
+# Copy bundled agent hooks (message_hook.json, MESSAGE_HOOK_*.md, webhooks.json, examples) once per file.
+_seed_agent_hooks_catalog() {
+    local cfg_parent="$1"
+    local src_dir="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_HOOKS_REL}"
+    local dest_dir="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_HOOKS_REL}"
+    if [ ! -d "$src_dir" ]; then
+        return 0
+    fi
+    mkdir -p "${dest_dir}/runs" 2>/dev/null || true
+    local hook_file base
+    for hook_file in "${src_dir}"/*.json "${src_dir}"/*.md; do
+        [ -f "$hook_file" ] || continue
+        base="$(basename "$hook_file")"
+        if [ -f "${dest_dir}/${base}" ]; then
+            continue
+        fi
+        if cp "$hook_file" "${dest_dir}/${base}" 2>/dev/null; then
+            print_success "agent_llm_config: installed ${DEFAULT_AGENT_HOOKS_REL}/${base}"
+        fi
+    done
 }
 
 _seed_agent_cron_catalog() {
@@ -436,6 +459,65 @@ if empty:
     with open(path, "w") as f:
         yaml.dump(data, f)
 PYSCANNERMERGE
+}
+
+# Set EnableMcpChat and EnableAgentHooks to true when missing (preserves comments; does not override explicit false).
+configs_yaml_merge_agent_chat_and_hooks_enabled() {
+    local config_file="$1"
+    local _out
+    require_ruamel_yaml || return 1
+    if ! _out=$(AGENT_FEATURES_MERGE_CFG="$config_file" python3 << 'PYAGENTFEATURES' 2>&1
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.stderr.write("configs.yaml: install ruamel.yaml\n")
+    sys.exit(1)
+
+path_cfg = os.environ.get("AGENT_FEATURES_MERGE_CFG", "").strip()
+if not path_cfg:
+    sys.exit(0)
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)
+
+with open(path_cfg, "r") as f:
+    data = yaml.load(f)
+if not isinstance(data, dict):
+    sys.stderr.write("invalid yaml root\n")
+    sys.exit(1)
+
+merged = []
+for key in ("EnableMcpChat", "EnableAgentHooks"):
+    if key not in data or data[key] is None:
+        data[key] = True
+        merged.append(key)
+
+if merged:
+    with open(path_cfg, "w") as f:
+        yaml.dump(data, f)
+    print("merged:" + ",".join(merged), flush=True)
+else:
+    print("present", flush=True)
+PYAGENTFEATURES
+); then
+        echo "$_out" >&2
+        return 1
+    fi
+    local _last_line
+    _last_line=$(echo "$_out" | tail -n 1)
+    case "$_last_line" in
+        merged:*)
+            local _keys="${_last_line#merged:}"
+            print_success "configs.yaml: enabled ${_keys//,/, } (defaults for agent chat and hooks)"
+            ;;
+        present)
+            print_info "configs.yaml: EnableMcpChat and EnableAgentHooks already set (unchanged)"
+            ;;
+    esac
 }
 
 # Set AgentLlmConfigDir when missing or empty (preserves comments; skips if already set).
@@ -6371,6 +6453,8 @@ main() {
 
     _process_config_maybe_materialize_dotenv_from_environment "$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
 
+    configs_yaml_merge_agent_chat_and_hooks_enabled "$CONFIG_FILE" || exit 1
+
     case "${PROCESS_CONFIG_SKIP_AGENT_LLM_CONFIG_PATH:-}" in
         1|true|TRUE|yes|YES) SKIP_AGENT_LLM_CONFIG_PATH=true ;;
     esac
@@ -6382,10 +6466,13 @@ main() {
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/Skills"
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/cron"
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/cron/runs"
+        _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_HOOKS_REL}"
+        _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_HOOKS_REL}/runs"
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
         _seed_agent_mcp_default_servers_file "${_cfg_parent}" || true
         _seed_agent_mcp_servers_file "${_cfg_parent}" || true
         _seed_agent_skills_catalog "${_cfg_parent}" || true
+        _seed_agent_hooks_catalog "${_cfg_parent}" || true
         _seed_agent_cron_catalog "${_cfg_parent}" "$CONFIG_FILE" || true
         _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}"
         _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"

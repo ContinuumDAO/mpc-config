@@ -235,3 +235,19 @@ Soft-deletes **multiple** messages (and their reply trees). Only the **message o
 - **Read receipt:** `nodeKey`, `signature`, `signedAt` (UTC). Stored when a node marks a message read; optional client `signature` in the request.
 
 For full semantics (ids, threading depth, propagation, and auth conventions), see `./API_IMPLEMENTATION.md` and `./ED25519_MANAGEMENT_KEY_SIGNING.md`.
+
+---
+
+## Agent message hooks (in-node)
+
+When **`EnableAgentHooks`** is enabled (default), messages whose **title** or **body** contain **`@agent`** (word boundary, default token `agent`) can trigger an automated agent turn inside mpc-auth. Detection is **in-node** on `POST /sendMessage` and MQTT `KEYGENMESSAGE` — no external poll scripts.
+
+| Kind | Trigger | Result |
+|------|---------|--------|
+| Top-level + **`mpc-orchestrate v1`** block | `@agent` in title/body | Multi-task orchestration (sub-agents per `tasks[]`, optional synthesis cron) |
+| Top-level (no manifest) | `@agent` | One hook turn using **`MESSAGE_HOOK_*_TOP_LEVEL.md`** |
+| Reply | `@agent` in body | Hook only if orchestration manifest **`prompts.*`** is non-empty; else preset **`MESSAGE_HOOK_*_REPLY.md`** (often empty) |
+
+**Config:** `agent_llm_config/hooks/message_hook.json` and four **`MESSAGE_HOOK_*.md`** files (bundled from **mpc-config**). **Plan → execute:** agent chat with **`conversationPurpose: "plan"`** and **`POST /agent/plan/execute`** — see **[`../AGENT_HOOKS.md`](../AGENT_HOOKS.md)** (user guide) and **API_IMPLEMENTATION.md** (Agent hooks). Example manifest: **`agent_llm_config/hooks/ORCHESTRATION_MANIFEST_EXAMPLE.md`**.
+
+**Body size:** KeyGen message bodies support up to **16384** UTF-8 bytes (orchestration manifests are inline in the body).

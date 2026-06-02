@@ -1,0 +1,46 @@
+{
+  "webhooks": [
+    {
+      "name": "generic_inbound",
+      "type": "generic",
+      "enabled": false,
+      "prompt": "An external system posted to the generic inbound hook. Review the event body and take any appropriate action using available MCP tools."
+    },
+    {
+      "name": "github_events",
+      "type": "github",
+      "enabled": false,
+      "prompt": "A GitHub webhook was received. Summarize the event (repository, action, PR/issue if present) and note anything that needs follow-up on this node."
+    },
+    {
+      "name": "gmail_inbox",
+      "type": "gmail",
+      "enabled": false,
+      "prompt": "A Gmail-related inbound event was received. Summarize sender, subject, and body if present. If the payload is only a Gmail historyId / Pub/Sub notification, note that full message content requires Gmail API or a forwarding bridge.\n\nSetup: Gmail does not POST directly to mpc-auth. Use Google Pub/Sub push (via a relay that adds Authorization: Bearer with the value from Variables WEBHOOK_SECRET_GMAIL_INBOX) or Apps Script forwarding JSON: {\"from\",\"to\",\"subject\",\"snippet\",\"body\"}."
+    },
+    {
+      "name": "proton_inbox",
+      "type": "proton",
+      "enabled": false,
+      "prompt": "A Proton Mail inbound event was received. Summarize sender, subject, and body. Proton has no native webhooks; use Proton Bridge + IMAP polling or a custom forwarder posting JSON {\"provider\":\"proton\",\"from\",\"subject\",\"body\",\"receivedAt\"} with Authorization: Bearer using Variables WEBHOOK_SECRET_PROTON_INBOX."
+    },
+    {
+      "name": "stripe_events",
+      "type": "stripe",
+      "enabled": false,
+      "prompt": "A Stripe webhook event was received. Summarize event type, customer/payment identifiers, and amount or status fields. Flag anything needing operator action.\n\nSetup: In Stripe Dashboard → Developers → Webhooks, set the endpoint URL to this hook's inbound URL. Put the Stripe signing secret (whsec_...) in Variables as WEBHOOK_SECRET_STRIPE_EVENTS (replace the auto-generated placeholder). Stripe sends Stripe-Signature; mpc-auth verifies it against that variable."
+    },
+    {
+      "name": "slack_events",
+      "type": "slack",
+      "enabled": false,
+      "prompt": "A Slack Events API payload was received. Summarize event type, channel, user, and message text if present. Ignore URL verification challenges unless the body is only a challenge.\n\nSetup: In Slack app → Event Subscriptions, set Request URL to this hook's inbound URL. Put the Slack signing secret in Variables as WEBHOOK_SECRET_SLACK_EVENTS (replace the auto-generated placeholder). Slack sends X-Slack-Signature and X-Slack-Request-Timestamp."
+    },
+    {
+      "name": "telegram_updates",
+      "type": "telegram",
+      "enabled": false,
+      "prompt": "You are replying in a Telegram chat. The user's latest message is in the hook body. Reply concisely in plain text (Markdown is optional). Use MCP tools when needed for this node.\n\nSetup: Create a bot via @BotFather. Set Variables TELEGRAM_BOT_TOKEN to the bot token. Set WEBHOOK_SECRET_TELEGRAM_UPDATES to the secret_token used in setWebhook. Point Telegram to this hook's public HTTPS inbound URL. All messages share one agent conversation until the operator clears it."
+    }
+  ]
+}

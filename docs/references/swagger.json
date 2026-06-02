@@ -3,7 +3,7 @@
     "info": {
         "contact": {},
         "title": "MPC Auth Management API",
-        "description": "Distributed Auth / MPC node HTTP API. All responses use node.APIResponse (code, error, data). Keygen and sign GET/list response bodies include effectiveEcdsaMpcProtocol for secp256k1 (\"gg18\" or \"cggmp24\"); empty when not applicable. For completed secp256k1 keys, GET /getKeyGenResultById data and GET /getAllGroupIds keyGens[] include ethereumaddress plus bitcoinp2wpkhmainnet (bc1… mainnet), bitcoinp2wpkhtestnet (Bitcoin TestNet3 tb1…), bitcoinp2wpkhsignet (Bitcoin Signet; btcd SigNet witness HRP tb so encoding may duplicate testnet). GET /getGlobalNonceByKeyGenId data map includes effectiveEcdsaMpcProtocol (see that path description). See mpc-config docs/references/API_IMPLEMENTATION.md.",
+        "description": "Distributed Auth / MPC node HTTP API. All responses use node.APIResponse (code, error, data). Keygen and sign GET/list response bodies include effectiveEcdsaMpcProtocol for secp256k1 (\"gg18\" or \"cggmp24\"); empty when not applicable. For completed secp256k1 keys, GET /getKeyGenResultById data and GET /getAllGroupIds keyGens[] include ethereumaddress plus bitcoinp2wpkhmainnet (bc1\u2026 mainnet), bitcoinp2wpkhtestnet (Bitcoin TestNet3 tb1\u2026), bitcoinp2wpkhsignet (Bitcoin Signet; btcd SigNet witness HRP tb so encoding may duplicate testnet). GET /getGlobalNonceByKeyGenId data map includes effectiveEcdsaMpcProtocol (see that path description). See mpc-config docs/references/API_IMPLEMENTATION.md.",
         "version": "1.0"
     },
     "paths": {
@@ -55,7 +55,7 @@
         },
         "/getPublicMgtKey": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getPublicMgtKey).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getPublicMgtKey).",
                 "consumes": [
                     "application/json"
                 ],
@@ -78,7 +78,7 @@
         },
         "/getAllowedEd25519MgtKeys": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getAllowedEd25519MgtKeys).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getAllowedEd25519MgtKeys).",
                 "consumes": [
                     "application/json"
                 ],
@@ -124,7 +124,7 @@
         },
         "/getPreferredKeyGen": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getPreferredKeyGen).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getPreferredKeyGen).",
                 "consumes": [
                     "application/json"
                 ],
@@ -147,7 +147,7 @@
         },
         "/health": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /health).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /health).",
                 "consumes": [
                     "application/json"
                 ],
@@ -300,7 +300,7 @@
         },
         "/verifyMgtKey": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /verifyMgtKey).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /verifyMgtKey).",
                 "consumes": [
                     "application/json"
                 ],
@@ -326,7 +326,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -430,7 +430,7 @@
         },
         "/getNodeUptime": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getNodeUptime).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getNodeUptime).",
                 "consumes": [
                     "application/json"
                 ],
@@ -453,7 +453,7 @@
         },
         "/getMessageToSign": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /getMessageToSign).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /getMessageToSign).",
                 "consumes": [
                     "application/json"
                 ],
@@ -479,7 +479,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -533,7 +533,7 @@
         },
         "/getConfiguredNodeKeys": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getConfiguredNodeKeys).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getConfiguredNodeKeys).",
                 "consumes": [
                     "application/json"
                 ],
@@ -556,7 +556,7 @@
         },
         "/getSubscriptions": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getSubscriptions).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getSubscriptions).",
                 "consumes": [
                     "application/json"
                 ],
@@ -579,7 +579,7 @@
         },
         "/connectivityHealth": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /connectivityHealth).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /connectivityHealth).",
                 "consumes": [
                     "application/json"
                 ],
@@ -879,7 +879,7 @@
         },
         "/newGroupRequestRetry": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /newGroupRequestRetry).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /newGroupRequestRetry).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1090,7 +1090,7 @@
         },
         "/newSubGroupRequest": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /newSubGroupRequest).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /newSubGroupRequest).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1116,7 +1116,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -1124,7 +1124,7 @@
         },
         "/listNewSubGroupRequests": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listNewSubGroupRequests).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listNewSubGroupRequests).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1147,7 +1147,7 @@
         },
         "/newSubGroupRequestAgree": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /newSubGroupRequestAgree).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /newSubGroupRequestAgree).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1173,7 +1173,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -1215,7 +1215,7 @@
         },
         "/keyGenRequestRetry": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /keyGenRequestRetry).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /keyGenRequestRetry).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1777,7 +1777,7 @@
         },
         "/getKeyGenResultById": {
             "get": {
-                "description": "get keygen result by id. Response data includes effectiveEcdsaMpcProtocol for secp256k1 (gg18/cggmp24); empty otherwise. For secp256k1 keys with pubkeyhex, data includes ethereumaddress and bitcoin SegWit v0 P2WPKH addresses (bitcoinp2wpkhmainnet, bitcoinp2wpkhtestnet, bitcoinp2wpkhsignet when derivable) — see mpc-config docs/references/API_IMPLEMENTATION.md and definition node.KeyGenResultData (documentation shape).",
+                "description": "get keygen result by id. Response data includes effectiveEcdsaMpcProtocol for secp256k1 (gg18/cggmp24); empty otherwise. For secp256k1 keys with pubkeyhex, data includes ethereumaddress and bitcoin SegWit v0 P2WPKH addresses (bitcoinp2wpkhmainnet, bitcoinp2wpkhtestnet, bitcoinp2wpkhsignet when derivable) \u2014 see mpc-config docs/references/API_IMPLEMENTATION.md and definition node.KeyGenResultData (documentation shape).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1809,7 +1809,7 @@
         },
         "/getGlobalNonceByKeyGenId": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getGlobalNonceByKeyGenId). Success data includes globalnonce, effectiveEcdsaMpcProtocol, and keytype when the key is not secp256k1 (globalnonce 0).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getGlobalNonceByKeyGenId). Success data includes globalnonce, effectiveEcdsaMpcProtocol, and keytype when the key is not secp256k1 (globalnonce 0).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1832,7 +1832,7 @@
         },
         "/getKeyGenGroupId": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getKeyGenGroupId).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getKeyGenGroupId).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1855,7 +1855,7 @@
         },
         "/getAllGroupIds": {
             "get": {
-                "description": "MPC node management API — see mpc-config docs/references/API_IMPLEMENTATION.md (GET /getAllGroupIds). Each keyGens entry may include ethereumaddress plus bitcoin P2WPKH fields for secp256k1 keys (bitcoinp2wpkhmainnet bc1…, bitcoinp2wpkhtestnet and bitcoinp2wpkhsignet tb1… via btcd).",
+                "description": "MPC node management API \u2014 see mpc-config docs/references/API_IMPLEMENTATION.md (GET /getAllGroupIds). Each keyGens entry may include ethereumaddress plus bitcoin P2WPKH fields for secp256k1 keys (bitcoinp2wpkhmainnet bc1\u2026, bitcoinp2wpkhtestnet and bitcoinp2wpkhsignet tb1\u2026 via btcd).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1878,7 +1878,7 @@
         },
         "/listGroupResults": {
             "get": {
-                "description": "MPC node management API — see docs/API_IMPLEMENTATION.md (GET /listGroupResults).",
+                "description": "MPC node management API \u2014 see docs/API_IMPLEMENTATION.md (GET /listGroupResults).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2200,7 +2200,7 @@
         },
         "/multiSignRequest": {
             "post": {
-                "description": "Multi-agree keys only. Single-tx (msgHash) or batch (messageHashes length ≥ 2): one agree, one trigger, one SignResult. Batch uses full interactive MPC per leg — no presignId / presign-finish path. Supports secp256k1 (CGGMP24), ed25519, and bitcoin-taproot (FROST). See mpc-config docs/references/API_IMPLEMENTATION.md (POST /multiSignRequest).",
+                "description": "Multi-agree keys only. Single-tx (msgHash) or batch (messageHashes length \u2265 2): one agree, one trigger, one SignResult. Batch uses full interactive MPC per leg \u2014 no presignId / presign-finish path. Supports secp256k1 (CGGMP24), ed25519, and bitcoin-taproot (FROST). See mpc-config docs/references/API_IMPLEMENTATION.md (POST /multiSignRequest).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2226,7 +2226,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -2357,7 +2357,7 @@
         },
         "/isSignRequestReadyById": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /isSignRequestReadyById).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /isSignRequestReadyById).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2389,7 +2389,7 @@
         },
         "/listSignRequestsReady": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listSignRequestsReady). Items include effectiveEcdsaMpcProtocol for secp256k1 when derivable.",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listSignRequestsReady). Items include effectiveEcdsaMpcProtocol for secp256k1 when derivable.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2445,7 +2445,7 @@
         },
         "/updateSignResultStatusById": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /updateSignResultStatusById).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /updateSignResultStatusById).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2471,7 +2471,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -2479,7 +2479,7 @@
         },
         "/shelveSignRequest": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /shelveSignRequest).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /shelveSignRequest).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2505,7 +2505,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -2513,7 +2513,7 @@
         },
         "/listSignResults": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listSignResults). Items include effectiveEcdsaMpcProtocol for secp256k1 when derivable.",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listSignResults). Items include effectiveEcdsaMpcProtocol for secp256k1 when derivable.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2691,7 +2691,7 @@
         },
         "/nodeRegister": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /nodeRegister).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /nodeRegister).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2717,7 +2717,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -2725,7 +2725,7 @@
         },
         "/fetchNodeData": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /fetchNodeData).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /fetchNodeData).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2748,7 +2748,7 @@
         },
         "/postChainDetails": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postChainDetails).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postChainDetails).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2781,7 +2781,7 @@
         },
         "/getChainDetails": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getChainDetails).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getChainDetails).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2813,7 +2813,7 @@
         },
         "/removeChainDetails": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeChainDetails).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeChainDetails).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2846,7 +2846,7 @@
         },
         "/postNonEvmChainDetails": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postNonEvmChainDetails).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postNonEvmChainDetails).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2879,7 +2879,7 @@
         },
         "/getNonEvmChainDetails": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getNonEvmChainDetails).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getNonEvmChainDetails).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2902,7 +2902,7 @@
         },
         "/removeNonEvmChainDetails": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeNonEvmChainDetails).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeNonEvmChainDetails).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2935,7 +2935,7 @@
         },
         "/addToken": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /addToken).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /addToken).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2968,7 +2968,7 @@
         },
         "/removeToken": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeToken).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeToken).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3001,7 +3001,7 @@
         },
         "/getTokens": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getTokens).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getTokens).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3038,7 +3038,7 @@
         },
         "/addKnownAddress": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /addKnownAddress).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /addKnownAddress).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3071,7 +3071,7 @@
         },
         "/removeKnownAddress": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeKnownAddress).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeKnownAddress).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3104,7 +3104,7 @@
         },
         "/getKnownAddresses": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getKnownAddresses).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getKnownAddresses).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3148,7 +3148,7 @@
         },
         "/setPreferredSigner": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /setPreferredSigner).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /setPreferredSigner).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3181,7 +3181,7 @@
         },
         "/postPreferredKeyGen": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postPreferredKeyGen).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postPreferredKeyGen).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3672,7 +3672,7 @@
         },
         "/listCronJobs": {
             "get": {
-                "description": "List agent cron job summaries (agent_llm_config/cron/jobs.json). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /listCronJobs).",
+                "description": "List agent cron job summaries. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /listCronJobs).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3695,7 +3695,7 @@
         },
         "/getCronJob": {
             "get": {
-                "description": "Get one agent cron job by id or name query param. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getCronJob).",
+                "description": "Get one agent cron job. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getCronJob).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3730,7 +3730,7 @@
         },
         "/listCronJobRuns": {
             "get": {
-                "description": "List recent cron run history for jobId. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /listCronJobRuns).",
+                "description": "List cron job run history. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /listCronJobRuns).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3799,7 +3799,7 @@
         },
         "/updateCronJob": {
             "post": {
-                "description": "Update agent cron job schedule/message (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /updateCronJob).",
+                "description": "Update agent cron job (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /updateCronJob).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3865,7 +3865,7 @@
         },
         "/deactivateCronJob": {
             "post": {
-                "description": "Disable agent cron job without deleting it (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /deactivateCronJob).",
+                "description": "Disable agent cron job (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /deactivateCronJob).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3962,9 +3962,294 @@
                 ]
             }
         },
+        "/listWebhooks": {
+            "get": {
+                "description": "List inbound agent webhooks (agent_llm_config/hooks/webhooks.json). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /listWebhooks).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent hooks"
+                ],
+                "summary": "list inbound webhooks",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/getWebhookById": {
+            "get": {
+                "description": "Get one inbound webhook by id query param. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getWebhookById).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent hooks"
+                ],
+                "summary": "get inbound webhook by id",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "id",
+                        "required": true,
+                        "type": "string"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/addWebhook": {
+            "post": {
+                "description": "Create inbound webhook (management-signed; secret stored as WEBHOOK_SECRET_* variable). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /addWebhook).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent hooks"
+                ],
+                "summary": "add inbound webhook",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.AddWebhookPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/updateWebhook": {
+            "post": {
+                "description": "Update inbound webhook prompt and/or type (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /updateWebhook).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent hooks"
+                ],
+                "summary": "update inbound webhook",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.UpdateWebhookPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/removeWebhook": {
+            "post": {
+                "description": "Remove inbound webhook (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /removeWebhook).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent hooks"
+                ],
+                "summary": "remove inbound webhook",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.WebhookRefPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/activateWebhook": {
+            "post": {
+                "description": "Enable inbound webhook (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /activateWebhook).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent hooks"
+                ],
+                "summary": "activate inbound webhook",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.WebhookRefPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/deactivateWebhook": {
+            "post": {
+                "description": "Disable inbound webhook (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /deactivateWebhook).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent hooks"
+                ],
+                "summary": "deactivate inbound webhook",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.WebhookRefPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/runWebhook": {
+            "post": {
+                "description": "Manual inbound webhook test trigger (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /runWebhook).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent hooks"
+                ],
+                "summary": "run inbound webhook test",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.WebhookRefPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/agent/plan/execute": {
+            "post": {
+                "description": "Post mpc-orchestrate manifest from plan thread to KeyGen (read JWT). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /agent/plan/execute).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent hooks"
+                ],
+                "summary": "execute orchestration plan in KeyGen",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.AgentPlanExecutePost"
+                        }
+                    }
+                ]
+            }
+        },
         "/getMSQTTKey": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMSQTTKey).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMSQTTKey).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3987,7 +4272,7 @@
         },
         "/postMSQTTKey": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postMSQTTKey).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /postMSQTTKey).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4020,7 +4305,7 @@
         },
         "/getWebTLSKey": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getWebTLSKey).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getWebTLSKey).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4092,7 +4377,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see docs/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -4100,7 +4385,7 @@
         },
         "/configUpdatePlan": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /configUpdatePlan).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /configUpdatePlan).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4126,7 +4411,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -4134,7 +4419,7 @@
         },
         "/configUpdateImplement": {
             "post": {
-                "description": "MPC node management API — POST /configUpdateImplement. Body: plannedYaml, nonce, clientSig, signedMessage. rotationPublicMgtKeyClientSig required when the plan sets the first PublicMgtKey; rotationNodeMgtKeyClientSig optional (if present, personal_sign from the new Ethereum NodeMgtKey). Details: mpc-config docs/references/API_IMPLEMENTATION.md.",
+                "description": "MPC node management API \u2014 POST /configUpdateImplement. Body: plannedYaml, nonce, clientSig, signedMessage. rotationPublicMgtKeyClientSig required when the plan sets the first PublicMgtKey; rotationNodeMgtKeyClientSig optional (if present, personal_sign from the new Ethereum NodeMgtKey). Details: mpc-config docs/references/API_IMPLEMENTATION.md.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4167,7 +4452,7 @@
         },
         "/maintenance/requestRestartPrep": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /maintenance/requestRestartPrep).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /maintenance/requestRestartPrep).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4193,7 +4478,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -4201,7 +4486,7 @@
         },
         "/maintenance/restartGate": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /maintenance/restartGate).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /maintenance/restartGate).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4224,7 +4509,7 @@
         },
         "/reboot": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /reboot).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /reboot).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4250,7 +4535,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -4258,7 +4543,7 @@
         },
         "/updateMpcAuth": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /updateMpcAuth).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /updateMpcAuth).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4284,7 +4569,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -4364,7 +4649,7 @@
         },
         "/restoreDatabase": {
             "post": {
-                "description": "Restore MongoDB from encrypted backup (pre-restore ./.mongodump → /app/.mongodump in compose; wipe; mongorestore) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /restoreDatabase).",
+                "description": "Restore MongoDB from encrypted backup (pre-restore ./.mongodump \u2192 /app/.mongodump in compose; wipe; mongorestore) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /restoreDatabase).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4374,7 +4659,7 @@
                 "tags": [
                     "Database backup"
                 ],
-                "summary": "Restore MongoDB from encrypted backup (pre-restore ./.mongodump → /app/.mongodump in compose; wipe; mongorestore)",
+                "summary": "Restore MongoDB from encrypted backup (pre-restore ./.mongodump \u2192 /app/.mongodump in compose; wipe; mongorestore)",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -4574,7 +4859,7 @@
         },
         "/sendMessage": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /sendMessage).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /sendMessage).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4600,7 +4885,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -4608,7 +4893,7 @@
         },
         "/listMessages": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listMessages).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listMessages).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4676,7 +4961,7 @@
         },
         "/getMessageById": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMessageById).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMessageById).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4713,7 +4998,7 @@
         },
         "/getMessageThread": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMessageThread).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMessageThread).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4750,7 +5035,7 @@
         },
         "/markMessageRead": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /markMessageRead).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /markMessageRead).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4776,7 +5061,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -4784,7 +5069,7 @@
         },
         "/multiMarkMessagesRead": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /multiMarkMessagesRead).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /multiMarkMessagesRead).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4810,7 +5095,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -4818,7 +5103,7 @@
         },
         "/deleteMessage": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /deleteMessage).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /deleteMessage).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4844,7 +5129,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -4852,7 +5137,7 @@
         },
         "/multiDeleteMessages": {
             "post": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /multiDeleteMessages).",
+                "description": "MPC node management API \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /multiDeleteMessages).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4878,7 +5163,7 @@
                         "required": true,
                         "schema": {
                             "type": "object",
-                            "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                            "description": "Request JSON \u2014 see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
                         }
                     }
                 ]
@@ -4912,7 +5197,7 @@
                 },
                 "pubkeyhex": {
                     "type": "string",
-                    "description": "MPC joint pubkey as x‖y uncompressed coordinates, 128 hex characters"
+                    "description": "MPC joint pubkey as x\u2016y uncompressed coordinates, 128 hex characters"
                 },
                 "ethereumaddress": {
                     "type": "string",
@@ -4920,15 +5205,15 @@
                 },
                 "bitcoinp2wpkhmainnet": {
                     "type": "string",
-                    "description": "Bitcoin mainnet native SegWit v0 (P2WPKH) bc1… from pubkeyhex"
+                    "description": "Bitcoin mainnet native SegWit v0 (P2WPKH) bc1\u2026 from pubkeyhex"
                 },
                 "bitcoinp2wpkhtestnet": {
                     "type": "string",
-                    "description": "Bitcoin TestNet3 P2WPKH tb1… (chaincfg.TestNet3Params)"
+                    "description": "Bitcoin TestNet3 P2WPKH tb1\u2026 (chaincfg.TestNet3Params)"
                 },
                 "bitcoinp2wpkhsignet": {
                     "type": "string",
-                    "description": "Bitcoin Signet P2WPKH (chaincfg.SigNetParams; witness HRP is tb per btcd — may match bitcoinp2wpkhtestnet string for the same pubkey)"
+                    "description": "Bitcoin Signet P2WPKH (chaincfg.SigNetParams; witness HRP is tb per btcd \u2014 may match bitcoinp2wpkhtestnet string for the same pubkey)"
                 },
                 "keylist": {
                     "type": "array",
@@ -4967,7 +5252,7 @@
                 },
                 "sorobanaddress": {
                     "type": "string",
-                    "description": "Stellar/Soroban strkey (G…) when keytype is ed25519"
+                    "description": "Stellar/Soroban strkey (G\u2026) when keytype is ed25519"
                 },
                 "nearaddress": {
                     "type": "string",
@@ -4983,7 +5268,7 @@
                 },
                 "bitcoinp2trmainnet": {
                     "type": "string",
-                    "description": "Bitcoin mainnet P2TR bc1p… when keytype is bitcoin-taproot"
+                    "description": "Bitcoin mainnet P2TR bc1p\u2026 when keytype is bitcoin-taproot"
                 },
                 "taprootinternalpubkeyhex": {
                     "type": "string",
@@ -5014,7 +5299,7 @@
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
+                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey \u2014 include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
                 }
             }
         },
@@ -5046,11 +5331,11 @@
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
+                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey \u2014 include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
                 },
                 "threshold": {
                     "type": "integer",
-                    "description": "Signing quorum stored on the keygen payload. secp256k1 (CGGMP24, default): literal quorum t; MPC signing needs t parties; require 2 ≤ t ≤ n (n = group size). ed25519 and bitcoin-taproot (FROST / givre): literal quorum t; MPC signing needs t parties; require 2 ≤ t ≤ n. Legacy GG18 secp256k1 keys (Mongo only) used polynomial degree d with quorum d+1 — new keygen rejects gg18."
+                    "description": "Signing quorum stored on the keygen payload. secp256k1 (CGGMP24, default): literal quorum t; MPC signing needs t parties; require 2 \u2264 t \u2264 n (n = group size). ed25519 and bitcoin-taproot (FROST / givre): literal quorum t; MPC signing needs t parties; require 2 \u2264 t \u2264 n. Legacy GG18 secp256k1 keys (Mongo only) used polynomial degree d with quorum d+1 \u2014 new keygen rejects gg18."
                 }
             }
         },
@@ -5068,7 +5353,7 @@
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
+                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey \u2014 include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
                 }
             }
         },
@@ -5095,7 +5380,7 @@
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
+                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey \u2014 include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
                 }
             }
         },
@@ -5122,7 +5407,7 @@
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
+                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey \u2014 include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
                 }
             }
         },
@@ -5140,7 +5425,7 @@
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
+                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey \u2014 include in the signed JSON with nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
                 }
             }
         },
@@ -5314,7 +5599,7 @@
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey — include in the signed JSON with Nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
+                    "description": "Optional (recommended). 128-hex MPC node id from GET /getNodeKey \u2014 include in the signed JSON with Nonce/sig so the signature cannot be replayed on another node. Omitting nodeKey is deprecated and may become unsupported."
                 },
                 "txParams": {
                     "type": "object",
@@ -5698,7 +5983,7 @@
             "properties": {
                 "publicKey": {
                     "type": "string",
-                    "description": "64 hex — key added via POST /addManagementKey to soft-remove (not bootstrap PublicMgtKey)."
+                    "description": "64 hex \u2014 key added via POST /addManagementKey to soft-remove (not bootstrap PublicMgtKey)."
                 },
                 "nonce": {
                     "type": "integer",
@@ -5738,7 +6023,7 @@
                 },
                 "nodeKey": {
                     "type": "string",
-                    "description": "Required. 128-hex MPC node id from GET /getNodeKey — binds signature to this node."
+                    "description": "Required. 128-hex MPC node id from GET /getNodeKey \u2014 binds signature to this node."
                 },
                 "keyGenId": {
                     "type": "string",
@@ -5752,7 +6037,7 @@
         },
         "node.KeyGenEjectAgreePost": {
             "type": "object",
-            "description": "POST /keyGenEjectAgree. Committee member vote with **management** signature (same pattern as signRequestAgree — nonce, nodeKey, clientSig over json.Marshal with clientSig cleared). **Reject** (`accept`: false) is recorded for audit only and does **not** veto the eject once signing-quorum accepts exist.",
+            "description": "POST /keyGenEjectAgree. Committee member vote with **management** signature (same pattern as signRequestAgree \u2014 nonce, nodeKey, clientSig over json.Marshal with clientSig cleared). **Reject** (`accept`: false) is recorded for audit only and does **not** veto the eject once signing-quorum accepts exist.",
             "required": [
                 "ejectRequestId",
                 "nonce",
@@ -5836,7 +6121,7 @@
                     "additionalProperties": {
                         "type": "string"
                     },
-                    "description": "Node key → management signature hex (empty when not yet agreed)"
+                    "description": "Node key \u2192 management signature hex (empty when not yet agreed)"
                 },
                 "ClientSigs": {
                     "type": "object",
@@ -6619,21 +6904,17 @@
                     "description": "cron, every, or at"
                 },
                 "expr": {
-                    "type": "string",
-                    "description": "5-field cron expression when kind=cron"
+                    "type": "string"
                 },
                 "everyMs": {
                     "type": "integer",
-                    "format": "int64",
-                    "description": "Interval in milliseconds when kind=every"
+                    "format": "int64"
                 },
                 "at": {
-                    "type": "string",
-                    "description": "RFC3339 timestamp when kind=at"
+                    "type": "string"
                 },
                 "tz": {
-                    "type": "string",
-                    "description": "IANA timezone for kind=cron (default UTC)"
+                    "type": "string"
                 }
             }
         },
@@ -6733,8 +7014,7 @@
                             "type": "string"
                         },
                         "deleteConversation": {
-                            "type": "boolean",
-                            "description": "When true, also delete linked conversation"
+                            "type": "boolean"
                         }
                     }
                 }
@@ -6758,6 +7038,95 @@
                     }
                 }
             ]
+        },
+        "node.AddWebhookPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "name",
+                        "type",
+                        "prompt"
+                    ],
+                    "properties": {
+                        "name": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string",
+                            "description": "generic, github, gmail, proton, stripe, slack, or telegram"
+                        },
+                        "prompt": {
+                            "type": "string"
+                        },
+                        "enabled": {
+                            "type": "boolean"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.UpdateWebhookPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "id"
+                    ],
+                    "properties": {
+                        "id": {
+                            "type": "string"
+                        },
+                        "prompt": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.WebhookRefPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string"
+                        },
+                        "name": {
+                            "type": "string"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.AgentPlanExecutePost": {
+            "type": "object",
+            "properties": {
+                "conversationId": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "keyGenId": {
+                    "type": "string"
+                }
+            }
         }
     }
 }

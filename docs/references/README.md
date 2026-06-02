@@ -14,6 +14,7 @@ This directory contains reference docs for node APIs, agent workflows, and local
 | `./API_IMPLEMENTATION.md` | Full management API behavior, endpoint contracts, and conventions. § **`POST /triggerSignRequestById`** documents **EVM** trigger (**`txParams`/`messageHash`/`txParamsBatch`**) for supported automation (**executeSignResult.py**, **continuumdao-node-app**). |
 | `$MPA_PATH/scripts/mpc_sign_request_digest.py` | Reserved hook for future non–unsigned-tx trigger rules; digest-only detection is currently disabled (automation always uses standard EVM trigger fields). |
 | `./API_KEYGEN_MESSAGING.md` | KeyGen-scoped messaging API model and endpoint usage. |
+| [`../AGENT_HOOKS.md`](../AGENT_HOOKS.md) | **User guide:** inbound webhooks (all types), KeyGen `@agent` hooks, Plan mode, and orchestration (`mpc-orchestrate`). |
 | `./instructions.md` | End-to-end operational instructions for agent-managed node workflows. |
 | `./KNOWN_ADDRESSES_SCHEMA.md` | Local storage schema for known addresses. |
 | `./TOKEN_STORAGE_SCHEMA.md` | Local storage schema for token configuration data. |
