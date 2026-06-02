@@ -36,6 +36,8 @@ services:
     # Image: default continuumdao/mpc-auth:latest; override with MPC_AUTH_COMPOSE_APP_IMAGE.
     image: ${MPC_AUTH_COMPOSE_APP_IMAGE:-continuumdao/mpc-auth:latest}
     restart: always
+    # Bind mounts (agent_llm_config/, user_folder/, etc.) stay owned by the repo user when uid:gid match the host (see .env MPC_AUTH_RUN_AS_*).
+    user: "${MPC_AUTH_RUN_AS_UID:-0}:${MPC_AUTH_RUN_AS_GID:-0}"
     # pending-update.json / pending-reboot.json under /var/lib/mpc-auth-docker (systemd); agent LLM config beside compose (see agent_llm_config volume).
     environment:
       GOLOG_FILE: logs/MPCAuthCore.log

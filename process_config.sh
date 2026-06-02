@@ -301,11 +301,11 @@ _process_config_mkdir_owned_by_invoking_user() {
 }
 
 # agent_llm_config/ and user_folder/ beside configs.yaml: user + primary group (git pull, editor).
+# Also fixes root-owned bind-mount files written by mpc-auth before user: was set in compose.
 _process_config_ensure_path_owned_by_invoking_user() {
     local target="$1"
     [ -n "$target" ] || return 0
     [ -e "$target" ] || return 0
-    [ "${PROCESS_CONFIG_REPO_OWNER:-root}" = "root" ] && return 0
     process_config_transfer_repo_path_to_invoking_user "$target"
     if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
         if [ "${EUID:-0}" -eq 0 ]; then
@@ -1103,6 +1103,47 @@ PY_MERGE_DOTENV
     if [ "$merging" = true ]; then
         print_success "Updated Mongo-related entries in ${dotenv} from the current environment."
     fi
+}
+
+# Set MPC_AUTH_RUN_AS_UID/GID in compose .env so the app container writes bind mounts as the repo user (not root).
+_process_config_merge_dotenv_run_as_user() {
+    local root="$1"
+    local dotenv="${root}/.env"
+    [ -f "$dotenv" ] || return 0
+    [ -n "${PROCESS_CONFIG_REPO_UID:-}" ] || return 0
+    [ -n "${PROCESS_CONFIG_REPO_GID:-}" ] || return 0
+    if ! MPC_DOTENV_FILE="$dotenv" MPC_RUN_AS_UID="$PROCESS_CONFIG_REPO_UID" MPC_RUN_AS_GID="$PROCESS_CONFIG_REPO_GID" python3 <<'PY_MERGE_RUN_AS'
+import os
+import pathlib
+import re
+
+path = pathlib.Path(os.environ["MPC_DOTENV_FILE"])
+uid = os.environ["MPC_RUN_AS_UID"].strip()
+gid = os.environ["MPC_RUN_AS_GID"].strip()
+updates = {"MPC_AUTH_RUN_AS_UID": uid, "MPC_AUTH_RUN_AS_GID": gid}
+assign = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$")
+
+lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+out = []
+seen = set()
+for ln in lines:
+    m = assign.match(ln)
+    if m and m.group(1) in updates:
+        out.append("{}={}".format(m.group(1), updates[m.group(1)]))
+        seen.add(m.group(1))
+    else:
+        out.append(ln)
+for key, val in updates.items():
+    if key not in seen:
+        out.append("{}={}".format(key, val))
+path.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
+PY_MERGE_RUN_AS
+    then
+        print_warning "Could not set MPC_AUTH_RUN_AS_UID/GID in ${dotenv} (python3)."
+        return 1
+    fi
+    print_success ".env: mpc-auth container will run as uid:gid ${PROCESS_CONFIG_REPO_UID}:${PROCESS_CONFIG_REPO_GID} (bind-mount ownership)"
+    return 0
 }
 
 
@@ -6454,6 +6495,7 @@ main() {
     echo ""
 
     _process_config_maybe_materialize_dotenv_from_environment "$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
+    _process_config_merge_dotenv_run_as_user "$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
 
     configs_yaml_merge_agent_chat_and_hooks_enabled "$CONFIG_FILE" || exit 1
 

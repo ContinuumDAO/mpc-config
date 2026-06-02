@@ -6,6 +6,8 @@ Bundled defaults ship in **`agent_llm_config.defaults/`** (tracked in this repo)
 
 If you run **`process_config.sh` with `sudo`**, the script creates **`agent_llm_config/`** and **`user_folder/`** as that user’s uid **and primary group** (`chown -R user:group`) so Docker and editors are not blocked by root-owned paths.
 
+**Docker writes as root by default.** mpc-auth updates **`agent_llm_config/`** (skills, MCP JSON, cron, hooks) through the bind mount. Without **`user:`** in compose, new files are **`root:root`** on the host — **`git pull`** and **`git checkout`** as your login user then fail. **`process_config.sh`** sets **`MPC_AUTH_RUN_AS_UID`** / **`MPC_AUTH_RUN_AS_GID`** in **`.env`** and recreates the app container so future writes use your uid. To fix existing root-owned files: **`sudo ./scripts/fix-bind-mount-ownership.sh`**, then **`docker compose up -d --no-deps --force-recreate app`**.
+
 | File / path | Purpose |
 |-------------|---------|
 | **`agent-llm-config.json`** | LLM provider settings (created at runtime; may contain API key references). |
@@ -29,21 +31,30 @@ If **`git pull`** fails on **`agent_llm_config/Skills/skills.json`** or **`cron/
 
 ```bash
 cd ~/mpc-config
-mkdir -p ~/agent_llm_config-backup
-cp -a agent_llm_config/Skills agent_llm_config/cron agent_llm_config/hooks \
-  agent_llm_config/MCP_*.json ~/agent_llm_config-backup/ 2>/dev/null || true
-sudo chown -R "$(whoami):$(id -gn)" agent_llm_config/
 
-# If pull still complains about local changes to old tracked paths:
-git checkout HEAD -- agent_llm_config/Skills/skills.json 2>/dev/null || true
+# Stop app so Docker does not recreate root-owned files mid-migration
+docker compose stop app
+
+# Fix ownership (or: sudo ./scripts/fix-bind-mount-ownership.sh after you have that script)
+sudo chown -R "$(whoami):$(id -gn)" agent_llm_config/ user_folder/ 2>/dev/null || true
+mkdir -p ~/agent_llm_config-backup
+cp -a agent_llm_config ~/agent_llm_config-backup/runtime
+
+# Move old tracked paths aside (still on pre-fe325e9 checkout)
+SID=~/agent_llm_config-pull-stash
+mkdir -p "$SID"
+mv -f agent_llm_config/MCP_servers.json "$SID/" 2>/dev/null || sudo mv agent_llm_config/MCP_servers.json "$SID/"
+mv -f agent_llm_config/Skills/skills.json "$SID/" 2>/dev/null || sudo mv agent_llm_config/Skills/skills.json "$SID/"
+mv -f agent_llm_config/MCP_default_servers.json "$SID/" 2>/dev/null || true
+mv -f agent_llm_config/cron/jobs.json "$SID/" 2>/dev/null || true
+mv -f agent_llm_config/hooks "$SID/hooks" 2>/dev/null || true
+
 git pull
 
-# Restore live runtime data (process_config.sh will not overwrite existing files)
-cp -an ~/agent_llm_config-backup/Skills/. agent_llm_config/Skills/ 2>/dev/null || true
-cp -an ~/agent_llm_config-backup/cron/. agent_llm_config/cron/ 2>/dev/null || true
-cp -an ~/agent_llm_config-backup/hooks/. agent_llm_config/hooks/ 2>/dev/null || true
-cp -an ~/agent_llm_config-backup/MCP_*.json agent_llm_config/ 2>/dev/null || true
-./process_config.sh
+cp -a ~/agent_llm_config-backup/runtime/. agent_llm_config/
+sudo chown -R "$(whoami):$(id -gn)" agent_llm_config/ user_folder/
+sudo ./process_config.sh --enable-loopback-http --install-mpc-auth-systemd
+docker compose up -d --no-deps --force-recreate app
 ```
 
 After this, **`agent_llm_config/`** is gitignored and future **`git pull`** calls are clean.
