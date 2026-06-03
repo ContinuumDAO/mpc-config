@@ -77,6 +77,28 @@
       "initialLoad": false
     },
     {
+      "id": "altfins",
+      "displayName": "altFINS (crypto analytics)",
+      "transport": "http",
+      "url": "https://mcp.altfins.com/mcp",
+      "apiKeyEnvVar": "ALTFINS_API_KEY",
+      "apiKeyHeader": "X-Api-Key",
+      "initialLoad": false
+    },
+    {
+      "id": "messari",
+      "displayName": "Messari (crypto intelligence)",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@messari/sdk-ts-mcp@latest", "--client=claude", "--tools=dynamic"],
+      "apiKeyEnvVar": "MESSARI_SDK_API_KEY",
+      "envVars": ["MESSARI_SDK_API_KEY"],
+      "runtime": {
+        "requireCommands": ["npx"]
+      },
+      "initialLoad": false
+    },
+    {
       "id": "alphavantage",
       "displayName": "Alpha Vantage (stock market data)",
       "transport": "stdio",
@@ -104,6 +126,28 @@
         "pydantic>=2.0.0",
         "https://raw.githubusercontent.com/danishashko/binance-mcp-server/main/binance_mcp.py"
       ],
+      "runtime": {
+        "requireCommands": ["uv"]
+      },
+      "initialLoad": false
+    },
+    {
+      "id": "whale-tracker",
+      "displayName": "Whale Tracker (Whale Alert)",
+      "transport": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--with",
+        "httpx>=0.28.1",
+        "--with",
+        "mcp[cli]>=1.4.0",
+        "--with",
+        "python-dotenv",
+        "https://raw.githubusercontent.com/kukapay/whale-tracker-mcp/main/whale-tracker.py"
+      ],
+      "apiKeyEnvVar": "WHALE_ALERT_API_KEY",
+      "envVars": ["WHALE_ALERT_API_KEY"],
       "runtime": {
         "requireCommands": ["uv"]
       },
