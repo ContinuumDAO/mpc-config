@@ -40,10 +40,14 @@
     },
     {
       "id": "etherscan",
-      "displayName": "Etherscan",
-      "transport": "http",
-      "url": "https://mcp.etherscan.io/mcp",
+      "displayName": "Etherscan (API v2)",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "mcp-etherscan-server"],
       "apiKeyEnvVar": "ETHERSCAN_API_KEY",
+      "runtime": {
+        "requireCommands": ["npx"]
+      },
       "initialLoad": false
     },
     {
