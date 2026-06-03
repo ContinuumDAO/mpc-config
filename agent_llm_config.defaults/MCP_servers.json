@@ -45,6 +45,7 @@
       "command": "npx",
       "args": ["-y", "mcp-etherscan-server"],
       "apiKeyEnvVar": "ETHERSCAN_API_KEY",
+      "envVars": ["ETHERSCAN_API_KEY"],
       "runtime": {
         "requireCommands": ["npx"]
       },
@@ -73,6 +74,19 @@
       "url": "https://mcp.pro-api.coingecko.com/mcp",
       "apiKeyEnvVar": "COINGECKO_API_KEY",
       "apiKeyHeader": "x-cg-pro-api-key",
+      "initialLoad": false
+    },
+    {
+      "id": "alphavantage",
+      "displayName": "Alpha Vantage (stock market data)",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["--from", "marketdata-mcp-server", "marketdata-mcp"],
+      "apiKeyEnvVar": "ALPHA_VANTAGE_API_KEY",
+      "envVars": ["ALPHA_VANTAGE_API_KEY"],
+      "runtime": {
+        "requireCommands": ["uv"]
+      },
       "initialLoad": false
     },
     {
