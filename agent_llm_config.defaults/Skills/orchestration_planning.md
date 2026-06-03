@@ -42,4 +42,18 @@ Rules:
 - If a **system** message says orchestration was already posted to KeyGen, do **not** ask to Execute again unless drafting a **new** manifest.
 - **Follow-on plan:** the thread may start with `--- prior orchestration rollup ---` (`POST /agent/plan/start`). Use only that rollup plus new goals.
 
+## After synthesis: continue in [Orchestrator] (preferred)
+
+When the operator wants to **act** on synthesis (gas, multiSign, schedule execution) — **not** another research manifest — do **not** add new `tasks[]`. Tell them to use the UI **After orchestration → Continue in Orchestrator chat** (`POST /agent/orchestration/continue`), which opens the **same** `[Orchestrator]` thread for **interactive** chat (elicitation works).
+
+In that thread:
+
+- Answer questions and confirm execution parameters with the operator.
+- Use **`agent_schedule_orchestration_cron`** (meta tool) for a **one-shot** `schedule.kind: at` job on **this** `conversationId` — never a separate cron conversation.
+- Do **not** copy bundled `auto-sign-and-broadcast` (`every` + `everyMs: 300000`). Cron `message` must be **non-interactive** (embed confirmed gas/fees); gather prefs in interactive chat first.
+
+**Plan follow-on** is only for drafting a **new** `mpc-orchestrate` manifest, not for post-synthesis execution.
+
+**`POST /addCronJob`:** if used from management signing, set **`conversationId`** to the orchestrator id (or **`orchestrationTopLevelMessageId`** so the node resolves it). Never leave `conversationId` empty for orchestration follow-up (that creates a confusing extra `[Cron]` thread).
+
 Do not post to KeyGen yourself from plan chat unless using the implement tool/API.

@@ -137,7 +137,7 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on **`GET`** requests. **`POST`** is not JWT-gated on that listener; use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same **`GET`** rules when Browser HTTPS is configured.
 
-**JWT-protected agent paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/execute`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, and webhook read routes **`/listWebhooks`**, **`/getWebhookById`**.
+**JWT-protected agent paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, and webhook read routes **`/listWebhooks`**, **`/getWebhookById`**.
 
 ## Quick Reference: All Endpoints
 
@@ -239,6 +239,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /deactivateWebhook`](#post-deactivatewebhook) - Disable webhook (**management signature**)
 - [`POST /runWebhook`](#post-runwebhook) - Manual test trigger (**management signature**)
 - [`POST /agent/plan/start`](#post-agentplanstart) - Start a plan thread with optional prior-orchestration rollup injected (**read JWT**)
+- [`POST /agent/orchestration/continue`](#post-agentorchestrationcontinue) - Open the [Orchestrator] thread for interactive post-synthesis follow-up (**read JWT**)
 - [`POST /agent/plan/execute`](#post-agentplanexecute) - Post latest `mpc-orchestrate v1` manifest from a plan thread to KeyGen (**read JWT**)
 - [`POST /agent/chat`](#post-agentchat) - Stream one assistant turn (LLM + MCP **tools/call** loop; **read JWT** on Browser HTTPS / loopback)
 - [`GET /agent/chat`](#get-agentchat) - Load persisted conversation history by `conversationId` (**read JWT** when JWT applies)
@@ -2833,13 +2834,17 @@ Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each job
   "schedule": { "kind": "cron", "expr": "0 7 * * *", "tz": "UTC" },
   "enabled": true,
   "deleteAfterRun": false,
+  "conversationId": "optional — reuse [Orchestrator] thread",
+  "orchestrationTopLevelMessageId": "optional — node resolves orchestrator conversationId",
   "nonce": 0,
   "clientSig": "...",
   "nodeKey": "<128-hex>"
 }
 ```
 
-Creates **`id`**, **`conversationId`**, and initial **`nextRunAt`**. New jobs default **`enabled: true`**. **`at`** jobs default **`deleteAfterRun: true`** unless overridden.
+Creates **`id`**, **`conversationId`**, and initial **`nextRunAt`**. New jobs default **`enabled: true`**. **`at`** jobs default **`deleteAfterRun: true`** unless overridden. For orchestration follow-up, set **`conversationId`** or **`orchestrationTopLevelMessageId`** so cron runs append to the **[Orchestrator]** thread (not a new `[Cron]`-only conversation).
+
+**`GET /listCronJobs`** includes **`usesOrchestratorConversation`** and **`orchestrationTopLevelMessageId`** when the job’s `conversationId` matches an orchestration record.
 
 <a id="post-updatecronjob"></a>
 #### `POST /updateCronJob`
@@ -3042,6 +3047,28 @@ Total rollup size is capped (~24k runes) so follow-on Plan turns do not load ful
 ```
 
 **Errors:** **400** (no prior reference, orchestration not found, mismatched ids, KeyGen not eligible), **403** when MCP chat disabled.
+
+<a id="post-agentorchestrationcontinue"></a>
+#### `POST /agent/orchestration/continue`
+
+**Auth:** Read JWT when applicable (same as **`POST /agent/chat`**).
+
+**Request body:**
+```json
+{
+  "priorOrchestratorConversationId": "<uuid>",
+  "priorTopLevelMessageId": "<KeyGen top-level message id>",
+  "injectBootstrap": true
+}
+```
+
+At least one of **`priorOrchestratorConversationId`** or **`priorTopLevelMessageId`** is required (same resolution rules as plan start).
+
+**Behavior:** Returns the existing **`[Orchestrator]`** `conversationId` for that run (does **not** create a new thread). When **`injectBootstrap`** is true, appends a one-time **system** hint: use interactive chat here for gas/fees; schedule one-shot jobs with meta tool **`agent_schedule_orchestration_cron`** on this conversation (not a separate cron thread).
+
+**Response data:** `{ "conversationId", "orchestratorConversationId", "keyGenId", "topLevelMessageId", "title", "bootstrapInjected" }`.
+
+**Interactive turns:** **`POST /agent/chat`** on the returned `conversationId` uses **interactive** mode (elicitation supported). Meta tool **`agent_schedule_orchestration_cron`** is available in that thread.
 
 <a id="post-agentplanexecute"></a>
 #### `POST /agent/plan/execute`

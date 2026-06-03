@@ -439,7 +439,15 @@ Do not pick threads by raw UUID alone: use the **title** or **Plan follow-on** (
 
 ### Plan follow-on (next phase after synthesis)
 
-When a run has finished (or synthesis cron has run), start the **next** manifest from summarized context instead of re-pasting history:
+When a run has finished (or synthesis has run), **continue in the same [Orchestrator] thread** for interactive follow-up (gas, multiSign, scheduling):
+
+1. Node agent header → **After orchestration** → **Continue in Orchestrator chat** (calls `POST /agent/orchestration/continue` with bootstrap hint).
+2. Answer questions in that chat tab (interactive; elicitation supported).
+3. Agent schedules one-shot work with meta tool **`agent_schedule_orchestration_cron`** on the **orchestrator** `conversationId` (not a new cron-only thread).
+
+Use **Plan follow-on** only when drafting a **new** `mpc-orchestrate` manifest.
+
+When a run has finished and you need a **new** manifest from summarized context instead of re-pasting history:
 
 1. **Plan follow-on** in the node agent chat header → select the **`[Orchestrator]`** conversation for that run.
 2. The node calls **`POST /agent/plan/start`** and opens a new plan tab with an injected **`--- prior orchestration rollup ---`** block (synthesis prose + task results + statuses; size-capped).
@@ -610,6 +618,10 @@ Use Plan mode when the manifest is large or iterative; use manual post for fixed
 | Plan asks to Execute again | Normal after Execute — check for a **system** message on the plan thread; watch **`[Sub-agent]`** / KeyGen thread instead. |
 | Telegram no reply | **`TELEGRAM_BOT_TOKEN`** set; `setWebhook` **secret_token** matches **`WEBHOOK_SECRET_TELEGRAM_UPDATES`** |
 | Agent asks for user input | Hook/cron modes do not support MCP elicitation; simplify prompt or use interactive chat |
+| Cron runs every 5 minutes | Agent copied bundled `auto-sign-and-broadcast` (`every` + `everyMs: 300000`). Use **`schedule.kind: at`** for one-shot sign/trade follow-up |
+| Cron questions (gas, etc.) but no way to answer | Cron **View** is read-only. Use Cron tab **Agent chat** (or Conversations → **Cron**) to reply in interactive chat |
+| Post-synthesis follow-up confusing | Use **After orchestration → Continue in Orchestrator chat** (not Plan follow-on for execution) |
+| Cron on wrong thread | `addCronJob` must set **`conversationId`** or **`orchestrationTopLevelMessageId`**; or use **`agent_schedule_orchestration_cron`** in Orchestrator chat |
 
 ---
 
