@@ -521,32 +521,32 @@ sequenceDiagram
   participant S2 as Sub-agent task B
   participant CR as Cron synthesis
 
-  KG->>O: Top-level hook + manifest
-  KG->>S1: Task A prompt + MCP allowlist
-  KG->>S2: Task B prompt + MCP allowlist
+  KG->>S1: Node dispatches task A (MCP allowlist)
+  KG->>S2: Node dispatches task B
   S1->>KG: Reply with mpc-task-result
   S2->>KG: Reply with mpc-task-result
-  O->>O: Track completion via replies
-  KG-->>CR: Optional at-schedule synthesis
+  Note over O: Synthesis hook when all tasks terminal
+  O->>KG: Synthesis reply (send_key_gen_message)
+  KG-->>CR: Optional backup at-schedule synthesis
 ```
 
-1. **Orchestrator** — one agent conversation per top-level message; uses the same-node **top-level** prompt + message envelope.
-2. **Sub-agents** — one conversation per **`tasks[].id`**, with only the listed **`mcpServers`** enabled for that turn.
-3. **Sub-agent contract** — each sub-agent is instructed to finish with a **reply** to the top-level message containing:
+1. **Orchestrator** — one `[Orchestrator]` agent conversation per top-level message. The node does **not** run a generic top-level hook on the manifest; it tracks state in `agent_llm_config/hooks/orchestrations/` and runs **synthesis** when all tasks are terminal.
+2. **Sub-agents** — one `[Sub-agent]` conversation per **`tasks[].id`**, with only the listed **`mcpServers`** enabled for that turn.
+3. **Sub-agent contract** — each sub-agent must post a **reply** to the top-level message containing:
 
    ```yaml
    ```mpc-task-result v1
-   taskId: check-tvl
+   taskId: <task-id>
    status: complete
    summary: |
-     TVL is …; volume …
+     Findings for the KeyGen group
    ```
    ```
 
-   Replies do **not** need `@agent` — mpc-auth matches orchestration by `replyTo` (top-level message id) and the task-result block. Sub-agents should use MCP **`send_key_gen_message`** only, not poll `listMessages`.
+   Replies do **not** need `@agent`. Do **not** use `mpc-orchestrate-task` or post dispatch/progress-only messages. Use MCP **`send_key_gen_message`** once; do not poll `listMessages`.
 
-4. **Reply hooks** — controlled by manifest **`prompts.*`** (empty = no automated turn for that case).
-5. **Synthesis** — if **`synthesis.at`** is set, a **one-shot cron** runs **`synthesis.cronPrompt`** at that time; **`rescheduleOnReply: true`** reschedules when new replies arrive before **`at`**.
+4. **Reply hooks** — same-node replies **without** `mpc-task-result` do **not** re-trigger orchestrator hooks (avoids progress/dispatch echo loops). **`prompts.externalReply`** runs for **peer** replies. **`prompts.subAgentReply`** is optional per-task ack (skipped when synthesis runs). **`prompts.orchestratorOnReply`** runs **once** when all tasks are terminal (`synthesis.onPartial` controls whether `failed` counts).
+5. **Synthesis** — automated hook in `[Orchestrator]` with MCP `continuum` (including `send_key_gen_message` to post a **KeyGen reply** for the group). Optional **`synthesis.at`** cron is a backup.
 
 ### Manual Execute (without Plan UI)
 
@@ -583,7 +583,7 @@ Use Plan mode when the manifest is large or iterative; use manual post for fixed
 4. Click **Execute in KeyGen** → top-level message appears in the KeyGen UI.
 5. Watch **agent conversations**: `[Orchestrator] …`, `[Sub-agent] list-ready`, `[Sub-agent] check-blocked`.
 6. Sub-agents post **replies** under the top-level thread with **`mpc-task-result`** blocks.
-7. At synthesis time, cron runs **`cronPrompt`**; orchestrator may also run on replies if **`orchestratorOnReply`** is non-empty.
+7. When all tasks are terminal, the node runs **`orchestratorOnReply`** once (synthesis on KeyGen). Optional cron runs **`cronPrompt`** at **`synthesis.at`**.
 8. Optional **Plan follow-on**: select the **`[Orchestrator]`** thread → draft the next manifest from the injected rollup → **Execute in KeyGen** again.
 
 ---
@@ -601,6 +601,8 @@ Use Plan mode when the manifest is large or iterative; use manual post for fixed
 | Plan execute fails | Thread is **plan** purpose; manifest fence valid; preferred KeyGen set and node in **KeyList** |
 | Plan follow-on fails | Prior orchestration exists; use **`[Orchestrator]`** title or **`orchestrationTopLevelMessageId`**; at least one prior id in **`POST /agent/plan/start`** |
 | Orchestration does not spawn | Body includes **`@agent`** and **`mpc-orchestrate v1`**; YAML has tasks with **mcpServers** |
+| Orchestrator hook loop / no synthesis | Sub-agents must use **`mpc-task-result`** (not **`mpc-orchestrate-task`**). Set **`subAgentReply: ""`**. Use **`orchestratorOnReply`** for synthesis. Same-node progress replies are ignored by the node. |
+| Plan asks to Execute again | Normal after Execute — check for a **system** message on the plan thread; watch **`[Sub-agent]`** / KeyGen thread instead. |
 | Telegram no reply | **`TELEGRAM_BOT_TOKEN`** set; `setWebhook` **secret_token** matches **`WEBHOOK_SECRET_TELEGRAM_UPDATES`** |
 | Agent asks for user input | Hook/cron modes do not support MCP elicitation; simplify prompt or use interactive chat |
 
