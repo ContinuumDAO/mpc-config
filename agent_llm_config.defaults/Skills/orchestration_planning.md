@@ -18,7 +18,11 @@ prompts:
 synthesis:
   at: ""
   rescheduleOnReply: false
-  cronPrompt: ""
+  cronPrompt: |
+    Review synthesis and task results on the KeyGen thread (orchestration state below).
+    If the operator should act on prior recommendations, offer to build multiSign
+    proposal payloads via ctm_* multisign MCP tools (quote/simulate first).
+    Do not POST /multiSignRequest or broadcast without explicit operator confirmation.
   onPartial: true
 ```
 
@@ -31,7 +35,8 @@ Rules:
 - Use **empty strings** for `prompts.subAgentReply` and `prompts.externalReply` unless the operator needs per-reply hooks.
 - Set **`prompts.orchestratorOnReply`** for automated synthesis when all tasks finish (node runs this once; keep instructions domain-neutral).
 - `synthesis.onPartial: true` (default if omitted) allows synthesis when tasks end `complete` or `failed`; `false` requires all `complete`.
-- `synthesis.at` is RFC3339 UTC for a optional backup synthesis cron; leave empty to skip.
+- `synthesis.at` is RFC3339 UTC for an optional **follow-up** cron in `[Orchestrator]`; leave empty to skip. **Both** `at` and `cronPrompt` must be non-empty for the node to schedule the job.
+- Default **`cronPrompt`** above is for a post-synthesis turn (e.g. offer multiSign drafts). Customize per plan; ensure cron turns can load MCP servers that expose `ctm_*` multisign tools (`initialLoad` catalog).
 - Keep the manifest within the KeyGen **16 KiB** body limit (inline block only).
 - When the operator is satisfied, tell them to use **Execute in KeyGen** or ask you to implement the plan (`POST /agent/plan/execute`).
 - If a **system** message says orchestration was already posted to KeyGen, do **not** ask to Execute again unless drafting a **new** manifest.

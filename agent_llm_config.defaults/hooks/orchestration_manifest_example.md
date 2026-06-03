@@ -22,9 +22,13 @@ prompts:
     Post synthesis as a REPLY to the top-level orchestration message for the group.
     Present facts and trade-offs; do not assume the operator's preferences or domain.
 synthesis:
-  at: ""
-  rescheduleOnReply: false
-  cronPrompt: "Synthesize task results from the orchestration state and KeyGen thread; note missing or failed tasks."
+  at: "2026-06-10T18:00:00Z"
+  rescheduleOnReply: true
+  cronPrompt: |
+    Review synthesis and task results on the KeyGen thread (orchestration state below).
+    If the operator should act on prior recommendations, offer to build multiSign
+    proposal payloads via ctm_* multisign MCP tools (quote/simulate first).
+    Do not POST /multiSignRequest or broadcast without explicit operator confirmation.
   onPartial: true
 ```
 ````
@@ -45,5 +49,6 @@ Use MCP **`send_key_gen_message`** with `replyTo` set to the top-level message i
 - Sub-agents run on this node; results belong on KeyGen for the group.
 - Same-node replies without `mpc-task-result` do not re-trigger orchestrator hooks.
 - When all tasks are terminal (`onPartial` controls failed vs complete-only), the node runs **`orchestratorOnReply`** once in the `[Orchestrator]` conversation (MCP `continuum`, including `send_key_gen_message` for synthesis).
+- If **`synthesis.at`** and **`synthesis.cronPrompt`** are both set, a one-shot cron runs that follow-up prompt in `[Orchestrator]` (uses MCP servers with **`initialLoad: true`** — include DeFi MCP ids there if the cron must call `ctm_*` multisign tools).
 
 **Plan mode:** draft manifests in agent chat with `conversationPurpose: "plan"` and the `orchestration_planning` skill. Use **`POST /agent/plan/execute`** (or UI **Execute in KeyGen**) to post to KeyGen.

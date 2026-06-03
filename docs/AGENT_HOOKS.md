@@ -485,7 +485,12 @@ prompts:
 synthesis:
   at: "2026-06-10T18:00:00Z"
   rescheduleOnReply: true
-  cronPrompt: "Read all task results on this thread and write an executive summary for the KeyGen channel."
+  cronPrompt: |
+    Review synthesis and task results on the KeyGen thread (orchestration state below).
+    If the operator should act on prior recommendations, offer to build multiSign
+    proposal payloads via ctm_* multisign MCP tools (quote/simulate first).
+    Do not POST /multiSignRequest or broadcast without explicit operator confirmation.
+  onPartial: true
 ```
 ````
 
@@ -546,7 +551,7 @@ sequenceDiagram
    Replies do **not** need `@agent`. Do **not** use `mpc-orchestrate-task` or post dispatch/progress-only messages. Use MCP **`send_key_gen_message`** once; do not poll `listMessages`.
 
 4. **Reply hooks** — same-node replies **without** `mpc-task-result` do **not** re-trigger orchestrator hooks (avoids progress/dispatch echo loops). **`prompts.externalReply`** runs for **peer** replies. **`prompts.subAgentReply`** is optional per-task ack (skipped when synthesis runs). **`prompts.orchestratorOnReply`** runs **once** when all tasks are terminal (`synthesis.onPartial` controls whether `failed` counts).
-5. **Synthesis** — automated hook in `[Orchestrator]` with MCP `continuum` (including `send_key_gen_message` to post a **KeyGen reply** for the group). Optional **`synthesis.at`** cron is a backup.
+5. **Synthesis** — automated hook in `[Orchestrator]` with MCP `continuum` (including `send_key_gen_message` to post a **KeyGen reply** for the group). Optional **`synthesis.at`** + **`cronPrompt`** schedules a **follow-up** turn (e.g. offer multiSign drafts via `ctm_*` tools); requires both fields non-empty. Cron uses **`initialLoad`** MCP servers only — not per-task allowlists.
 
 ### Manual Execute (without Plan UI)
 
@@ -583,7 +588,7 @@ Use Plan mode when the manifest is large or iterative; use manual post for fixed
 4. Click **Execute in KeyGen** → top-level message appears in the KeyGen UI.
 5. Watch **agent conversations**: `[Orchestrator] …`, `[Sub-agent] list-ready`, `[Sub-agent] check-blocked`.
 6. Sub-agents post **replies** under the top-level thread with **`mpc-task-result`** blocks.
-7. When all tasks are terminal, the node runs **`orchestratorOnReply`** once (synthesis on KeyGen). Optional cron runs **`cronPrompt`** at **`synthesis.at`**.
+7. When all tasks are terminal, the node runs **`orchestratorOnReply`** once (synthesis on KeyGen). A failed task does not block this if **`onPartial`** is true (default). Optional cron runs **`cronPrompt`** at **`synthesis.at`** for a later follow-up (e.g. multiSign proposals).
 8. Optional **Plan follow-on**: select the **`[Orchestrator]`** thread → draft the next manifest from the injected rollup → **Execute in KeyGen** again.
 
 ---
