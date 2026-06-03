@@ -17,9 +17,9 @@
         "run",
         "--with",
         "git+https://github.com/jvenkatasandeep/finance-news-mcp",
-        "fastmcp",
-        "run",
-        "https://github.com/jvenkatasandeep/finance-news-mcp/raw/main/main.py"
+        "python",
+        "-m",
+        "main"
       ],
       "runtime": {
         "requireCommands": ["uv"]
