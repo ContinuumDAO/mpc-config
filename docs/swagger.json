@@ -4214,6 +4214,39 @@
                 ]
             }
         },
+        "/agent/plan/start": {
+            "post": {
+                "description": "Create plan thread with capped prior-orchestration rollup (read JWT). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /agent/plan/start).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent hooks"
+                ],
+                "summary": "start plan thread from prior orchestration",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.AgentPlanStartPost"
+                        }
+                    }
+                ]
+            }
+        },
         "/agent/plan/execute": {
             "post": {
                 "description": "Post mpc-orchestrate manifest from plan thread to KeyGen (read JWT). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /agent/plan/execute).",
@@ -7113,6 +7146,27 @@
                     }
                 }
             ]
+        },
+        "node.AgentPlanStartPost": {
+            "type": "object",
+            "properties": {
+                "priorOrchestratorConversationId": {
+                    "type": "string",
+                    "description": "UUID of [Orchestrator] hook conversation (at least one prior ref required)"
+                },
+                "priorTopLevelMessageId": {
+                    "type": "string",
+                    "description": "KeyGen top-level message id for the orchestration run"
+                },
+                "keyGenId": {
+                    "type": "string",
+                    "description": "Optional KeyGen override for the new plan thread"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Optional conversation tab title (default Plan follow-on)"
+                }
+            }
         },
         "node.AgentPlanExecutePost": {
             "type": "object",

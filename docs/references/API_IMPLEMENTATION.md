@@ -137,7 +137,7 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on **`GET`** requests. **`POST`** is not JWT-gated on that listener; use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same **`GET`** rules when Browser HTTPS is configured.
 
-**JWT-protected agent GET paths** include **`/agent/chat`**, **`/agent/conversations`**, **`/agent/mcp/tools`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, and webhook read routes **`/listWebhooks`**, **`/getWebhookById`**.
+**JWT-protected agent paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/execute`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, and webhook read routes **`/listWebhooks`**, **`/getWebhookById`**.
 
 ## Quick Reference: All Endpoints
 
@@ -238,6 +238,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /activateWebhook`](#post-activatewebhook) - Enable webhook (**management signature**)
 - [`POST /deactivateWebhook`](#post-deactivatewebhook) - Disable webhook (**management signature**)
 - [`POST /runWebhook`](#post-runwebhook) - Manual test trigger (**management signature**)
+- [`POST /agent/plan/start`](#post-agentplanstart) - Start a plan thread with optional prior-orchestration rollup injected (**read JWT**)
 - [`POST /agent/plan/execute`](#post-agentplanexecute) - Post latest `mpc-orchestrate v1` manifest from a plan thread to KeyGen (**read JWT**)
 - [`POST /agent/chat`](#post-agentchat) - Stream one assistant turn (LLM + MCP **tools/call** loop; **read JWT** on Browser HTTPS / loopback)
 - [`GET /agent/chat`](#get-agentchat) - Load persisted conversation history by `conversationId` (**read JWT** when JWT applies)
@@ -2691,9 +2692,9 @@ Each server entry: `id`, `displayName`, `initialLoad` (connect at chat startup),
 
 The mpc-auth image ships **uv**, **Node**, **Foundry**, and **Heimdall** as platform tools; per-server PyPI installs are driven by JSON when a server is **added** or **loaded**.
 
-**HTTP** (`transport`: `http`, default): `url` — Streamable HTTP MCP endpoint; empty `url` on default **continuum** uses compose **continuum-mcp** URL. Auth: inline `apiKey` and/or `apiKeyEnvVar` (e.g. default **etherscan** uses `https://mcp.etherscan.io/mcp` with `apiKeyEnvVar`: `ETHERSCAN_API_KEY` — set the key via **`POST /addEnvironmentVariable`**). Default **coingecko** ([public MCP](https://mcp.api.coingecko.com/)) uses `https://mcp.api.coingecko.com/mcp` with no API key (shared rate limits). Default **coingecko-pro** ([Pro MCP](https://mcp.pro-api.coingecko.com/)) uses `https://mcp.pro-api.coingecko.com/mcp` with `apiKeyEnvVar`: `COINGECKO_API_KEY` and `apiKeyHeader`: `x-cg-pro-api-key` ([CoinGecko Pro auth](https://docs.coingecko.com/reference/authentication)). Optional **`apiKeyHeader`** on HTTP servers: custom header instead of `Authorization: Bearer`.
+**HTTP** (`transport`: `http`, default): `url` — Streamable HTTP MCP endpoint; empty `url` on default **continuum** uses compose **continuum-mcp** URL. Auth: inline `apiKey` and/or `apiKeyEnvVar` (e.g. default **etherscan** uses `https://mcp.etherscan.io/mcp` with `apiKeyEnvVar`: `ETHERSCAN_API_KEY` — set the key via **`POST /addEnvironmentVariable`**). Default **dune** ([Dune MCP](https://docs.dune.com/api-reference/agents/mcp)) uses `https://api.dune.com/mcp/v1` with `apiKeyEnvVar`: `DUNE_API_KEY` and `apiKeyHeader`: `x-dune-api-key` (API key from [dune.com/settings/api](https://dune.com/settings/api)). Default **coingecko** ([public MCP](https://mcp.api.coingecko.com/)) uses `https://mcp.api.coingecko.com/mcp` with no API key (shared rate limits). Default **coingecko-pro** ([Pro MCP](https://mcp.pro-api.coingecko.com/)) uses `https://mcp.pro-api.coingecko.com/mcp` with `apiKeyEnvVar`: `COINGECKO_API_KEY` and `apiKeyHeader`: `x-cg-pro-api-key` ([CoinGecko Pro auth](https://docs.coingecko.com/reference/authentication)). Optional **`apiKeyHeader`** on HTTP servers: custom header instead of `Authorization: Bearer`.
 
-**STDIO** (`transport`: `stdio`): `command` (executable, e.g. `npx`) and optional `args` (e.g. `["-y", "duckduckgo-mcp-server"]`). Optional **`envVars`**: names of agent environment variables injected into the child process (all listed names must be set before load). Example default **x** ([DataWhisker/x-mcp-server](https://github.com/DataWhisker/x-mcp-server)): OAuth 1.0a via `TWITTER_API_KEY`, `TWITTER_API_SECRET`, `TWITTER_ACCESS_TOKEN`, `TWITTER_ACCESS_SECRET` from the [X Developer Portal](https://developer.x.com/en/portal/dashboard). Media upload may additionally need OAuth 2.0 vars (`TWITTER_OAUTH2_ACCESS_TOKEN` or `TWITTER_CLIENT_ID` / `TWITTER_CLIENT_SECRET` / `TWITTER_OAUTH2_REFRESH_TOKEN`) — add those via **Variables** and extend `envVars` on a user server entry if needed.
+**STDIO** (`transport`: `stdio`): `command` (executable, e.g. `npx`) and optional `args` (e.g. `["-y", "duckduckgo-mcp-server"]`). Optional **`envVars`**: names of agent environment variables injected into the child process (all listed names must be set before load). Optional **`apiKeyEnvVar`** on stdio entries: inject one named variable when set (does not block load if unset). Default **finance-news** ([finance-news-mcp](https://github.com/jvenkatasandeep/finance-news-mcp), [LobeHub](https://lobehub.com/mcp/jvenkatasandeep-finance-news-mcp)): `uv run --with git+https://github.com/jvenkatasandeep/finance-news-mcp fastmcp run …/main.py`; requires **`uv`** on PATH (`runtime.requireCommands`); public RSS feeds, no API key. Default **binance** ([@snjyor/binance-mcp](https://www.npmjs.com/package/@snjyor/binance-mcp)): public market data without a key; set **`BINANCE_API_KEY`** in Variables for historical trades (`get_historical_trades`). Example default **x** ([DataWhisker/x-mcp-server](https://github.com/DataWhisker/x-mcp-server)): OAuth 1.0a via `TWITTER_API_KEY`, `TWITTER_API_SECRET`, `TWITTER_ACCESS_TOKEN`, `TWITTER_ACCESS_SECRET` from the [X Developer Portal](https://developer.x.com/en/portal/dashboard). Media upload may additionally need OAuth 2.0 vars (`TWITTER_OAUTH2_ACCESS_TOKEN` or `TWITTER_CLIENT_ID` / `TWITTER_CLIENT_SECRET` / `TWITTER_OAUTH2_REFRESH_TOKEN`) — add those via **Variables** and extend `envVars` on a user server entry if needed.
 
 **Agent chat tools (runtime):**
 
@@ -2910,7 +2911,7 @@ Bundled templates ship in **mpc-config** under **`agent_llm_config.defaults/hook
 
 **Webhook `type` presets:** `generic`, `github`, `gmail`, `proton`, `stripe`, `slack`, `telegram`. Presets affect signature verification and body formatting; all run the job **`prompt`** plus a bounded event excerpt. **Telegram** is bidirectional: after the agent turn, replies are sent via Bot API (`sendMessage`), splitting text longer than **4096 runes**.
 
-**KeyGen orchestration:** top-level messages with `@agent` and a fenced **`mpc-orchestrate v1`** YAML block spawn sub-agent turns per `tasks[]` entry (each with `mcpServers` allowlist). Reply hooks use manifest **`prompts.*`**; empty string = no hook. **Plan → execute:** interactive chat with **`conversationPurpose: "plan"`** and **`POST /agent/plan/execute`** (see below). Operator guide: **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**. See **`docs/references/API_KEYGEN_MESSAGING.md`** and bundled **`hooks/orchestration_manifest_example.md`**.
+**KeyGen orchestration:** top-level messages with `@agent` and a fenced **`mpc-orchestrate v1`** YAML block spawn sub-agent turns per `tasks[]` entry (each with `mcpServers` allowlist). Reply hooks use manifest **`prompts.*`**; empty string = no hook. **Plan → execute:** interactive chat with **`conversationPurpose: "plan"`**, optional **`POST /agent/plan/start`** (follow-on rollup from a prior run), then **`POST /agent/plan/execute`** (see below). Operator guide: **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**. See **`docs/references/API_KEYGEN_MESSAGING.md`** and bundled **`hooks/orchestration_manifest_example.md`**.
 
 <a id="get-listwebhooks"></a>
 #### `GET /listWebhooks`
@@ -3002,6 +3003,45 @@ Authorization: Bearer <WEBHOOK_SECRET_*>
 - Other types return **202 Accepted** after enqueueing the agent turn.
 
 The hook listener binds **`127.0.0.1:18090`** by default (not Browser HTTPS **:8443**). There is no built-in public CA-trusted URL; expose **`AgentHookListenPort`** via a relay, tunnel, or operator reverse proxy (see **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**).
+
+<a id="post-agentplanstart"></a>
+#### `POST /agent/plan/start`
+
+**Auth:** Read JWT when applicable (same as **`POST /agent/chat`**).
+
+**Request body:**
+```json
+{
+  "priorOrchestratorConversationId": "<uuid of [Orchestrator] hook thread>",
+  "priorTopLevelMessageId": "<KeyGen top-level message id>",
+  "keyGenId": "optional override",
+  "title": "optional tab title (default Plan follow-on)"
+}
+```
+
+At least one of **`priorOrchestratorConversationId`** or **`priorTopLevelMessageId`** is required. When both are sent, they must refer to the same orchestration record.
+
+**Behavior:** Creates a **new** plan conversation (`conversationPurpose: "plan"`), sets **`keyGenId`** from the body override or the prior orchestration record, and appends one **user** message containing a capped **prior orchestration rollup**:
+
+- Last **assistant** message from the orchestrator conversation (synthesis prose), truncated.
+- **`mpc-task-result`** summaries from KeyGen replies on the top-level thread.
+- Task statuses from **`agent_llm_config/hooks/orchestrations/{topLevelMessageId}.json`**.
+
+Total rollup size is capped (~24k runes) so follow-on Plan turns do not load full hook history into the LLM context. The **`orchestration_planning`** skill is loaded on subsequent **`POST /agent/chat`** turns (same as **New plan**).
+
+**Response data:**
+```json
+{
+  "conversationId": "<new plan uuid>",
+  "keyGenId": "<resolved>",
+  "priorTopLevelMessageId": "<canonical top-level id>",
+  "priorOrchestratorConversationId": "<from record>",
+  "priorInjected": true,
+  "injectedChars": 1234
+}
+```
+
+**Errors:** **400** (no prior reference, orchestration not found, mismatched ids, KeyGen not eligible), **403** when MCP chat disabled.
 
 <a id="post-agentplanexecute"></a>
 #### `POST /agent/plan/execute`
@@ -3097,7 +3137,12 @@ Other providers require **`baseUrl`**. If `baseUrl` ends with `/chat`, Ollama na
 
 **Auth:** Read JWT when applicable.
 
-**Response `data`:** `{ "conversations": [ { "conversationId", "title", "updatedAt", "createdAt" } ] }`
+**Query:** optional **`hookKind`** — filter by thread class: `orchestrator`, `sub_agent`, `plan`, or `chat`. Orchestrator rows are hook threads whose title starts with **`[Orchestrator]`**; sub-agent rows use **`[Sub-agent]`**; plan rows have **`conversationPurpose: "plan"`**.
+
+**Response `data`:** `{ "conversations": [ { "conversationId", "title", "conversationPurpose", "conversationKind", "keyGenId", "effectiveKeyGenId", "orchestrationTopLevelMessageId"?, "updatedAt", "createdAt", "sizeBytes" } ] }`
+
+- **`conversationKind`:** `orchestrator` | `sub_agent` | `plan` | `chat` (derived from title prefix and purpose).
+- **`orchestrationTopLevelMessageId`:** present on **`orchestrator`** rows when a matching orchestration state file exists (use with **`POST /agent/plan/start`** instead of guessing UUIDs).
 
 <a id="get-agentconversationsid"></a>
 #### `GET /agent/conversations/:id`

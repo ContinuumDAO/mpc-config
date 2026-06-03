@@ -419,9 +419,43 @@ KeyGen message bodies support up to **16 384** UTF-8 bytes. Orchestration mani
 1. Set a **preferred KeyGen** (node app **Settings** or **`POST /postPreferredKeyGen`**) so **Execute in KeyGen** knows where to post.
 2. Start a **Plan** conversation:
    - UI: **New plan** (sets `conversationPurpose: plan`), or
+   - UI: **Plan follow-on** — pick a prior **`[Orchestrator] …`** thread (see [Finding orchestrator threads](#finding-orchestrator-threads)), or
+   - API: **`POST /agent/plan/start`** with prior refs (rollup injected), or
    - API: **`POST /agent/chat`** with `"conversationPurpose": "plan"` and optional `"keyGenId"` override.
 
 The node loads the **`orchestration_planning`** skill each turn (bundled in **`agent_llm_config.defaults/Skills/`**, runtime path **`agent_llm_config/Skills/`**).
+
+### Finding orchestrator threads
+
+After **Execute in KeyGen**, hook threads appear in **Node → AI Agent → Conversations** and in the agent chat **history** picker:
+
+| What you see | Meaning |
+|--------------|---------|
+| **Title** `[Orchestrator] …` | Main orchestrator hook conversation for that run |
+| **Mode** Orchestrator | Same (API field **`conversationKind: orchestrator`**) |
+| **`orchestrationTopLevelMessageId`** | KeyGen top-level message id (when listed) — use with **`POST /agent/plan/start`** |
+
+Do not pick threads by raw UUID alone: use the **title** or **Plan follow-on** (filters orchestrators via **`GET /agent/conversations?hookKind=orchestrator`**).
+
+### Plan follow-on (next phase after synthesis)
+
+When a run has finished (or synthesis cron has run), start the **next** manifest from summarized context instead of re-pasting history:
+
+1. **Plan follow-on** in the node agent chat header → select the **`[Orchestrator]`** conversation for that run.
+2. The node calls **`POST /agent/plan/start`** and opens a new plan tab with an injected **`--- prior orchestration rollup ---`** block (synthesis prose + task results + statuses; size-capped).
+3. Describe what to do next; refine **`mpc-orchestrate v1`**; **Execute in KeyGen** when ready.
+
+Alternatively, call **`POST /agent/plan/start`** yourself:
+
+```json
+{
+  "priorOrchestratorConversationId": "<orchestrator-conv-uuid>",
+  "priorTopLevelMessageId": "<optional cross-check>",
+  "title": "Plan follow-on Q3"
+}
+```
+
+Then continue with **`POST /agent/chat`** on the returned **`conversationId`**.
 
 ### What to do in Plan chat
 
@@ -509,6 +543,8 @@ sequenceDiagram
    ```
    ```
 
+   Replies do **not** need `@agent` — mpc-auth matches orchestration by `replyTo` (top-level message id) and the task-result block. Sub-agents should use MCP **`send_key_gen_message`** only, not poll `listMessages`.
+
 4. **Reply hooks** — controlled by manifest **`prompts.*`** (empty = no automated turn for that case).
 5. **Synthesis** — if **`synthesis.at`** is set, a **one-shot cron** runs **`synthesis.cronPrompt`** at that time; **`rescheduleOnReply: true`** reschedules when new replies arrive before **`at`**.
 
@@ -548,6 +584,7 @@ Use Plan mode when the manifest is large or iterative; use manual post for fixed
 5. Watch **agent conversations**: `[Orchestrator] …`, `[Sub-agent] list-ready`, `[Sub-agent] check-blocked`.
 6. Sub-agents post **replies** under the top-level thread with **`mpc-task-result`** blocks.
 7. At synthesis time, cron runs **`cronPrompt`**; orchestrator may also run on replies if **`orchestratorOnReply`** is non-empty.
+8. Optional **Plan follow-on**: select the **`[Orchestrator]`** thread → draft the next manifest from the injected rollup → **Execute in KeyGen** again.
 
 ---
 
@@ -562,6 +599,7 @@ Use Plan mode when the manifest is large or iterative; use manual post for fixed
 | Used laptop `127.0.0.1` in GitHub | SSH `-L` is for **your** testing only; use relay/tunnel/LE URL as **`your-proxy`**. |
 | `@agent` does nothing | `EnableAgentHooks`; `message_hook.json` **`enabled`**; message actually contains `@agent` |
 | Plan execute fails | Thread is **plan** purpose; manifest fence valid; preferred KeyGen set and node in **KeyList** |
+| Plan follow-on fails | Prior orchestration exists; use **`[Orchestrator]`** title or **`orchestrationTopLevelMessageId`**; at least one prior id in **`POST /agent/plan/start`** |
 | Orchestration does not spawn | Body includes **`@agent`** and **`mpc-orchestrate v1`**; YAML has tasks with **mcpServers** |
 | Telegram no reply | **`TELEGRAM_BOT_TOKEN`** set; `setWebhook` **secret_token** matches **`WEBHOOK_SECRET_TELEGRAM_UPDATES`** |
 | Agent asks for user input | Hook/cron modes do not support MCP elicitation; simplify prompt or use interactive chat |
@@ -572,7 +610,7 @@ Use Plan mode when the manifest is large or iterative; use manual post for fixed
 
 | Document | Content |
 |----------|---------|
-| [`references/API_IMPLEMENTATION.md`](references/API_IMPLEMENTATION.md) | Webhook CRUD, inbound HTTP, `POST /agent/plan/execute`, feature flags |
+| [`references/API_IMPLEMENTATION.md`](references/API_IMPLEMENTATION.md) | Webhook CRUD, inbound HTTP, `POST /agent/plan/start`, `POST /agent/plan/execute`, conversations list, feature flags |
 | [`references/API_KEYGEN_MESSAGING.md`](references/API_KEYGEN_MESSAGING.md) | `sendMessage`, threading, signatures |
 | [`agent_llm_config.defaults/hooks/README.md`](../agent_llm_config.defaults/hooks/README.md) | Bundled hook files |
 | [`agent_llm_config.defaults/hooks/orchestration_manifest_example.md`](../agent_llm_config.defaults/hooks/orchestration_manifest_example.md) | Copy-paste manifest |

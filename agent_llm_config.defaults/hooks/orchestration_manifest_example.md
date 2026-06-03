@@ -25,7 +25,7 @@ synthesis:
 ```
 ````
 
-Sub-agents should reply to the top-level message with:
+Sub-agents should reply to the top-level message with (no `@agent` on the reply):
 
 ```mpc-task-result v1
 taskId: legal-review
@@ -34,4 +34,6 @@ summary: |
   Human-readable summary for operators.
 ```
 
-**Plan mode:** draft manifests in agent chat with `conversationPurpose: "plan"` and the `orchestration_planning` skill, then **`POST /agent/plan/execute`** to post to KeyGen (uses preferred KeyGen when set).
+Use MCP tool **`send_key_gen_message`** with `replyTo` set to the top-level message id.
+
+**Plan mode:** draft manifests in agent chat with `conversationPurpose: "plan"` and the `orchestration_planning` skill. For a **follow-on** phase after a prior run, use **`POST /agent/plan/start`** (or UI **Plan follow-on**) to inject a capped rollup from the **`[Orchestrator]`** thread, then **`POST /agent/plan/execute`** to post to KeyGen (uses preferred KeyGen when set).

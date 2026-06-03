@@ -121,6 +121,8 @@ _seed_agent_llm_runtime_readme() {
 }
 
 # Copy bundled MCP JSON catalogs from agent_llm_config.defaults/ into the node's agent_llm_config/ (once per file).
+# MCP_servers.json: apiKeyEnvVar / envVars names only — secret values live in Variables; AI agent must not see values.
+# See agent_llm_config.defaults/README.md ("MCP catalog secrets") and continuum-node-sdk mcp-servers-catalog.ts.
 _seed_agent_mcp_json_file() {
     local cfg_parent="$1"
     local basename="$2"

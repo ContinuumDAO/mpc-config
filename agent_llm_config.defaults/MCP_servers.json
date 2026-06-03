@@ -9,6 +9,24 @@
       "initialLoad": false
     },
     {
+      "id": "finance-news",
+      "displayName": "Finance News RSS",
+      "transport": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--with",
+        "git+https://github.com/jvenkatasandeep/finance-news-mcp",
+        "fastmcp",
+        "run",
+        "https://github.com/jvenkatasandeep/finance-news-mcp/raw/main/main.py"
+      ],
+      "runtime": {
+        "requireCommands": ["uv"]
+      },
+      "initialLoad": false
+    },
+    {
       "id": "foundry",
       "displayName": "Foundry (Forge, Cast, Anvil)",
       "transport": "stdio",
@@ -29,6 +47,15 @@
       "initialLoad": false
     },
     {
+      "id": "dune",
+      "displayName": "Dune Analytics",
+      "transport": "http",
+      "url": "https://api.dune.com/mcp/v1",
+      "apiKeyEnvVar": "DUNE_API_KEY",
+      "apiKeyHeader": "x-dune-api-key",
+      "initialLoad": false
+    },
+    {
       "id": "coingecko",
       "displayName": "CoinGecko (public)",
       "transport": "http",
@@ -42,6 +69,15 @@
       "url": "https://mcp.pro-api.coingecko.com/mcp",
       "apiKeyEnvVar": "COINGECKO_API_KEY",
       "apiKeyHeader": "x-cg-pro-api-key",
+      "initialLoad": false
+    },
+    {
+      "id": "binance",
+      "displayName": "Binance (public market data)",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@snjyor/binance-mcp@latest"],
+      "apiKeyEnvVar": "BINANCE_API_KEY",
       "initialLoad": false
     },
     {
