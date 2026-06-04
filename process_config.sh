@@ -94,6 +94,7 @@ DEFAULT_SCANNER_API_URLS=(
 # Bundled templates (tracked in git) seed into agent_llm_config/ once per file if missing.
 DEFAULT_AGENT_LLM_CONFIG_DIR="agent_llm_config"
 DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR="agent_llm_config.defaults"
+DEFAULT_AGENT_LLM_CONFIG_DEFAULTS_CONTAINER_DIR="/app/agent_llm_config.defaults"
 DEFAULT_AGENT_LLM_CONFIG_CONTAINER_FILE="/app/agent_llm_config/agent-llm-config.json"
 DEFAULT_USER_FOLDER_DIR="user_folder"
 DEFAULT_USER_FOLDER_CONTAINER_PATH="/app/user_folder"
@@ -4187,6 +4188,7 @@ configure_docker_compose() {
         apply_docker_compose_continuumdao_node_app "$docker_compose_file" "$configs_yaml_path" || true
         apply_docker_compose_continuum_mcp_server "$docker_compose_file" "$configs_yaml_path" || true
         apply_docker_compose_agent_llm_config_env "$docker_compose_file" "${5:-1}" || true
+        apply_docker_compose_agent_llm_config_defaults_volume "$docker_compose_file" "${5:-1}" || true
         process_config_repo_take_if_sudo_invoker "$docker_compose_file"
         shopt -s nullglob
         local _dcf_bak
@@ -4749,6 +4751,121 @@ PYCOMPOSEAGENT
             return 1
             ;;
     esac
+}
+
+# Bind-mount agent_llm_config.defaults so GET /listMcpServers and GET /listWebhooks see catalog updates after git pull.
+apply_docker_compose_agent_llm_config_defaults_volume() {
+    local file="$1"
+    local enable="${2:-1}"
+    local host_dir="./${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}"
+    local container_dir="${DEFAULT_AGENT_LLM_CONFIG_DEFAULTS_CONTAINER_DIR:-/app/agent_llm_config.defaults}"
+    if [ ! -f "$file" ]; then
+        return 0
+    fi
+    if ! command -v python3 &>/dev/null; then
+        print_warning "python3 not found — could not adjust agent_llm_config.defaults bind-mount in docker-compose.yml"
+        return 1
+    fi
+    local _action
+    _action=$(
+        COMPOSE_AGENT_DEFAULTS_FILE="$file" COMPOSE_AGENT_DEFAULTS_ENABLE="$enable" \
+            COMPOSE_AGENT_DEFAULTS_HOST="$host_dir" COMPOSE_AGENT_DEFAULTS_CONTAINER="$container_dir" python3 << 'PYCOMPOSEAGENTDEFAULTS'
+import os
+import re
+import sys
+
+path = os.environ.get("COMPOSE_AGENT_DEFAULTS_FILE", "")
+enable = os.environ.get("COMPOSE_AGENT_DEFAULTS_ENABLE", "1").strip() == "1"
+host = os.environ.get("COMPOSE_AGENT_DEFAULTS_HOST", "./agent_llm_config.defaults").strip()
+container = os.environ.get("COMPOSE_AGENT_DEFAULTS_CONTAINER", "/app/agent_llm_config.defaults").strip()
+line_active = f"      - {host}:{container}:ro\n"
+line_plain = f"      - {host}:{container}\n"
+pat_defaults = re.compile(r"^\s*#?\s*-\s*\./agent_llm_config\.defaults:/app/agent_llm_config\.defaults")
+pat_runtime = re.compile(r"^\s*#?\s*-\s*\./agent_llm_config:/app/agent_llm_config\s*$")
+
+if not path or not host or not container:
+    print("skip", flush=True)
+    sys.exit(0)
+
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+except OSError as e:
+    sys.stderr.write(f"{path}: {e}\n")
+    print("error", flush=True)
+    sys.exit(1)
+
+if not enable:
+    out = []
+    removed = False
+    for line in lines:
+        if pat_defaults.match(line):
+            removed = True
+            continue
+        out.append(line)
+    if removed:
+        with open(path, "w", encoding="utf-8") as f:
+            f.writelines(out)
+        print("remove", flush=True)
+    else:
+        print("noop", flush=True)
+    sys.exit(0)
+
+for line in lines:
+    if pat_defaults.match(line) and not line.lstrip().startswith("#"):
+        print("already", flush=True)
+        sys.exit(0)
+
+out = []
+inserted = False
+for line in lines:
+    out.append(line)
+    if inserted:
+        continue
+    if pat_runtime.match(line):
+        out.append("      # Repository catalog (MCP_servers.json, hooks/webhooks.json); host git pull updates this tree.\n")
+        out.append(line_active)
+        inserted = True
+
+if not inserted:
+    print("none", flush=True)
+    sys.exit(0)
+
+with open(path, "w", encoding="utf-8") as f:
+    f.writelines(out)
+print("insert", flush=True)
+PYCOMPOSEAGENTDEFAULTS
+    )
+    case "$_action" in
+        insert)
+            print_success "docker-compose.yml: bind-mount ${host_dir} → ${container_dir} (catalog for MCP/webhooks)"
+            ;;
+        already)
+            print_info "docker-compose.yml: agent_llm_config.defaults bind-mount already present"
+            ;;
+        remove)
+            print_info "docker-compose.yml: removed agent_llm_config.defaults bind-mount (--no-agent-llm-config-path)"
+            ;;
+        none)
+            print_warning "docker-compose.yml: could not insert agent_llm_config.defaults volume (./agent_llm_config:/app/agent_llm_config line missing)"
+            ;;
+        skip|noop) ;;
+        error)
+            print_warning "docker-compose.yml: failed to adjust agent_llm_config.defaults bind-mount"
+            return 1
+            ;;
+    esac
+}
+
+_process_config_ensure_agent_llm_config_defaults_compose_volume() {
+    if [ "${SKIP_AGENT_LLM_CONFIG_PATH:-false}" = true ]; then
+        return 0
+    fi
+    local cf="${REPO_ROOT}/docker-compose.yml"
+    if [ ! -f "$cf" ]; then
+        return 0
+    fi
+    apply_docker_compose_agent_llm_config_defaults_volume "$cf" 1 || true
 }
 
 # After copying a compose template, uncomment or comment the loopback-only port line for BrowserLoopbackReadHTTP.
@@ -6582,6 +6699,7 @@ main() {
     _process_config_prompt_mpc_auth_systemd_helpers "$SKIP_SYSTEMD" "$INSTALL_MPC_AUTH_SYSTEMD"
     _process_config_sync_mpc_auth_docker_compose_workdir
     _process_config_sync_mpc_auth_docker_dashboard_keys "$CONFIG_FILE"
+    _process_config_ensure_agent_llm_config_defaults_compose_volume
     _process_config_sync_mpc_auth_libexec_from_repo "$SKIP_SYSTEMD"
 
     # Validate Relayer API connection (MANDATORY for relay before certificate generation; may exit 1 on failure)

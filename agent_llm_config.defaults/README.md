@@ -2,6 +2,8 @@
 
 Tracked template files copied into the node’s runtime **`agent_llm_config/`** folder beside `configs.yaml` when you run **`process_config.sh`** (or **`scripts/provision-node.sh`**). Each file is installed **once if missing** — existing runtime copies are never overwritten.
 
+**Docker:** mpc-auth reads this directory at **`/app/agent_llm_config.defaults`** (bind-mounted from **`./agent_llm_config.defaults`** in docker-compose). A host **`git pull`** updates the catalog only when that mount is present — not from files baked into the mpc-auth image alone.
+
 Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent_llm_config/`**, which is **gitignored** on deployed nodes so **`git pull`** is not blocked.
 
 | File | Runtime path | Purpose |

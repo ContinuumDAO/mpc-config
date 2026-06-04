@@ -94,6 +94,8 @@ services:
       - ./database_backups:/app/database_backups
       # Agent LLM settings (agent-llm-config.json); host ./agent_llm_config (AgentLlmConfigDir in configs.yaml).
       - ./agent_llm_config:/app/agent_llm_config
+      # Repository catalog (MCP_servers.json, hooks/webhooks.json); host git pull updates this tree.
+      - ./agent_llm_config.defaults:/app/agent_llm_config.defaults:ro
       # Writable agent/MCP artefacts (scripts, Foundry workspace under ~/.mcp-foundry-workspace when useUserFolder).
       - ./user_folder:/app/user_folder
       # Ed25519 management keys (POST /addManagementKey); host ./added_keys, shared with continuum-mcp.
