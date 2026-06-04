@@ -9,6 +9,19 @@
       "initialLoad": false
     },
     {
+      "id": "brave-search",
+      "displayName": "Brave Search",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "apiKeyEnvVar": "BRAVE_API_KEY",
+      "envVars": ["BRAVE_API_KEY"],
+      "runtime": {
+        "requireCommands": ["npx"]
+      },
+      "initialLoad": false
+    },
+    {
       "id": "finance-news",
       "displayName": "Finance News RSS",
       "transport": "stdio",
