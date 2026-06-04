@@ -45,7 +45,7 @@ JSON contract (written by mpc-auth):
 {"tag":"v1.1","registryDigest":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}
 ```
 
-**Optional fields:** **`restartOnly`** (boolean) — omit **`registryDigest`** when true; host skips pull/rmi and restarts or recreates only. **`forceRecreate`** (boolean) — run **`docker compose up -d --no-deps --force-recreate`** for the configured service (**`app`**, not Mongo/MQTT dependents). The apply script exports **`MPC_AUTH_PENDING_RESTART_ONLY`** and **`MPC_AUTH_PENDING_FORCE_RECREATE`** as **`0`** or **`1`** before **`mpc-auth-docker-update.sh`**.
+**Optional fields:** **`restartOnly`** (boolean) — omit **`registryDigest`** when true; host still runs **`git pull`** in **`MPC_AUTH_COMPOSE_WORKDIR`** (unless **`MPC_AUTH_SKIP_GIT_PULL=1`**), then skips Docker image pull/rmi and restarts or recreates only. **`forceRecreate`** (boolean) — run **`docker compose up -d --no-deps --force-recreate`** for the configured service (**`app`**, not Mongo/MQTT dependents). The apply script exports **`MPC_AUTH_PENDING_RESTART_ONLY`** and **`MPC_AUTH_PENDING_FORCE_RECREATE`** as **`0`** or **`1`** before **`mpc-auth-docker-update.sh`**.
 
 (Optionally **`newVersionRequested`** / **`registry_digest`** aliases are accepted by **`mpc-auth-apply-pending-update.sh`**.)
 
@@ -80,7 +80,7 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 ### Update script behavior
 
 1. Reads optional `/etc/default/mpc-auth-docker` (`MPC_AUTH_CONTAINER_NAME`, **`MPC_AUTH_EXPECTED_DIGEST`**, `MPC_AUTH_POST_UPDATE_CMD`, …).
-2. **Full updates only:** `git pull` in **`MPC_AUTH_COMPOSE_WORKDIR`** as the checkout owner (or parent directory owner when the repo is root-owned), via **`runuser`** / **`su`**, so SSH/credential helpers match the home user — not as root. Skipped when **`MPC_AUTH_SKIP_GIT_PULL=1`**, **`restartOnly`**, or the path is not a git repo. On failure the oneshot exits before stop/rm/pull.
+2. **`git pull`** in **`MPC_AUTH_COMPOSE_WORKDIR`** as the checkout owner (or parent directory owner when the repo is root-owned), via **`runuser`** / **`su`**, so SSH/credential helpers match the home user — not as root. Runs on **full** and **`restartOnly`** updates. Skipped when **`MPC_AUTH_SKIP_GIT_PULL=1`** or the path is not a git repo. On failure the oneshot exits before Docker pull (full update) or before restart/recreate (**`restartOnly`**).
 3. If the named container exists, records `docker inspect … .Config.Image`, then `docker stop` and `docker rm`. If **`MPC_AUTH_CONTAINER_NAME`** does not match the live container, a **warning** is printed and stop/rm is skipped — post-pull compose still runs **`up -d --no-deps --force-recreate`** so only the app service is replaced and the process actually restarts.
 4. If an old image ref was recorded, runs `docker rmi --force` on it (ignore failure if already gone).
 5. Runs `docker pull "${MPC_AUTH_IMAGE}:${TAG}"`.

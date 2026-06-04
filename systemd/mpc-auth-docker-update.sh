@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # (A) Full update: stop mpc-auth container, rmi old ref, pull, digest verify, compose up -d --no-deps --force-recreate (app only).
-# (B) Restart-only: no pull — docker compose restart, or compose up -d --no-deps --force-recreate when
+# (B) Restart-only: git pull in MPC_AUTH_COMPOSE_WORKDIR (mpc-config) when configured, then restart/recreate
+#     without Docker image pull/rmi — docker compose restart, or compose up -d --no-deps --force-recreate when
 #     MPC_AUTH_PENDING_FORCE_RECREATE=1 (set from pending-update.json by mpc-auth-apply-pending-update.sh).
 #
 # TAG: first CLI arg (Docker tag / systemd template instance); default latest.
@@ -245,7 +246,8 @@ mpc_auth_run_restart_or_recreate() {
 }
 
 if [[ "$RESTART_ONLY" == "1" ]]; then
-	echo "MPC_AUTH_PENDING_RESTART_ONLY=1 — restarting/recreating without pull/rmi (tag=$TAG)."
+	echo "MPC_AUTH_PENDING_RESTART_ONLY=1 — mpc-config git pull (if configured), then restart/recreate without Docker image pull/rmi (tag=$TAG)."
+	mpc_auth_git_pull_compose_repo
 	mpc_auth_run_restart_or_recreate
 	echo "Restart-only complete (tag $TAG)."
 	exit 0
