@@ -4644,6 +4644,9 @@ definitions:
           type: string
         displayName:
           type: string
+        setupUrl:
+          type: string
+          description: Optional HTTPS setup/docs link from MCP_servers.json catalog (UI only; not used at MCP connect)
         transport:
           type: string
           enum:

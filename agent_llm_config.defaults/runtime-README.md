@@ -12,7 +12,7 @@ If you run **`process_config.sh` with `sudo`**, the script creates **`agent_llm_
 |-------------|---------|
 | **`agent-llm-config.json`** | LLM provider settings (created at runtime; may contain API key references). |
 | **`MCP_default_servers.json`** | Built-in MCP servers (seeded from defaults; not removable via API). |
-| **`MCP_servers.json`** | Optional MCP catalog + user edits (**POST /addMcpServer**, etc.). |
+| *(no `MCP_servers.json` here)* | Optional MCP catalog is **`agent_llm_config.defaults/MCP_servers.json`** on the host mount only — activate via **`POST /addMcpServerFromCatalog`**. Custom/active servers: **`POST /addMcpServer`** → MongoDB. |
 | **`Skills/`** | Agent skills manifest (**`skills.json`**) and **`.md`** / **`.txt`** bodies. |
 | **`cron/jobs.json`** | Cron job manifest; mpc-auth assigns **`id`**, **`conversationId`**, **`nextRunAt`**. Run logs: **`cron/runs/{jobId}.jsonl`**. |
 | **`hooks/`** | KeyGen hooks + inbound webhooks; run logs **`hooks/runs/{webhookId}.jsonl`**. |

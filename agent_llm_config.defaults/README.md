@@ -18,18 +18,26 @@ Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent
 
 See **`runtime-README.md`** (copied to **`agent_llm_config/README.md`** on the node when missing) and **`docs/references/API_IMPLEMENTATION.md`** for API details.
 
-### Webhook catalog secrets (`hooks/webhooks.json`)
+### Webhook catalog (`hooks/webhooks.json`)
 
-When adding another bundled webhook template (keep in sync with continuum-node-sdk `src/core/agent/webhooks-catalog.ts`):
+See **[`CATALOG.md`](CATALOG.md)** — add templates only in **`hooks/webhooks.json`** here (not in continuum-node-sdk or runtime `agent_llm_config/`).
 
 - Templates define **name**, **type**, **prompt**, and default **enabled** only — no inline secrets.
 - On add (catalog or custom), mpc-auth creates **`WEBHOOK_SECRET_<NAME>`** in Variables with a placeholder value; operators replace with provider signing secrets before activating.
 - The **AI agent must not see Variable values** — only names and `*Configured` flags in listings.
 
-### MCP catalog secrets (`MCP_servers.json`)
+### MCP catalog (`MCP_servers.json`)
 
-When adding another default MCP server entry (keep in sync with continuum-node-sdk `src/core/agent/mcp-servers-catalog.ts`):
+See **[`CATALOG.md`](CATALOG.md)** — add servers only in **`MCP_servers.json`** here (not in continuum-node-sdk or runtime `agent_llm_config/`).
+
+Authoritative optional MCP catalog for deployed nodes. mpc-auth reads this file from the bind-mounted **`agent_llm_config.defaults/`** tree:
+
+- **`GET /listMcpServers`** → **`availableCatalog`**: entries not yet active on this node (`source`: `catalog`).
+- **`POST /addMcpServerFromCatalog`** → copies the matching catalog row into **`LocalAgentMcpServers`** (active use).
+
+When adding another catalog entry:
 
 - Store **names** only in JSON: `apiKeyEnvVar`, `apiKeyHeader`, `envVars`. Never `apiKey` or other inline secrets.
+- Optional **`setupUrl`**: HTTPS setup/documentation link returned in list responses and stored on activate; shown as the **Name** link in the node app (not sent to the MCP child process).
 - Operators set values in **AI Agent → Variables** (`POST /addEnvironmentVariable`). mpc-auth injects them into HTTP headers or the stdio child environment at connect time.
 - The **AI agent must not see Variable values** — only names in `GET /listMcpServers` / MCP tool listings (`envConfigured`, masked `apiKeyPresent`). Do not surface `GET /getEnvironmentVariable` values to the agent.

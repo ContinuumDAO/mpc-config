@@ -120,10 +120,12 @@ _seed_agent_llm_runtime_readme() {
     fi
 }
 
-# Copy bundled MCP_default_servers.json into agent_llm_config/ (once) for continuum bootstrap on first DB migration.
-# MCP_servers.json catalog stays in agent_llm_config.defaults/ only — operators activate servers via the UI or
-# POST /addMcpServerFromCatalog; active definitions live in the node database (LocalAgentMcpServers).
-# See agent_llm_config.defaults/README.md ("MCP catalog secrets") and continuum-node-sdk mcp-servers-catalog.ts.
+# Copy MCP_default_servers.json into agent_llm_config/ (once) for continuum bootstrap on first DB migration only.
+#
+# OPTIONAL MCP CATALOG: edit agent_llm_config.defaults/MCP_servers.json in this repo only (never copy to
+# agent_llm_config/, never duplicate in continuum-node-sdk). Nodes read it from the bind mount;
+# GET /listMcpServers → availableCatalog; POST /addMcpServerFromCatalog activates a row. See
+# agent_llm_config.defaults/CATALOG.md.
 _seed_agent_mcp_json_file() {
     local cfg_parent="$1"
     local basename="$2"
@@ -195,8 +197,10 @@ _agent_cron_enabled_for_config() {
     return 0
 }
 
-# Copy bundled agent hooks (message_hook.json, message_hook_*.md) from agent_llm_config.defaults/ once per file.
-# webhooks.json catalog stays in agent_llm_config.defaults/hooks/ only — operators activate via UI or POST /addWebhookFromCatalog.
+# Copy agent hooks (message_hook.json, message_hook_*.md) from agent_llm_config.defaults/ once per file.
+#
+# WEBHOOK CATALOG: edit agent_llm_config.defaults/hooks/webhooks.json in this repo only (skipped below).
+# GET /listWebhooks → availableCatalog; POST /addWebhookFromCatalog activates. See agent_llm_config.defaults/CATALOG.md.
 _seed_agent_hooks_catalog() {
     local cfg_parent="$1"
     local src_dir="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/${DEFAULT_AGENT_HOOKS_REL}"

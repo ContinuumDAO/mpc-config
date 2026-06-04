@@ -6,7 +6,7 @@ Copied from **`agent_llm_config.defaults/hooks/`** into the node's runtime **`ag
 |------|---------|
 | **`message_hook.json`** | Enable KeyGen `@agent` hooks (`triggerToken`, `markReadAfterRun`, optional `conversationId`). |
 | **`message_hook_*.md`** | Prompt templates for same/other node × top-level/reply (reply files often empty; orchestration uses manifest `prompts.*`). |
-| **`webhooks.json`** | **Catalog only** (not copied to runtime). Bundled inbound webhook templates; activate via Node UI or `POST /addWebhookFromCatalog`. Active jobs live in MongoDB `LocalAgentWebhooks`. |
+| **`webhooks.json`** | **Catalog only** (not copied to runtime; do not duplicate in continuum-node-sdk). Activate via Node UI or `POST /addWebhookFromCatalog`. See **[`../CATALOG.md`](../CATALOG.md)**. Active jobs live in MongoDB `LocalAgentWebhooks`. |
 | **`orchestration_manifest_example.md`** | Reference manifest for multi-task KeyGen orchestration. |
 
 Inbound callback on the node: `http://127.0.0.1:18090/hooks/inbound/{webhookId}` (loopback only by default). Internet providers need a relay, tunnel, or reverse proxy with a CA-trusted cert — not Browser HTTPS `:8443` (self-signed). See **`docs/AGENT_HOOKS.md`**.

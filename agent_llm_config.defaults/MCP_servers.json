@@ -22,6 +22,20 @@
       "initialLoad": false
     },
     {
+      "id": "google-search",
+      "displayName": "Google Search (Custom Search API)",
+      "setupUrl": "https://github.com/adenot/mcp-google-search",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@adenot/mcp-google-search"],
+      "apiKeyEnvVar": "GOOGLE_API_KEY",
+      "envVars": ["GOOGLE_API_KEY", "GOOGLE_SEARCH_ENGINE_ID"],
+      "runtime": {
+        "requireCommands": ["npx"]
+      },
+      "initialLoad": false
+    },
+    {
       "id": "finance-news",
       "displayName": "Finance News RSS",
       "transport": "stdio",
