@@ -127,6 +127,58 @@ mpc_auth_require_compose_workdir() {
 	fi
 }
 
+# Full image updates: pull mpc-config as the checkout owner (systemd runs this script as root; git must use the home user's credentials).
+mpc_auth_git_pull_compose_repo() {
+	case "${MPC_AUTH_SKIP_GIT_PULL:-0}" in
+	1 | true | TRUE | yes | YES) return 0 ;;
+	esac
+
+	local workdir owner parent home
+	workdir="$(mpc_auth_compose_workdir_resolve)"
+	if [[ -z "$workdir" ]]; then
+		echo "warning: MPC_AUTH_COMPOSE_WORKDIR unset — skipping mpc-config git pull." >&2
+		return 0
+	fi
+	if [[ ! -d "$workdir/.git" ]]; then
+		echo "warning: $(printf %q "$workdir") has no .git — skipping git pull." >&2
+		return 0
+	fi
+
+	owner="$(stat -c '%U' "$workdir" 2>/dev/null || true)"
+	if [[ -z "$owner" || "$owner" == "UNKNOWN" || "$owner" == "root" ]]; then
+		parent="$(dirname "$workdir")"
+		owner="$(stat -c '%U' "$parent" 2>/dev/null || true)"
+	fi
+	if [[ -z "$owner" || "$owner" == "UNKNOWN" || "$owner" == "root" ]]; then
+		echo "warning: cannot determine non-root owner for $(printf %q "$workdir") — skipping git pull." >&2
+		return 0
+	fi
+
+	echo "mpc-config: git pull in $(printf %q "$workdir") as user $(printf %q "$owner") (before Docker image pull)"
+
+	if [[ "$(id -u)" -eq 0 ]]; then
+		home="$(getent passwd "$owner" 2>/dev/null | awk -F: '{print $6}' || true)"
+		[[ -z "$home" ]] && home="/home/$owner"
+		if command -v runuser &>/dev/null; then
+			if ! runuser -u "$owner" -w "$home" -- git -C "$workdir" pull; then
+				echo "error: git pull failed in $(printf %q "$workdir") as $(printf %q "$owner")." >&2
+				exit 1
+			fi
+			return 0
+		fi
+		if ! su - "$owner" -c "cd $(printf '%q' "$workdir") && git pull"; then
+			echo "error: git pull failed in $(printf %q "$workdir") as $(printf %q "$owner")." >&2
+			exit 1
+		fi
+		return 0
+	fi
+
+	if ! git -C "$workdir" pull; then
+		echo "error: git pull failed in $(printf %q "$workdir")." >&2
+		exit 1
+	fi
+}
+
 mpc_auth_run_restart_or_recreate() {
 	local workdir svc explicit
 	svc="$(mpc_auth_trim "${MPC_AUTH_COMPOSE_SERVICE:-app}")"
@@ -203,6 +255,8 @@ fi
 if [[ -z "$(mpc_auth_trim "${MPC_AUTH_POST_UPDATE_CMD:-}")" ]]; then
 	mpc_auth_require_compose_workdir
 fi
+
+mpc_auth_git_pull_compose_repo
 
 OLD_IMAGE=""
 if docker container inspect "$CONTAINER" &>/dev/null; then

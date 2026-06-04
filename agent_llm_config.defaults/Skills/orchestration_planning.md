@@ -20,9 +20,14 @@ synthesis:
   rescheduleOnReply: false
   cronPrompt: |
     Review synthesis and task results on the KeyGen thread (orchestration state below).
-    If the operator should act on prior recommendations, offer to build multiSign
-    proposal payloads via ctm_* multisign MCP tools (quote/simulate first).
-    Do not POST /multiSignRequest or broadcast without explicit operator confirmation.
+    If this turn should propose on-chain actions for one operator Accept/Reject round,
+    produce exactly one multiSign requestId: prefer create_compose_multi_sign_request
+    with all actions[] in one call, or merge helper payloads with
+    create_joined_multi_sign_request (same chain/keyList; firstNonce from
+    get_multi_sign_gas_options; chain A+B then join with C for longer sequences).
+    Do not call multiple create_* / ctm_* multisign tools that each return requestId
+    for the same round. Quote/simulate first; do not broadcast without confirmation
+    unless the scheduled message already embeds confirmed execution parameters.
   onPartial: true
 ```
 
@@ -51,6 +56,7 @@ In that thread:
 - Answer questions and confirm execution parameters with the operator.
 - Use **`agent_schedule_orchestration_cron`** (meta tool) for a **one-shot** `schedule.kind: at` job on **this** `conversationId` — never a separate cron conversation.
 - Do **not** copy bundled `auto-sign-and-broadcast` (`every` + `everyMs: 300000`). Cron `message` must be **non-interactive** (embed confirmed gas/fees); gather prefs in interactive chat first.
+- Cron execution must yield **one** `requestId` when multiple txs belong together: **`create_joined_multi_sign_request`** or single **`create_compose_multi_sign_request`** — not several separate multisign creates.
 
 **Plan follow-on** is only for drafting a **new** `mpc-orchestrate` manifest, not for post-synthesis execution.
 

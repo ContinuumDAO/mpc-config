@@ -26,9 +26,11 @@ synthesis:
   rescheduleOnReply: true
   cronPrompt: |
     Review synthesis and task results on the KeyGen thread (orchestration state below).
-    If the operator should act on prior recommendations, offer to build multiSign
-    proposal payloads via ctm_* multisign MCP tools (quote/simulate first).
-    Do not POST /multiSignRequest or broadcast without explicit operator confirmation.
+    If proposing multiple on-chain legs for one Accept/Reject round, end with exactly
+    one requestId: create_compose_multi_sign_request (all actions[]) or
+    create_joined_multi_sign_request (merge two helper payloads; chain for 3+).
+    Do not call multiple create_* / ctm_* tools that each return requestId for the same round.
+    Quote/simulate first; no broadcast without operator confirmation unless prefs are embedded.
   onPartial: true
 ```
 ````
