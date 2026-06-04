@@ -2,7 +2,7 @@
 
 This guide explains how to use **inbound webhooks**, **KeyGen `@agent` messaging**, **Plan mode**, and **multi-task orchestration** on an mpc-auth node. It is written for operators and integrators.
 
-For HTTP API field names and auth rules, see **[`docs/references/API_IMPLEMENTATION.md`](references/API_IMPLEMENTATION.md)** (Agent hooks) and **[`docs/references/API_KEYGEN_MESSAGING.md`](references/API_KEYGEN_MESSAGING.md)**. Bundled templates live under **`agent_llm_config.defaults/hooks/`** in this repo and are copied into runtime **`agent_llm_config/hooks/`** beside your node’s **`configs.yaml`** by **`process_config.sh`** (once per file if missing).
+For HTTP API field names and auth rules, see **[`docs/references/API_IMPLEMENTATION.md`](references/API_IMPLEMENTATION.md)** (Agent hooks) and **[`docs/references/API_KEYGEN_MESSAGING.md`](references/API_KEYGEN_MESSAGING.md)**. Bundled webhook **templates** live under **`agent_llm_config.defaults/hooks/webhooks.json`** in mpc-config (catalog only — not copied to runtime). **`message_hook.json`** and prompt stubs are copied into runtime **`agent_llm_config/hooks/`** by **`process_config.sh`** (once per file if missing). **Active webhook jobs** are stored in MongoDB **`LocalAgentWebhooks`** on the node.
 
 ---
 
@@ -56,7 +56,7 @@ flowchart TB
    AgentHookListenPort: 18090
    ```
 
-2. Run **`process_config.sh`** (or **`scripts/provision-node.sh`**) so bundled hook files are copied into **`agent_llm_config/hooks/`** next to **`configs.yaml`** (existing files are not overwritten).
+2. Run **`process_config.sh`** (or **`scripts/provision-node.sh`**) so bundled **message hook** files are copied into **`agent_llm_config/hooks/`** next to **`configs.yaml`** (existing files are not overwritten). Webhook templates stay in **`.defaults/`** until you add them from the UI or API.
 
 3. **Restart mpc-auth** after changing hook config or adding webhooks (same pattern as MCP/cron updates in the node app).
 
@@ -64,12 +64,12 @@ flowchart TB
 
 ### Secrets and Variables
 
-Webhook signing secrets are **never** stored in `webhooks.json`. Each webhook uses a Variables entry:
+Webhook signing secrets are **never** stored in webhook job documents. Each webhook uses a Variables entry:
 
 - **`WEBHOOK_SECRET_<WEBHOOK_NAME>`** — e.g. `WEBHOOK_SECRET_GITHUB_EVENTS` for webhook name `github_events`
 - **`TELEGRAM_BOT_TOKEN`** — required for Telegram **replies** (separate from the webhook secret)
 
-Set values in **AI Agent → Variables** or **`POST /addEnvironmentVariable`**. On first load, mpc-auth can auto-generate placeholder webhook secrets; replace them with real provider secrets before going live.
+Set values in **AI Agent → Variables** or **`POST /addEnvironmentVariable`**. When you **add** a webhook (custom or from catalog), mpc-auth creates the variable name and stores an auto-generated placeholder secret; replace it with the real provider secret before **activating** the webhook.
 
 ### Inbound URL (webhooks only)
 
@@ -165,18 +165,20 @@ Authenticate inbound calls with one of:
 ### Webhooks tab (continuumdao-node-app)
 
 1. Open **AI Agent → Webhooks**.
-2. Built-in templates appear after restart (`generic_inbound`, `github_events`, `gmail_inbox`, `proton_inbox`, `stripe_events`, `slack_events`, `telegram_updates`) — usually **disabled** until configured.
-3. **Add webhook** — choose **type**, set **name** (lowercase `a-z`, digits, `-`, `_`), edit **prompt**, enable when ready.
-4. Copy **inbound URL** (`http://127.0.0.1:18090/…` on the node) and **secret variable**; set the secret in **Variables**. For internet providers, set up [exposure](#how-to-expose-webhooks-choose-one) first — the tab URL is not enough by itself.
-5. Use **Run** for a test payload, **Activate/Deactivate** without deleting, **Restart node** when prompted after add/update.
+2. **Active webhooks** — jobs stored in the node database (`LocalAgentWebhooks`).
+3. **Available from repository** — bundled templates from **`agent_llm_config.defaults/hooks/webhooks.json`** (updates when you pull mpc-config). Click **Add** to create a disabled job and `WEBHOOK_SECRET_*` in Variables.
+4. **Custom webhook** — choose **type**, set **name** (lowercase `a-z`, digits, `-`, `_`), edit **prompt**, enable when ready.
+5. Copy **inbound URL** (`http://127.0.0.1:18090/…` on the node) and set the secret in **Variables**. For internet providers, set up [exposure](#how-to-expose-webhooks-choose-one) first — the tab URL is not enough by itself.
+6. Use **Run** for a test payload, **Activate/Deactivate** without deleting, **Restart node** when prompted after add/update.
 
 ### API equivalents
 
 | Action | Method |
 |--------|--------|
-| List | `GET /listWebhooks` (JWT on Browser HTTPS when applicable) |
+| List active + catalog | `GET /listWebhooks` (JWT on Browser HTTPS when applicable) |
 | Detail + inbound URL | `GET /getWebhookById?id=` |
-| Create | `POST /addWebhook` (management signature) |
+| Create custom | `POST /addWebhook` (management signature) |
+| Add from catalog | `POST /addWebhookFromCatalog` |
 | Edit prompt/type | `POST /updateWebhook` |
 | Enable/disable | `POST /activateWebhook` / `POST /deactivateWebhook` |
 | Test | `POST /runWebhook` |
@@ -196,7 +198,7 @@ All types run your **prompt** plus a formatted event body. Max payload **256 KiB
 
 **Steps:**
 
-1. Enable webhook **`generic_inbound`** (or create `my_integration` with type **generic**).
+1. **Add from repository** template **`generic_inbound`** (or create a custom webhook named `my_integration` with type **generic**).
 2. Set **`WEBHOOK_SECRET_GENERIC_INBOUND`** in Variables (replace auto-generated value if needed).
 3. Point your sender at:
 
@@ -207,7 +209,7 @@ All types run your **prompt** plus a formatted event body. Max payload **256 KiB
      -d '{"event":"deploy","status":"ok","repo":"mpc-auth"}'
    ```
 
-4. Edit the **prompt** (UI or `webhooks.json`) to tell the agent what to do with unknown JSON shapes.
+4. Edit the **prompt** in the Webhooks tab (or **`POST /updateWebhook`**) to tell the agent what to do with unknown JSON shapes.
 
 **Default prompt (bundled):** summarize the body and use MCP tools as appropriate.
 
@@ -219,7 +221,7 @@ All types run your **prompt** plus a formatted event body. Max payload **256 KiB
 
 **Steps:**
 
-1. Enable **`github_events`** (or add a named webhook, type **github**).
+1. **Add from repository** template **`github_events`** (or add a custom webhook with type **github**).
 2. In GitHub → **Settings → Webhooks → Add webhook**:
    - **Payload URL:** `https://your-proxy/hooks/inbound/<webhook-id>`
    - **Content type:** `application/json`
@@ -237,7 +239,7 @@ All types run your **prompt** plus a formatted event body. Max payload **256 KiB
 
 **Steps:**
 
-1. Enable **`gmail_inbox`**.
+1. **Add from repository** template **`gmail_inbox`**.
 2. Set **`WEBHOOK_SECRET_GMAIL_INBOX`**.
 3. Configure a forwarder (Apps Script, Cloud Function, etc.) to `POST` to your inbound URL with:
 
@@ -268,7 +270,7 @@ All types run your **prompt** plus a formatted event body. Max payload **256 KiB
 
 **Steps:**
 
-1. Enable **`proton_inbox`**.
+1. **Add from repository** template **`proton_inbox`**.
 2. Set **`WEBHOOK_SECRET_PROTON_INBOX`**.
 3. Forwarder `POST` with Bearer auth, body like:
 
@@ -290,7 +292,7 @@ All types run your **prompt** plus a formatted event body. Max payload **256 KiB
 
 **Steps:**
 
-1. Enable **`stripe_events`**.
+1. **Add from repository** template **`stripe_events`**.
 2. Stripe Dashboard → **Developers → Webhooks → Add endpoint**:
    - **URL:** `https://your-proxy/hooks/inbound/<webhook-id>`
    - Copy the **Signing secret** (`whsec_…`) into Variables as **`WEBHOOK_SECRET_STRIPE_EVENTS`** (replace placeholder).
@@ -306,7 +308,7 @@ All types run your **prompt** plus a formatted event body. Max payload **256 KiB
 
 **Steps:**
 
-1. Enable **`slack_events`**.
+1. **Add from repository** template **`slack_events`**.
 2. Slack app → **Event Subscriptions**:
    - **Request URL:** `https://your-proxy/hooks/inbound/<webhook-id>`
    - Put the app **Signing Secret** in **`WEBHOOK_SECRET_SLACK_EVENTS`**.
@@ -322,7 +324,7 @@ All types run your **prompt** plus a formatted event body. Max payload **256 KiB
 **Steps:**
 
 1. Create a bot with **@BotFather**; copy the **bot token**.
-2. Enable **`telegram_updates`**.
+2. **Add from repository** template **`telegram_updates`**, then enable when Variables are set.
 3. In **Variables**:
    - **`TELEGRAM_BOT_TOKEN`** — bot token (sensitive; not shown to the agent in prompts)
    - **`WEBHOOK_SECRET_TELEGRAM_UPDATES`** — choose a random string; used as Telegram `secret_token`

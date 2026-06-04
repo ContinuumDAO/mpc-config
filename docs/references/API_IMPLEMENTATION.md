@@ -213,10 +213,12 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getEnvironmentVariable`](#get-getenvironmentvariable) - Get one variable by `name` query param
 - [`POST /addEnvironmentVariable`](#post-addenvironmentvariable) - Add or update one variable (**management signature**; name normalized to uppercase `A-Z`, `0-9`, `_`)
 - [`POST /removeEnvironmentVariable`](#post-removeenvironmentvariable) - Remove one variable by name (**management signature**)
-- [`GET /listMcpServers`](#get-listmcpservers) - List default + user MCP servers (`MCP_default_servers.json` + `MCP_servers.json`)
-- [`GET /getMcpServer`](#get-getmcpserver) - Get one MCP server by `id`
-- [`POST /addMcpServer`](#post-addmcpserver) - Add or update a user MCP server in `MCP_servers.json` (**management signature**)
-- [`POST /removeMcpServer`](#post-removemcpserver) - Remove a user MCP server (**management signature**)
+- [`GET /listMcpServers`](#get-listmcpservers) - List active MCP servers (node database) and available repository catalog (`agent_llm_config.defaults/MCP_servers.json`)
+- [`GET /getMcpServer`](#get-getmcpserver) - Get one active MCP server by `id`
+- [`POST /addMcpServer`](#post-addmcpserver) - Add or update a custom active MCP server in the node database (**management signature**)
+- [`POST /addMcpServerFromCatalog`](#post-addmcpserverfromcatalog) - Activate one catalog MCP server on this node (**management signature**)
+- [`POST /setMcpServerFlags`](#post-setmcpserverflags) - Update `initialLoad` and/or `aiReady` on an active server (**management signature**)
+- [`POST /removeMcpServer`](#post-removemcpserver) - Remove an active MCP server (**management signature**; builtin **continuum** cannot be removed)
 - [`GET /listSkills`](#get-listskills) - List agent skill names (`agent_llm_config/Skills/`)
 - [`GET /getSkill`](#get-getskill) - Get one skill file by `name`
 - [`POST /addSkill`](#post-addskill) - Add or update a skill file (**management signature**)
@@ -230,7 +232,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /deactivateCronJob`](#post-deactivatecronjob) - Disable a cron job without deleting it (**management signature**)
 - [`POST /removeCronJob`](#post-removecronjob) - Remove a cron job (**management signature**; optional `deleteConversation`)
 - [`POST /runCronJob`](#post-runcronjob) - Manual trigger (async; **management signature**)
-- [`GET /listWebhooks`](#get-listwebhooks) - List inbound webhook summaries (`agent_llm_config/hooks/webhooks.json`; **read JWT** when JWT applies)
+- [`GET /listWebhooks`](#get-listwebhooks) - List active inbound webhooks + available catalog (**read JWT** when JWT applies)
 - [`GET /getWebhookById`](#get-getwebhookbyid) - Get one webhook including prompt (**read JWT** when JWT applies)
 - [`POST /addWebhook`](#post-addwebhook) - Create inbound webhook (**management signature**; stores secret in Variables as `WEBHOOK_SECRET_<NAME>`)
 - [`POST /updateWebhook`](#post-updatewebhook) - Update prompt and/or type (**management signature**)
@@ -2674,14 +2676,15 @@ Stored in the base MongoDB database collection **`LocalAgentEnvironmentVariables
 
 STDIO MCP servers with **`useUserFolder`: true** (default **foundry**) run with **`HOME`** set to **`MPC_AUTH_USER_FOLDER`** so tools persist files on the host (e.g. Foundry MCP workspace at **`user_folder/.mcp-foundry-workspace/`** on the VPS). The **foundry** MCP package expects Foundry at **`$HOME/.foundry/bin/`**; mpc-auth symlinks the image’s **`/usr/local/bin/{forge,cast,anvil}`** into **`user_folder/.foundry/bin/`** before connect (the image tools alone are not enough when **`HOME`** is redirected).
 
-### Agent MCP servers (local filesystem)
+### Agent MCP servers (node database + repository catalog)
 
-| File | Purpose |
-|------|---------|
-| **`agent_llm_config/MCP_default_servers.json`** | **Source of truth** for built-in MCP servers (seeded from **`agent_llm_config.defaults/`** on provision); not writable via API; **no Go embedded fallback**. Ships **continuum** only. |
-| **`agent_llm_config/MCP_servers.json`** | Bundled optional MCP catalog (seeded from **`agent_llm_config.defaults/`** on first provision) plus user edits (**POST /addMcpServer**, **POST /removeMcpServer**). Entries are removable in the UI. |
+| Storage | Purpose |
+|---------|---------|
+| **MongoDB `LocalAgentMcpServers`** | **Active** MCP server definitions on this node (included in database backups). Builtin **continuum** is seeded on first use; custom and catalog-activated servers are removable. |
+| **`agent_llm_config.defaults/MCP_servers.json`** | **Repository catalog** of optional MCP templates (updated on `git pull` of mpc-config). Not active until the operator adds via UI or **`POST /addMcpServerFromCatalog`**. |
+| **`agent_llm_config/MCP_default_servers.json`** | Legacy bootstrap file for **continuum** only (seeded once by **`process_config.sh`**); used when mpc-auth first migrates/seeds the database. |
 
-Each server entry: `id`, `displayName`, `initialLoad` (connect at chat startup), optional `apiKey` (HTTP auth, stored in `MCP_servers.json`), optional `apiKeyEnvVar` (HTTP auth loaded from agent environment variables), optional **`apiKeyHeader`** (HTTP header name when using `apiKeyEnvVar`; default Bearer), optional `envVars` (STDIO: inject named variables into the child process), optional **`useUserFolder`** (STDIO: set **`HOME`** to **`/app/user_folder`** for persistent artefacts), optional **`runtime`** (STDIO: install/check before connect or on **POST /addMcpServer**).
+Each active server entry: `id`, `displayName`, **`initialLoad`** (connect at chat startup so tools are available in a new agent window), **`aiReady`** (include id in plan-mode orchestration prompts for `mpc-orchestrate` manifests; **continuum** is always ai-ready), optional `apiKey` (HTTP auth, stored in database; redacted in list responses), optional `apiKeyEnvVar` (HTTP auth loaded from agent environment variables), optional **`apiKeyHeader`** (HTTP header name when using `apiKeyEnvVar`; default Bearer), optional `envVars` (STDIO: inject named variables into the child process), optional **`useUserFolder`** (STDIO: set **`HOME`** to **`/app/user_folder`** for persistent artefacts), optional **`runtime`** (STDIO: install/check before connect or on add/activate).
 
 **`runtime` object (optional):**
 
@@ -2707,26 +2710,40 @@ The mpc-auth image ships **uv**, **Node**, **Foundry**, and **Heimdall** as plat
 <a id="get-listmcpservers"></a>
 #### `GET /listMcpServers`
 
-**Response data:** `{ "defaultServers": [...], "userServers": [...], "servers": [...] }` — list items include masked `apiKey`, `source` (`default` \| `user`), `removable`.
+**Response data:** `{ "activeServers": [...], "availableCatalog": [...], "defaultServers": [...], "userServers": [...], "servers": [...] }` — **`activeServers`** / **`servers`**: database entries with `initialLoad`, `aiReady`, `builtin`, masked `apiKey`, `source` (`default` \| `user`), `removable`. **`availableCatalog`**: templates from **`agent_llm_config.defaults/MCP_servers.json`** not yet active on this node (`source`: `catalog`).
 
 <a id="get-getmcpserver"></a>
 #### `GET /getMcpServer`
 
-**Query:** `id` (required).
+**Query:** `id` (required). Returns one **active** server from the database.
 
 <a id="post-addmcpserver"></a>
 #### `POST /addMcpServer`
 
 **Auth:** Management signature (JSON with `clientSig` cleared, same as **POST /addKnownAddress**).
 
-**Body:** `{ "id", "displayName", "transport?", "url?", "command?", "args?", "apiKey?", "apiKeyEnvVar?", "envVars?", "useUserFolder?", "initialLoad", "nonce", "clientSig", "nodeKey" }` — upserts **MCP_servers.json**; cannot use an id reserved in **MCP_default_servers.json**. For HTTP auth without storing a secret in the file, set **`apiKeyEnvVar`** to the variable name (e.g. `DUNE_API_KEY`) and set the value via **`POST /addEnvironmentVariable`**. **`useUserFolder`** (STDIO only): sets **`HOME`** to **`/app/user_folder`** so MCP tools persist files on the host **`./user_folder`** bind mount.
+**Body:** `{ "id", "displayName", "transport?", "url?", "command?", "args?", "apiKey?", "apiKeyEnvVar?", "apiKeyHeader?", "envVars?", "useUserFolder?", "runtime?", "initialLoad", "aiReady?", "nonce", "clientSig", "nodeKey" }` — upserts an **active** server in **`LocalAgentMcpServers`**; cannot replace builtin **continuum**. For HTTP auth without storing a secret in the database, set **`apiKeyEnvVar`** and the value via **`POST /addEnvironmentVariable`**. **`useUserFolder`** (STDIO only): sets **`HOME`** to **`/app/user_folder`**.
+
+<a id="post-addmcpserverfromcatalog"></a>
+#### `POST /addMcpServerFromCatalog`
+
+**Auth:** Management signature.
+
+**Body:** `{ "id", "initialLoad?", "aiReady?", "nonce", "clientSig", "nodeKey" }` — copies the full definition from **`agent_llm_config.defaults/MCP_servers.json`** into the active database. Fails if the id is already active or not in the catalog.
+
+<a id="post-setmcpserverflags"></a>
+#### `POST /setMcpServerFlags`
+
+**Auth:** Management signature.
+
+**Body:** `{ "id", "initialLoad?", "aiReady?", "nonce", "clientSig", "nodeKey" }` — partial update; at least one of **`initialLoad`** or **`aiReady`** must be supplied. **`aiReady`** on builtin **continuum** is always treated as true.
 
 <a id="post-removemcpserver"></a>
 #### `POST /removeMcpServer`
 
 **Auth:** Management signature.
 
-**Body:** `{ "id", "nonce", "clientSig", "nodeKey" }` — removes from **MCP_servers.json** only.
+**Body:** `{ "id", "nonce", "clientSig", "nodeKey" }` — removes from the active database only (not from the repository catalog). Builtin servers cannot be removed.
 
 ### Agent skills (local files)
 
@@ -2893,13 +2910,14 @@ When **`EnableAgentHooks`** is true (default), mpc-auth runs automated agent tur
 1. **KeyGen `@agent` messages** — event-driven on local `POST /sendMessage` and MQTT `KEYGENMESSAGE` (no external poll scripts).
 2. **Inbound webhooks** — external systems POST to a dedicated hook listener (default **`127.0.0.1:18090`**, path **`/hooks/inbound/{webhookId}`**).
 
-Bundled templates ship in **mpc-config** under **`agent_llm_config.defaults/hooks/`** and are copied into runtime **`agent_llm_config/hooks/`** by **`process_config.sh`** (once per file if missing). Secrets are **not** stored in JSON files — webhook signing values live in **Variables** as **`WEBHOOK_SECRET_<NAME>`** (and **`TELEGRAM_BOT_TOKEN`** for Telegram replies).
+Bundled templates ship in **mpc-config** under **`agent_llm_config.defaults/hooks/webhooks.json`** (catalog only — not copied to runtime). Active webhook jobs are stored in MongoDB **`LocalAgentWebhooks`**. One-time migration imports legacy **`agent_llm_config/hooks/webhooks.json`** and archives it as **`webhooks.json.migrated`**. Secrets are **not** stored in job documents — webhook signing values live in **Variables** as **`WEBHOOK_SECRET_<NAME>`** (and **`TELEGRAM_BOT_TOKEN`** for Telegram replies).
 
 | Path | Role |
 |------|------|
 | **`agent_llm_config/hooks/message_hook.json`** | KeyGen hook config (`enabled`, `triggerToken`, `markReadAfterRun`, optional `conversationId`, optional `promptFiles`) |
 | **`agent_llm_config/hooks/message_hook_*.md`** | Four preset prompts (same/other node × top-level/reply) |
-| **`agent_llm_config/hooks/webhooks.json`** | Webhook jobs: `name`, `type`, `prompt`, `conversationId`, `secretEnvVar` (runtime) |
+| **`agent_llm_config.defaults/hooks/webhooks.json`** | Bundled webhook **catalog** (templates not yet activated) |
+| **`LocalAgentWebhooks`** (MongoDB) | Active webhook jobs |
 | **`agent_llm_config/hooks/runs/{webhookId}.jsonl`** | Append-only inbound run log |
 | **`agent_llm_config/hooks/orchestrations/`** | Per–top-level-message orchestration state (runtime) |
 | **`agent_llm_config/Skills/orchestration_planning.md`** | Plan-mode skill for drafting manifests |
@@ -2923,9 +2941,20 @@ Bundled templates ship in **mpc-config** under **`agent_llm_config.defaults/hook
 
 **Auth:** Read JWT on Browser HTTPS / loopback when JWT applies; plain management port has no JWT.
 
-**Response data:** `{ "webhooks": [ { "id", "name", "enabled", "type", "conversationId", "inboundUrl", "secretEnvVar", "secretConfigured", "telegramBotTokenEnvVar"?, "telegramBotTokenConfigured"?, "createdAt", "updatedAt", "lastTriggeredAt"? } ] }` — omits secret values.
+**Response data:** `{ "activeWebhooks": [ … ], "availableCatalog": [ { "name", "type", "prompt", "enabled" } ], "webhooks": [ … ] }` — `webhooks` mirrors `activeWebhooks` for backward compatibility. Omits secret values.
 
 **Errors:** **403** when **`EnableAgentHooks`** is false.
+
+<a id="post-addwebhookfromcatalog"></a>
+#### `POST /addWebhookFromCatalog`
+
+**Auth:** Management signature.
+
+**Body:** `{ "name": "<catalog template name>", "enabled"?: false, "nonce", "clientSig", "nodeKey" }`
+
+Copies one entry from **`agent_llm_config.defaults/hooks/webhooks.json`** into **`LocalAgentWebhooks`**. Creates **`WEBHOOK_SECRET_*`** in Variables. **Response data:** same shape as **`POST /addWebhook`**.
+
+**Errors:** **400** if name not in catalog or already active.
 
 <a id="get-getwebhookbyid"></a>
 #### `GET /getWebhookById`

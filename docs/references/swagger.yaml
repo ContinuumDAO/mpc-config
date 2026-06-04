@@ -2291,7 +2291,7 @@ paths:
           $ref: '#/definitions/node.RemoveEnvironmentVariablePost'
   /listMcpServers:
     get:
-      description: 'List default + user MCP servers (agent_llm_config JSON files) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+      description: 'List active MCP servers (database) and available repository catalog Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
         (GET /listMcpServers).'
       consumes:
       - application/json
@@ -2299,7 +2299,7 @@ paths:
       - application/json
       tags:
       - Agent automation
-      summary: List default + user MCP servers (agent_llm_config JSON files)
+      summary: List active MCP servers (database) and available repository catalog
       responses:
         '200':
           description: OK
@@ -2307,15 +2307,15 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getMcpServer:
     get:
-      description: 'Get one MCP server by id query param Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET
-        /getMcpServer).'
+      description: 'Get one active MCP server by id (database) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /getMcpServer).'
       consumes:
       - application/json
       produces:
       - application/json
       tags:
       - Agent automation
-      summary: Get one MCP server by id query param
+      summary: Get one active MCP server by id (database)
       responses:
         '200':
           description: OK
@@ -2328,7 +2328,7 @@ paths:
         required: true
   /addMcpServer:
     post:
-      description: 'Add or update user MCP server in MCP_servers.json (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+      description: 'Add or update active MCP server in node database (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
         (POST /addMcpServer).'
       consumes:
       - application/json
@@ -2336,7 +2336,7 @@ paths:
       - application/json
       tags:
       - Agent automation
-      summary: Add or update user MCP server in MCP_servers.json (management-signed)
+      summary: Add or update active MCP server in node database (management-signed)
       responses:
         '200':
           description: OK
@@ -2350,7 +2350,7 @@ paths:
           $ref: '#/definitions/node.AddMcpServerPost'
   /removeMcpServer:
     post:
-      description: 'Remove user MCP server from MCP_servers.json (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+      description: 'Remove active MCP server from node database (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
         (POST /removeMcpServer).'
       consumes:
       - application/json
@@ -2358,7 +2358,7 @@ paths:
       - application/json
       tags:
       - Agent automation
-      summary: Remove user MCP server from MCP_servers.json (management-signed)
+      summary: Remove active MCP server from node database (management-signed)
       responses:
         '200':
           description: OK
@@ -2370,6 +2370,50 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.RemoveMcpServerPost'
+  /addMcpServerFromCatalog:
+    post:
+      description: 'Activate one MCP server from agent_llm_config.defaults catalog (management-signed) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (POST /addMcpServerFromCatalog).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Activate one MCP server from agent_llm_config.defaults catalog (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.AddMcpServerFromCatalogPost'
+  /setMcpServerFlags:
+    post:
+      description: 'Update initialLoad and/or aiReady on an active MCP server (management-signed) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (POST /setMcpServerFlags).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Update initialLoad and/or aiReady on an active MCP server (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.SetMcpServerFlagsPost'
   /listSkills:
     get:
       description: 'List agent skill names (agent_llm_config/Skills/) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
@@ -2453,15 +2497,14 @@ paths:
           $ref: '#/definitions/node.RemoveSkillPost'
   /listCronJobs:
     get:
-      description: 'List agent cron job summaries. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (GET /listCronJobs).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listCronJobs).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent automation
-      summary: list agent cron jobs
+      - Management API
+      summary: GET listCronJobs
       responses:
         '200':
           description: OK
@@ -2469,62 +2512,44 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getCronJob:
     get:
-      description: 'Get one agent cron job. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (GET /getCronJob).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getCronJob).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent automation
-      summary: get one agent cron job
+      - Management API
+      summary: GET getCronJob
       responses:
         '200':
           description: OK
           schema:
             $ref: '#/definitions/node.APIResponse'
-      parameters:
-      - type: string
-        name: id
-        in: query
-      - type: string
-        name: name
-        in: query
   /listCronJobRuns:
     get:
-      description: 'List cron job run history. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (GET /listCronJobRuns).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listCronJobRuns).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent automation
-      summary: list cron job run history
+      - Management API
+      summary: GET listCronJobRuns
       responses:
         '200':
           description: OK
           schema:
             $ref: '#/definitions/node.APIResponse'
-      parameters:
-      - type: string
-        name: jobId
-        in: query
-        required: true
-      - type: integer
-        name: limit
-        in: query
   /addCronJob:
     post:
-      description: 'Create agent cron job (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /addCronJob).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /addCronJob).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent automation
-      summary: add agent cron job
+      - Management API
+      summary: POST addCronJob
       responses:
         '200':
           description: OK
@@ -2535,18 +2560,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.AddCronJobPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /updateCronJob:
     post:
-      description: 'Update agent cron job (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /updateCronJob).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /updateCronJob).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent automation
-      summary: update agent cron job
+      - Management API
+      summary: POST updateCronJob
       responses:
         '200':
           description: OK
@@ -2557,18 +2582,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.UpdateCronJobPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /activateCronJob:
     post:
-      description: 'Enable agent cron job (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /activateCronJob).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /activateCronJob).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent automation
-      summary: activate agent cron job
+      - Management API
+      summary: POST activateCronJob
       responses:
         '200':
           description: OK
@@ -2579,18 +2604,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.CronJobRefPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /deactivateCronJob:
     post:
-      description: 'Disable agent cron job (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /deactivateCronJob).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /deactivateCronJob).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent automation
-      summary: deactivate agent cron job
+      - Management API
+      summary: POST deactivateCronJob
       responses:
         '200':
           description: OK
@@ -2601,18 +2626,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.CronJobRefPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /removeCronJob:
     post:
-      description: 'Remove agent cron job (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /removeCronJob).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeCronJob).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent automation
-      summary: remove agent cron job
+      - Management API
+      summary: POST removeCronJob
       responses:
         '200':
           description: OK
@@ -2623,18 +2648,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.RemoveCronJobPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /runCronJob:
     post:
-      description: 'Enqueue manual cron job run (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /runCronJob).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /runCronJob).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent automation
-      summary: run agent cron job now
+      - Management API
+      summary: POST runCronJob
       responses:
         '200':
           description: OK
@@ -2645,18 +2670,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.RunCronJobPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /listWebhooks:
     get:
-      description: 'List inbound agent webhooks (agent_llm_config/hooks/webhooks.json). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (GET /listWebhooks).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listWebhooks).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent hooks
-      summary: list inbound webhooks
+      - Management API
+      summary: GET listWebhooks
       responses:
         '200':
           description: OK
@@ -2664,36 +2689,35 @@ paths:
             $ref: '#/definitions/node.APIResponse'
   /getWebhookById:
     get:
-      description: 'Get one inbound webhook by id query param. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (GET /getWebhookById).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getWebhookById).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent hooks
-      summary: get inbound webhook by id
-      parameters:
-      - in: query
-        name: id
-        required: true
-        type: string
+      - Management API
+      summary: GET getWebhookById
       responses:
         '200':
           description: OK
           schema:
             $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: id
+        in: query
+        required: true
+        description: Resource id
   /addWebhook:
     post:
-      description: 'Create inbound webhook (management-signed; secret stored as WEBHOOK_SECRET_* variable). Full detail:
-        mpc-config docs/references/API_IMPLEMENTATION.md (POST /addWebhook).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /addWebhook).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent hooks
-      summary: add inbound webhook
+      - Management API
+      summary: POST addWebhook
       responses:
         '200':
           description: OK
@@ -2704,18 +2728,40 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.AddWebhookPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
+  /addWebhookFromCatalog:
+    post:
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /addWebhookFromCatalog).
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Management API
+      summary: POST addWebhookFromCatalog
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /updateWebhook:
     post:
-      description: 'Update inbound webhook prompt and/or type (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /updateWebhook).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /updateWebhook).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent hooks
-      summary: update inbound webhook
+      - Management API
+      summary: POST updateWebhook
       responses:
         '200':
           description: OK
@@ -2726,18 +2772,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.UpdateWebhookPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /removeWebhook:
     post:
-      description: 'Remove inbound webhook (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /removeWebhook).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeWebhook).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent hooks
-      summary: remove inbound webhook
+      - Management API
+      summary: POST removeWebhook
       responses:
         '200':
           description: OK
@@ -2748,18 +2794,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.WebhookRefPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /activateWebhook:
     post:
-      description: 'Enable inbound webhook (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /activateWebhook).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /activateWebhook).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent hooks
-      summary: activate inbound webhook
+      - Management API
+      summary: POST activateWebhook
       responses:
         '200':
           description: OK
@@ -2770,18 +2816,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.WebhookRefPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /deactivateWebhook:
     post:
-      description: 'Disable inbound webhook (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /deactivateWebhook).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /deactivateWebhook).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent hooks
-      summary: deactivate inbound webhook
+      - Management API
+      summary: POST deactivateWebhook
       responses:
         '200':
           description: OK
@@ -2792,18 +2838,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.WebhookRefPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /runWebhook:
     post:
-      description: 'Manual inbound webhook test trigger (management-signed). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /runWebhook).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /runWebhook).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent hooks
-      summary: run inbound webhook test
+      - Management API
+      summary: POST runWebhook
       responses:
         '200':
           description: OK
@@ -2814,18 +2860,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.WebhookRefPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /agent/plan/start:
     post:
-      description: 'Create plan thread with capped prior-orchestration rollup (read JWT). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /agent/plan/start).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /agent/plan/start).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent hooks
-      summary: start plan thread from prior orchestration
+      - Management API
+      summary: POST agent plan start
       responses:
         '200':
           description: OK
@@ -2836,18 +2882,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.AgentPlanStartPost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /agent/plan/execute:
     post:
-      description: 'Post mpc-orchestrate manifest from plan thread to KeyGen (read JWT). Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /agent/plan/execute).'
+      description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /agent/plan/execute).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
-      - Agent hooks
-      summary: execute orchestration plan in KeyGen
+      - Management API
+      summary: POST agent plan execute
       responses:
         '200':
           description: OK
@@ -2858,7 +2904,8 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.AgentPlanExecutePost'
+          type: object
+          description: Request JSON — see docs/API_IMPLEMENTATION.md
   /getMSQTTKey:
     get:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMSQTTKey).
@@ -4616,7 +4663,7 @@ definitions:
           description: STDIO command arguments
         apiKey:
           type: string
-          description: Optional HTTP bearer token (stored in MCP_servers.json)
+          description: Optional HTTP bearer token (stored in node database; redacted in list responses)
         apiKeyEnvVar:
           type: string
           description: HTTP auth from agent env var (POST /addEnvironmentVariable)
@@ -4637,6 +4684,9 @@ definitions:
         initialLoad:
           type: boolean
           description: Connect at agent chat session startup
+        aiReady:
+          type: boolean
+          description: Include in orchestration plan-mode mpc-orchestrate server allowlist
   node.RemoveMcpServerPost:
     type: object
     allOf:
@@ -4681,111 +4731,7 @@ definitions:
       properties:
         name:
           type: string
-  node.agentCronSchedule:
-    type: object
-    required:
-    - kind
-    properties:
-      kind:
-        type: string
-        description: cron, every, or at
-      expr:
-        type: string
-      everyMs:
-        type: integer
-        format: int64
-      at:
-        type: string
-      tz:
-        type: string
-  node.AddCronJobPost:
-    type: object
-    allOf:
-    - *id001
-    - type: object
-      required:
-      - name
-      - message
-      - schedule
-      properties:
-        name:
-          type: string
-        message:
-          type: string
-        schedule:
-          $ref: '#/definitions/node.agentCronSchedule'
-        enabled:
-          type: boolean
-        deleteAfterRun:
-          type: boolean
-  node.UpdateCronJobPost:
-    type: object
-    allOf:
-    - *id001
-    - type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        message:
-          type: string
-        schedule:
-          $ref: '#/definitions/node.agentCronSchedule'
-        deleteAfterRun:
-          type: boolean
-  node.CronJobRefPost:
-    type: object
-    allOf:
-    - *id001
-    - type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-  node.RemoveCronJobPost:
-    type: object
-    allOf:
-    - *id001
-    - type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        deleteConversation:
-          type: boolean
-  node.RunCronJobPost:
-    type: object
-    allOf:
-    - *id001
-    - type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-  node.AddWebhookPost:
-    type: object
-    allOf:
-    - *id001
-    - type: object
-      required:
-      - name
-      - type
-      - prompt
-      properties:
-        name:
-          type: string
-        type:
-          type: string
-          description: generic, github, gmail, proton, stripe, slack, or telegram
-        prompt:
-          type: string
-        enabled:
-          type: boolean
-  node.UpdateWebhookPost:
+  node.AddMcpServerFromCatalogPost:
     type: object
     allOf:
     - *id001
@@ -4795,41 +4741,26 @@ definitions:
       properties:
         id:
           type: string
-        prompt:
-          type: string
-        type:
-          type: string
-  node.WebhookRefPost:
+          description: Catalog server id from agent_llm_config.defaults/MCP_servers.json
+        initialLoad:
+          type: boolean
+          description: Connect at agent chat session startup
+        aiReady:
+          type: boolean
+          description: Include in orchestration plan-mode mpc-orchestrate server allowlist
+  node.SetMcpServerFlagsPost:
     type: object
     allOf:
     - *id001
     - type: object
+      required:
+      - id
       properties:
         id:
           type: string
-        name:
-          type: string
-  node.AgentPlanStartPost:
-    type: object
-    properties:
-      priorOrchestratorConversationId:
-        type: string
-        description: UUID of [Orchestrator] hook conversation (at least one prior ref required)
-      priorTopLevelMessageId:
-        type: string
-        description: KeyGen top-level message id for the orchestration run
-      keyGenId:
-        type: string
-        description: Optional KeyGen override for the new plan thread
-      title:
-        type: string
-        description: Optional conversation tab title (default Plan follow-on)
-  node.AgentPlanExecutePost:
-    type: object
-    properties:
-      conversationId:
-        type: string
-      title:
-        type: string
-      keyGenId:
-        type: string
+        initialLoad:
+          type: boolean
+          description: Connect at agent chat session startup
+        aiReady:
+          type: boolean
+          description: Include in orchestration plan-mode mpc-orchestrate server allowlist (ignored for builtin continuum)

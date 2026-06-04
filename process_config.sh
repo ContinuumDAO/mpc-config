@@ -98,7 +98,6 @@ DEFAULT_AGENT_LLM_CONFIG_CONTAINER_FILE="/app/agent_llm_config/agent-llm-config.
 DEFAULT_USER_FOLDER_DIR="user_folder"
 DEFAULT_USER_FOLDER_CONTAINER_PATH="/app/user_folder"
 DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME="MCP_default_servers.json"
-DEFAULT_AGENT_MCP_SERVERS_BASENAME="MCP_servers.json"
 DEFAULT_AGENT_CRON_JOBS_REL="cron/jobs.json"
 DEFAULT_AGENT_HOOKS_REL="hooks"
 
@@ -120,8 +119,9 @@ _seed_agent_llm_runtime_readme() {
     fi
 }
 
-# Copy bundled MCP JSON catalogs from agent_llm_config.defaults/ into the node's agent_llm_config/ (once per file).
-# MCP_servers.json: apiKeyEnvVar / envVars names only — secret values live in Variables; AI agent must not see values.
+# Copy bundled MCP_default_servers.json into agent_llm_config/ (once) for continuum bootstrap on first DB migration.
+# MCP_servers.json catalog stays in agent_llm_config.defaults/ only — operators activate servers via the UI or
+# POST /addMcpServerFromCatalog; active definitions live in the node database (LocalAgentMcpServers).
 # See agent_llm_config.defaults/README.md ("MCP catalog secrets") and continuum-node-sdk mcp-servers-catalog.ts.
 _seed_agent_mcp_json_file() {
     local cfg_parent="$1"
@@ -141,10 +141,6 @@ _seed_agent_mcp_json_file() {
 
 _seed_agent_mcp_default_servers_file() {
     _seed_agent_mcp_json_file "$1" "${DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME}"
-}
-
-_seed_agent_mcp_servers_file() {
-    _seed_agent_mcp_json_file "$1" "${DEFAULT_AGENT_MCP_SERVERS_BASENAME}"
 }
 
 # Copy bundled agent skills (Skills/skills.json + .md/.txt) from agent_llm_config.defaults/ into agent_llm_config/ (once per file).
@@ -198,7 +194,8 @@ _agent_cron_enabled_for_config() {
     return 0
 }
 
-# Copy bundled agent hooks (message_hook.json, message_hook_*.md, webhooks.json, examples) from agent_llm_config.defaults/ once per file.
+# Copy bundled agent hooks (message_hook.json, message_hook_*.md) from agent_llm_config.defaults/ once per file.
+# webhooks.json catalog stays in agent_llm_config.defaults/hooks/ only — operators activate via UI or POST /addWebhookFromCatalog.
 _seed_agent_hooks_catalog() {
     local cfg_parent="$1"
     local src_dir="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/${DEFAULT_AGENT_HOOKS_REL}"
@@ -211,6 +208,9 @@ _seed_agent_hooks_catalog() {
     for hook_file in "${src_dir}"/*.json "${src_dir}"/*.md; do
         [ -f "$hook_file" ] || continue
         base="$(basename "$hook_file")"
+        if [ "$base" = "webhooks.json" ]; then
+            continue
+        fi
         if [ -f "${dest_dir}/${base}" ]; then
             continue
         fi
@@ -6509,7 +6509,6 @@ main() {
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_HOOKS_REL}/runs"
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
         _seed_agent_mcp_default_servers_file "${_cfg_parent}" || true
-        _seed_agent_mcp_servers_file "${_cfg_parent}" || true
         _seed_agent_llm_runtime_readme "${_cfg_parent}" || true
         _seed_agent_skills_catalog "${_cfg_parent}" || true
         _seed_agent_hooks_catalog "${_cfg_parent}" || true
