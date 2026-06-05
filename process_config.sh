@@ -3757,8 +3757,9 @@ subjectAltName = @alt_names
 
 [alt_names]
 IP.1 = $server_ip
+DNS.1 = mosquitto
 EOF
-        print_info "Including IP address $server_ip in certificate SANs"
+        print_info "Including IP address $server_ip and DNS mosquitto in certificate SANs"
     fi
     
     # Sign certificate with or without SANs
@@ -4147,6 +4148,94 @@ _process_config_compose_file_is_relay() {
     [ -n "$compose_file" ] && [ -f "$compose_file" ] && grep -qE '^[[:space:]]{2}mosquitto:[[:space:]]*$' "$compose_file"
 }
 
+# True when relay MQTT TLS files needed by mosquitto and mpc-auth are all present.
+_relay_mqtt_tls_certs_complete() {
+    [ -f "$CA_CRT" ] && [ -f "$SERVER_CRT" ] && [ -f "$SERVER_KEY" ]
+}
+
+# Relay app uses mqttBroker ssl://<WAN-ip>:8883; from inside Docker that often fails without NAT hairpin.
+# Map the relay WAN IP (first nodeAddresses host) to host-gateway so TLS still targets the public IP SAN.
+apply_docker_compose_relay_mqtt_hairpin_extra_hosts() {
+    local file="$1"
+    local config_file="$2"
+    local relay_ip=""
+    if [ -z "$config_file" ] || [ ! -f "$config_file" ] || [ ! -f "$file" ]; then
+        return 0
+    fi
+    relay_ip=$(get_first_node_address "$config_file" 2>/dev/null) || true
+    if [ -n "$relay_ip" ] && [ "$relay_ip" != "null" ]; then
+        relay_ip=$(extract_ip_from_url "$relay_ip")
+    fi
+    if [ -z "$relay_ip" ] || [ "$relay_ip" = "$NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4" ]; then
+        print_info "docker-compose.yml: relay MQTT hairpin extra_hosts skipped (no real relay IP in configs.yaml yet)."
+        return 0
+    fi
+    if ! command -v python3 &> /dev/null; then
+        print_warning "python3 not found — could not set relay MQTT hairpin extra_hosts in docker-compose.yml"
+        return 1
+    fi
+    local _hairpin_action
+    _hairpin_action=$(
+        COMPOSE_HAIRPIN_FILE="$file" COMPOSE_HAIRPIN_RELAY_IP="$relay_ip" python3 << 'PYHAIRPIN'
+import os
+import re
+import sys
+
+path = os.environ.get("COMPOSE_HAIRPIN_FILE", "")
+relay_ip = (os.environ.get("COMPOSE_HAIRPIN_RELAY_IP") or "").strip()
+BEGIN = "    # BEGIN mpc-config relay-mqtt-hairpin-extra-hosts"
+END = "    # END mpc-config relay-mqtt-hairpin-extra-hosts"
+if not path or not relay_ip:
+    print("skip", flush=True)
+    sys.exit(0)
+if not re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", relay_ip):
+    print("skip", flush=True)
+    sys.exit(0)
+
+try:
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+except OSError:
+    print("error_read", flush=True)
+    sys.exit(1)
+
+if BEGIN not in text or END not in text:
+    print("no_marker", flush=True)
+    sys.exit(0)
+
+block = (
+    f"{BEGIN} (process_config.sh adds relay WAN IP → host-gateway)\n"
+    f"    extra_hosts:\n"
+    f'      - "{relay_ip}:host-gateway"\n'
+    f'      - "host.docker.internal:host-gateway"\n'
+    f"{END}"
+)
+i0 = text.index(BEGIN)
+i1 = text.index(END) + len(END)
+new_text = text[:i0] + block + text[i1:]
+try:
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(new_text)
+except OSError:
+    print("error_write", flush=True)
+    sys.exit(1)
+print("ok", flush=True)
+PYHAIRPIN
+    )
+    case "$_hairpin_action" in
+        ok)
+            print_success "docker-compose.yml: app extra_hosts maps ${relay_ip} → host-gateway (relay MQTT hairpin)."
+            ;;
+        no_marker)
+            print_warning "docker-compose.yml: relay-mqtt-hairpin-extra-hosts markers missing — git pull mpc-config relay template."
+            ;;
+        skip) ;;
+        *)
+            print_warning "docker-compose.yml: could not merge relay MQTT hairpin extra_hosts."
+            ;;
+    esac
+}
+
 # Non-interactive path for host automation (systemd restart / pending-update): align docker-compose.yml
 # with relay vs client role from configs.yaml; generate MQTT broker certs on relay promotion; demotion
 # copies the client template (mosquitto removed — host update uses compose up --remove-orphans).
@@ -4221,9 +4310,16 @@ print(1 if port > 0 else 0)
 
     if [ "$IS_RELAY_NODE" = "true" ]; then
         MOSQUITTO_CONF=$(find_mosquitto_conf)
+        local _gen_mqtt_certs=false
         if [ -n "$MOSQUITTO_CONF" ] && is_letsencrypt_configured "$MOSQUITTO_CONF"; then
             print_info "sync-compose-role: Let's Encrypt configured — skipping self-signed MQTT cert generation."
+        elif ! _relay_mqtt_tls_certs_complete; then
+            print_info "sync-compose-role: MQTT broker TLS files incomplete in $CERT_DIR — generating."
+            _gen_mqtt_certs=true
         elif confirm_overwrite_mqtt_certs; then
+            _gen_mqtt_certs=true
+        fi
+        if [ "$_gen_mqtt_certs" = true ]; then
             check_cert_dir
             print_step "sync-compose-role: generating Mosquitto (MQTT TLS) broker certificates..."
             generate_ca_key
@@ -4233,6 +4329,9 @@ print(1 if port > 0 else 0)
             sign_server_cert "$CONFIG_FILE"
             set_permissions
             _process_config_chown_repo_tree_if_sudo_root "$CERT_DIR"
+            needs_full_stack=1
+        elif [ "$new_relay" -eq 1 ] && ! _relay_mqtt_tls_certs_complete; then
+            print_warning "sync-compose-role: MQTT TLS certs still missing under $CERT_DIR — mosquitto will not serve TLS until you run process_config.sh on the relay."
             needs_full_stack=1
         fi
     fi
@@ -4305,6 +4404,9 @@ configure_docker_compose() {
         apply_docker_compose_continuum_mcp_server "$docker_compose_file" "$configs_yaml_path" || true
         apply_docker_compose_agent_llm_config_env "$docker_compose_file" "${5:-1}" || true
         apply_docker_compose_agent_llm_config_defaults_volume "$docker_compose_file" "${5:-1}" || true
+        if [ "$is_relay_node" = "true" ]; then
+            apply_docker_compose_relay_mqtt_hairpin_extra_hosts "$docker_compose_file" "$configs_yaml_path" || true
+        fi
         process_config_repo_take_if_sudo_invoker "$docker_compose_file"
         shopt -s nullglob
         local _dcf_bak

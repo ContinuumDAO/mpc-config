@@ -113,6 +113,10 @@ services:
       - seccomp:unconfined
     cap_add:
       - SYS_PTRACE
+    # BEGIN mpc-config relay-mqtt-hairpin-extra-hosts (process_config.sh adds relay WAN IP → host-gateway)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # END mpc-config relay-mqtt-hairpin-extra-hosts
 
   # BEGIN mpc-config continuumdao-node-app
   dashboard:
