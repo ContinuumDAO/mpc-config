@@ -4141,6 +4141,118 @@ EOF
     return 0
 }
 
+# True when docker-compose.yml defines the mosquitto service (relay template).
+_process_config_compose_file_is_relay() {
+    local compose_file="$1"
+    [ -n "$compose_file" ] && [ -f "$compose_file" ] && grep -qE '^[[:space:]]{2}mosquitto:[[:space:]]*$' "$compose_file"
+}
+
+# Non-interactive path for host automation (systemd restart / pending-update): align docker-compose.yml
+# with relay vs client role from configs.yaml; generate MQTT broker certs on relay promotion; demotion
+# copies the client template (mosquitto removed — host update uses compose up --remove-orphans).
+process_config_sync_compose_role_only() {
+    local skip_agent_llm="${1:-true}"
+    local app_image_override="${2:-}"
+    local compose_dir script_dir compose_file
+    local prev_relay=0 new_relay=0 changed=0 needs_full_stack=0
+    local _agent_llm_compose_enable=1
+
+    export PROCESS_CONFIG_NONINTERACTIVE="${PROCESS_CONFIG_NONINTERACTIVE:-1}"
+    export SKIP_NODE_ADDRESS_MENU="${SKIP_NODE_ADDRESS_MENU:-1}"
+
+    CONFIG_FILE=$(find_configs_yaml)
+    if [ -z "$CONFIG_FILE" ]; then
+        print_error "sync-compose-role: configs.yaml not found"
+        return 1
+    fi
+
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    compose_dir="$script_dir"
+    if [ -d "$script_dir/mosquitto/config" ]; then
+        compose_dir="$script_dir"
+    elif [ -f "$script_dir/../docker-compose.yml" ] || [ -f "$script_dir/../docker-compose.relay.yml" ]; then
+        compose_dir="$(cd "$script_dir/.." && pwd)"
+    else
+        compose_dir="$(cd "$(dirname "$CONFIG_FILE")" && pwd)"
+    fi
+    compose_file="$compose_dir/docker-compose.yml"
+
+    if _process_config_compose_file_is_relay "$compose_file"; then
+        prev_relay=1
+    fi
+
+    IS_RELAY_NODE=$(validate_node_ip "$CONFIG_FILE")
+    if [ "$IS_RELAY_NODE" = "true" ]; then
+        new_relay=1
+    fi
+
+    if [ "$prev_relay" -ne "$new_relay" ]; then
+        changed=1
+        needs_full_stack=1
+    fi
+
+    BROWSER_LOOPBACK_READ_HTTP_ENABLED=0
+    if command -v python3 &> /dev/null; then
+        local _blr_infer
+        _blr_infer=$(python3 -c "
+import sys
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    print(0); raise SystemExit
+p = sys.argv[1]
+y = YAML()
+with open(p) as f:
+    d = y.load(f) or {}
+b = d.get('BrowserLoopbackReadHTTP') if isinstance(d, dict) else None
+port = int(b.get('Port') or 0) if isinstance(b, dict) else 0
+print(1 if port > 0 else 0)
+" "$CONFIG_FILE" 2>/dev/null) || _blr_infer=0
+        if [ "$_blr_infer" = "1" ]; then
+            BROWSER_LOOPBACK_READ_HTTP_ENABLED=1
+        fi
+    fi
+
+    case "$skip_agent_llm" in
+        true|1) _agent_llm_compose_enable=0 ;;
+    esac
+
+    configure_docker_compose "$IS_RELAY_NODE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED" "$app_image_override" "$CONFIG_FILE" "$_agent_llm_compose_enable"
+
+    if [ "$IS_RELAY_NODE" = "true" ]; then
+        MOSQUITTO_CONF=$(find_mosquitto_conf)
+        if [ -n "$MOSQUITTO_CONF" ] && is_letsencrypt_configured "$MOSQUITTO_CONF"; then
+            print_info "sync-compose-role: Let's Encrypt configured — skipping self-signed MQTT cert generation."
+        elif confirm_overwrite_mqtt_certs; then
+            check_cert_dir
+            print_step "sync-compose-role: generating Mosquitto (MQTT TLS) broker certificates..."
+            generate_ca_key
+            generate_ca_cert
+            generate_server_key
+            generate_server_csr
+            sign_server_cert "$CONFIG_FILE"
+            set_permissions
+            _process_config_chown_repo_tree_if_sudo_root "$CERT_DIR"
+            needs_full_stack=1
+        fi
+    fi
+
+    if [ "$new_relay" -eq 1 ] && [ "$needs_full_stack" -eq 0 ]; then
+        if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qiE 'mosquitto'; then
+            needs_full_stack=1
+        fi
+    fi
+
+    if [ "$new_relay" -eq 1 ]; then
+        echo "compose_role_sync: role=relay changed=${changed} needs_full_stack=${needs_full_stack}"
+    else
+        echo "compose_role_sync: role=client changed=${changed} needs_full_stack=${needs_full_stack}"
+    fi
+
+    _process_config_finalize_repo_ownership_after_sudo
+    return 0
+}
+
 # Configure docker-compose.yml based on node type (relay or client).
 # Uses two fixed files: docker-compose.relay.yml and docker-compose.client.yml.
 # Copies the appropriate one to docker-compose.yml, then applies loopback port mapping (see apply_docker_compose_loopback_mapping).
@@ -5422,6 +5534,7 @@ show_process_config_help() {
     echo "  --no-systemd                    Skip optional mpc-auth Docker systemd installer prompts (after firewall; before Relayer check — see mpc-config/systemd/README.md)."
     echo "  --no-agent-llm-config-path      Do not set AgentLlmConfigDir in configs.yaml, agent_llm_config bind-mount, or MPC_AUTH_AGENT_LLM_CONFIG_FILE in docker-compose.yml."
     echo "  --install-mpc-auth-systemd      Non-interactive: sudo-run systemd/install-mpc-auth-docker-systemd.sh (requires sudo; may prompt restart)."
+    echo "  --sync-compose-role-only        Non-interactive: switch docker-compose.yml relay/client from configs.yaml (host systemd; may generate MQTT certs)."
     echo "  --help | -h | -help | help   Show this message (arguments above + relay/client behavior below)"
     echo ""
     echo "Environment (optional): FORCE_REGENERATE_MQTT_CERTS=1 / FORCE_REGENERATE_BROWSER_HTTPS_CERTS=1 same as the flags above."
@@ -6529,6 +6642,7 @@ main() {
     local SKIP_SYSTEMD=false
     local SKIP_AGENT_LLM_CONFIG_PATH=false
     local INSTALL_MPC_AUTH_SYSTEMD=false
+    local SYNC_COMPOSE_ROLE_ONLY=false
     local COMPOSE_APP_IMAGE_REF="${MPC_AUTH_COMPOSE_APP_IMAGE:-}"
 
     # Parse command line arguments
@@ -6578,6 +6692,10 @@ main() {
                 INSTALL_MPC_AUTH_SYSTEMD=true
                 shift
                 ;;
+            --sync-compose-role-only)
+                SYNC_COMPOSE_ROLE_ONLY=true
+                shift
+                ;;
             --help|-h|-help|help)
                 show_process_config_help
                 exit 0
@@ -6589,6 +6707,11 @@ main() {
                 ;;
         esac
     done
+
+    if [ "$SYNC_COMPOSE_ROLE_ONLY" = true ]; then
+        process_config_sync_compose_role_only "$SKIP_AGENT_LLM_CONFIG_PATH" "$COMPOSE_APP_IMAGE_REF"
+        exit $?
+    fi
     
     echo "=========================================="
     echo "MPC config: Mosquitto (MQTT) + Browser HTTPS (web) validation and certificates"

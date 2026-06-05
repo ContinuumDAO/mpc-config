@@ -113,6 +113,64 @@ mpc_auth_compose_workdir_resolve() {
 	printf '%s' "$(mpc_auth_trim "${MPC_AUTH_COMPOSE_WORKDIR:-${MPC_AUTH_COMPOSE_DIR:-}}")"
 }
 
+# Before restart/recreate: switch docker-compose.yml relay/client from configs.yaml (e.g. after app sets this node relay).
+mpc_auth_sync_compose_role_if_needed() {
+	local sync_script="${MPC_AUTH_SYNC_COMPOSE_ROLE_SCRIPT:-/usr/local/libexec/mpc-auth/mpc-auth-sync-compose-role.sh}"
+	local sync_line role changed needs_full
+	case "${MPC_AUTH_SKIP_COMPOSE_ROLE_SYNC:-0}" in
+	1 | true | TRUE | yes | YES) return 0 ;;
+	esac
+	if [[ ! -x "$sync_script" ]]; then
+		echo "mpc-auth-docker-update: compose role sync script missing ($(printf %q "$sync_script")) — skipping." >&2
+		return 0
+	fi
+	sync_line="$("$sync_script" 2>&1 | grep -E '^compose_role_sync:' | tail -n 1 || true)"
+	if [[ -z "$sync_line" ]]; then
+		return 0
+	fi
+	echo "mpc-auth-docker-update: ${sync_line}"
+	role="$(printf '%s' "$sync_line" | sed -n 's/.*role=\([^[:space:]]*\).*/\1/p')"
+	changed="$(printf '%s' "$sync_line" | sed -n 's/.*changed=\([01]\).*/\1/p')"
+	needs_full="$(printf '%s' "$sync_line" | sed -n 's/.*needs_full_stack=\([01]\).*/\1/p')"
+	export MPC_AUTH_COMPOSE_ROLE="${role:-unknown}"
+	export MPC_AUTH_COMPOSE_ROLE_CHANGED="${changed:-0}"
+	export MPC_AUTH_COMPOSE_NEEDS_FULL_STACK="${needs_full:-0}"
+}
+
+mpc_auth_run_full_compose_up() {
+	local workdir force orphan_args=()
+	mpc_auth_require_compose_workdir
+	workdir="$(mpc_auth_compose_workdir_resolve)"
+	force="$(mpc_auth_trim "${MPC_AUTH_PENDING_FORCE_RECREATE:-0}")"
+	# Relay→client demotion drops mosquitto from compose; remove the old broker container (and any other orphans).
+	if [[ "${MPC_AUTH_COMPOSE_ROLE_CHANGED:-0}" == "1" ]]; then
+		orphan_args+=(--remove-orphans)
+	fi
+	if docker compose version &>/dev/null 2>&1; then
+		if [[ "$force" == "1" ]]; then
+			echo "Running: cd $(printf %q "$workdir") && docker compose up -d --force-recreate ${orphan_args[*]:-}"
+			(cd "$workdir" && docker compose up -d --force-recreate "${orphan_args[@]}")
+		else
+			echo "Running: cd $(printf %q "$workdir") && docker compose up -d ${orphan_args[*]:-}"
+			(cd "$workdir" && docker compose up -d "${orphan_args[@]}")
+		fi
+		return 0
+	fi
+	if command -v docker-compose &>/dev/null 2>&1; then
+		echo "WARNING: using legacy docker-compose (v1) for full stack up." >&2
+		if [[ "$force" == "1" ]]; then
+			echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --force-recreate ${orphan_args[*]:-}"
+			(cd "$workdir" && docker-compose up -d --force-recreate "${orphan_args[@]}")
+		else
+			echo "Running: cd $(printf %q "$workdir") && docker-compose up -d ${orphan_args[*]:-}"
+			(cd "$workdir" && docker-compose up -d "${orphan_args[@]}")
+		fi
+		return 0
+	fi
+	echo "error: full stack compose up requires docker compose or docker-compose." >&2
+	return 1
+}
+
 mpc_auth_require_compose_workdir() {
 	local w
 	w="$(mpc_auth_compose_workdir_resolve)"
@@ -248,7 +306,13 @@ mpc_auth_run_restart_or_recreate() {
 if [[ "$RESTART_ONLY" == "1" ]]; then
 	echo "MPC_AUTH_PENDING_RESTART_ONLY=1 — mpc-config git pull (if configured), then restart/recreate without Docker image pull/rmi (tag=$TAG)."
 	mpc_auth_git_pull_compose_repo
-	mpc_auth_run_restart_or_recreate
+	mpc_auth_sync_compose_role_if_needed || true
+	if [[ "${MPC_AUTH_COMPOSE_NEEDS_FULL_STACK:-0}" == "1" ]]; then
+		echo "mpc-auth-docker-update: relay/client compose role requires full stack (mosquitto + app)."
+		mpc_auth_run_full_compose_up
+	else
+		mpc_auth_run_restart_or_recreate
+	fi
 	echo "Restart-only complete (tag $TAG)."
 	exit 0
 fi
@@ -259,6 +323,7 @@ if [[ -z "$(mpc_auth_trim "${MPC_AUTH_POST_UPDATE_CMD:-}")" ]]; then
 fi
 
 mpc_auth_git_pull_compose_repo
+mpc_auth_sync_compose_role_if_needed || true
 
 OLD_IMAGE=""
 if docker container inspect "$CONTAINER" &>/dev/null; then
@@ -472,6 +537,8 @@ if [[ -n "$explicit" ]]; then
 		echo "error: MPC_AUTH_POST_UPDATE_CMD exited with an error." >&2
 		exit 1
 	fi
+elif [[ "${MPC_AUTH_COMPOSE_NEEDS_FULL_STACK:-0}" == "1" ]] && mpc_auth_run_full_compose_up; then
+	:
 elif mpc_auth_run_default_compose_up; then
 	:
 else

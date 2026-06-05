@@ -47,6 +47,7 @@ install -m 0755 \
 	"$HERE/mpc-auth-apply-pending-update.sh" \
 	"$HERE/mpc-auth-apply-pending-reboot.sh" \
 	"$HERE/mpc-auth-apply-agent-llm-config.sh" \
+	"$HERE/mpc-auth-sync-compose-role.sh" \
 	"$LIBEXEC/"
 
 if [[ "$INSTALL_ENV" == true ]]; then
@@ -127,6 +128,7 @@ echo "  $UNIT_DIR/mpc-auth-agent-llm-config.{path,service} (agent LLM config sta
 echo "  $LIBEXEC/mpc-auth-apply-agent-llm-config.sh"
 echo "  $LIBEXEC/mpc-auth-apply-pending-update.sh"
 echo "  $LIBEXEC/mpc-auth-apply-pending-reboot.sh"
+echo "  $LIBEXEC/mpc-auth-sync-compose-role.sh (relay/client docker-compose.yml sync before restart)"
 echo
 echo "Run: sudo systemctl start mpc-auth-docker-restart.service"
 echo "(Optional automation) mpc-auth-docker-pending-update.path watches /var/lib/mpc-auth-docker/pending-update.json — bind-mount that dir in compose."

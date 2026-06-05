@@ -82,7 +82,7 @@ The same PublicMgtKey / bootstrap behavior applies when you run **`./process_con
   - **`node2_key`** → `http://<this-host>:<port>` (this machine’s address for the management API URLs).
 - Default HTTP port for those URLs is **8081** (matches `process_config.sh`’s `MPC_NODE_HTTP_PORT`). Override with **`--http-port`** or **`PROVISION_HTTP_PORT`**.
 
-With **`0.0.0.0`** first, `process_config.sh` treats the machine as a **client** path for MQTT relay steps until the real relay is the first entry; your app or operators can align full group `nodeAddresses` later.
+With **`0.0.0.0`** first, `process_config.sh` treats the machine as a **client** path for MQTT relay steps until the real relay is the first entry; your app or operators can align full group `nodeAddresses` later. After the DAO app writes the relay IP and you **Restart** the node (maintenance / peer IP flow), host **systemd** runs **`mpc-auth-sync-compose-role.sh`**: it switches **`docker-compose.yml`** to the relay template, generates MQTT certs if needed, and runs **`docker compose up -d`** so **mosquitto** starts (requires **`install-mpc-auth-docker-systemd.sh`** and a current **`git pull`** on the node).
 
 **Environment and flags**
 
