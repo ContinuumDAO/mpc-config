@@ -1130,7 +1130,7 @@ OpenSSL Error[0]: error:80000002:system library::No such file or directory
 - Verify broker is reachable: `mosquitto_pub -h <broker-ip> -p 8883 -t "test" -m "test"` (use `--cafile` for TLS).
 - For TLS: ensure `MQTTTLS.CAFile` in `configs.yaml` points to the correct CA certificate (`/mosquitto/config/certs/ca.crt` in the container; host path `./mosquitto/config/certs/ca.crt`).
 - Check firewall rules allow MQTT (1883 unencrypted, 8883 TLS).
-- **Relay promoted via the DAO app but MQTT still disconnected:** `mpc-auth` uses `mqttBroker: ssl://<relay-wan-ip>:8883`. From inside the **`app`** container that often fails without NAT hairpin. Re-run **`process_config.sh --sync-compose-role-only`** (or a full relay **`process_config.sh`**) so **`docker-compose.yml`** gets **`extra_hosts: <wan-ip>:host-gateway`** on **`app`**, confirm **`mosquitto/config/certs/{ca.crt,server.crt,server.key}`** exist, then **`docker compose up -d`**. Check **`GET /health`** → **`data.mqtt.errors`** and **`docker compose logs mosquitto`**.
+- **Relay promoted via the DAO app but MQTT still disconnected:** The DAO app sets **`mqttBroker: ssl://<relay-wan-ip>:8883`** (correct for **peer** nodes). On the **relay** host, **`mpc-auth` runs inside Docker** and cannot reliably dial its own WAN IP — mosquitto logs may show **PINGREQ from a remote peer** while local health still reports disconnected. Re-run **`process_config.sh --sync-compose-role-only`** (or full relay **`process_config.sh`**): on the relay it sets **`mqttBroker: ssl://mosquitto:8883`**, ensures **`server.crt`** has **DNS:mosquitto**, then **`docker compose up -d`**. Peers keep **`ssl://<relay-wan>:8883`**. Check **`GET /health`** → **`data.mqtt.errors`**.
 
 ### API authentication errors
 

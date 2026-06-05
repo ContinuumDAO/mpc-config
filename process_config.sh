@@ -3939,23 +3939,41 @@ configure_mqtt_broker() {
         return 0
     fi
     
-    # Construct broker address (TLS on port 8883)
-    local broker_addr="ssl://${first_node_host}:8883"
+    # Construct broker address (TLS on port 8883). Relay runs mosquitto in compose — mpc-auth must use the
+    # Docker service name (configs-original.yaml documents tls://mosquitto:8883). Peer nodes keep WAN IP.
+    local broker_addr
+    if [ "$is_relay_node" = "true" ]; then
+        broker_addr="ssl://mosquitto:8883"
+        print_step "Configuring mqttBroker for relay node (Docker internal broker)..."
+        print_info "Setting mqttBroker to: $broker_addr (peers use ssl://${first_node_host}:8883 on their nodes)"
+    else
+        broker_addr="ssl://${first_node_host}:8883"
+        print_step "Configuring mqttBroker in configs.yaml..."
+        print_info "Setting mqttBroker to: $broker_addr (derived from first node: $first_node_addr)"
+    fi
     
-    print_step "Configuring mqttBroker in configs.yaml..."
-    print_info "Setting mqttBroker to: $broker_addr (derived from first node: $first_node_addr)"
-    
-    # Check if mqttBroker is already set by the user
+    # Detect existing mqttBroker before relay/client branches (relay always overwrites WAN IP from DAO app).
     local existing_broker=""
     local mqtt_broker_exists=false
     if grep -qE '^\s*mqttBroker\s*:' "$config_file"; then
         mqtt_broker_exists=true
-        # Extract existing value via awk (no sed - avoids any chance of URL like ssl:// breaking sed)
         existing_broker=$(awk '
             /^[[:space:]]*mqttBroker[[:space:]]*:/ {
                 sub(/#.*$/, ""); sub(/^[[:space:]]*mqttBroker[[:space:]]*:[[:space:]]*/, ""); gsub(/^["'\'']?|["'\'']?[[:space:]]*$/, ""); gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print; exit
             }
         ' "$config_file" | xargs)
+    fi
+
+    if [ "$is_relay_node" = "true" ]; then
+        if [ -n "$existing_broker" ] && [ "$existing_broker" = "$broker_addr" ]; then
+            print_info "mqttBroker already set correctly for relay: $broker_addr"
+            return 0
+        fi
+        if [ -n "$existing_broker" ] && [ "$existing_broker" != "$broker_addr" ]; then
+            print_info "Relay: replacing mqttBroker $existing_broker → $broker_addr (DAO WAN IP is not reachable from inside the app container)"
+        fi
+    else
+    # Client nodes: preserve user-specified mqttBroker when format is valid
         if [ -n "$existing_broker" ]; then
             # Validate the broker address format
             local protocol_valid=false
@@ -4027,11 +4045,15 @@ try:
         data['MPCGroups'] = []
     
     updated = False
-    # Update all groups (only if not already set or if set to empty)
+    force_relay = "$is_relay_node" == "true"
     for group in data.get('MPCGroups', []):
         mqtt_broker = group.get('mqttBroker')
-        # Update if not set, empty string, or None
-        if mqtt_broker is None or mqtt_broker == '' or str(mqtt_broker).strip() == '':
+        current = "" if mqtt_broker is None else str(mqtt_broker).strip()
+        if force_relay:
+            if current != "$broker_addr":
+                group['mqttBroker'] = "$broker_addr"
+                updated = True
+        elif mqtt_broker is None or mqtt_broker == '' or current == '':
             group['mqttBroker'] = "$broker_addr"
             updated = True
     
@@ -4053,12 +4075,10 @@ EOF
                 print_success "Added/updated mqttBroker: $broker_addr (comments preserved)"
                 ruamel_success=true
             elif echo "$py_output" | grep -q "NO_UPDATE_NEEDED"; then
-                # Check if it's because mqttBroker already has a value
-                if [ "$mqtt_broker_exists" = true ] && [ -n "$existing_broker" ]; then
-                    # Already handled above, just return
+                if [ "$is_relay_node" != "true" ] && [ "$mqtt_broker_exists" = true ] && [ -n "$existing_broker" ]; then
                     return 0
                 else
-                    print_warning "ruamel.yaml found no groups to update, trying sed fallback..."
+                    print_warning "ruamel.yaml found no groups to update, trying sed/awk fallback..."
                 fi
             fi
         else
@@ -4116,8 +4136,8 @@ EOF
             rm -f "${config_file}.tmp"
             return 1
         fi
-        elif [ "$mqtt_broker_exists" = true ] && [ -z "$existing_broker" ]; then
-            # mqttBroker exists but is empty - update line via awk (no sed so ssl:// in URL cannot break anything)
+        elif [ "$mqtt_broker_exists" = true ] && { [ -z "$existing_broker" ] || [ "$is_relay_node" = "true" ]; }; then
+            # Empty mqttBroker, or relay forcing WAN → mosquitto — update line via awk (no sed so ssl:// in URL cannot break anything)
             local mqtt_line=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1)
             local comment_part=$(echo "$mqtt_line" | awk 'match($0, /#.*$/) { print substr($0, RSTART, RLENGTH) }')
             if awk -v broker="$broker_addr" -v comment="${comment_part:-}" '
@@ -4131,7 +4151,7 @@ EOF
                 { print }
             ' "$config_file" > "${config_file}.tmp" 2>/dev/null && mv "${config_file}.tmp" "$config_file"; then
                 rm -f "${config_file}.tmp"
-                print_success "Updated empty mqttBroker to: $broker_addr"
+                print_success "Updated mqttBroker to: $broker_addr"
             else
                 rm -f "${config_file}.tmp"
                 print_warning "Failed to update mqttBroker - please update manually in configs.yaml"
@@ -4151,6 +4171,12 @@ _process_config_compose_file_is_relay() {
 # True when relay MQTT TLS files needed by mosquitto and mpc-auth are all present.
 _relay_mqtt_tls_certs_complete() {
     [ -f "$CA_CRT" ] && [ -f "$SERVER_CRT" ] && [ -f "$SERVER_KEY" ]
+}
+
+# True when server.crt includes DNS SAN mosquitto (required for ssl://mosquitto:8883 from the app container).
+_relay_mqtt_server_cert_has_mosquitto_san() {
+    [ -f "$SERVER_CRT" ] && command -v openssl >/dev/null 2>&1 && \
+        openssl x509 -in "$SERVER_CRT" -noout -text 2>/dev/null | grep -qE 'DNS:mosquitto([^a-zA-Z0-9_-]|$)'
 }
 
 # Relay app uses mqttBroker ssl://<WAN-ip>:8883; from inside Docker that often fails without NAT hairpin.
@@ -4309,8 +4335,14 @@ print(1 if port > 0 else 0)
     configure_docker_compose "$IS_RELAY_NODE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED" "$app_image_override" "$CONFIG_FILE" "$_agent_llm_compose_enable"
 
     if [ "$IS_RELAY_NODE" = "true" ]; then
+        configure_mqtt_broker "$CONFIG_FILE" "true"
+        needs_full_stack=1
+    fi
+
+    if [ "$IS_RELAY_NODE" = "true" ]; then
         MOSQUITTO_CONF=$(find_mosquitto_conf)
         local _gen_mqtt_certs=false
+        local _regen_server_san_only=false
         if [ -n "$MOSQUITTO_CONF" ] && is_letsencrypt_configured "$MOSQUITTO_CONF"; then
             print_info "sync-compose-role: Let's Encrypt configured — skipping self-signed MQTT cert generation."
         elif ! _relay_mqtt_tls_certs_complete; then
@@ -4318,12 +4350,24 @@ print(1 if port > 0 else 0)
             _gen_mqtt_certs=true
         elif confirm_overwrite_mqtt_certs; then
             _gen_mqtt_certs=true
+        elif _relay_mqtt_tls_certs_complete && ! _relay_mqtt_server_cert_has_mosquitto_san; then
+            print_info "sync-compose-role: server.crt missing DNS SAN mosquitto — regenerating server cert for ssl://mosquitto:8883."
+            _regen_server_san_only=true
         fi
         if [ "$_gen_mqtt_certs" = true ]; then
             check_cert_dir
             print_step "sync-compose-role: generating Mosquitto (MQTT TLS) broker certificates..."
             generate_ca_key
             generate_ca_cert
+            generate_server_key
+            generate_server_csr
+            sign_server_cert "$CONFIG_FILE"
+            set_permissions
+            _process_config_chown_repo_tree_if_sudo_root "$CERT_DIR"
+            needs_full_stack=1
+        elif [ "$_regen_server_san_only" = true ]; then
+            check_cert_dir
+            print_step "sync-compose-role: re-issuing Mosquitto server certificate (add DNS mosquitto SAN)..."
             generate_server_key
             generate_server_csr
             sign_server_cert "$CONFIG_FILE"
