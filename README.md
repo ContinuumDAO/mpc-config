@@ -25,16 +25,18 @@ The install script and repo clone both track **`main`** on GitHub. You do **not*
 curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" \
   | bash -s -- \
       --node-mgt-key "0xYour40HexCharacters..." \
-      --ip "YOUR_VPS_PUBLIC_IP" \
-      --install-systemd
+      --ip "YOUR_VPS_PUBLIC_IP"
 
 # B) Run FROM your PC (Windows/macOS/Linux terminal; prompts for VPS root password):
 curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" \
   | ssh -o StrictHostKeyChecking=accept-new root@YOUR_VPS_PUBLIC_IP bash -s -- \
       --node-mgt-key "0xYour40HexCharacters..." \
-      --ip "YOUR_VPS_PUBLIC_IP" \
-      --install-systemd
+      --ip "YOUR_VPS_PUBLIC_IP"
 ```
+
+Systemd units are installed by default. Pass **`--no-systemd`** only if you do not want host systemd helpers.
+
+**Preflight:** the installer exits immediately if **`/home/mpcnode/mpc-config/configs.yaml`** already exists or MPC Docker containers (mpc-auth, mongo, etc.) are running. Use MPA **Maintenance** to update an existing node.
 
 Optional **`--public-mgt-key`** (64 hex or `ssh-ed25519 …` line) for restore/migrate; omit it for a new node (Ed25519 bootstrap is auto-generated). Ed25519-only: pass **`--public-mgt-key`** without **`--node-mgt-key`**.
 

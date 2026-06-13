@@ -28,7 +28,7 @@ assert(onVps.includes('--node-mgt-key'));
 assert(onVps.includes(sample));
 assert(onVps.includes('--ip'));
 assert(onVps.includes(ip));
-assert(onVps.includes('--install-systemd'));
+assert(!onVps.includes('--install-systemd'));
 assert(onVps.includes('| bash -s --'));
 
 const viaSsh = buildProvisionCommand({

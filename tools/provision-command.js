@@ -90,8 +90,10 @@ function buildProvisionCommand(opts) {
     args.push('--public-mgt-key', String(o.publicMgtKey).trim());
   }
   args.push('--ip', vpsIp);
-  if (o.installSystemd !== false) {
-    args.push('--install-systemd');
+  // systemd is enabled by default in install-node-debian-ubuntu.sh — do not emit --install-systemd
+  // (avoids failures with older cached copies of the install script on raw.githubusercontent.com).
+  if (o.installSystemd === false) {
+    args.push('--no-systemd');
   }
   if (o.noLoopback) {
     args.push('--no-loopback');

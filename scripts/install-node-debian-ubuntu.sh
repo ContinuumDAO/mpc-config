@@ -13,7 +13,7 @@
 #
 set -euo pipefail
 
-INSTALL_SCRIPT_VERSION="1.0.0"
+INSTALL_SCRIPT_VERSION="1.0.2"
 
 MPC_CONFIG_REPO="${MPC_CONFIG_REPO:-https://github.com/ContinuumDAO/mpc-config.git}"
 MPC_CONFIG_REF="${MPC_CONFIG_REF:-main}"
@@ -26,6 +26,7 @@ SKIP_USER=false
 SKIP_CLONE=false
 DRY_RUN=false
 NO_START=false
+FORCE_FRESH_INSTALL=false
 PROVISION_NODE_IP=""
 
 # Collected provision-node.sh arguments (built while parsing).
@@ -63,6 +64,7 @@ Install options:
       --skip-user               Skip mpcnode user creation
       --no-start                Provision only; skip docker compose up -d
       --dry-run                 Print actions without executing
+      --force-fresh-install     Continue if MPC Docker containers are running (configs.yaml must still be absent)
   -h, --help                    Show this help
 
 Environment:
@@ -118,6 +120,59 @@ run_or_dry() {
     else
         "$@"
     fi
+}
+
+# Refuse to clobber an existing node (run before apt/packages).
+preflight_check_fresh_install() {
+    local cfg="${REPO_DIR}/configs.yaml"
+
+    if [ -f "$cfg" ]; then
+        printf 'error: %s already exists — this installer is for a new node only.\n' "$cfg" >&2
+        printf 'Remove or back up that file (and stop containers) before reprovisioning, or use MPA Maintenance to update.\n' >&2
+        exit 1
+    fi
+
+    local docker_block=0
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+        local project line name image
+        project="$(basename "$REPO_DIR")"
+        if docker ps --filter "label=com.docker.compose.project=${project}" -q 2>/dev/null | grep -q .; then
+            docker_block=1
+            printf 'error: Docker Compose project %q has running containers:\n' "$project" >&2
+            docker ps --filter "label=com.docker.compose.project=${project}" \
+                --format '  {{.Names}}  ({{.Image}})  {{.Status}}' >&2 || true
+        else
+            while IFS= read -r line; do
+                [ -z "$line" ] && continue
+                name="${line%%$'\t'*}"
+                image="${line#*$'\t'}"
+                case "$image" in
+                    continuumdao/mpc-auth*|mongo:6*|continuumdao/continuumdao-node-app*|continuumdao/continuum-mcp-server*|eclipse-mosquitto:2*)
+                        if [ "$docker_block" -eq 0 ]; then
+                            printf 'error: MPC node Docker containers are already running:\n' >&2
+                        fi
+                        docker_block=1
+                        printf '  %s  (%s)\n' "$name" "$image" >&2
+                        ;;
+                esac
+            done < <(docker ps --format '{{.Names}}	{{.Image}}' 2>/dev/null || true)
+        fi
+    fi
+
+    if [ "$docker_block" -ne 0 ]; then
+        printf '\n' >&2
+        printf 'Stop the existing stack first (e.g. cd %s && docker compose down).\n' "$REPO_DIR" >&2
+        printf 'To update a running node use https://mpa.continuumdao.org (Maintenance).\n' >&2
+        printf 'Override (containers only): --force-fresh-install\n' >&2
+        if [ "$FORCE_FRESH_INSTALL" = true ]; then
+            warn "--force-fresh-install set — continuing despite running containers"
+            log "Preflight OK: configs.yaml absent; running containers ignored by --force-fresh-install"
+            return 0
+        fi
+        exit 1
+    fi
+
+    log "Preflight OK: no existing configs.yaml or MPC Docker stack detected at ${REPO_DIR}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -181,6 +236,10 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=true
             shift
             ;;
+        --force-fresh-install)
+            FORCE_FRESH_INSTALL=true
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -203,6 +262,8 @@ require_debian_ubuntu
 
 log "ContinuumDAO MPC node one-shot install (installer v${INSTALL_SCRIPT_VERSION})"
 log "Target repo: ${REPO_DIR} (ref: ${MPC_CONFIG_REF})"
+
+preflight_check_fresh_install
 
 if [ "$SKIP_PACKAGES" = false ]; then
     log "Installing system packages"
