@@ -13,7 +13,7 @@
 #
 set -euo pipefail
 
-INSTALL_SCRIPT_VERSION="1.0.2"
+INSTALL_SCRIPT_VERSION="1.0.3"
 
 MPC_CONFIG_REPO="${MPC_CONFIG_REPO:-https://github.com/ContinuumDAO/mpc-config.git}"
 MPC_CONFIG_REF="${MPC_CONFIG_REF:-main}"
@@ -69,6 +69,7 @@ Install options:
 
 Environment:
   MPC_CONFIG_REF, MPC_CONFIG_REPO, MPC_USER, MPC_REPO_DIR, RELAYER_API_URL
+  APT_LOCK_WAIT_SECS          Seconds to wait for apt/dpkg lock (default 300)
 
 Examples:
   bash -s -- --node-mgt-key "0xabc..." --ip "203.0.113.50"
@@ -120,6 +121,54 @@ run_or_dry() {
     else
         "$@"
     fi
+}
+
+# Wait until apt/dpkg locks are free (unattended-upgrades, cloud-init, manual apt, etc.).
+wait_for_apt_lock() {
+    if [ "$DRY_RUN" = true ]; then
+        printf '[dry-run] wait for apt/dpkg lock\n'
+        return 0
+    fi
+
+    local max_wait="${APT_LOCK_WAIT_SECS:-300}"
+    local interval=5
+    local waited=0
+    local lock_paths=(
+        /var/lib/dpkg/lock-frontend
+        /var/lib/dpkg/lock
+        /var/lib/apt/lists/lock
+    )
+
+    _apt_lock_held() {
+        command -v fuser >/dev/null 2>&1 || return 1
+        local p
+        for p in "${lock_paths[@]}"; do
+            if [ -e "$p" ] && fuser "$p" >/dev/null 2>&1; then
+                return 0
+            fi
+        done
+        return 1
+    }
+
+    if ! _apt_lock_held; then
+        return 0
+    fi
+
+    log "Waiting for apt/dpkg lock (another package manager may be running, e.g. unattended-upgrades)…"
+    while _apt_lock_held; do
+        if [ "$waited" -ge "$max_wait" ]; then
+            printf 'error: apt/dpkg lock still held after %ss.\n' "$max_wait" >&2
+            printf 'Check: fuser -v /var/lib/dpkg/lock-frontend\n' >&2
+            printf 'Wait for automatic updates to finish, then re-run this installer.\n' >&2
+            exit 1
+        fi
+        sleep "$interval"
+        waited=$((waited + interval))
+        if [ $((waited % 30)) -eq 0 ]; then
+            log "Still waiting for apt lock (${waited}s / ${max_wait}s)…"
+        fi
+    done
+    log "apt/dpkg lock released — continuing"
 }
 
 # Refuse to clobber an existing node (run before apt/packages).
@@ -267,8 +316,10 @@ preflight_check_fresh_install
 
 if [ "$SKIP_PACKAGES" = false ]; then
     log "Installing system packages"
-    run_or_dry apt-get update -qq
-    run_or_dry apt-get install -y \
+    wait_for_apt_lock
+    run_or_dry apt-get -o "DPkg::Lock::Timeout=${APT_LOCK_WAIT_SECS:-300}" update -qq
+    wait_for_apt_lock
+    run_or_dry apt-get -o "DPkg::Lock::Timeout=${APT_LOCK_WAIT_SECS:-300}" install -y \
         ca-certificates \
         curl \
         wget \
