@@ -7171,10 +7171,10 @@ main() {
         
         print_step "Validating CA certificate configuration..."
         
-        # Validate CAFile configuration
-        local validation_result
-        validation_result=$(validate_client_cafile "$CONFIG_FILE" "$expected_ca_path" 2>&1)
-        local exit_code=$?
+        # validate_client_cafile uses return 1–4 for status, not hard failures (avoid set -e on $()).
+        local validation_result=""
+        local exit_code=0
+        validation_result=$(validate_client_cafile "$CONFIG_FILE" "$expected_ca_path" 2>&1) || exit_code=$?
         
         case $exit_code in
             0)
