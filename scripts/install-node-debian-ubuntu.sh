@@ -13,7 +13,7 @@
 #
 set -euo pipefail
 
-INSTALL_SCRIPT_VERSION="1.0.3"
+INSTALL_SCRIPT_VERSION="1.0.4"
 
 MPC_CONFIG_REPO="${MPC_CONFIG_REPO:-https://github.com/ContinuumDAO/mpc-config.git}"
 MPC_CONFIG_REF="${MPC_CONFIG_REF:-main}"
@@ -70,6 +70,7 @@ Install options:
 Environment:
   MPC_CONFIG_REF, MPC_CONFIG_REPO, MPC_USER, MPC_REPO_DIR, RELAYER_API_URL
   APT_LOCK_WAIT_SECS          Seconds to wait for apt/dpkg lock (default 300)
+  APT_LOCK_NO_FORCE_CLEAR=1   Do not kill stuck apt or remove locks after timeout; exit instead
 
 Examples:
   bash -s -- --node-mgt-key "0xabc..." --ip "203.0.113.50"
@@ -123,7 +124,7 @@ run_or_dry() {
     fi
 }
 
-# Wait until apt/dpkg locks are free (unattended-upgrades, cloud-init, manual apt, etc.).
+# Wait until apt/dpkg locks are free; after timeout, recover stale locks (see recover_stuck_apt_lock).
 wait_for_apt_lock() {
     if [ "$DRY_RUN" = true ]; then
         printf '[dry-run] wait for apt/dpkg lock\n'
@@ -137,13 +138,17 @@ wait_for_apt_lock() {
         /var/lib/dpkg/lock-frontend
         /var/lib/dpkg/lock
         /var/lib/apt/lists/lock
+        /var/cache/apt/archives/lock
     )
 
     _apt_lock_held() {
-        command -v fuser >/dev/null 2>&1 || return 1
         local p
         for p in "${lock_paths[@]}"; do
-            if [ -e "$p" ] && fuser "$p" >/dev/null 2>&1; then
+            [ -e "$p" ] || continue
+            if command -v fuser >/dev/null 2>&1; then
+                fuser "$p" >/dev/null 2>&1 && return 0
+            else
+                # Without fuser, treat existing lock files as held.
                 return 0
             fi
         done
@@ -157,10 +162,16 @@ wait_for_apt_lock() {
     log "Waiting for apt/dpkg lock (another package manager may be running, e.g. unattended-upgrades)…"
     while _apt_lock_held; do
         if [ "$waited" -ge "$max_wait" ]; then
-            printf 'error: apt/dpkg lock still held after %ss.\n' "$max_wait" >&2
-            printf 'Check: fuser -v /var/lib/dpkg/lock-frontend\n' >&2
-            printf 'Wait for automatic updates to finish, then re-run this installer.\n' >&2
-            exit 1
+            if [ "${APT_LOCK_NO_FORCE_CLEAR:-0}" = "1" ]; then
+                printf 'error: apt/dpkg lock still held after %ss (APT_LOCK_NO_FORCE_CLEAR=1).\n' "$max_wait" >&2
+                printf 'Check: fuser -v /var/lib/dpkg/lock-frontend\n' >&2
+                exit 1
+            fi
+            recover_stuck_apt_lock "$max_wait"
+            if _apt_lock_held; then
+                die "apt/dpkg lock still held after lock recovery — fix manually: fuser -v /var/lib/dpkg/lock-frontend"
+            fi
+            return 0
         fi
         sleep "$interval"
         waited=$((waited + interval))
@@ -169,6 +180,48 @@ wait_for_apt_lock() {
         fi
     done
     log "apt/dpkg lock released — continuing"
+}
+
+# After APT_LOCK_WAIT_SECS, stop stuck apt/daily services, clear lock files, reconfigure dpkg.
+recover_stuck_apt_lock() {
+    local max_wait="${1:-300}"
+    warn "apt/dpkg lock still held after ${max_wait}s — clearing stale locks"
+
+    if command -v fuser >/dev/null 2>&1; then
+        fuser -v /var/lib/dpkg/lock-frontend 2>&1 | sed 's/^/  /' >&2 || true
+    fi
+
+    local svc
+    for svc in apt-daily.service apt-daily-upgrade.service unattended-upgrades.service; do
+        if systemctl is-active --quiet "$svc" 2>/dev/null; then
+            warn "Stopping ${svc}…"
+            systemctl stop "$svc" 2>/dev/null || true
+        fi
+    done
+
+    local pid comm
+    for pid in $(pgrep -x apt-get 2>/dev/null || true) $(pgrep -x apt 2>/dev/null || true) $(pgrep -x dpkg 2>/dev/null || true); do
+        [ -n "$pid" ] || continue
+        comm="$(ps -p "$pid" -o comm= 2>/dev/null || echo '?')"
+        warn "Stopping stuck package manager pid ${pid} (${comm})"
+        kill -TERM "$pid" 2>/dev/null || true
+    done
+    sleep 2
+    for pid in $(pgrep -x apt-get 2>/dev/null || true) $(pgrep -x apt 2>/dev/null || true) $(pgrep -x dpkg 2>/dev/null || true); do
+        [ -n "$pid" ] || continue
+        kill -KILL "$pid" 2>/dev/null || true
+    done
+
+    rm -f /var/lib/apt/lists/lock
+    rm -f /var/cache/apt/archives/lock
+    rm -f /var/lib/dpkg/lock-frontend
+    rm -f /var/lib/dpkg/lock
+
+    log "Running dpkg --configure -a after lock recovery"
+    if ! dpkg --configure -a; then
+        die "dpkg --configure -a failed after lock recovery — repair dpkg on the host and re-run"
+    fi
+    log "Stale apt/dpkg locks cleared"
 }
 
 # Refuse to clobber an existing node (run before apt/packages).
