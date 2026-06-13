@@ -5,15 +5,15 @@
 #   curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" \
 #     | bash -s -- --node-mgt-key "0xYour40Hex..." --ip "203.0.113.50"
 #
-# Or pipe from your PC over SSH:
-#   curl -fsSL "…/install-node-debian-ubuntu.sh" \
-#     | ssh root@203.0.113.50 bash -s -- --node-mgt-key "0x..." --ip "203.0.113.50"
+# Or from your PC (curl runs ON the VPS — do not use curl | ssh bash -s):
+#   ssh root@203.0.113.50 'curl -fsSL "…/install-node-debian-ubuntu.sh" | bash -s -- --node-mgt-key "0x..." --ip "203.0.113.50"'
 #
 # Tracks main on GitHub. After install, update mpc-config from the MPA Maintenance tab (git pull + updateMpcAuth).
 #
 set -euo pipefail
 
-INSTALL_SCRIPT_VERSION="1.0.4"
+INSTALL_SCRIPT_VERSION="1.0.5"
+INSTALL_LOG="${INSTALL_LOG:-/var/log/continuumdao-mpc-install.log}"
 
 MPC_CONFIG_REPO="${MPC_CONFIG_REPO:-https://github.com/ContinuumDAO/mpc-config.git}"
 MPC_CONFIG_REF="${MPC_CONFIG_REF:-main}"
@@ -79,16 +79,31 @@ EOF
 }
 
 log() {
-    printf '==> %s\n' "$*"
+    printf '==> %s\n' "$*" >&2
+    if [ "$DRY_RUN" = false ]; then
+        printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$INSTALL_LOG" 2>/dev/null || true
+    fi
 }
 
 warn() {
     printf 'warning: %s\n' "$*" >&2
+    if [ "$DRY_RUN" = false ]; then
+        printf '[%s] warning: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$INSTALL_LOG" 2>/dev/null || true
+    fi
 }
 
 die() {
     printf 'error: %s\n' "$*" >&2
+    if [ "$DRY_RUN" = false ]; then
+        printf '[%s] error: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >>"$INSTALL_LOG" 2>/dev/null || true
+    fi
     exit 1
+}
+
+on_err() {
+    local ec=$?
+    printf 'error: install failed at line %s (exit %s). See %s on the server.\n' "${BASH_LINENO[0]:-?}" "$ec" "$INSTALL_LOG" >&2
+    exit "$ec"
 }
 
 require_root() {
@@ -222,6 +237,24 @@ recover_stuck_apt_lock() {
         die "dpkg --configure -a failed after lock recovery — repair dpkg on the host and re-run"
     fi
     log "Stale apt/dpkg locks cleared"
+}
+
+# Skip apt when a prior run already installed dependencies but exited before mpcnode/clone.
+packages_already_installed() {
+    command -v docker >/dev/null 2>&1 \
+        && command -v git >/dev/null 2>&1 \
+        && command -v python3 >/dev/null 2>&1 \
+        && python3 -c "import ruamel.yaml, cryptography" 2>/dev/null
+}
+
+maybe_auto_skip_packages() {
+    if [ "$SKIP_PACKAGES" = true ]; then
+        return 0
+    fi
+    if packages_already_installed; then
+        warn "Required packages already installed — skipping apt (resume after interrupted install)"
+        SKIP_PACKAGES=true
+    fi
 }
 
 # Refuse to clobber an existing node (run before apt/packages).
@@ -361,11 +394,19 @@ fi
 
 require_root
 require_debian_ubuntu
+trap on_err ERR
+
+if [ "$DRY_RUN" = false ]; then
+    install -d -m 0755 "$(dirname "$INSTALL_LOG")" 2>/dev/null || true
+    printf '[%s] install start v%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$INSTALL_SCRIPT_VERSION" >>"$INSTALL_LOG" 2>/dev/null || true
+fi
 
 log "ContinuumDAO MPC node one-shot install (installer v${INSTALL_SCRIPT_VERSION})"
+log "Install log: ${INSTALL_LOG}"
 log "Target repo: ${REPO_DIR} (ref: ${MPC_CONFIG_REF})"
 
 preflight_check_fresh_install
+maybe_auto_skip_packages
 
 if [ "$SKIP_PACKAGES" = false ]; then
     log "Installing system packages"
@@ -393,6 +434,7 @@ if [ "$SKIP_PACKAGES" = false ]; then
     else
         printf '[dry-run] systemctl enable --now docker\n'
     fi
+    log "Packages phase complete"
 fi
 
 if [ "$SKIP_USER" = false ]; then

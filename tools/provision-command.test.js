@@ -37,7 +37,9 @@ const viaSsh = buildProvisionCommand({
   delivery: 'via-ssh',
 });
 
-assert(viaSsh.includes(`ssh -o StrictHostKeyChecking=accept-new root@${ip}`));
+assert(viaSsh.startsWith('ssh '));
+assert(viaSsh.includes('curl -fsSL'));
+assert(viaSsh.includes('| bash -s --'));
 
 const both = buildProvisionCommands({ nodeMgtKey: sample, vpsIp: ip });
 assert.strictEqual(typeof both.onVps, 'string');

@@ -27,11 +27,9 @@ curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scrip
       --node-mgt-key "0xYour40HexCharacters..." \
       --ip "YOUR_VPS_PUBLIC_IP"
 
-# B) Run FROM your PC (Windows/macOS/Linux terminal; prompts for VPS root password):
-curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" \
-  | ssh -o StrictHostKeyChecking=accept-new root@YOUR_VPS_PUBLIC_IP bash -s -- \
-      --node-mgt-key "0xYour40HexCharacters..." \
-      --ip "YOUR_VPS_PUBLIC_IP"
+# B) Run FROM your PC (curl runs on the VPS — recommended; avoids curl | ssh bash -s):
+ssh -o StrictHostKeyChecking=accept-new root@YOUR_VPS_PUBLIC_IP \
+  'curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" | bash -s -- --node-mgt-key "0xYour40HexCharacters..." --ip "YOUR_VPS_PUBLIC_IP"'
 ```
 
 Systemd units are installed by default. Pass **`--no-systemd`** only if you do not want host systemd helpers.

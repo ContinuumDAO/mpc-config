@@ -111,17 +111,14 @@ function buildProvisionCommand(opts) {
   const scriptUrl =
     `https://raw.githubusercontent.com/${repo}/${ref}/${DEFAULT_SCRIPT}`;
   const argStr = args.map(shellQuote).join(' \\\n      ');
-
-  const curlPipe = `curl -fsSL ${shellQuote(scriptUrl)} \\\n  | bash -s -- \\\n      ${argStr}`;
+  const flatArgStr = args.map(shellQuote).join(' ');
 
   if (delivery === 'on-vps') {
-    return curlPipe;
+    return `curl -fsSL ${shellQuote(scriptUrl)} \\\n  | bash -s -- \\\n      ${argStr}`;
   }
   if (delivery === 'via-ssh') {
-    return curlPipe.replace(
-      '| bash -s --',
-      `| ssh -o StrictHostKeyChecking=accept-new root@${vpsIp} bash -s --`,
-    );
+    const remoteCmd = `curl -fsSL ${shellQuote(scriptUrl)} | bash -s -- ${flatArgStr}`;
+    return `ssh -o StrictHostKeyChecking=accept-new root@${vpsIp} ${shellQuote(remoteCmd)}`;
   }
   throw new Error('delivery must be "on-vps" or "via-ssh"');
 }
