@@ -52,6 +52,7 @@ Provision options (at least one management key required):
       --no-agent-llm-config-path
 
 Install options:
+      --install-systemd           Enable systemd units (default; accepted for compatibility with generated commands)
       --no-systemd              Do not pass --install-systemd to provision-node.sh
       --mpc-user USER           OS user (default: mpcnode)
       --repo-dir PATH           Clone path (default: /home/mpcnode/mpc-config)
@@ -133,6 +134,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --force-browser-certs|--no-loopback|--no-firewall|--no-agent-llm-config-path)
             PROVISION_ARGS+=("$1")
+            shift
+            ;;
+        --install-systemd)
+            INSTALL_SYSTEMD=true
             shift
             ;;
         --no-systemd)
