@@ -28,6 +28,10 @@ usage() {
 Usage:
   sudo [env vars...] ./scripts/provision-node.sh [options] [--node-mgt-key ADDR] [--public-mgt-key KEY]
 
+  For a full VPS one-shot (packages, mpcnode user, clone, provision, docker compose up -d), see:
+    ./scripts/install-node-debian-ubuntu.sh --help
+    tools/provision-command.js (MPA frontend command builder)
+
   Provide at least one of:
     --node-mgt-key, -k ADDR   Ethereum management address (0x + 40 hex or 40 hex). Not the template placeholder.
     --public-mgt-key KEY      Ed25519 public: 64 hex (optional 0x), or full ssh-ed25519 line (quote if it contains spaces).
