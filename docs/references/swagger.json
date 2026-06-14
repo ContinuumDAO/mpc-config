@@ -1830,6 +1830,29 @@
                 }
             }
         },
+        "/getFeeStatusByKeyGenId": {
+            "get": {
+                "description": "Get MPA wallet fee status by keyGen request id (remaining nonces, deposit wei, required minimum top-up, daily accrual) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getFeeStatusByKeyGenId).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Key Generation"
+                ],
+                "summary": "Get MPA wallet fee status by keyGen request id (remaining nonces, deposit wei, required minimum top-up, daily accrual)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/getKeyGenGroupId": {
             "get": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getKeyGenGroupId).",

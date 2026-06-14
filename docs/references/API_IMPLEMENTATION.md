@@ -283,6 +283,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /getEd25519PrivateKey`](#post-geted25519privatekey) - After eject: read exported **Ed25519 seed** and chain wallet import formats (**ed25519** only)
 - [`POST /getTaprootPrivateKey`](#post-gettaprootprivatekey) - After eject: read exported **Taproot internal key scalar** and P2TR metadata (**bitcoin-taproot** only)
 - [`GET /getGlobalNonceByKeyGenId`](#get-getglobalnoncebykeygenid) - Get globalNonce by keyGen result id
+- [`GET /getFeeStatusByKeyGenId`](#get-getfeestatusbykeygenid) - Get MPA wallet fee status (remaining nonces, deposit wei, minimum top-up)
 - [`GET /getKeyGenGroupId`](#get-getkeygengroupid) - Get key generation result and GroupId by keyGen ID
 - [`GET /getAllGroupIds`](#get-getallgroupids) - Get all GroupIds with their keyGens
 - [`GET /listGroupResults`](#get-listgroupresults) - List configured groups and member node keys (`nodeKeys`); optional filters `node_key`, `exclude_node_key`
@@ -4178,6 +4179,42 @@ For keyGen results that are not secp256k1 (e.g. ed25519, bitcoin-taproot), the e
 **Example:**
 ```bash
 curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getGlobalNonceByKeyGenId?id=KeyGen20260111003720999cf104d0f"
+```
+
+<a id="get-getfeestatusbykeygenid"></a>
+#### `GET /getFeeStatusByKeyGenId`
+Returns MPA wallet **fee status** for a secp256k1 keyGen: remaining signature credits, deposit balance, daily fee accrual, and required minimum top-up. Monetary fields are **decimal wei strings** (integer token smallest units — no floating point).
+
+**Query Parameters:**
+- `id` (required): KeyGen result id (requestId)
+
+**Response (secp256k1, registered):**
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": {
+    "globalnonce": 5,
+    "remainingnonces": 15,
+    "freetransactionsleft": 2,
+    "remainingdepositwei": "5000000",
+    "requireminimumtopupwei": "31000000",
+    "accrueddailywei": "26000000",
+    "currentfeeperdaywei": "1000000",
+    "currentfeepernoncewei": "100000",
+    "feetokensymbol": "USDC",
+    "feetokendecimals": 6,
+    "registered": true,
+    "effectiveEcdsaMpcProtocol": "cggmp24"
+  }
+}
+```
+
+For non-secp256k1 key types, numeric fields are zero and `registered` is false.
+
+**Example:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getFeeStatusByKeyGenId?id=KeyGen20260111003720999cf104d0f"
 ```
 
 <a id="get-getkeygengroupid"></a>
