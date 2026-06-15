@@ -8,9 +8,49 @@ This repository contains the configuration files and setup scripts needed to dep
 - **`configs-original.yaml`** - Pristine copy of the default `configs.yaml` from this repo; use `cp configs-original.yaml configs.yaml` to revert if something goes wrong. **`process_config.sh` copies it to `configs.yaml` automatically** if `configs.yaml` is missing.
 - **`process_config.sh`** - Configuration validator and certificate generator; **generates `docker-compose.yml`** (not committed) from **`docker-compose.relay.yml`** (relay / first node) or **`docker-compose.client.yml`** (other nodes)
 - **`scripts/provision-node.sh`** - Non-interactive helper for a **fresh** `configs.yaml`: copies `configs-original.yaml`, sets management keys and a two-node **`nodeAddresses`** layout, then runs **`process_config.sh`**. Stable **`nodeKey`** requires **`DeterministicNodeKey: true`** and **`bootstrap_key/ed25519_private.hex`** (**`tools/bootstrap_key_provision.py`**). For reinstalls see **Automated provisioning** pattern **2**.
+- **`scripts/install-node-debian-ubuntu.sh`** - **One-shot VPS install** (Ubuntu/Debian, run as root): apt packages, **`mpcnode`** user, clone repo, **`provision-node.sh`**, **`docker compose up -d`**. See **One-shot VPS install** below.
+- **`tools/provision-command.js`** - Reference module for the MPA frontend to build curl/SSH one-liner commands (wallet or manual Ethereum address + VPS IP).
 - **`mosquitto/config/mosquitto.conf`** - MQTT broker configuration
 - **`sign-clipboard in tools/`** - Utility to sign Ed25519 messages
 - **`webTLS/config/certs`** - certs to allow TLS 1.3 encryption to the browser
+
+## One-shot VPS install
+
+For a **rented Ubuntu/Debian VPS**, run one command **as root on the server** (or pipe it over SSH from your PC). The MPA frontend at [https://mpa.continuumdao.org](https://mpa.continuumdao.org) can generate this command using your connected wallet address or a manually entered Ethereum address — **no wallet signing is required at install time**.
+
+The install script and repo clone both track **`main`** on GitHub. You do **not** need a release tag: after the node is running, use the **Maintenance** section in the node app ([continuumdao-node-app](https://github.com/ContinuumDAO/continuumdao-node-app)) to **`git pull`** mpc-config and restart via **`updateMpcAuth`** when you want newer config or compose templates.
+
+```bash
+# A) Run ON the VPS (ssh root@YOUR_VPS_IP, then paste):
+curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" \
+  | bash -s -- \
+      --node-mgt-key "0xYour40HexCharacters..." \
+      --ip "YOUR_VPS_PUBLIC_IP"
+
+# B) Run FROM your PC (curl runs on the VPS — recommended; avoids curl | ssh bash -s):
+ssh -o StrictHostKeyChecking=accept-new root@YOUR_VPS_PUBLIC_IP \
+  'curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" | bash -s -- --node-mgt-key "0xYour40HexCharacters..." --ip "YOUR_VPS_PUBLIC_IP"'
+```
+
+Systemd units are installed by default. Pass **`--no-systemd`** only if you do not want host systemd helpers.
+
+**Preflight:** the installer exits immediately if **`/home/mpcnode/mpc-config/configs.yaml`** already exists or MPC Docker containers (mpc-auth, mongo, etc.) are running. Use MPA **Maintenance** to update an existing node.
+
+Optional **`--public-mgt-key`** (64 hex or `ssh-ed25519 …` line) for restore/migrate; omit it for a new node (Ed25519 bootstrap is auto-generated). Ed25519-only: pass **`--public-mgt-key`** without **`--node-mgt-key`**.
+
+The installer creates user **`mpcnode`** with **password-protected sudo** (no login password during install — set it securely over SSH). After it finishes, run:
+
+```bash
+ssh root@YOUR_VPS_PUBLIC_IP 'passwd mpcnode'
+```
+
+Then attach the node at [https://mpa.continuumdao.org](https://mpa.continuumdao.org).
+
+Frontend integrators: use **`tools/provision-command.js`** (`buildProvisionCommand`, `buildProvisionCommands`). Run **`node tools/provision-command.test.js`** to verify.
+
+Full options: **`./scripts/install-node-debian-ubuntu.sh --help`**
+
+---
 
 ## Quick Start
 
