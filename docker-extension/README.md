@@ -18,14 +18,14 @@ The extension **backend image is UI-only** (no baked `/mpc-config`, no `docker.s
 1. [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
 2. **Settings → Extensions** — enable **Docker Extensions** (disabled by default).
 3. For unpublished builds: disable **Allow only Marketplace extensions**.
-4. **Windows only:** WSL 2 engine + integration for your Ubuntu distro (**Settings → Resources → WSL integration**).
+4. **Windows only:** WSL 2 engine + integration for your Ubuntu distro (**Settings → Resources → WSL integration**). After changing integration, **quit and restart Docker Desktop** (a full PC reboot is usually not required).
 
 ## Install the extension (sideload)
 
 After the image is published or built locally:
 
 ```bash
-docker extension install continuumdao/continuum-node-installer:0.1.0
+docker extension install continuumdao/continuum-node-installer:0.1.2
 ```
 
 Open **Docker Desktop → Extensions → Continuum Node** and complete the wizard.
@@ -35,8 +35,8 @@ Open **Docker Desktop → Extensions → Continuum Node** and complete the wizar
 From the **mpc-config repo root**:
 
 ```bash
-docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.0 .
-docker extension install continuumdao/continuum-node-installer:0.1.0   # requires Docker Desktop on host
+docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.2 .
+docker extension install continuumdao/continuum-node-installer:0.1.2   # requires Docker Desktop on host
 ```
 
 Push to Docker Hub (multi-arch recommended for Windows):
@@ -44,7 +44,7 @@ Push to Docker Hub (multi-arch recommended for Windows):
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
   -f docker-extension/Dockerfile \
-  -t continuumdao/continuum-node-installer:0.1.0 \
+  -t continuumdao/continuum-node-installer:0.1.2 \
   --push .
 ```
 
@@ -69,7 +69,7 @@ The extension backend container does **not** bind-mount or bake `~/mpc-config`. 
 Run on a Windows machine with Docker Desktop — **not required to merge initial Linux implementation**.
 
 1. [ ] Docker Desktop + Extensions enabled + WSL2 engine + Ubuntu WSL integration
-2. [ ] `docker extension install continuumdao/continuum-node-installer:0.1.0`
+2. [ ] `docker extension install continuumdao/continuum-node-installer:0.1.2`
 3. [ ] Extension wizard completes → containers visible in Desktop **Containers**
 4. [ ] `mosquitto/config/certs` and `webTLS/config/certs` populated under repo; `mpc-auth` healthy
 5. [ ] Attach node at [mpa.continuumdao.org](https://mpa.continuumdao.org) via loopback/HTTPS URL
@@ -116,9 +116,10 @@ Live node data after install: **WSL `~/mpc-config`** (Windows) or **`~/mpc-confi
 
 | Symptom | Check |
 |---------|--------|
-| False “WSL is required” on Windows | Rebuild **0.1.1+** — uses `wsl -l -v` not `wsl --status`; set exact distro name (e.g. `Ubuntu-26.04`) |
-| Install shows empty log panel | Rebuild **0.1.1+** — fixes streaming `host.cli.exec` (install was not waiting for output) |
-| Install button clears fields, no log output | Rebuild extension **after 0.2.1+** — UI JS must load from `./assets/` (not `/assets/`). You should see **Ready** under the title. |
+| Could not run commands in WSL distro | Rebuild **0.1.2** (ships `continuum-wsl.cmd`). **Quit and restart Docker Desktop** — full PC reboot usually not needed. Distro name must match `wsl -l -v` exactly (e.g. `Ubuntu-26.04`). |
+| False “WSL is required” on Windows | Rebuild **0.1.2** — uses `wsl -l -v` not `wsl --status`; set exact distro name |
+| Install shows empty log panel | Rebuild **0.1.2** — fixes streaming `host.cli.exec` (install waits for output) |
+| Install button clears fields, no log output | Rebuild **0.1.2** — UI JS loads from `./assets/` (not `/assets/`). You should see **Ready** under the title. |
 | `Docker Desktop host CLI API unavailable` | Update Docker Desktop; reload extension |
 | `WSL is required on Windows` | Install WSL distro + enable integration in Docker Desktop |
 | `curl: 404` in install log | `desktop-local-orchestrate.sh` not on GitHub `main` yet — push mpc-config or install manually in WSL |

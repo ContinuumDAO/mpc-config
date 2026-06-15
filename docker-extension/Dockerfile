@@ -1,8 +1,8 @@
 # Build from mpc-config repo root:
-#   docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.0 .
+#   docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.2 .
 #
 # Install extension (Windows / macOS Docker Desktop):
-#   docker extension install continuumdao/continuum-node-installer:0.1.0
+#   docker extension install continuumdao/continuum-node-installer:0.1.2
 #
 # Windows: install orchestration runs via host WSL → ~/mpc-config (no baked /mpc-config in this image).
 #
@@ -26,7 +26,7 @@ LABEL org.opencontainers.image.title="Continuum Node" \
     com.docker.extension.screenshots="[]" \
     com.docker.extension.detailed-description="Provision certificates, configs.yaml, and start the Continuum MPC stack via Docker Desktop. Windows: clones mpc-config to WSL ~/mpc-config and runs docker compose from there." \
     com.docker.extension.publisher-url="https://continuumdao.org" \
-    com.docker.extension.changelog="0.1.1: Fix WSL detection (wsl -l -v) and streaming host.cli.exec install output on Windows."
+    com.docker.extension.changelog="0.1.2: Windows WSL via shipped continuum-wsl.cmd; UI aligned with node app; relative assets; streaming install fix."
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -35,6 +35,7 @@ COPY --from=ui-build /ui/dist /ui
 COPY docker-extension/metadata.json /metadata.json
 COPY docker-extension/docker-compose.yaml /docker-compose.yaml
 COPY docker-extension/continuum-icon.svg /continuum-icon.svg
+COPY docker-extension/host/windows/continuum-wsl.cmd /host/windows/continuum-wsl.cmd
 COPY docker-extension/vm/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

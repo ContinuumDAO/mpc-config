@@ -9,5 +9,16 @@
   },
   "vm": {
     "composefile": "docker-compose.yaml"
+  },
+  "host": {
+    "binaries": [
+      {
+        "windows": [
+          {
+            "path": "/host/windows/continuum-wsl.cmd"
+          }
+        ]
+      }
+    ]
   }
 }
