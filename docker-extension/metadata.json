@@ -1,0 +1,13 @@
+{
+  "icon": "continuum-icon.svg",
+  "ui": {
+    "dashboard-tab": {
+      "title": "Continuum Node",
+      "root": "/ui",
+      "src": "index.html"
+    }
+  },
+  "vm": {
+    "composefile": "docker-compose.yaml"
+  }
+}

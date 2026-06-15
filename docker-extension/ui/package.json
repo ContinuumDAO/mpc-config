@@ -1,0 +1,14 @@
+{
+  "name": "continuum-node-extension-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@docker/extension-api-client": "^0.4.2"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11"
+  }
+}

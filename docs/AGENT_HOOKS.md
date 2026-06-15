@@ -73,7 +73,7 @@ Set values in **AI Agent → Variables** or **`POST /addEnvironmentVariable`**. 
 
 ### Inbound URL (webhooks only)
 
-mpc-auth exposes inbound webhooks on a **dedicated HTTP listener**, separate from management (**8080** / **8081**) and from **Browser HTTPS** (**8443**, self-signed cert for the dashboard).
+mpc-auth exposes inbound webhooks on a **dedicated HTTP listener**, separate from management (**8080** / **8081**) and from **Browser HTTPS** (**8443**, self-signed cert for continuumdao-node-app).
 
 | Listener | Default bind | Purpose |
 |----------|--------------|---------|
@@ -122,7 +122,7 @@ location /hooks/inbound/ {
 
 | Attach mode | What you enter in the app | Relation to webhooks |
 |-------------|---------------------------|----------------------|
-| **Browser HTTPS** + JWT | Public host → app uses **`https://<host>:8443`** (self-signed) | Use for the dashboard only. For providers, use **A/B/C** — not `:8443` unless you manually proxy `/hooks/inbound/` → **18090** with a **CA-trusted** cert in front. |
+| **Browser HTTPS** + JWT | Public host → app uses **`https://<host>:8443`** (self-signed) | Use for continuumdao-node-app only. For providers, use **A/B/C** — not `:8443` unless you manually proxy `/hooks/inbound/` → **18090** with a **CA-trusted** cert in front. |
 | **SSH tunnel** + JWT | **`http://127.0.0.1:8445`** locally + **Public node IP/hostname** for `ssh` | Tunnel carries **browser** traffic to **8445**. Providers still need **A/B/C**; optional **E** for local `curl`. See [SSH tunnel attach](#ssh-tunnel-attach-127001) below. |
 | **Plain HTTP** on the node | **`http://127.0.0.1:8080`** | **D**: `curl` / **runWebhook** to **`http://127.0.0.1:18090`**. Internet providers need **A/B/C**. |
 | **Plain HTTP** + SSH to management | **`http://127.0.0.1:8080`** on laptop + public SSH host | Same as SSH row. |

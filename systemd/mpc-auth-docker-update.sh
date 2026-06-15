@@ -431,12 +431,12 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 
 	echo "Companion (continuumdao-node-app): pulling ${ref}"
 	docker pull "$ref" || {
-		echo "warning: companion dashboard docker pull failed: ${ref}" >&2
+		echo "warning: companion continuumdao-node-app docker pull failed: ${ref}" >&2
 		return 0
 	}
 	workdir="$(mpc_auth_compose_workdir_resolve)"
 	if [[ -z "$workdir" ]] || [[ ! -d "$workdir" ]]; then
-		echo "warning: MPC_AUTH_COMPOSE_WORKDIR (or MPC_AUTH_COMPOSE_DIR) unset or missing — skipping dashboard recreate." >&2
+		echo "warning: MPC_AUTH_COMPOSE_WORKDIR (or MPC_AUTH_COMPOSE_DIR) unset or missing — skipping continuumdao-node-app recreate." >&2
 		return 0
 	fi
 	compose_ok=1
@@ -445,15 +445,15 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 		if (cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc"); then
 			compose_ok=0
 		else
-			echo "warning: dashboard compose recreate failed (ContinuumdaoNodeApp disabled or compose has no '${svc}' service?)." >&2
+			echo "warning: continuumdao-node-app compose recreate failed (ContinuumdaoNodeApp disabled or compose has no '${svc}' service?)." >&2
 		fi
 	elif command -v docker-compose &>/dev/null 2>&1; then
-		echo "WARNING: using legacy docker-compose (v1) for dashboard recreate." >&2
+		echo "WARNING: using legacy docker-compose (v1) for continuumdao-node-app recreate." >&2
 		echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --no-deps --force-recreate $(printf %q "$svc")"
 		if (cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc"); then
 			compose_ok=0
 		else
-			echo "warning: dashboard docker-compose recreate failed." >&2
+			echo "warning: continuumdao-node-app docker-compose recreate failed." >&2
 		fi
 	fi
 
@@ -463,7 +463,7 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 			new_img_id="$(docker inspect -f '{{.Image}}' "$dash_container")"
 		fi
 		if [[ -n "$new_img_id" && "$new_img_id" != "$old_img_id" ]]; then
-			echo "Removing previous companion dashboard image (force): ${old_img_id}"
+			echo "Removing previous companion continuumdao-node-app image (force): ${old_img_id}"
 			docker rmi --force "$old_img_id" || true
 		fi
 	fi

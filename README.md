@@ -9,6 +9,8 @@ This repository contains the configuration files and setup scripts needed to dep
 - **`process_config.sh`** - Configuration validator and certificate generator; **generates `docker-compose.yml`** (not committed) from **`docker-compose.relay.yml`** (relay / first node) or **`docker-compose.client.yml`** (other nodes)
 - **`scripts/provision-node.sh`** - Non-interactive helper for a **fresh** `configs.yaml`: copies `configs-original.yaml`, sets management keys and a two-node **`nodeAddresses`** layout, then runs **`process_config.sh`**. Stable **`nodeKey`** requires **`DeterministicNodeKey: true`** and **`bootstrap_key/ed25519_private.hex`** (**`tools/bootstrap_key_provision.py`**). For reinstalls see **Automated provisioning** pattern **2**.
 - **`scripts/install-node-debian-ubuntu.sh`** - **One-shot VPS install** (Ubuntu/Debian, run as root): apt packages, **`mpcnode`** user, clone repo, **`provision-node.sh`**, **`docker compose up -d`**. See **One-shot VPS install** below.
+- **`scripts/install-node-docker-desktop.sh`** - **Docker Desktop local install** (Windows/macOS): provision + compose via Desktop engine; no apt docker, UFW, or systemd. See **Docker Desktop (Windows local)** and **`docker-extension/README.md`**.
+- **`scripts/desktop-local-orchestrate.sh`** - **Desktop clone + install**: git clone to **`~/mpc-config`**, then `install-node-docker-desktop.sh` (used by the Docker extension and manual WSL).
 - **`tools/provision-command.js`** - Reference module for the MPA frontend to build curl/SSH one-liner commands (wallet or manual Ethereum address + VPS IP).
 - **`mosquitto/config/mosquitto.conf`** - MQTT broker configuration
 - **`sign-clipboard in tools/`** - Utility to sign Ed25519 messages
@@ -49,6 +51,29 @@ Then attach the node at [https://mpa.continuumdao.org](https://mpa.continuumdao.
 Frontend integrators: use **`tools/provision-command.js`** (`buildProvisionCommand`, `buildProvisionCommands`). Run **`node tools/provision-command.test.js`** to verify.
 
 Full options: **`./scripts/install-node-debian-ubuntu.sh --help`**
+
+---
+
+## Docker Desktop (Windows local)
+
+For **Windows + this machine** in the Continuum node app, the primary install path is the **Docker Desktop Extension** (not the VPS curl script). It provisions certs, `configs.yaml`, and runs `docker compose up -d` via Docker Desktop — without apt docker, UFW, systemd, or the `mpcnode` OS user.
+
+**Canonical repo path on desktop:** **`~/mpc-config`** in your WSL distro (Windows) or home directory (macOS). Same `configs.yaml`, `bootstrap_key/`, `added_keys/`, and generated `docker-compose.yml` layout as other installs. From Windows Explorer: `\\wsl$\<Distro>\home\<user>\mpc-config`.
+
+**Prerequisites:** Docker Desktop running, **Settings → Extensions** enabled, WSL integration for your Ubuntu distro (Windows), and **Settings → Resources → WSL integration** enabled for that distro.
+
+Install **Continuum Node** (`continuumdao/continuum-node-installer`) from **Docker Desktop → Extensions**. The extension clones/uses `~/mpc-config` in WSL and starts the stack. Protocol containers (mongo, mpc-auth, continuum-mcp, node app) appear under **Docker Desktop → Containers**. Open the extension, enter your management key and public IPv4, and run Install. Then attach the node at [https://mpa.continuumdao.org](https://mpa.continuumdao.org).
+
+**Advanced (manual WSL, same path):**
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/desktop-local-orchestrate.sh" \
+  | bash -s -- --node-mgt-key "0x…" --ip "YOUR_PUBLIC_IP"
+```
+
+Build, Windows QA checklist, and compose bind-mount notes: **[`docker-extension/README.md`](docker-extension/README.md)**.
+
+Full options: **`./scripts/install-node-docker-desktop.sh --help`**
 
 ---
 

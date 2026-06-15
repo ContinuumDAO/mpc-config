@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Continuum Node</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&family=Source+Serif+4:wght@600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="panel-header">
+        <img src="CTM-main.svg" alt="" class="wordmark" width="120" height="32" />
+      </header>
+
+      <div class="panel-body">
+        <h1 class="title">Install Continuum node</h1>
+        <p class="lede">
+          Provision certificates, configuration, and start the MPC stack on this machine. Attach the node at
+          <a class="link" href="https://mpa.continuumdao.org" target="_blank" rel="noopener noreferrer"
+            >mpa.continuumdao.org</a
+          >
+          when install completes.
+        </p>
+        <p class="note">
+          Fresh install only — if <code>configs.yaml</code> already exists under
+          <code>~/mpc-config</code>, use Maintenance in the node app to update.
+        </p>
+
+        <form id="install-form" class="form">
+          <div id="wsl-distro-row" class="field" hidden>
+            <span class="field-label">WSL distro name (Windows)</span>
+            <input
+              id="wsl-distro"
+              type="text"
+              value="Ubuntu"
+              placeholder="Ubuntu-24.04"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <p class="hint">
+              Required on Windows. Run <code>wsl -l -v</code> in PowerShell. Install clones to
+              <code>~/mpc-config</code> in that distro (not inside the extension container). Enable WSL integration
+              for this distro in Docker Desktop.
+            </p>
+          </div>
+          <label class="field">
+            <span class="field-label">Ethereum NodeMgtKey <span class="optional">(optional)</span></span>
+            <input id="node-mgt-key" type="text" placeholder="0x…" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="field">
+            <span class="field-label"
+              >Public Management Key <span class="optional">(optional, restore/migrate)</span></span
+            >
+            <textarea
+              id="public-mgt-key"
+              rows="2"
+              placeholder="64 hex or ssh-ed25519 …"
+              autocomplete="off"
+              spellcheck="false"
+            ></textarea>
+          </label>
+          <label class="field">
+            <span class="field-label">Public IPv4 of this machine</span>
+            <input id="node-ip" type="text" placeholder="203.0.113.50" required autocomplete="off" />
+          </label>
+          <p class="hint">Provide at least one management key (Ethereum or PublicMgtKey).</p>
+          <div class="actions">
+            <button type="submit" id="install-btn" class="btn btn-primary">Install node</button>
+          </div>
+        </form>
+
+        <section id="log-panel" class="log-panel" hidden>
+          <h2 class="section-title">Install log</h2>
+          <pre id="log-output" class="log-output"></pre>
+        </section>
+
+        <section id="result-panel" class="result-panel" hidden></section>
+      </div>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

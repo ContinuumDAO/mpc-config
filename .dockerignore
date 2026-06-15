@@ -1,0 +1,16 @@
+configs.yaml
+docker-compose.yml
+.git
+bootstrap_key/
+added_keys/
+mosquitto/config/certs/
+webTLS/config/certs/
+database_backups/
+.mongodump/
+agent_llm_config/
+user_folder/*
+!user_folder/README.md
+local-node-app/
+data/
+*.log
+.env
