@@ -26,7 +26,7 @@ LABEL org.opencontainers.image.title="Continuum Node" \
     com.docker.extension.screenshots="[]" \
     com.docker.extension.detailed-description="Provision certificates, configs.yaml, and start the Continuum MPC stack via Docker Desktop. Windows: clones mpc-config to WSL ~/mpc-config and runs docker compose from there." \
     com.docker.extension.publisher-url="https://continuumdao.org" \
-    com.docker.extension.changelog="0.2.2: Extension UI uses continuumdao-node-app globals.css + Tailwind (modal-style panel)."
+    com.docker.extension.changelog="0.1.1: Fix WSL detection (wsl -l -v) and streaming host.cli.exec install output on Windows."
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*

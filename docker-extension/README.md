@@ -116,6 +116,8 @@ Live node data after install: **WSL `~/mpc-config`** (Windows) or **`~/mpc-confi
 
 | Symptom | Check |
 |---------|--------|
+| False “WSL is required” on Windows | Rebuild **0.1.1+** — uses `wsl -l -v` not `wsl --status`; set exact distro name (e.g. `Ubuntu-26.04`) |
+| Install shows empty log panel | Rebuild **0.1.1+** — fixes streaming `host.cli.exec` (install was not waiting for output) |
 | Install button clears fields, no log output | Rebuild extension **after 0.2.1+** — UI JS must load from `./assets/` (not `/assets/`). You should see **Ready** under the title. |
 | `Docker Desktop host CLI API unavailable` | Update Docker Desktop; reload extension |
 | `WSL is required on Windows` | Install WSL distro + enable integration in Docker Desktop |
