@@ -106,7 +106,7 @@ cd ~/mpc-config
 
 | Path | Purpose |
 |------|---------|
-| `/ui` | Extension tab (built from `ui/`) |
+| `/ui` | Extension tab (built from `ui/`; styles synced from [continuumdao-node-app](https://github.com/ContinuumDAO/continuumdao-node-app) `app/globals.css`) |
 | `/metadata.json` | Extension manifest |
 | `/docker-compose.yaml` | Minimal backend keeper container (no docker.sock, no mpc-config tree) |
 
@@ -116,8 +116,10 @@ Live node data after install: **WSL `~/mpc-config`** (Windows) or **`~/mpc-confi
 
 | Symptom | Check |
 |---------|--------|
-| `docker info` fails in extension log | Docker Desktop not running |
+| Install button clears fields, no log output | Rebuild extension **after 0.2.1+** — UI JS must load from `./assets/` (not `/assets/`). You should see **Ready** under the title. |
+| `Docker Desktop host CLI API unavailable` | Update Docker Desktop; reload extension |
+| `WSL is required on Windows` | Install WSL distro + enable integration in Docker Desktop |
+| `curl: 404` in install log | `desktop-local-orchestrate.sh` not on GitHub `main` yet — push mpc-config or install manually in WSL |
+| `docker info` fails in log | Start Docker Desktop; enable WSL integration for your distro |
 | `configs.yaml already exists` | Fresh install only; use Maintenance for updates |
-| `docker compose` not found | Rebuild extension image (includes compose plugin) |
 | Bind mount errors on Windows | Confirm hybrid A paths; see QA checklist |
-| `com.docker.desktop.extension.api.version` not set | Rebuild image; Dockerfile must include Extension labels (see Dockerfile `LABEL` block) |

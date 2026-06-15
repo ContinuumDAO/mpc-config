@@ -10,31 +10,52 @@
       href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&family=Source+Serif+4:wght@600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main class="panel">
-      <header class="panel-header">
-        <img src="CTM-main.svg" alt="" class="wordmark" width="120" height="32" />
-      </header>
+    <main class="mx-auto w-full max-w-lg p-6">
+      <div
+        class="flex flex-col gap-4 rounded-[4px] border border-[var(--muted)] bg-[var(--surface)] p-6 shadow-xl"
+      >
+        <img
+          src="CTM-main.svg"
+          alt=""
+          width="120"
+          height="32"
+          class="h-8 w-auto max-w-[7.5rem] shrink-0 object-contain object-left"
+          aria-hidden="true"
+        />
 
-      <div class="panel-body">
-        <h1 class="title">Install Continuum node</h1>
-        <p class="lede">
+        <h1 class="m-0 font-sans text-[1rem] font-semibold text-[var(--text)]">Install Continuum node</h1>
+
+        <p class="m-0 font-sans text-[0.8125rem] text-[var(--muted)]">
           Provision certificates, configuration, and start the MPC stack on this machine. Attach the node at
-          <a class="link" href="https://mpa.continuumdao.org" target="_blank" rel="noopener noreferrer"
+          <a
+            class="text-[var(--primary)] underline"
+            href="https://mpa.continuumdao.org"
+            target="_blank"
+            rel="noopener noreferrer"
             >mpa.continuumdao.org</a
           >
           when install completes.
         </p>
-        <p class="note">
-          Fresh install only — if <code>configs.yaml</code> already exists under
-          <code>~/mpc-config</code>, use Maintenance in the node app to update.
+
+        <p class="m-0 font-sans text-[0.8125rem] text-[var(--muted)]">
+          Fresh install only — if
+          <code class="font-mono text-[0.6875rem] text-[var(--text)]">configs.yaml</code>
+          already exists under
+          <code class="font-mono text-[0.6875rem] text-[var(--text)]">~/mpc-config</code>, use Maintenance in the
+          node app to update.
         </p>
 
-        <form id="install-form" class="form">
-          <div id="wsl-distro-row" class="field" hidden>
-            <span class="field-label">WSL distro name (Windows)</span>
+        <p
+          id="boot-status"
+          class="m-0 hidden rounded-[4px] border border-[var(--muted)] px-3 py-2 font-sans text-[0.8125rem] text-[var(--muted)]"
+          hidden
+        ></p>
+
+        <form id="install-form" class="flex flex-col gap-3">
+          <div id="wsl-distro-row" class="flex flex-col gap-1.5" hidden>
+            <span class="font-sans text-[0.8125rem] text-[var(--text)]">WSL distro name (Windows)</span>
             <input
               id="wsl-distro"
               type="text"
@@ -42,45 +63,87 @@
               placeholder="Ubuntu-24.04"
               autocomplete="off"
               spellcheck="false"
+              class="w-full rounded-[4px] border border-[var(--muted)] bg-[var(--bg)] px-3 py-2 font-mono text-[0.8125rem] text-[var(--text)] outline-none focus:border-[var(--primary)]"
             />
-            <p class="hint">
-              Required on Windows. Run <code>wsl -l -v</code> in PowerShell. Install clones to
-              <code>~/mpc-config</code> in that distro (not inside the extension container). Enable WSL integration
-              for this distro in Docker Desktop.
+            <p class="m-0 font-sans text-[0.8125rem] text-[var(--muted)]">
+              Required on Windows. Run
+              <code class="font-mono text-[0.6875rem] text-[var(--text)]">wsl -l -v</code>
+              in PowerShell. Install clones to
+              <code class="font-mono text-[0.6875rem] text-[var(--text)]">~/mpc-config</code>
+              in that distro (not inside the extension container). Enable WSL integration for this distro in Docker
+              Desktop.
             </p>
           </div>
-          <label class="field">
-            <span class="field-label">Ethereum NodeMgtKey <span class="optional">(optional)</span></span>
-            <input id="node-mgt-key" type="text" placeholder="0x…" autocomplete="off" spellcheck="false" />
+
+          <label class="flex flex-col gap-1.5">
+            <span class="font-sans text-[0.8125rem] text-[var(--text)]">
+              Ethereum NodeMgtKey <span class="font-normal text-[var(--muted)]">(optional)</span>
+            </span>
+            <input
+              id="node-mgt-key"
+              type="text"
+              placeholder="0x…"
+              autocomplete="off"
+              spellcheck="false"
+              class="w-full rounded-[4px] border border-[var(--muted)] bg-[var(--bg)] px-3 py-2 font-mono text-[0.8125rem] text-[var(--text)] outline-none focus:border-[var(--primary)]"
+            />
           </label>
-          <label class="field">
-            <span class="field-label"
-              >Public Management Key <span class="optional">(optional, restore/migrate)</span></span
-            >
+
+          <label class="flex flex-col gap-1.5">
+            <span class="font-sans text-[0.8125rem] text-[var(--text)]">
+              Public Management Key
+              <span class="font-normal text-[var(--muted)]">(optional, restore/migrate)</span>
+            </span>
             <textarea
               id="public-mgt-key"
               rows="2"
               placeholder="64 hex or ssh-ed25519 …"
               autocomplete="off"
               spellcheck="false"
+              class="min-h-[4.5rem] w-full resize-y rounded-[4px] border border-[var(--muted)] bg-[var(--bg)] px-3 py-2 font-mono text-[0.8125rem] text-[var(--text)] outline-none focus:border-[var(--primary)]"
             ></textarea>
           </label>
-          <label class="field">
-            <span class="field-label">Public IPv4 of this machine</span>
-            <input id="node-ip" type="text" placeholder="203.0.113.50" required autocomplete="off" />
+
+          <label class="flex flex-col gap-1.5">
+            <span class="font-sans text-[0.8125rem] text-[var(--text)]">Public IPv4 of this machine</span>
+            <input
+              id="node-ip"
+              type="text"
+              placeholder="203.0.113.50"
+              required
+              autocomplete="off"
+              class="w-full rounded-[4px] border border-[var(--muted)] bg-[var(--bg)] px-3 py-2 font-mono text-[0.8125rem] text-[var(--text)] outline-none focus:border-[var(--primary)]"
+            />
           </label>
-          <p class="hint">Provide at least one management key (Ethereum or PublicMgtKey).</p>
-          <div class="actions">
-            <button type="submit" id="install-btn" class="btn btn-primary">Install node</button>
+
+          <p class="m-0 font-sans text-[0.8125rem] text-[var(--muted)]">
+            Provide at least one management key (Ethereum or PublicMgtKey).
+          </p>
+
+          <div class="mt-1 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              id="install-btn"
+              class="cursor-pointer rounded-[4px] bg-[var(--primary)] px-4 py-2 font-sans text-[0.875rem] font-medium text-[var(--bg)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Install node
+            </button>
           </div>
         </form>
 
-        <section id="log-panel" class="log-panel" hidden>
-          <h2 class="section-title">Install log</h2>
-          <pre id="log-output" class="log-output"></pre>
+        <section id="log-panel" class="hidden flex-col gap-2" hidden>
+          <h2 class="m-0 font-sans text-[1rem] font-semibold text-[var(--text)]">Install log</h2>
+          <pre
+            id="log-output"
+            class="m-0 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[4px] border border-[var(--muted)] bg-[var(--bg)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--text)]"
+          ></pre>
         </section>
 
-        <section id="result-panel" class="result-panel" hidden></section>
+        <section
+          id="result-panel"
+          class="hidden m-0 rounded-[4px] border border-[var(--muted)] bg-[color-mix(in_srgb,var(--surface)_88%,var(--bg))] p-3 font-sans text-[0.8125rem] leading-relaxed text-[var(--text)]"
+          hidden
+        ></section>
       </div>
     </main>
     <script type="module" src="app.js"></script>
