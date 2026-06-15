@@ -33,6 +33,7 @@ user_folder/*
 
 # Ed25519 management private keys (POST /addManagementKey; bind-mounted into app + continuum-mcp)
 added_keys/
+bootstrap_key/
 
 # POST /restoreDatabase pre-restore mongodump snapshots (operators may copy off-host)
 .mongodump/
