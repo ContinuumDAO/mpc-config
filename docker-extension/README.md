@@ -18,14 +18,14 @@ The extension **backend image is UI-only** (no baked `/mpc-config`, no `docker.s
 1. [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
 2. **Settings → Extensions** — enable **Docker Extensions** (disabled by default).
 3. For unpublished builds: disable **Allow only Marketplace extensions**.
-4. **Windows only:** WSL 2 + Docker Desktop WSL integration. **`python3-venv`** is required once for provision (`sudo apt install -y python3-venv openssl curl git`) — desktop install uses **`~/mpc-config/.venv-provision`**, not system pip/apt Python packages.
+4. **Windows only:** WSL 2 + Docker Desktop WSL integration. **0.1.7+** installs Python provision deps via `pip --target` (no `python3-venv` required). If auto-install fails, run Option A from the install log once in WSL.
 
 ## Install the extension (sideload)
 
 After the image is published or built locally:
 
 ```bash
-docker extension install continuumdao/continuum-node-installer:0.1.4
+docker extension install continuumdao/continuum-node-installer:0.1.7
 ```
 
 Open **Docker Desktop → Extensions → Continuum Node** and complete the wizard.
@@ -35,8 +35,8 @@ Open **Docker Desktop → Extensions → Continuum Node** and complete the wizar
 From the **mpc-config repo root**:
 
 ```bash
-docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.4 .
-docker extension install continuumdao/continuum-node-installer:0.1.4   # requires Docker Desktop on host
+docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.7 .
+docker extension install continuumdao/continuum-node-installer:0.1.7   # requires Docker Desktop on host
 ```
 
 Push to Docker Hub (multi-arch recommended for Windows):
@@ -44,7 +44,7 @@ Push to Docker Hub (multi-arch recommended for Windows):
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
   -f docker-extension/Dockerfile \
-  -t continuumdao/continuum-node-installer:0.1.4 \
+  -t continuumdao/continuum-node-installer:0.1.7 \
   --push .
 ```
 
@@ -69,7 +69,7 @@ The extension backend container does **not** bind-mount or bake `~/mpc-config`. 
 Run on a Windows machine with Docker Desktop — **not required to merge initial Linux implementation**.
 
 1. [ ] Docker Desktop + Extensions enabled + WSL2 engine + Ubuntu WSL integration
-2. [ ] `docker extension install continuumdao/continuum-node-installer:0.1.4`
+2. [ ] `docker extension install continuumdao/continuum-node-installer:0.1.7`
 3. [ ] Extension wizard completes → containers visible in Desktop **Containers**
 4. [ ] `mosquitto/config/certs` and `webTLS/config/certs` populated under repo; `mpc-auth` healthy
 5. [ ] Attach node at [mpa.continuumdao.org](https://mpa.continuumdao.org) via loopback/HTTPS URL
@@ -119,13 +119,13 @@ On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the e
 
 | Symptom | Check |
 |---------|--------|
-| `python3 ruamel.yaml is required` / PEP 668 / externally-managed | Pull mpc-config **0.1.3+** scripts. Desktop install uses **`~/mpc-config/.venv-provision`**. One-time: `sudo apt install -y python3-venv`, then retry. |
-| Install stops at `sudo: preserving the entire environment` | Push mpc-config **0.1.1+** scripts to `main`. Desktop path no longer uses sudo. Remove partial `~/mpc-config/configs.yaml` and retry. |
-| `shell operators are not allowed` in install log | Rebuild extension **0.1.4+** — orchestrator uses `curl -o` then `bash` (no `\|` pipe through SDK) |
+| `python3-venv` / ensurepip / PEP 668 errors | Use extension **0.1.7+** — tries `pip install --target ~/mpc-config/.provision-py` first (no apt). If all auto paths fail, run Option A from the error log once in WSL. |
+| Install stops at `sudo: preserving the entire environment` | Use extension **0.1.7+** scripts on `main`. Desktop path no longer uses sudo. Remove partial `~/mpc-config/configs.yaml` and retry. |
+| `shell operators are not allowed` in install log | Rebuild extension **0.1.7+** — orchestrator uses `curl -o` then `bash` (no `\|` pipe through SDK) |
 | Could not run commands in WSL distro | Distro name must match `wsl -l -v` exactly. Reinstall extension so **`continuum-wsl.cmd`** is copied to the host. Quit and restart Docker Desktop. |
-| False “WSL is required” on Windows | Rebuild **0.1.4** — uses `wsl -l -v` not `wsl --status`; set exact distro name |
-| Install shows empty log panel | Rebuild **0.1.4** — fixes streaming `host.cli.exec` (install waits for output) |
-| Install button clears fields, no log output | Rebuild **0.1.4** — UI JS loads from `./assets/` (not `/assets/`). You should see **Ready** under the title. |
+| False “WSL is required” on Windows | Rebuild **0.1.7** — uses `wsl -l -v` not `wsl --status`; set exact distro name |
+| Install shows empty log panel | Rebuild **0.1.7** — fixes streaming `host.cli.exec` (install waits for output) |
+| Install button clears fields, no log output | Rebuild **0.1.7** — UI JS loads from `./assets/` (not `/assets/`). You should see **Ready** under the title. |
 | `Docker Desktop host CLI API unavailable` | Update Docker Desktop; reload extension |
 | `WSL is required on Windows` | Install WSL distro + enable integration in Docker Desktop |
 | `curl: 404` in install log | `desktop-local-orchestrate.sh` not on GitHub `main` yet — push mpc-config or install manually in WSL |

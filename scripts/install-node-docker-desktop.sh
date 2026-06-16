@@ -11,10 +11,12 @@
 #
 set -euo pipefail
 
-INSTALL_SCRIPT_VERSION="0.1.3"
+INSTALL_SCRIPT_VERSION="0.1.7"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${MPC_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 PROVISION_VENV="${MPC_PROVISION_VENV:-${REPO_DIR}/.venv-provision}"
+PROVISION_PY_DIR="${MPC_PROVISION_PY_DIR:-${REPO_DIR}/.provision-py}"
+GET_PIP_URL="${GET_PIP_URL:-https://bootstrap.pypa.io/get-pip.py}"
 
 DRY_RUN=false
 NO_START=false
@@ -28,7 +30,7 @@ Usage:
   ./scripts/install-node-docker-desktop.sh [options]
 
 Docker Desktop local profile (not for VPS). Requires docker + docker compose v2.
-Installs Python deps into ${REPO_DIR}/.venv-provision (PEP 668–safe; no system pip/apt required when venv works).
+Installs Python deps into .venv-provision or .provision-py (PEP 668–safe; no sudo apt when pip --target works).
 Skips UFW (--no-firewall) and systemd.
 
 Provision options (at least one management key required):
@@ -92,66 +94,167 @@ preflight_fresh() {
     fi
 }
 
-python_provision_deps_ok() {
-    if [ ! -x "${PROVISION_VENV}/bin/python3" ]; then
-        return 1
-    fi
-    "${PROVISION_VENV}/bin/python3" -c "import ruamel.yaml, cryptography" 2>/dev/null
+python3_minor_version() {
+    python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'
 }
 
-ensure_provision_venv() {
+python_provision_import_check() {
+    local py="$1"
+    local path_prefix="${2:-}"
+    if [ -n "$path_prefix" ]; then
+        PYTHONPATH="${path_prefix}${PYTHONPATH:+:${PYTHONPATH}}" "$py" -c "import ruamel.yaml, cryptography" 2>/dev/null
+    else
+        "$py" -c "import ruamel.yaml, cryptography" 2>/dev/null
+    fi
+}
+
+python_provision_deps_ok() {
+    if [ -x "${PROVISION_VENV}/bin/python3" ]; then
+        python_provision_import_check "${PROVISION_VENV}/bin/python3" && return 0
+    fi
+    if [ -d "${PROVISION_PY_DIR}" ]; then
+        python_provision_import_check python3 "${PROVISION_PY_DIR}" && return 0
+    fi
+    return 1
+}
+
+install_provision_pip_packages() {
+    local pip="$1"
+    "$pip" install --upgrade pip wheel >/dev/null 2>&1 || true
+    "$pip" install ruamel.yaml cryptography
+}
+
+try_pip_target_provision_deps() {
+    command -v python3 >/dev/null 2>&1 || return 1
+    python3 -m pip --version >/dev/null 2>&1 || return 1
+
+    log "Installing ruamel.yaml + cryptography via pip --target ${PROVISION_PY_DIR} (no python3-venv required)"
+    rm -rf "${PROVISION_PY_DIR}"
+    mkdir -p "${PROVISION_PY_DIR}"
+    if ! python3 -m pip install --target "${PROVISION_PY_DIR}" ruamel.yaml cryptography; then
+        rm -rf "${PROVISION_PY_DIR}"
+        return 1
+    fi
+    python_provision_deps_ok
+}
+
+try_venv_provision_deps() {
+    local mode="$1"
+    rm -rf "${PROVISION_VENV}"
+
+    if [ "$mode" = "without-pip" ]; then
+        log "Trying python3 -m venv --without-pip ${PROVISION_VENV}"
+        python3 -m venv --without-pip "${PROVISION_VENV}" 2>/dev/null || return 1
+        local get_pip="${PROVISION_VENV}/get-pip.py"
+        curl -fsSL "${GET_PIP_URL}" -o "${get_pip}" || return 1
+        "${PROVISION_VENV}/bin/python3" "${get_pip}" || return 1
+        rm -f "${get_pip}"
+    else
+        log "Trying python3 -m venv ${PROVISION_VENV}"
+        python3 -m venv "${PROVISION_VENV}" 2>/dev/null || return 1
+    fi
+
+    install_provision_pip_packages "${PROVISION_VENV}/bin/pip"
+    python_provision_deps_ok
+}
+
+try_apt_python_venv_packages() {
+    command -v apt-get >/dev/null 2>&1 || return 1
+    command -v sudo >/dev/null 2>&1 || return 1
+    sudo -n true 2>/dev/null || return 1
+
+    local py_minor
+    py_minor="$(python3_minor_version 2>/dev/null || true)"
+    log "Trying passwordless apt install of python venv packages (python${py_minor}-venv / python3-venv)"
+    sudo -n apt-get update -qq || return 1
+    if [ -n "$py_minor" ]; then
+        sudo -n apt-get install -y "python${py_minor}-venv" python3-venv python3-full 2>/dev/null \
+            || sudo -n apt-get install -y python3-venv python3-full 2>/dev/null \
+            || return 1
+    else
+        sudo -n apt-get install -y python3-venv python3-full || return 1
+    fi
+}
+
+manual_provision_python_instructions() {
+    local py_minor
+    py_minor="$(python3_minor_version 2>/dev/null || echo "3.x")"
+    cat <<EOF
+Could not install Python deps (ruamel.yaml, cryptography) without interactive sudo.
+The Docker extension cannot enter your WSL sudo password.
+
+Option A — pip --target (often works on Ubuntu ${py_minor} without python3-venv):
+  cd ${REPO_DIR}
+  python3 -m pip install --target .provision-py ruamel.yaml cryptography
+  PYTHONPATH=${REPO_DIR}/.provision-py ./scripts/install-node-docker-desktop.sh ...
+
+Option B — venv (requires python3-venv once):
+  sudo apt update
+  sudo apt install -y python${py_minor}-venv openssl curl git
+  python3 -m venv ${PROVISION_VENV}
+  ${PROVISION_VENV}/bin/pip install ruamel.yaml cryptography
+  ./scripts/install-node-docker-desktop.sh ...
+
+Then re-run Install in the Docker extension.
+EOF
+}
+
+ensure_provision_python_deps() {
     if python_provision_deps_ok; then
-        log "Using provision venv at ${PROVISION_VENV}"
+        if [ -x "${PROVISION_VENV}/bin/python3" ]; then
+            log "Using provision venv at ${PROVISION_VENV}"
+        else
+            log "Using provision Python path ${PROVISION_PY_DIR}"
+        fi
         return 0
     fi
 
     command -v python3 >/dev/null 2>&1 || die "python3 not found in WSL — sudo apt install -y python3"
+    command -v curl >/dev/null 2>&1 || die "curl not found — sudo apt install -y curl"
 
     if [ "$DRY_RUN" = true ]; then
-        printf '[dry-run] python3 -m venv %q\n' "$PROVISION_VENV"
-        printf '[dry-run] %q/bin/pip install ruamel.yaml cryptography\n' "$PROVISION_VENV"
+        printf '[dry-run] pip --target %q OR python3 -m venv %q\n' "$PROVISION_PY_DIR" "$PROVISION_VENV"
         return 0
     fi
 
-    log "Creating provision venv at ${PROVISION_VENV} (PEP 668–safe Python deps for process_config)"
+    log "Ensuring Python deps for provision-node.sh / process_config.sh"
 
-    if ! python3 -m venv "$PROVISION_VENV" 2>/dev/null; then
-        log "python3 -m venv failed — trying passwordless apt install of python3-venv"
-        if command -v apt-get >/dev/null 2>&1 \
-            && command -v sudo >/dev/null 2>&1 \
-            && sudo -n true 2>/dev/null \
-            && sudo -n apt-get update -qq \
-            && sudo -n apt-get install -y python3-venv python3-full; then
-            python3 -m venv "$PROVISION_VENV" || die "python3 -m venv failed after installing python3-venv"
-        else
-            die "$(cat <<EOF
-Could not create Python venv at ${PROVISION_VENV}.
-Ubuntu/WSL often blocks system-wide pip (PEP 668); provision uses a venv instead.
+    if try_pip_target_provision_deps; then
+        log "Provision Python deps ready (.provision-py)"
+        return 0
+    fi
 
-Run once in WSL:
-  sudo apt update
-  sudo apt install -y python3-venv openssl curl git
-  python3 -m venv ${PROVISION_VENV}
-  ${PROVISION_VENV}/bin/pip install ruamel.yaml cryptography
+    if try_venv_provision_deps standard; then
+        log "Provision Python deps ready (venv)"
+        return 0
+    fi
 
-Then re-run Install in the Docker extension.
-EOF
-)"
+    if try_venv_provision_deps without-pip; then
+        log "Provision Python deps ready (venv --without-pip + get-pip)"
+        return 0
+    fi
+
+    if try_apt_python_venv_packages; then
+        if try_venv_provision_deps standard || try_venv_provision_deps without-pip; then
+            log "Provision Python deps ready (venv after apt)"
+            return 0
         fi
     fi
 
-    log "Installing ruamel.yaml and cryptography into provision venv"
-    "${PROVISION_VENV}/bin/pip" install --upgrade pip wheel >/dev/null 2>&1 || true
-    if ! "${PROVISION_VENV}/bin/pip" install ruamel.yaml cryptography; then
-        die "pip install into ${PROVISION_VENV} failed — check network access from WSL"
-    fi
-
-    python_provision_deps_ok || die "provision venv missing ruamel.yaml or cryptography after pip install"
+    die "$(manual_provision_python_instructions)"
 }
 
-activate_provision_venv() {
-    export VIRTUAL_ENV="$PROVISION_VENV"
-    export PATH="${PROVISION_VENV}/bin:${PATH}"
+activate_provision_python() {
+    if [ -x "${PROVISION_VENV}/bin/python3" ] && python_provision_import_check "${PROVISION_VENV}/bin/python3"; then
+        export VIRTUAL_ENV="$PROVISION_VENV"
+        export PATH="${PROVISION_VENV}/bin:${PATH}"
+        return 0
+    fi
+    if [ -d "${PROVISION_PY_DIR}" ]; then
+        export PYTHONPATH="${PROVISION_PY_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+        return 0
+    fi
+    die "provision Python environment not activated"
 }
 
 preflight_desktop_tools() {
@@ -210,8 +313,8 @@ log "Repo: $REPO_DIR"
 if [ "$DRY_RUN" = false ]; then
     preflight_docker
     preflight_fresh
-    ensure_provision_venv
-    activate_provision_venv
+    ensure_provision_python_deps
+    activate_provision_python
     preflight_desktop_tools
 fi
 preflight_repo

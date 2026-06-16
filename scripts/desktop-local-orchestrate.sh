@@ -9,7 +9,7 @@
 #
 set -euo pipefail
 
-ORCHESTRATE_VERSION="0.1.1"
+ORCHESTRATE_VERSION="0.1.7"
 MPC_CONFIG_REPO="${MPC_CONFIG_REPO:-https://github.com/ContinuumDAO/mpc-config.git}"
 MPC_CONFIG_REF="${MPC_CONFIG_REF:-main}"
 REPO_DIR="${MPC_REPO_DIR:-${HOME}/mpc-config}"
