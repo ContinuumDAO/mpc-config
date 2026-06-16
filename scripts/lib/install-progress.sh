@@ -31,6 +31,8 @@ declare -g -A _INSTALL_PROGRESS_TOPIC_STATE
 declare -g -A _INSTALL_PROGRESS_TOPIC_REGISTERED
 _INSTALL_PROGRESS_FRAME_LINES=0
 _INSTALL_PROGRESS_SPINNER_PID=""
+INSTALL_PROGRESS_PULL_WEIGHT="${INSTALL_PROGRESS_PULL_WEIGHT:-20}"
+INSTALL_PROGRESS_START_STACK_WEIGHT="${INSTALL_PROGRESS_START_STACK_WEIGHT:-12}"
 
 install_progress__resolve_lib_dir() {
     if [ -n "${INSTALL_PROGRESS_LIB_DIR:-}" ] && [ -f "${INSTALL_PROGRESS_LIB_DIR}/install-progress.sh" ]; then
@@ -88,6 +90,9 @@ install_progress__register_topic() {
     _INSTALL_PROGRESS_TOPIC_WEIGHT[$id]="$weight"
     _INSTALL_PROGRESS_TOPIC_PCT[$id]=0
     _INSTALL_PROGRESS_TOPIC_STATE[$id]=pending
+    if [ "${CONTINUUM_INSTALL_PROGRESS_SUPPRESS_SYNC:-0}" != "1" ]; then
+        install_progress_emit_sync
+    fi
 }
 
 install_progress__profile_topics() {
@@ -95,19 +100,18 @@ install_progress__profile_topics() {
     case "$profile" in
         vps)
             install_progress__register_topic preflight "Preflight check" 2
-            install_progress__register_topic packages "System packages" 14
-            install_progress__register_topic os-user "OS user & sudo" 3
-            install_progress__register_topic clone "Clone mpc-config" 5
-            install_progress__register_topic docker-v2 "Docker Compose v2" 4
-            install_progress__register_topic provision-setup "Node config bootstrap" 4
-            install_progress__register_topic start-stack "Start containers" 4
+            install_progress__register_topic packages "System packages" 6
+            install_progress__register_topic os-user "OS user & sudo" 2
+            install_progress__register_topic clone "Clone mpc-config" 2
+            install_progress__register_topic docker-v2 "Docker Compose v2" 2
+            install_progress__register_topic provision-setup "Node config bootstrap" 2
+            install_progress__register_topic start-stack "Start containers" "$INSTALL_PROGRESS_START_STACK_WEIGHT"
             ;;
         desktop)
-            install_progress__register_topic clone "Clone mpc-config" 8
-            install_progress__register_topic python-deps "Python dependencies" 10
-            install_progress__register_topic provision-setup "Node config bootstrap" 5
-            install_progress__register_topic desktop-patch "Dashboard discovery patch" 3
-            install_progress__register_topic start-stack "Start containers" 4
+            install_progress__register_topic clone "Clone mpc-config" 2
+            install_progress__register_topic python-deps "Python dependencies" 3
+            install_progress__register_topic provision-setup "Node config bootstrap" 2
+            install_progress__register_topic start-stack "Start containers" "$INSTALL_PROGRESS_START_STACK_WEIGHT"
             ;;
         *)
             install_progress__register_topic preflight "Preflight check" 1
@@ -115,24 +119,49 @@ install_progress__profile_topics() {
     esac
 }
 
-# Register process_config sub-topics (call before process_config.sh runs).
+install_progress__register_topic_no_sync() {
+    local id="$1" label="$2" weight="${3:-1}"
+    if [ "${_INSTALL_PROGRESS_TOPIC_REGISTERED[$id]:-}" = "1" ]; then
+        return 0
+    fi
+    _INSTALL_PROGRESS_TOPIC_REGISTERED[$id]=1
+    _INSTALL_PROGRESS_TOPIC_ORDER+=("$id")
+    _INSTALL_PROGRESS_TOPIC_LABEL[$id]="$label"
+    _INSTALL_PROGRESS_TOPIC_WEIGHT[$id]="$weight"
+    _INSTALL_PROGRESS_TOPIC_PCT[$id]=0
+    _INSTALL_PROGRESS_TOPIC_STATE[$id]=pending
+}
+
+install_progress__profile_topics_nosync() {
+    local profile="$1"
+    case "$profile" in
+        vps)
+            install_progress__register_topic_no_sync preflight "Preflight check" 2
+            install_progress__register_topic_no_sync packages "System packages" 6
+            install_progress__register_topic_no_sync os-user "OS user & sudo" 2
+            install_progress__register_topic_no_sync clone "Clone mpc-config" 2
+            install_progress__register_topic_no_sync docker-v2 "Docker Compose v2" 2
+            install_progress__register_topic_no_sync provision-setup "Node config bootstrap" 2
+            install_progress__register_topic_no_sync start-stack "Start containers" "$INSTALL_PROGRESS_START_STACK_WEIGHT"
+            ;;
+        desktop)
+            install_progress__register_topic_no_sync clone "Clone mpc-config" 2
+            install_progress__register_topic_no_sync python-deps "Python dependencies" 3
+            install_progress__register_topic_no_sync provision-setup "Node config bootstrap" 2
+            install_progress__register_topic_no_sync start-stack "Start containers" "$INSTALL_PROGRESS_START_STACK_WEIGHT"
+            ;;
+        *)
+            install_progress__register_topic_no_sync preflight "Preflight check" 1
+            ;;
+    esac
+}
+
+# Register configure-node topic (call before process_config.sh runs).
 install_progress_register_pc_topics() {
-    local skip_firewall="${1:-0}" skip_systemd="${2:-0}"
-    install_progress__register_topic pc-config "Load & prepare configs" 6
-    install_progress__register_topic pc-keys "Management keys & peers" 6
-    install_progress__register_topic pc-validate "Validate configuration" 8
-    install_progress__register_topic pc-mqtt-config "MQTT broker setup" 5
-    install_progress__register_topic pc-compose "Generate docker-compose" 8
-    install_progress__register_topic pc-browser-https "Browser HTTPS certificates" 8
-    install_progress__register_topic pc-relayer "Relayer API check" 6
-    if [ "$skip_firewall" != "1" ]; then
-        install_progress__register_topic pc-firewall "Host firewall (UFW)" 5
+    install_progress__register_topic_no_sync configure-node "Configure node" 8
+    if [ "${CONTINUUM_INSTALL_PROGRESS_SUPPRESS_SYNC:-0}" != "1" ]; then
+        install_progress_emit_sync
     fi
-    if [ "$skip_systemd" != "1" ]; then
-        install_progress__register_topic pc-systemd "Systemd helpers" 4
-    fi
-    install_progress__register_topic pc-mqtt-certs "MQTT TLS certificates" 6
-    install_progress__emit_init_if_needed
 }
 
 install_progress_register_pull_topic() {
@@ -140,24 +169,62 @@ install_progress_register_pull_topic() {
     local short="${image##*/}"
     short="${short:-$image}"
     local id="pull:${image//[^a-zA-Z0-9._-]/_}"
-    install_progress__register_topic "$id" "Pull ${short}" 3
-    install_progress__emit_init_if_needed
+    install_progress__register_topic "$id" "Pull ${short}" "$INSTALL_PROGRESS_PULL_WEIGHT"
     printf '%s' "$id"
 }
 
-install_progress__emit_init_if_needed() {
-    [ "$_INSTALL_PROGRESS_MODE" = "json" ] || return 0
-    [ "${_INSTALL_PROGRESS_JSON_INIT_EMITTED:-0}" = "1" ] && return 0
-    _INSTALL_PROGRESS_JSON_INIT_EMITTED=1
-    local topics_json="" id w label
-    local first=true
+# Pre-register docker compose images so extension receives pull topics before pulls start.
+install_progress_register_compose_pull_topics() {
+    local repo_dir="${1:-}"
+    local img short id added=false
+    [ -n "$repo_dir" ] && [ -d "$repo_dir" ] || return 0
+    while IFS= read -r img; do
+        [ -n "$img" ] || continue
+        short="${img##*/}"
+        short="${short:-$img}"
+        id="pull:${img//[^a-zA-Z0-9._-]/_}"
+        install_progress__register_topic_no_sync "$id" "Pull ${short}" "$INSTALL_PROGRESS_PULL_WEIGHT"
+        added=true
+    done < <(cd "$repo_dir" && docker compose config --images 2>/dev/null | sort -u)
+    [ "$added" = true ] && install_progress_emit_sync
+}
+
+install_progress__topics_json_payload() {
+    local topics_json="" id w label first=true
     for id in "${_INSTALL_PROGRESS_TOPIC_ORDER[@]}"; do
         label="${_INSTALL_PROGRESS_TOPIC_LABEL[$id]}"
         w="${_INSTALL_PROGRESS_TOPIC_WEIGHT[$id]}"
         if [ "$first" = true ]; then first=false; else topics_json+=","; fi
-        topics_json+="{\"id\":\"$(install_progress__json_escape "$id")\",\"label\":\"$(install_progress__json_escape "$label")\",\"weight\":${w}}"
+        topics_json+="{\"id\":\"$(install_progress__json_escape "$id")\",\"label\":\"$(install_progress__json_escape "$label")\",\"weight\":${w},\"pct\":${_INSTALL_PROGRESS_TOPIC_PCT[$id]:-0},\"state\":\"${_INSTALL_PROGRESS_TOPIC_STATE[$id]:-pending}\"}"
     done
-    install_progress__json_line "{\"type\":\"init\",\"profile\":\"${_INSTALL_PROGRESS_PROFILE}\",\"topics\":[${topics_json}]}"
+    printf '%s' "$topics_json"
+}
+
+install_progress_emit_sync() {
+    [ "$_INSTALL_PROGRESS_MODE" = "json" ] || return 0
+    [ "${CONTINUUM_INSTALL_PROGRESS_SUPPRESS_SYNC:-0}" = "1" ] && return 0
+    install_progress_emit_sync_force
+}
+
+install_progress_emit_sync_force() {
+    [ "$_INSTALL_PROGRESS_MODE" = "json" ] || return 0
+    local payload
+    payload="$(install_progress__topics_json_payload)"
+    install_progress__json_line "{\"type\":\"sync\",\"profile\":\"${_INSTALL_PROGRESS_PROFILE}\",\"topics\":[${payload}]}"
+    install_progress_flush_stdout
+}
+
+install_progress_flush_stdout() {
+    [ "$_INSTALL_PROGRESS_MODE" = "json" ] || return 0
+    :
+}
+
+install_progress__emit_init_if_needed() {
+    [ "$_INSTALL_PROGRESS_MODE" = "json" ] || return 0
+    [ "${CONTINUUM_INSTALL_PROGRESS_SUPPRESS_SYNC:-0}" = "1" ] && return 0
+    [ "${_INSTALL_PROGRESS_JSON_INIT_EMITTED:-0}" = "1" ] && return 0
+    _INSTALL_PROGRESS_JSON_INIT_EMITTED=1
+    install_progress_emit_sync
 }
 
 install_progress__json_escape() {
@@ -169,6 +236,7 @@ install_progress__json_escape() {
 
 install_progress__json_line() {
     printf '@continuum/progress\t%s\n' "$1"
+    install_progress_flush_stdout
 }
 
 install_progress__overall_pct() {
@@ -337,7 +405,7 @@ install_progress_init() {
 
     [ "$_INSTALL_PROGRESS_MODE" = "off" ] && return 0
 
-    install_progress__profile_topics "$profile"
+    install_progress__profile_topics_nosync "$profile"
     install_progress__emit_init_if_needed
 
     case "$_INSTALL_PROGRESS_MODE" in
@@ -449,8 +517,14 @@ install_progress_finish() {
             fi
             ;;
         json)
-            install_progress__emit_json_overall false
+            install_progress_emit_sync_force
+            if [ "$ok" = "true" ]; then
+                install_progress__json_line "{\"type\":\"overall\",\"pct\":100,\"spinner\":false}"
+            else
+                install_progress__emit_json_overall false
+            fi
             install_progress__json_line "{\"type\":\"finish\",\"ok\":$([ "$ok" = "true" ] && printf true || printf false)}"
+            install_progress_flush_stdout
             ;;
         plain)
             if [ "$ok" = "true" ]; then

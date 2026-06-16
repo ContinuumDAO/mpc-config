@@ -35,18 +35,40 @@ function getHostCli() {
 }
 
 const PROGRESS_PREFIX = '@continuum/progress\t'
-const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
+function topicSortKey(id) {
+  if (id.startsWith('pull:')) return `2:${id}`
+  if (id === 'start-stack') return '3:start-stack'
+  return `1:${id}`
+}
 
 function createProgressTracker({ progressPanel, progressTopics, progressOverall }) {
   const topics = new Map()
   let overallPct = 0
   let spinnerOn = false
-  let spinnerIdx = 0
-  let spinnerTimer = null
 
-  function topicLabel(id, fallback) {
-    const t = topics.get(id)
-    return t?.label ?? fallback ?? id
+  function applyTopicList(list, { replace = false } = {}) {
+    if (replace) topics.clear()
+    for (const t of list ?? []) {
+      if (!t?.id) continue
+      topics.set(t.id, {
+        label: t.label ?? topics.get(t.id)?.label ?? t.id,
+        pct: typeof t.pct === 'number' ? t.pct : (topics.get(t.id)?.pct ?? 0),
+        state: t.state ?? topics.get(t.id)?.state ?? 'pending',
+        weight: t.weight ?? topics.get(t.id)?.weight ?? 1,
+      })
+    }
+  }
+
+  function markAllTopicsDone() {
+    for (const t of topics.values()) {
+      t.pct = 100
+      if (t.state !== 'failed') t.state = 'done'
+    }
+  }
+
+  function sortedTopicEntries() {
+    return [...topics.entries()].sort(([a], [b]) => topicSortKey(a).localeCompare(topicSortKey(b)))
   }
 
   function renderRow(id, label, pct, state) {
@@ -103,8 +125,8 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
     if (spinnerOn) {
       const spin = document.createElement('span')
       spin.className = 'install-progress-spinner'
-      spin.textContent = SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]
       spin.setAttribute('aria-hidden', 'true')
+      spin.setAttribute('aria-label', 'Working')
       tail.appendChild(spin)
     }
 
@@ -115,7 +137,7 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
   function renderAll() {
     if (!progressTopics) return
     progressTopics.replaceChildren()
-    for (const [id, t] of topics) {
+    for (const [id, t] of sortedTopicEntries()) {
       progressTopics.appendChild(renderRow(id, t.label, t.pct ?? 0, t.state ?? 'pending'))
     }
     renderOverall()
@@ -127,30 +149,16 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
     progressPanel.classList.remove('hidden')
   }
 
-  function startSpinner() {
-    if (spinnerTimer) return
-    spinnerTimer = window.setInterval(() => {
-      spinnerIdx = (spinnerIdx + 1) % SPINNER_FRAMES.length
-      renderOverall()
-    }, 120)
-  }
-
-  function stopSpinner() {
-    if (spinnerTimer) {
-      window.clearInterval(spinnerTimer)
-      spinnerTimer = null
-    }
-  }
-
   function handleEvent(ev) {
     if (!ev || typeof ev !== 'object') return
     switch (ev.type) {
       case 'init':
-        topics.clear()
-        for (const t of ev.topics ?? []) {
-          if (!t?.id) continue
-          topics.set(t.id, { label: t.label ?? t.id, pct: 0, state: 'pending', weight: t.weight ?? 1 })
-        }
+        applyTopicList(ev.topics, { replace: true })
+        showPanel()
+        renderAll()
+        break
+      case 'sync':
+        applyTopicList(ev.topics)
         showPanel()
         renderAll()
         break
@@ -167,15 +175,15 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
       case 'overall':
         overallPct = typeof ev.pct === 'number' ? ev.pct : overallPct
         spinnerOn = ev.spinner === true
-        if (spinnerOn) startSpinner()
-        else stopSpinner()
         showPanel()
         renderOverall()
         break
       case 'finish':
         spinnerOn = false
-        stopSpinner()
-        if (ev.ok === true) overallPct = 100
+        if (ev.ok === true) {
+          markAllTopicsDone()
+          overallPct = 100
+        }
         renderAll()
         break
       default:
@@ -187,8 +195,6 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
     topics.clear()
     overallPct = 0
     spinnerOn = false
-    spinnerIdx = 0
-    stopSpinner()
     if (progressTopics) progressTopics.replaceChildren()
     if (progressOverall) progressOverall.replaceChildren()
     if (progressPanel) {
@@ -197,7 +203,7 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
     }
   }
 
-  return { handleEvent, reset, topicLabel }
+  return { handleEvent, reset }
 }
 
 function parseProgressLines(text, progressTracker, logOutput) {

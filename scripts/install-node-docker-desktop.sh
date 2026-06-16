@@ -16,6 +16,8 @@ CONTINUUM_INSTALL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/n
 if [ -n "$CONTINUUM_INSTALL_SCRIPT_DIR" ] && [ -f "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/load-install-progress.sh" ]; then
     # shellcheck source=lib/load-install-progress.sh
     . "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/load-install-progress.sh"
+    # shellcheck source=lib/install-progress-docker.sh
+    . "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/install-progress-docker.sh"
 else
     CONTINUUM_INSTALL_PROGRESS=off
     export CONTINUUM_INSTALL_PROGRESS
@@ -556,26 +558,26 @@ install_progress_register_pc_topics 1 1
 if [ "$DRY_RUN" = true ]; then
     printf '[dry-run] %q ' "${PROVISION_SH[@]}"
     printf '\n'
+    install_progress_topic_done provision-setup 2>/dev/null || true
+    install_progress_topic_done configure-node 2>/dev/null || true
 else
     cd "$REPO_DIR"
     export PROCESS_CONFIG_SKIP_SYSTEMD=1
-    "${PROVISION_SH[@]}"
+    CONTINUUM_INSTALL_PROGRESS_SUPPRESS_SYNC=1 "${PROVISION_SH[@]}"
+    install_progress_topic_done provision-setup
+    install_progress_topic_done configure-node
 fi
 
-install_progress_topic_begin desktop-patch
 patch_desktop_dashboard_compose_discovery
-install_progress_topic_done desktop-patch
 
-PULL_HELPER="${REPO_DIR}/scripts/lib/docker-compose-pull-with-progress.sh"
 if [ "$NO_START" = false ]; then
     log "Pulling images and starting Docker stack"
     if [ "$DRY_RUN" = true ]; then
-        printf '[dry-run] bash %q %q\n' "$PULL_HELPER" "$REPO_DIR"
-        install_progress_topic_begin start-stack
-        install_progress_topic_done start-stack
+        printf '[dry-run] install_progress_docker_pull_and_up %q\n' "$REPO_DIR"
+        install_progress_register_compose_pull_topics "$REPO_DIR" 2>/dev/null || true
+        install_progress_topic_done start-stack 2>/dev/null || true
     else
-        cd "$REPO_DIR"
-        bash "$PULL_HELPER" "$REPO_DIR"
+        install_progress_docker_pull_and_up "$REPO_DIR"
         log "Running containers:"
         docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || docker ps
     fi

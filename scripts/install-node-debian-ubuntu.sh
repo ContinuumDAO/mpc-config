@@ -17,6 +17,8 @@ CONTINUUM_INSTALL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/n
 if [ -n "$CONTINUUM_INSTALL_SCRIPT_DIR" ] && [ -f "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/load-install-progress.sh" ]; then
     # shellcheck source=lib/load-install-progress.sh
     . "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/load-install-progress.sh"
+    # shellcheck source=lib/install-progress-docker.sh
+    . "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/install-progress-docker.sh"
 else
     _bootstrap_tmp="$(mktemp -d 2>/dev/null || echo "/tmp/continuum-bootstrap-$$")"
     _raw_base="https://raw.githubusercontent.com/ContinuumDAO/mpc-config/${MPC_CONFIG_REF:-main}"
@@ -548,10 +550,14 @@ export CONTINUUM_INSTALL_SCRIPT_DIR="${REPO_DIR}/scripts"
 install_progress_register_pc_topics 0 0
 if [ "$DRY_RUN" = true ]; then
     printf '[dry-run] bash %s %s\n' "$PROVISION_SH" "${PROVISION_ARGS[*]:-}"
+    install_progress_topic_done provision-setup 2>/dev/null || true
+    install_progress_topic_done configure-node 2>/dev/null || true
 else
     cd "$REPO_DIR"
     # Preserve RELAYER_API_URL and other env through root run.
-    bash "$PROVISION_SH" "${PROVISION_ARGS[@]}"
+    CONTINUUM_INSTALL_PROGRESS_SUPPRESS_SYNC=1 bash "$PROVISION_SH" "${PROVISION_ARGS[@]}"
+    install_progress_topic_done provision-setup
+    install_progress_topic_done configure-node
 fi
 
 if [ "$DRY_RUN" = false ]; then
@@ -559,19 +565,18 @@ if [ "$DRY_RUN" = false ]; then
     chown -R "${MPC_USER}:${MPC_USER}" "$REPO_DIR"
 fi
 
-PULL_HELPER="${REPO_DIR}/scripts/lib/docker-compose-pull-with-progress.sh"
 if [ "$NO_START" = false ]; then
     log "Pulling images and starting Docker stack"
     if [ "$DRY_RUN" = true ]; then
-        printf '[dry-run] bash %s %s\n' "$PULL_HELPER" "$REPO_DIR"
-        install_progress_topic_begin start-stack
-        install_progress_topic_done start-stack
+        printf '[dry-run] install_progress_docker_pull_and_up %q\n' "$REPO_DIR"
+        install_progress_register_compose_pull_topics "$REPO_DIR" 2>/dev/null || true
+        install_progress_topic_done start-stack 2>/dev/null || true
     else
         cd "$REPO_DIR"
         if ! docker compose version >/dev/null 2>&1; then
             die "'docker compose' (v2) is required — see scripts/docker-V2_debian_ubuntu.sh"
         fi
-        bash "$PULL_HELPER" "$REPO_DIR"
+        install_progress_docker_pull_and_up "$REPO_DIR"
         log "Running containers:"
         docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || docker ps
     fi

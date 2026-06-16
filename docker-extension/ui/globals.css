@@ -165,10 +165,13 @@ h6 {
 
 .install-progress-spinner {
   display: inline-block;
-  width: 1rem;
-  font-size: 0.875rem;
-  color: var(--primary);
-  animation: install-progress-spin 0.8s steps(10) infinite;
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 2px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: install-progress-spin 0.75s linear infinite;
+  flex-shrink: 0;
 }
 
 @keyframes install-progress-stripes {
