@@ -11,7 +11,7 @@
 #
 set -euo pipefail
 
-INSTALL_SCRIPT_VERSION="0.1.1"
+INSTALL_SCRIPT_VERSION="0.1.2"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${MPC_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
@@ -27,7 +27,8 @@ Usage:
   ./scripts/install-node-docker-desktop.sh [options]
 
 Docker Desktop local profile (not for VPS). Requires docker + docker compose v2.
-Skips apt docker.io, UFW (--no-firewall), and systemd (--no-systemd).
+Installs Python/openssl deps in WSL when needed (VPS one-shot installs them via apt; desktop skips docker.io/systemd).
+Skips UFW (--no-firewall) and systemd.
 
 Provision options (at least one management key required):
   -k, --node-mgt-key ADDR     Ethereum NodeMgtKey (0x + 40 hex)
@@ -90,6 +91,74 @@ preflight_fresh() {
     fi
 }
 
+python_provision_deps_ok() {
+    command -v python3 >/dev/null 2>&1 \
+        && python3 -c "import ruamel.yaml, cryptography" 2>/dev/null
+}
+
+install_desktop_python_deps() {
+    if python_provision_deps_ok; then
+        return 0
+    fi
+
+    log "Installing Python dependencies (ruamel.yaml, cryptography) for provision-node.sh"
+
+    if python3 -m pip --version >/dev/null 2>&1; then
+        if [ "$DRY_RUN" = true ]; then
+            printf '[dry-run] python3 -m pip install --user ruamel.yaml cryptography\n'
+        elif python3 -m pip install --user ruamel.yaml cryptography 2>/dev/null && python_provision_deps_ok; then
+            return 0
+        fi
+    elif [ "$DRY_RUN" = false ]; then
+        if python3 -m ensurepip --user --default-pip >/dev/null 2>&1 \
+            && python3 -m pip install --user ruamel.yaml cryptography 2>/dev/null \
+            && python_provision_deps_ok; then
+            return 0
+        fi
+    else
+        printf '[dry-run] python3 -m ensurepip --user && pip install --user ruamel.yaml cryptography\n'
+    fi
+
+    if command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+        log "Trying passwordless sudo apt install for python3-ruamel.yaml python3-cryptography"
+        if [ "$DRY_RUN" = true ]; then
+            printf '[dry-run] sudo -n apt-get update && sudo -n apt-get install -y python3 python3-pip python3-ruamel.yaml python3-cryptography openssl curl git\n'
+        elif sudo -n apt-get update -qq \
+            && sudo -n apt-get install -y \
+                python3 \
+                python3-pip \
+                python3-ruamel.yaml \
+                python3-cryptography \
+                openssl \
+                curl \
+                git \
+            && python_provision_deps_ok; then
+            return 0
+        fi
+    fi
+
+    die "$(cat <<EOF
+Python packages required by provision-node.sh are missing (ruamel.yaml, cryptography).
+The VPS installer installs these via apt; the Docker Desktop profile does not install docker.io/systemd but needs these Python modules.
+
+Run once in WSL (${REPO_DIR}):
+  sudo apt update
+  sudo apt install -y python3-ruamel.yaml python3-cryptography openssl curl git
+
+Or without apt (user install):
+  python3 -m pip install --user ruamel.yaml cryptography
+
+Then re-run Install in the Docker extension (or ./scripts/install-node-docker-desktop.sh).
+EOF
+)"
+}
+
+preflight_desktop_tools() {
+    command -v openssl >/dev/null 2>&1 || warn "openssl not found — process_config may fail (sudo apt install openssl)"
+    command -v curl >/dev/null 2>&1 || warn "curl not found — sudo apt install curl"
+    command -v git >/dev/null 2>&1 || warn "git not found — sudo apt install git"
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -k|--node-mgt-key|--public-mgt-key|-i|--ip|-p|--http-port|--relay-host)
@@ -140,6 +209,8 @@ log "Repo: $REPO_DIR"
 if [ "$DRY_RUN" = false ]; then
     preflight_docker
     preflight_fresh
+    install_desktop_python_deps
+    preflight_desktop_tools
 fi
 preflight_repo
 

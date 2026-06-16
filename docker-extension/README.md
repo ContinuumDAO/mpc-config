@@ -18,7 +18,7 @@ The extension **backend image is UI-only** (no baked `/mpc-config`, no `docker.s
 1. [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
 2. **Settings → Extensions** — enable **Docker Extensions** (disabled by default).
 3. For unpublished builds: disable **Allow only Marketplace extensions**.
-4. **Windows only:** WSL 2 engine + integration for your Ubuntu distro (**Settings → Resources → WSL integration**). After changing integration, **quit and restart Docker Desktop** (a full PC reboot is usually not required).
+4. **Windows only:** WSL 2 engine + integration for your Ubuntu distro (**Settings → Resources → WSL integration**). After changing integration, **quit and restart Docker Desktop** (a full PC reboot is usually not required). In WSL, install provision deps once if needed: `sudo apt install -y python3-ruamel.yaml python3-cryptography openssl curl git`.
 
 ## Install the extension (sideload)
 
@@ -119,7 +119,8 @@ On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the e
 
 | Symptom | Check |
 |---------|--------|
-| Install stops at `sudo: preserving the entire environment` | Push mpc-config **0.1.1+** scripts to `main` (or copy locally). Desktop path no longer uses sudo. Remove partial `~/mpc-config/configs.yaml` and retry. |
+| `python3 ruamel.yaml is required` | Run in WSL: `sudo apt install -y python3-ruamel.yaml python3-cryptography` then retry. Desktop installer **0.1.2+** tries `pip install --user` / passwordless apt first. |
+| Install stops at `sudo: preserving the entire environment` | Push mpc-config **0.1.1+** scripts to `main`. Desktop path no longer uses sudo. Remove partial `~/mpc-config/configs.yaml` and retry. |
 | `shell operators are not allowed` in install log | Rebuild extension **0.1.4+** — orchestrator uses `curl -o` then `bash` (no `\|` pipe through SDK) |
 | Could not run commands in WSL distro | Distro name must match `wsl -l -v` exactly. Reinstall extension so **`continuum-wsl.cmd`** is copied to the host. Quit and restart Docker Desktop. |
 | False “WSL is required” on Windows | Rebuild **0.1.4** — uses `wsl -l -v` not `wsl --status`; set exact distro name |
