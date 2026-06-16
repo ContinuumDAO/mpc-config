@@ -11,12 +11,13 @@
 #
 set -euo pipefail
 
-INSTALL_SCRIPT_VERSION="0.1.7"
+INSTALL_SCRIPT_VERSION="0.1.8"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${MPC_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 PROVISION_VENV="${MPC_PROVISION_VENV:-${REPO_DIR}/.venv-provision}"
 PROVISION_PY_DIR="${MPC_PROVISION_PY_DIR:-${REPO_DIR}/.provision-py}"
 GET_PIP_URL="${GET_PIP_URL:-https://bootstrap.pypa.io/get-pip.py}"
+MPC_AUTH_COMPOSE_SERVICE="${MPC_AUTH_COMPOSE_SERVICE:-app}"
 
 DRY_RUN=false
 NO_START=false
@@ -54,6 +55,7 @@ Environment:
 Notes:
   - Maintenance auto-restart via systemd paths is not available on desktop.
   - After updates, restart manually: cd mpc-config && docker compose restart
+  - Dashboard discovery is patched post-provision so Next.js in Docker reaches mpc-auth via the compose service "app".
 EOF
 }
 
@@ -257,6 +259,198 @@ activate_provision_python() {
     die "provision Python environment not activated"
 }
 
+# Desktop-only: process_config leaves dashboard discovery aliases pointing at host.docker.internal.
+# On Docker Desktop (WSL), continuumdao-node-app runs in the dashboard container; mpc-auth is the
+# compose service "app" on local-network (same as continuum-mcp MPC_AUTH_URL). Patch env + extra_hosts
+# so Maintenance /api/node-read/* can reach PublicDiscoveryPort without NAT hairpin to the WAN IP.
+provision_arg_value() {
+    local flag="$1"
+    local i=0
+    while [ "$i" -lt "${#PROVISION_ARGS[@]}" ]; do
+        if [ "${PROVISION_ARGS[$i]}" = "$flag" ] && [ $((i + 1)) -lt "${#PROVISION_ARGS[@]}" ]; then
+            printf '%s' "${PROVISION_ARGS[$((i + 1))]}"
+            return 0
+        fi
+        i=$((i + 1))
+    done
+    return 1
+}
+
+patch_desktop_dashboard_compose_discovery() {
+    local compose_file="$REPO_DIR/docker-compose.yml"
+    local config_file="$REPO_DIR/configs.yaml"
+    [ -f "$compose_file" ] || die "missing $compose_file after provision"
+    [ -f "$config_file" ] || die "missing $config_file after provision"
+
+    local desktop_ip=""
+    desktop_ip="$(provision_arg_value -i 2>/dev/null || true)"
+    [ -n "$desktop_ip" ] || desktop_ip="$(provision_arg_value --ip 2>/dev/null || true)"
+
+    if [ "$DRY_RUN" = true ]; then
+        printf '[dry-run] patch dashboard discovery in %q (WAN IP %q → compose service %q)\n' \
+            "$compose_file" "${desktop_ip:-<from configs.yaml>}" "$MPC_AUTH_COMPOSE_SERVICE"
+        return 0
+    fi
+
+    log "Patching dashboard container discovery env for Docker Desktop (mpc-auth via compose service ${MPC_AUTH_COMPOSE_SERVICE})"
+
+    DESKTOP_COMPOSE_FILE="$compose_file" \
+    DESKTOP_CONFIG_FILE="$config_file" \
+    DESKTOP_NODE_PUBLIC_IP="$desktop_ip" \
+    DESKTOP_MPC_AUTH_SERVICE="$MPC_AUTH_COMPOSE_SERVICE" \
+    python3 <<'PYDESKTOP'
+import os
+import re
+import sys
+from urllib.parse import urlparse
+
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    print("error: ruamel.yaml required to patch docker-compose.yml", file=sys.stderr)
+    sys.exit(1)
+
+compose_path = os.environ.get("DESKTOP_COMPOSE_FILE", "")
+config_path = os.environ.get("DESKTOP_CONFIG_FILE", "")
+cli_ip = (os.environ.get("DESKTOP_NODE_PUBLIC_IP") or "").strip()
+mpc_auth = (os.environ.get("DESKTOP_MPC_AUTH_SERVICE") or "app").strip() or "app"
+
+if not compose_path or not config_path:
+    sys.exit(1)
+
+y = YAML()
+y.preserve_quotes = True
+y.width = 4096
+
+with open(config_path, encoding="utf-8") as f:
+    cfg = y.load(f) or {}
+
+if not isinstance(cfg, dict):
+    cfg = {}
+
+
+def host_from_node_address(url):
+    s = str(url or "").strip()
+    if not s:
+        return None
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", s):
+        s = "http://" + s
+    try:
+        h = urlparse(s).hostname
+    except ValueError:
+        return None
+    return h.strip().lower() if h else None
+
+
+def collect_node_hosts(cfg_dict):
+    hosts = set()
+    if cli_ip:
+        h = host_from_node_address(cli_ip) or cli_ip.strip().lower()
+        if h:
+            hosts.add(h)
+    groups = cfg_dict.get("MPCGroups")
+    if not isinstance(groups, list) or not groups:
+        return hosts
+    g0 = groups[0]
+    if not isinstance(g0, dict):
+        return hosts
+    na = g0.get("nodeAddresses")
+    if not isinstance(na, dict):
+        return hosts
+    for v in na.values():
+        h = host_from_node_address(v)
+        if h:
+            hosts.add(h)
+    return hosts
+
+
+def merge_aliases(hosts, target):
+    parts = [
+        f"127.0.0.1={target}",
+        f"localhost={target}",
+        f"::1={target}",
+    ]
+    seen = {"127.0.0.1", "localhost", "::1"}
+    for h in sorted(hosts):
+        if h in seen:
+            continue
+        parts.append(f"{h}={target}")
+        seen.add(h)
+    return ",".join(parts)
+
+
+def normalize_env(env):
+    if env is None:
+        return {}
+    if isinstance(env, dict):
+        return dict(env)
+    if isinstance(env, list):
+        out = {}
+        for item in env:
+            if isinstance(item, str) and "=" in item:
+                k, v = item.split("=", 1)
+                out[k] = v
+        return out
+    return {}
+
+
+def normalize_extra_hosts(extra):
+    if extra is None:
+        return []
+    if isinstance(extra, list):
+        return [str(x) for x in extra]
+    return [str(extra)]
+
+
+hosts = collect_node_hosts(cfg)
+aliases = merge_aliases(hosts, mpc_auth)
+ipv4 = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")
+
+with open(compose_path, encoding="utf-8") as f:
+    compose = y.load(f)
+
+if not isinstance(compose, dict):
+    print("error: invalid docker-compose.yml", file=sys.stderr)
+    sys.exit(1)
+
+services = compose.get("services")
+if not isinstance(services, dict) or "dashboard" not in services:
+    print("error: docker-compose.yml has no dashboard service", file=sys.stderr)
+    sys.exit(1)
+
+dash = services["dashboard"]
+if not isinstance(dash, dict):
+    print("error: dashboard service is not a mapping", file=sys.stderr)
+    sys.exit(1)
+
+env = normalize_env(dash.get("environment"))
+env["NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES"] = aliases
+env["NODE_READ_DISCOVERY_HAIRPIN_FALLBACK"] = "1"
+env.setdefault("NODE_READ_DISCOVERY_ALLOW_PRIVATE", "1")
+env.setdefault("ENABLE_PLAIN_HTTP_ATTACH", "1")
+dash["environment"] = env
+
+extra = normalize_extra_hosts(dash.get("extra_hosts"))
+have = set()
+for entry in extra:
+    host = entry.split(":", 1)[0].strip().lower()
+    have.add(host)
+if "host.docker.internal" not in have:
+    extra.append("host.docker.internal:host-gateway")
+    have.add("host.docker.internal")
+for h in sorted(hosts):
+    if ipv4.match(h) and h not in have:
+        extra.append(f"{h}:host-gateway")
+        have.add(h)
+dash["extra_hosts"] = extra
+
+with open(compose_path, "w", encoding="utf-8") as f:
+    y.dump(compose, f)
+
+print(f"ok aliases={aliases}", flush=True)
+PYDESKTOP
+}
+
 preflight_desktop_tools() {
     command -v openssl >/dev/null 2>&1 || warn "openssl not found — process_config may fail (sudo apt install openssl)"
     command -v curl >/dev/null 2>&1 || warn "curl not found — sudo apt install curl"
@@ -338,6 +532,7 @@ else
     export PROCESS_CONFIG_SKIP_SYSTEMD=1
     "${PROVISION_SH[@]}"
 fi
+patch_desktop_dashboard_compose_discovery
 
 if [ "$NO_START" = false ]; then
     log "Starting Docker stack (docker compose up -d)"
