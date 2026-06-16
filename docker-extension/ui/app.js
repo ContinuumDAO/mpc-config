@@ -34,6 +34,191 @@ function getHostCli() {
   return { ddClient, cli }
 }
 
+const PROGRESS_PREFIX = '@continuum/progress\t'
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
+function createProgressTracker({ progressPanel, progressTopics, progressOverall }) {
+  const topics = new Map()
+  let overallPct = 0
+  let spinnerOn = false
+  let spinnerIdx = 0
+  let spinnerTimer = null
+
+  function topicLabel(id, fallback) {
+    const t = topics.get(id)
+    return t?.label ?? fallback ?? id
+  }
+
+  function renderRow(id, label, pct, state) {
+    const row = document.createElement('div')
+    row.className = 'install-progress-row'
+    row.dataset.topicId = id
+
+    const labelEl = document.createElement('span')
+    labelEl.className = 'install-progress-label'
+    if (state === 'done' || state === 'skipped') labelEl.classList.add('is-done')
+    if (state === 'failed') labelEl.classList.add('is-failed')
+    labelEl.textContent = label
+    labelEl.title = label
+
+    const track = document.createElement('div')
+    track.className = 'install-progress-track'
+    const fill = document.createElement('div')
+    fill.className = 'install-progress-fill'
+    if (state === 'active') fill.classList.add('is-active')
+    if (state === 'failed') fill.classList.add('is-failed')
+    fill.style.width = `${Math.max(0, Math.min(100, pct))}%`
+    track.appendChild(fill)
+
+    const pctEl = document.createElement('span')
+    pctEl.className = 'install-progress-pct'
+    pctEl.textContent = `${Math.round(pct)}%`
+
+    row.append(labelEl, track, pctEl)
+    return row
+  }
+
+  function renderOverall() {
+    if (!progressOverall) return
+    progressOverall.replaceChildren()
+
+    const row = document.createElement('div')
+    row.className = 'install-progress-overall-row'
+
+    const labelEl = document.createElement('span')
+    labelEl.className = 'install-progress-label font-medium'
+    labelEl.textContent = 'Overall'
+
+    const track = document.createElement('div')
+    track.className = 'install-progress-track'
+    const fill = document.createElement('div')
+    fill.className = 'install-progress-fill'
+    if (spinnerOn) fill.classList.add('is-active')
+    fill.style.width = `${Math.max(0, Math.min(100, overallPct))}%`
+    track.appendChild(fill)
+
+    const tail = document.createElement('span')
+    tail.className = 'install-progress-pct flex items-center justify-end gap-1'
+    tail.innerHTML = `<span>${Math.round(overallPct)}%</span>`
+    if (spinnerOn) {
+      const spin = document.createElement('span')
+      spin.className = 'install-progress-spinner'
+      spin.textContent = SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]
+      spin.setAttribute('aria-hidden', 'true')
+      tail.appendChild(spin)
+    }
+
+    row.append(labelEl, track, tail)
+    progressOverall.appendChild(row)
+  }
+
+  function renderAll() {
+    if (!progressTopics) return
+    progressTopics.replaceChildren()
+    for (const [id, t] of topics) {
+      progressTopics.appendChild(renderRow(id, t.label, t.pct ?? 0, t.state ?? 'pending'))
+    }
+    renderOverall()
+  }
+
+  function showPanel() {
+    if (!progressPanel) return
+    progressPanel.hidden = false
+    progressPanel.classList.remove('hidden')
+  }
+
+  function startSpinner() {
+    if (spinnerTimer) return
+    spinnerTimer = window.setInterval(() => {
+      spinnerIdx = (spinnerIdx + 1) % SPINNER_FRAMES.length
+      renderOverall()
+    }, 120)
+  }
+
+  function stopSpinner() {
+    if (spinnerTimer) {
+      window.clearInterval(spinnerTimer)
+      spinnerTimer = null
+    }
+  }
+
+  function handleEvent(ev) {
+    if (!ev || typeof ev !== 'object') return
+    switch (ev.type) {
+      case 'init':
+        topics.clear()
+        for (const t of ev.topics ?? []) {
+          if (!t?.id) continue
+          topics.set(t.id, { label: t.label ?? t.id, pct: 0, state: 'pending', weight: t.weight ?? 1 })
+        }
+        showPanel()
+        renderAll()
+        break
+      case 'topic': {
+        if (!ev.id) break
+        const cur = topics.get(ev.id) ?? { label: ev.id, pct: 0, state: 'pending' }
+        cur.pct = typeof ev.pct === 'number' ? ev.pct : cur.pct
+        cur.state = ev.state ?? cur.state
+        topics.set(ev.id, cur)
+        showPanel()
+        renderAll()
+        break
+      }
+      case 'overall':
+        overallPct = typeof ev.pct === 'number' ? ev.pct : overallPct
+        spinnerOn = ev.spinner === true
+        if (spinnerOn) startSpinner()
+        else stopSpinner()
+        showPanel()
+        renderOverall()
+        break
+      case 'finish':
+        spinnerOn = false
+        stopSpinner()
+        if (ev.ok === true) overallPct = 100
+        renderAll()
+        break
+      default:
+        break
+    }
+  }
+
+  function reset() {
+    topics.clear()
+    overallPct = 0
+    spinnerOn = false
+    spinnerIdx = 0
+    stopSpinner()
+    if (progressTopics) progressTopics.replaceChildren()
+    if (progressOverall) progressOverall.replaceChildren()
+    if (progressPanel) {
+      progressPanel.hidden = true
+      progressPanel.classList.add('hidden')
+    }
+  }
+
+  return { handleEvent, reset, topicLabel }
+}
+
+function parseProgressLines(text, progressTracker, logOutput) {
+  let rest = text
+  let idx
+  while ((idx = rest.indexOf(PROGRESS_PREFIX)) !== -1) {
+    const before = rest.slice(0, idx)
+    if (before && logOutput) appendLog(logOutput, before)
+    rest = rest.slice(idx + PROGRESS_PREFIX.length)
+    const lineEnd = rest.indexOf('\n')
+    const jsonLine = lineEnd === -1 ? rest : rest.slice(0, lineEnd)
+    rest = lineEnd === -1 ? '' : rest.slice(lineEnd + 1)
+    try {
+      progressTracker.handleEvent(JSON.parse(jsonLine))
+    } catch {
+      if (logOutput) appendLog(logOutput, `${PROGRESS_PREFIX}${jsonLine}\n`)
+    }
+  }
+  if (rest && logOutput) appendLog(logOutput, rest)
+}
+
 function appendLog(logOutput, text) {
   logOutput.textContent += text
   logOutput.scrollTop = logOutput.scrollHeight
@@ -188,20 +373,69 @@ async function probeWslEnvironment(cli, ddClient) {
 /**
  * host.cli.exec with { stream } returns ExecProcess, not a Promise — wrap onClose.
  */
-function execHostStreaming(cli, cmd, args, logOutput) {
+function execHostStreaming(cli, cmd, args, logOutput, progressTracker) {
   return new Promise((resolve, reject) => {
     let settled = false
+    let stdoutBuf = ''
+
+    const flushStdout = (final = false) => {
+      if (!stdoutBuf) return
+      if (progressTracker) {
+        parseProgressLines(stdoutBuf, progressTracker, logOutput)
+        stdoutBuf = ''
+        return
+      }
+      if (final || stdoutBuf.includes('\n')) {
+        appendLog(logOutput, stdoutBuf.endsWith('\n') ? stdoutBuf : `${stdoutBuf}\n`)
+        stdoutBuf = ''
+      }
+    }
 
     const finish = (exitCode) => {
       if (settled) return
       settled = true
+      if (progressTracker && stdoutBuf) {
+        const line = stdoutBuf
+        stdoutBuf = ''
+        if (line.startsWith(PROGRESS_PREFIX)) {
+          try {
+            progressTracker.handleEvent(JSON.parse(line.slice(PROGRESS_PREFIX.length)))
+          } catch {
+            appendLog(logOutput, `${line}\n`)
+          }
+        } else if (line.length > 0) {
+          appendLog(logOutput, `${line}\n`)
+        }
+      } else {
+        flushStdout(true)
+      }
       appendLog(logOutput, `\n[process exited ${exitCode}]\n`)
       resolve({ code: exitCode })
     }
 
     const stream = {
       onOutput({ stdout, stderr }) {
-        if (stdout) appendLog(logOutput, stdout.endsWith('\n') ? stdout : `${stdout}\n`)
+        if (stdout) {
+          if (progressTracker) {
+            stdoutBuf += stdout
+            let nl
+            while ((nl = stdoutBuf.indexOf('\n')) !== -1) {
+              const line = stdoutBuf.slice(0, nl)
+              stdoutBuf = stdoutBuf.slice(nl + 1)
+              if (line.startsWith(PROGRESS_PREFIX)) {
+                try {
+                  progressTracker.handleEvent(JSON.parse(line.slice(PROGRESS_PREFIX.length)))
+                } catch {
+                  appendLog(logOutput, `${line}\n`)
+                }
+              } else if (line.length > 0) {
+                appendLog(logOutput, `${line}\n`)
+              }
+            }
+          } else {
+            appendLog(logOutput, stdout.endsWith('\n') ? stdout : `${stdout}\n`)
+          }
+        }
         if (stderr) appendLog(logOutput, stderr.endsWith('\n') ? stderr : `${stderr}\n`)
       },
       onError(error) {
@@ -248,7 +482,7 @@ async function verifyWslDistro(cli, wslDistro, logOutput) {
   return false
 }
 
-async function runInstallOnHost(cli, { useWsl, wslDistro, scriptArgs }, logOutput) {
+async function runInstallOnHost(cli, { useWsl, wslDistro, scriptArgs }, logOutput, progressTracker) {
   appendLog(logOutput, 'Downloading orchestrator script…\n')
 
   const curlArgs = useWsl
@@ -260,6 +494,7 @@ async function runInstallOnHost(cli, { useWsl, wslDistro, scriptArgs }, logOutpu
     useWsl ? WSL_HOST_WRAPPER : 'curl',
     curlArgs,
     logOutput,
+    null,
   )
   if (result.code !== 0) {
     return result
@@ -268,10 +503,22 @@ async function runInstallOnHost(cli, { useWsl, wslDistro, scriptArgs }, logOutpu
   appendLog(logOutput, `\nRunning orchestrator via ${useWsl ? WSL_HOST_WRAPPER : 'bash'}…\n\n`)
 
   const runArgs = useWsl
-    ? wslHostArgs(wslDistro, ['bash', ORCHESTRATE_SCRIPT_PATH, ...scriptArgs])
-    : [ORCHESTRATE_SCRIPT_PATH, ...scriptArgs]
+    ? wslHostArgs(wslDistro, [
+        'env',
+        'CONTINUUM_INSTALL_PROGRESS=json',
+        'bash',
+        ORCHESTRATE_SCRIPT_PATH,
+        ...scriptArgs,
+      ])
+    : ['env', 'CONTINUUM_INSTALL_PROGRESS=json', 'bash', ORCHESTRATE_SCRIPT_PATH, ...scriptArgs]
 
-  return execHostStreaming(cli, useWsl ? WSL_HOST_WRAPPER : 'bash', runArgs, logOutput)
+  return execHostStreaming(
+    cli,
+    useWsl ? WSL_HOST_WRAPPER : 'bash',
+    runArgs,
+    logOutput,
+    progressTracker,
+  )
 }
 
 function applyDetectedWslDistro(wslDistroInput, wslEnv) {
@@ -288,6 +535,9 @@ function initExtensionUi() {
   const installBtn = document.getElementById('install-btn')
   const logPanel = document.getElementById('log-panel')
   const logOutput = document.getElementById('log-output')
+  const progressPanel = document.getElementById('progress-panel')
+  const progressTopics = document.getElementById('progress-topics')
+  const progressOverall = document.getElementById('progress-overall')
   const resultPanel = document.getElementById('result-panel')
   const wslDistroRow = document.getElementById('wsl-distro-row')
   const wslDistroInput = document.getElementById('wsl-distro')
@@ -312,6 +562,7 @@ function initExtensionUi() {
   }
 
   const { ddClient, cli } = hostCli
+  const progressTracker = createProgressTracker({ progressPanel, progressTopics, progressOverall })
   let wslEnv = { isWindows: false, wslAvailable: false, distros: [], defaultDistro: null, listOutput: '' }
 
   void (async () => {
@@ -350,6 +601,7 @@ function initExtensionUi() {
     resultPanel.textContent = ''
     showLogPanel(logPanel)
     logOutput.textContent = ''
+    progressTracker.reset()
     installBtn.disabled = true
 
     const nodeMgtKey = document.getElementById('node-mgt-key')?.value ?? ''
@@ -408,9 +660,9 @@ function initExtensionUi() {
     try {
       let result
       if (useWsl) {
-        result = await runInstallOnHost(cli, { useWsl: true, wslDistro, scriptArgs }, logOutput)
+        result = await runInstallOnHost(cli, { useWsl: true, wslDistro, scriptArgs }, logOutput, progressTracker)
       } else {
-        result = await runInstallOnHost(cli, { useWsl: false, wslDistro: null, scriptArgs }, logOutput)
+        result = await runInstallOnHost(cli, { useWsl: false, wslDistro: null, scriptArgs }, logOutput, progressTracker)
       }
 
       resultPanel.hidden = false

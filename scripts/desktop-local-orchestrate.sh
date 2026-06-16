@@ -9,7 +9,7 @@
 #
 set -euo pipefail
 
-ORCHESTRATE_VERSION="0.1.7"
+ORCHESTRATE_VERSION="0.1.8"
 MPC_CONFIG_REPO="${MPC_CONFIG_REPO:-https://github.com/ContinuumDAO/mpc-config.git}"
 MPC_CONFIG_REF="${MPC_CONFIG_REF:-main}"
 REPO_DIR="${MPC_REPO_DIR:-${HOME}/mpc-config}"
@@ -49,6 +49,7 @@ Orchestrator options:
 
 Environment:
   MPC_REPO_DIR, MPC_CONFIG_REPO, MPC_CONFIG_REF
+  CONTINUUM_INSTALL_PROGRESS=json   Structured progress for Docker extension
 EOF
 }
 

@@ -10,8 +10,8 @@
       href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&family=Source+Serif+4:wght@600&display=swap"
       rel="stylesheet"
     />
-    <script type="module" crossorigin src="./assets/index-DnjB0ZuL.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CTg-5DK3.css">
+    <script type="module" crossorigin src="./assets/index-B7PjEYij.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Co8ZzyIJ.css">
   </head>
   <body>
     <main class="mx-auto w-full max-w-lg p-6">
@@ -134,11 +134,24 @@
         </form>
 
         <section id="log-panel" class="hidden flex-col gap-2" hidden>
-          <h2 class="m-0 font-sans text-[1rem] font-semibold text-[var(--text)]">Install log</h2>
-          <pre
-            id="log-output"
-            class="m-0 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[4px] border border-[var(--muted)] bg-[var(--bg)] p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--text)]"
-          ></pre>
+          <h2 class="m-0 font-sans text-[1rem] font-semibold text-[var(--text)]">Install progress</h2>
+          <div
+            id="progress-panel"
+            class="install-progress-panel hidden m-0 flex max-h-72 flex-col overflow-hidden rounded-[4px] border border-[var(--muted)] bg-[var(--bg)]"
+            hidden
+          >
+            <div id="progress-topics" class="install-progress-topics flex flex-col gap-2 overflow-y-auto p-3"></div>
+            <div id="progress-overall" class="install-progress-overall border-t border-[var(--muted)] p-3"></div>
+          </div>
+          <details id="detail-log-wrap" class="rounded-[4px] border border-[var(--muted)]/60 bg-[var(--bg)]/40">
+            <summary class="cursor-pointer px-3 py-2 font-sans text-[0.8125rem] font-medium text-[var(--text)]">
+              Detail log
+            </summary>
+            <pre
+              id="log-output"
+              class="m-0 max-h-48 overflow-auto whitespace-pre-wrap break-words border-t border-[var(--muted)]/40 p-3 font-mono text-[0.6875rem] leading-relaxed text-[var(--text)]"
+            ></pre>
+          </details>
         </section>
 
         <section

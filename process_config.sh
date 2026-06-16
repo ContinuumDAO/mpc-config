@@ -22,6 +22,12 @@ else
     REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 fi
 
+CONTINUUM_INSTALL_SCRIPT_DIR="${REPO_ROOT}/scripts"
+if [ -f "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/load-install-progress.sh" ]; then
+    # shellcheck source=scripts/lib/load-install-progress.sh
+    . "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/load-install-progress.sh"
+fi
+
 # Prefer the invoking user's ids when running via sudo so repo-local paths are not left root-owned.
 if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ] && id -u "$SUDO_USER" &>/dev/null; then
     PROCESS_CONFIG_REPO_UID=$(id -u "$SUDO_USER")
@@ -252,19 +258,35 @@ print_error() {
 }
 
 print_success() {
-    echo -e "${GREEN}✓ $1${NC}"
+    if install_progress_ui_active 2>/dev/null; then
+        echo -e "${GREEN}✓ $1${NC}" >&2
+    else
+        echo -e "${GREEN}✓ $1${NC}"
+    fi
 }
 
 print_warning() {
-    echo -e "${YELLOW}⚠ $1${NC}"
+    if install_progress_ui_active 2>/dev/null; then
+        echo -e "${YELLOW}⚠ $1${NC}" >&2
+    else
+        echo -e "${YELLOW}⚠ $1${NC}"
+    fi
 }
 
 print_info() {
-    echo -e "${BLUE}ℹ $1${NC}"
+    if install_progress_ui_active 2>/dev/null; then
+        echo -e "${BLUE}ℹ $1${NC}" >&2
+    else
+        echo -e "${BLUE}ℹ $1${NC}"
+    fi
 }
 
 print_step() {
-    echo -e "\n${BLUE}==> $1${NC}"
+    if install_progress_ui_active 2>/dev/null; then
+        echo -e "\n${BLUE}==> $1${NC}" >&2
+    else
+        echo -e "\n${BLUE}==> $1${NC}"
+    fi
 }
 
 # Hand root-owned repo paths to the invoking user (sudo ./process_config.sh, or sudo mkdir as a normal user).
@@ -6858,12 +6880,22 @@ main() {
         process_config_sync_compose_role_only "$SKIP_AGENT_LLM_CONFIG_PATH" "$COMPOSE_APP_IMAGE_REF"
         exit $?
     fi
+
+    local _pc_skip_firewall=0 _pc_skip_systemd=0
+    [ "$SKIP_FIREWALL" = true ] && _pc_skip_firewall=1
+    if [ "$SKIP_SYSTEMD" = true ] || [ "${PROCESS_CONFIG_SKIP_SYSTEMD:-0}" = "1" ]; then
+        _pc_skip_systemd=1
+    fi
+    if declare -F install_progress_register_pc_topics >/dev/null 2>&1; then
+        install_progress_register_pc_topics "$_pc_skip_firewall" "$_pc_skip_systemd"
+    fi
     
-    echo "=========================================="
-    echo "MPC config: Mosquitto (MQTT) + Browser HTTPS (web) validation and certificates"
-    echo "=========================================="
-    echo ""
+    echo "==========================================" >&2
+    echo "MPC config: Mosquitto (MQTT) + Browser HTTPS (web) validation and certificates" >&2
+    echo "==========================================" >&2
+    echo "" >&2
     
+    install_progress_topic_begin pc-config 2>/dev/null || true
     # Require configs.yaml first (fail fast before any other checks)
     CONFIG_FILE=$(find_configs_yaml)
     if [ -z "$CONFIG_FILE" ]; then
@@ -6916,7 +6948,9 @@ main() {
     else
         print_info "Skipping AgentLlmConfigDir in configs.yaml (--no-agent-llm-config-path)"
     fi
+    install_progress_topic_done pc-config 2>/dev/null || true
 
+    install_progress_topic_begin pc-keys 2>/dev/null || true
     # Management keys before nodeAddresses so re-runs offer NodeMgtKey / PublicMgtKey when missing
     # (otherwise users only see the node IP flow first).
     normalize_openssh_public_mgt_key_in_yaml "$CONFIG_FILE" || exit 1
@@ -6925,7 +6959,9 @@ main() {
     prompt_fill_empty_node_addresses "$CONFIG_FILE" || exit 1
 
     prompt_menu_edit_node_addresses "$CONFIG_FILE" || exit 1
+    install_progress_topic_done pc-keys 2>/dev/null || true
 
+    install_progress_topic_begin pc-validate 2>/dev/null || true
     check_root
     check_openssl
     
@@ -6935,7 +6971,9 @@ main() {
     validate_no_default_ips "$CONFIG_FILE"
     validate_external_ips_only "$CONFIG_FILE"
     validate_presign_config "$CONFIG_FILE"
+    install_progress_topic_done pc-validate 2>/dev/null || true
     
+    install_progress_topic_begin pc-mqtt-config 2>/dev/null || true
     # Determine relay vs client and configure docker-compose FIRST (so client always gets mosquitto commented out)
     # before any step that might exit (e.g. Relayer API check). Otherwise a client would never reach configure_docker_compose.
     IS_RELAY_NODE=$(validate_node_ip "$CONFIG_FILE")
@@ -6951,20 +6989,29 @@ main() {
     prompt_browser_loopback_read_http
 
     configure_mqtt_broker "$CONFIG_FILE" "$IS_RELAY_NODE"
+    install_progress_topic_done pc-mqtt-config 2>/dev/null || true
+
+    install_progress_topic_begin pc-compose 2>/dev/null || true
     local _agent_llm_compose_enable=1
     if [ "$SKIP_AGENT_LLM_CONFIG_PATH" = true ]; then
         _agent_llm_compose_enable=0
     fi
     configure_docker_compose "$IS_RELAY_NODE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED" "$COMPOSE_APP_IMAGE_REF" "$CONFIG_FILE" "$_agent_llm_compose_enable"
+    install_progress_topic_done pc-compose 2>/dev/null || true
 
+    install_progress_topic_if_registered begin pc-browser-https 2>/dev/null || true
     setup_browser_https "$CONFIG_FILE"
     apply_browser_loopback_read_http_config "$CONFIG_FILE" "$BROWSER_LOOPBACK_READ_HTTP_ENABLED"
+    install_progress_topic_if_registered done pc-browser-https 2>/dev/null || true
 
+    install_progress_topic_if_registered begin pc-relayer 2>/dev/null || true
     prompt_relayer_api_url_if_missing "$CONFIG_FILE" || exit 1
 
-    # Host firewall must run before Relayer validation (UFW already enforced active earlier unless --no-firewall).
+    install_progress_topic_if_registered begin pc-firewall 2>/dev/null || true
     apply_process_config_firewall "$CONFIG_FILE" "$SKIP_FIREWALL" "$IS_RELAY_NODE"
+    install_progress_topic_if_registered done pc-firewall 2>/dev/null || true
 
+    install_progress_topic_if_registered begin pc-systemd 2>/dev/null || true
     # Optional mpc-auth Docker systemd installs/restarts (orthogonal to Relayer connectivity). Runs *before*
     # validate_relayer_api_connection so Relayer/network failures cannot skip these prompts entirely.
     # Sync workdir before install so a fresh /etc/default gets COMPOSE_WORKDIR even if install overwrites the file.
@@ -6974,10 +7021,14 @@ main() {
     _process_config_sync_mpc_auth_docker_dashboard_keys "$CONFIG_FILE"
     _process_config_ensure_agent_llm_config_defaults_compose_volume
     _process_config_sync_mpc_auth_libexec_from_repo "$SKIP_SYSTEMD"
+    install_progress_topic_if_registered done pc-systemd 2>/dev/null || true
 
+    install_progress_topic_if_registered set pc-relayer 50 2>/dev/null || true
     # Validate Relayer API connection (MANDATORY for relay before certificate generation; may exit 1 on failure)
     validate_relayer_api_connection "$CONFIG_FILE"
+    install_progress_topic_if_registered done pc-relayer 2>/dev/null || true
     
+    install_progress_topic_if_registered begin pc-mqtt-certs 2>/dev/null || true
     if [ "$IS_RELAY_NODE" = "true" ]; then
         # ========================================
         # RELAY NODE (MQTT Broker) PATH
@@ -7264,9 +7315,10 @@ main() {
         echo ""
         print_info "Replace 'RELAY_NODE_IP' with the actual IP address of your relay node."
         print_info "Replace 'relay-node-user' with the SSH username on the relay node."
-        echo ""
+        echo "" >&2
     fi
 
+    install_progress_topic_if_registered done pc-mqtt-certs 2>/dev/null || true
     _process_config_finalize_repo_ownership_after_sudo
 }
 

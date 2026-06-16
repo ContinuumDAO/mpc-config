@@ -12,7 +12,25 @@
 #
 set -euo pipefail
 
-INSTALL_SCRIPT_VERSION="1.0.5"
+CONTINUUM_INSTALL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+# shellcheck source=lib/load-install-progress.sh
+if [ -n "$CONTINUUM_INSTALL_SCRIPT_DIR" ] && [ -f "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/load-install-progress.sh" ]; then
+    # shellcheck source=lib/load-install-progress.sh
+    . "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/load-install-progress.sh"
+else
+    _bootstrap_tmp="$(mktemp -d 2>/dev/null || echo "/tmp/continuum-bootstrap-$$")"
+    _raw_base="https://raw.githubusercontent.com/ContinuumDAO/mpc-config/${MPC_CONFIG_REF:-main}"
+    if curl -fsSL "${_raw_base}/scripts/lib/load-install-progress.sh" -o "${_bootstrap_tmp}/load-install-progress.sh" 2>/dev/null; then
+        CONTINUUM_INSTALL_SCRIPT_DIR="${_bootstrap_tmp}"
+        # shellcheck source=/dev/null
+        . "${_bootstrap_tmp}/load-install-progress.sh"
+    else
+        CONTINUUM_INSTALL_PROGRESS=off
+        export CONTINUUM_INSTALL_PROGRESS
+    fi
+fi
+
+INSTALL_SCRIPT_VERSION="1.0.6"
 INSTALL_LOG="${INSTALL_LOG:-/var/log/continuumdao-mpc-install.log}"
 
 MPC_CONFIG_REPO="${MPC_CONFIG_REPO:-https://github.com/ContinuumDAO/mpc-config.git}"
@@ -102,6 +120,7 @@ die() {
 
 on_err() {
     local ec=$?
+    install_progress_finish false 2>/dev/null || true
     printf 'error: install failed at line %s (exit %s). See %s on the server.\n' "${BASH_LINENO[0]:-?}" "$ec" "$INSTALL_LOG" >&2
     exit "$ec"
 }
@@ -405,14 +424,27 @@ log "ContinuumDAO MPC node one-shot install (installer v${INSTALL_SCRIPT_VERSION
 log "Install log: ${INSTALL_LOG}"
 log "Target repo: ${REPO_DIR} (ref: ${MPC_CONFIG_REF})"
 
+export CONTINUUM_INSTALL_DRY_RUN="$DRY_RUN"
+install_progress_init vps
+
+install_progress_topic_begin preflight
 preflight_check_fresh_install
+install_progress_topic_done preflight
+
 maybe_auto_skip_packages
+if [ "$SKIP_PACKAGES" = true ]; then
+    install_progress_mark_done_if packages true
+fi
 
 if [ "$SKIP_PACKAGES" = false ]; then
     log "Installing system packages"
+    install_progress_topic_begin packages
+    install_progress_spinner_start
     wait_for_apt_lock
+    install_progress_topic_set packages 15
     run_or_dry apt-get -o "DPkg::Lock::Timeout=${APT_LOCK_WAIT_SECS:-300}" update -qq
     wait_for_apt_lock
+    install_progress_topic_set packages 40
     run_or_dry apt-get -o "DPkg::Lock::Timeout=${APT_LOCK_WAIT_SECS:-300}" install -y \
         ca-certificates \
         curl \
@@ -429,16 +461,20 @@ if [ "$SKIP_PACKAGES" = false ]; then
         python3-cryptography \
         mongodb-database-tools \
         jq
+    install_progress_topic_set packages 85
     if [ "$DRY_RUN" = false ]; then
         systemctl enable --now docker 2>/dev/null || true
     else
         printf '[dry-run] systemctl enable --now docker\n'
     fi
+    install_progress_spinner_stop
+    install_progress_topic_done packages
     log "Packages phase complete"
 fi
 
 if [ "$SKIP_USER" = false ]; then
     log "Ensuring OS user ${MPC_USER} with password-protected sudo"
+    install_progress_topic_begin os-user
     if [ "$DRY_RUN" = false ]; then
         if ! id "$MPC_USER" >/dev/null 2>&1; then
             adduser --disabled-password --gecos "ContinuumDAO MPC node" "$MPC_USER"
@@ -454,10 +490,15 @@ if [ "$SKIP_USER" = false ]; then
     else
         printf '[dry-run] create user %s, sudoers.d, docker group\n' "$MPC_USER"
     fi
+    install_progress_topic_done os-user
+else
+    install_progress_mark_done_if os-user true
 fi
 
 if [ "$SKIP_CLONE" = false ]; then
     log "Cloning mpc-config to ${REPO_DIR}"
+    install_progress_topic_begin clone
+    install_progress_spinner_start
     if [ "$DRY_RUN" = false ]; then
         if [ -d "$REPO_DIR" ]; then
             if [ -f "${REPO_DIR}/configs.yaml" ]; then
@@ -475,9 +516,12 @@ if [ "$SKIP_CLONE" = false ]; then
     else
         printf '[dry-run] git clone --branch %s %s %s\n' "$MPC_CONFIG_REF" "$MPC_CONFIG_REPO" "$REPO_DIR"
     fi
+    install_progress_spinner_stop
+    install_progress_topic_done clone
 else
     log "Skipping clone (--skip-clone); using ${REPO_DIR}"
     [ -d "$REPO_DIR" ] || die "repo directory not found: $REPO_DIR"
+    install_progress_mark_done_if clone true
 fi
 
 PROVISION_SH="${REPO_DIR}/scripts/provision-node.sh"
@@ -489,13 +533,19 @@ if [ "$DRY_RUN" = false ]; then
 fi
 
 log "Installing Docker Compose v2 plugin"
+install_progress_topic_begin docker-v2
+install_progress_spinner_start
 if [ "$DRY_RUN" = true ]; then
     printf '[dry-run] bash %s\n' "$DOCKER_V2_SH"
 else
     bash "$DOCKER_V2_SH" || die "docker-V2_debian_ubuntu.sh failed"
 fi
+install_progress_spinner_stop
+install_progress_topic_done docker-v2
 
 log "Provisioning node (scripts/provision-node.sh)"
+export CONTINUUM_INSTALL_SCRIPT_DIR="${REPO_DIR}/scripts"
+install_progress_register_pc_topics 0 0
 if [ "$DRY_RUN" = true ]; then
     printf '[dry-run] bash %s %s\n' "$PROVISION_SH" "${PROVISION_ARGS[*]:-}"
 else
@@ -509,22 +559,28 @@ if [ "$DRY_RUN" = false ]; then
     chown -R "${MPC_USER}:${MPC_USER}" "$REPO_DIR"
 fi
 
+PULL_HELPER="${REPO_DIR}/scripts/lib/docker-compose-pull-with-progress.sh"
 if [ "$NO_START" = false ]; then
-    log "Starting Docker stack (docker compose up -d)"
+    log "Pulling images and starting Docker stack"
     if [ "$DRY_RUN" = true ]; then
-        printf '[dry-run] cd %s && docker compose up -d\n' "$REPO_DIR"
+        printf '[dry-run] bash %s %s\n' "$PULL_HELPER" "$REPO_DIR"
+        install_progress_topic_begin start-stack
+        install_progress_topic_done start-stack
     else
         cd "$REPO_DIR"
         if ! docker compose version >/dev/null 2>&1; then
             die "'docker compose' (v2) is required — see scripts/docker-V2_debian_ubuntu.sh"
         fi
-        docker compose up -d
+        bash "$PULL_HELPER" "$REPO_DIR"
         log "Running containers:"
         docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || docker ps
     fi
 else
     log "Skipping docker compose (--no-start)"
+    install_progress_mark_done_if start-stack true
 fi
+
+install_progress_finish true
 
 if [ -n "$PROVISION_NODE_IP" ]; then
     MPC_PASSWD_SSH="ssh root@${PROVISION_NODE_IP} 'passwd ${MPC_USER}'"

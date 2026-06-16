@@ -75,6 +75,34 @@ Run on a Windows machine with Docker Desktop — **not required to merge initial
 5. [ ] Attach node at [mpa.continuumdao.org](https://mpa.continuumdao.org) via loopback/HTTPS URL
 6. [ ] Node map wizard: Windows primary (extension) + advanced WSL fallback smoke test
 
+## Install progress UI (manual QA)
+
+Install scripts emit structured progress on stdout (`@continuum/progress` JSON lines when `CONTINUUM_INSTALL_PROGRESS=json`). The extension parses these into per-topic bars plus a pinned **Overall** row with spinner.
+
+**Desktop JSON dry-run (WSL / Linux):**
+
+```bash
+cd ~/mpc-config   # or your mpc-config clone
+CONTINUUM_INSTALL_PROGRESS=json ./scripts/install-node-docker-desktop.sh \
+  --dry-run --no-start --repo-dir "$(pwd)" \
+  --node-mgt-key "0xYOUR40HEX…" --ip "203.0.113.50" 2>/dev/null | grep '@continuum/progress'
+```
+
+Expect `init`, multiple `topic` lines, `overall` with `"spinner":true`, and `finish` with `"ok":true`.
+
+**VPS plain progress (root shell on Debian/Ubuntu):**
+
+```bash
+sudo CONTINUUM_INSTALL_PROGRESS=plain ./scripts/install-node-debian-ubuntu.sh \
+  --dry-run --skip-clone --skip-packages --skip-user --no-start \
+  --repo-dir /path/to/empty-mpc-config-tree \
+  --node-mgt-key "0xYOUR40HEX…" --ip "203.0.113.50"
+```
+
+Expect `==> Overall N%` lines and per-topic percentages on stdout; verbose logs on stderr.
+
+**Extension UI:** after rebuild/sideload, run Install — the progress panel should list topics (clone, Python deps, process_config phases, docker pulls, start stack) with animated bars; detail log stays collapsible for stderr/errors.
+
 ## Maintenance on desktop
 
 Systemd pending-update paths are **not** installed. After `git pull` or config changes:

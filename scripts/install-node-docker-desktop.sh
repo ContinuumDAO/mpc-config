@@ -11,7 +11,17 @@
 #
 set -euo pipefail
 
-INSTALL_SCRIPT_VERSION="0.1.8"
+CONTINUUM_INSTALL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+# shellcheck source=lib/load-install-progress.sh
+if [ -n "$CONTINUUM_INSTALL_SCRIPT_DIR" ] && [ -f "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/load-install-progress.sh" ]; then
+    # shellcheck source=lib/load-install-progress.sh
+    . "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/load-install-progress.sh"
+else
+    CONTINUUM_INSTALL_PROGRESS=off
+    export CONTINUUM_INSTALL_PROGRESS
+fi
+
+INSTALL_SCRIPT_VERSION="0.1.9"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${MPC_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 PROVISION_VENV="${MPC_PROVISION_VENV:-${REPO_DIR}/.venv-provision}"
@@ -61,7 +71,11 @@ EOF
 
 log() { printf '==> %s\n' "$*" >&2; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
-die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+die() {
+    install_progress_finish false 2>/dev/null || true
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
 
 run_or_dry() {
     if [ "$DRY_RUN" = true ]; then
@@ -504,12 +518,25 @@ fi
 log "ContinuumDAO MPC node Docker Desktop install (v${INSTALL_SCRIPT_VERSION})"
 log "Repo: $REPO_DIR"
 
+export CONTINUUM_INSTALL_DRY_RUN="$DRY_RUN"
+install_progress_init desktop
+if [ -d "$REPO_DIR/.git" ]; then
+    install_progress_mark_done_if clone true
+fi
+
 if [ "$DRY_RUN" = false ]; then
     preflight_docker
     preflight_fresh
+    install_progress_topic_begin python-deps
+    install_progress_spinner_start
     ensure_provision_python_deps
+    install_progress_spinner_stop
+    install_progress_topic_done python-deps
     activate_provision_python
     preflight_desktop_tools
+else
+    install_progress_topic_begin python-deps
+    install_progress_topic_done python-deps
 fi
 preflight_repo
 
@@ -524,6 +551,8 @@ if [ "$FORCE_BROWSER" = true ]; then
 fi
 
 log "Provisioning node (scripts/provision-node.sh --no-firewall, no systemd)"
+export CONTINUUM_INSTALL_SCRIPT_DIR="${REPO_DIR}/scripts"
+install_progress_register_pc_topics 1 1
 if [ "$DRY_RUN" = true ]; then
     printf '[dry-run] %q ' "${PROVISION_SH[@]}"
     printf '\n'
@@ -532,21 +561,30 @@ else
     export PROCESS_CONFIG_SKIP_SYSTEMD=1
     "${PROVISION_SH[@]}"
 fi
-patch_desktop_dashboard_compose_discovery
 
+install_progress_topic_begin desktop-patch
+patch_desktop_dashboard_compose_discovery
+install_progress_topic_done desktop-patch
+
+PULL_HELPER="${REPO_DIR}/scripts/lib/docker-compose-pull-with-progress.sh"
 if [ "$NO_START" = false ]; then
-    log "Starting Docker stack (docker compose up -d)"
+    log "Pulling images and starting Docker stack"
     if [ "$DRY_RUN" = true ]; then
-        printf '[dry-run] cd %q && docker compose up -d\n' "$REPO_DIR"
+        printf '[dry-run] bash %q %q\n' "$PULL_HELPER" "$REPO_DIR"
+        install_progress_topic_begin start-stack
+        install_progress_topic_done start-stack
     else
         cd "$REPO_DIR"
-        docker compose up -d
+        bash "$PULL_HELPER" "$REPO_DIR"
         log "Running containers:"
         docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || docker ps
     fi
 else
     log "Skipping docker compose (--no-start)"
+    install_progress_mark_done_if start-stack true
 fi
+
+install_progress_finish true
 
 cat <<EOF
 

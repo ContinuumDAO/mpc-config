@@ -148,6 +148,11 @@ validate_and_normalize_public_mgt_key() {
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONTINUUM_INSTALL_SCRIPT_DIR="$SCRIPT_DIR"
+if [ -f "${SCRIPT_DIR}/lib/load-install-progress.sh" ]; then
+    # shellcheck source=lib/load-install-progress.sh
+    . "${SCRIPT_DIR}/lib/load-install-progress.sh"
+fi
 PROCESS_CONFIG_SH="$REPO_ROOT/process_config.sh"
 CONFIGS_ORIGINAL="$REPO_ROOT/configs-original.yaml"
 
@@ -292,7 +297,9 @@ if ! python3 -c "import cryptography" 2>/dev/null; then
     exit 1
 fi
 
-echo "==> Creating $CONFIG_FILE from configs-original.yaml"
+echo "==> Creating $CONFIG_FILE from configs-original.yaml" >&2
+install_progress_topic_begin provision-setup "Node config bootstrap"
+install_progress_topic_set provision-setup 10
 cp -- "$CONFIGS_ORIGINAL" "$CONFIG_FILE"
 
 set_management_keys() {
@@ -343,6 +350,7 @@ else
     echo "    PublicMgtKey: <empty>"
 fi
 set_management_keys "$CONFIG_FILE" "$NODE_MGT_FINAL" "$PUBLIC_MGT_FINAL"
+install_progress_topic_set provision-setup 40
 
 detect_node_ip() {
     if [ -n "${PROVISION_NODE_IP:-}" ]; then
@@ -435,11 +443,13 @@ with open(path, "w") as f:
 PYMERGE
 }
 
-echo "==> Provisioning nodeAddresses (relay placeholder + this host)"
+echo "==> Provisioning nodeAddresses (relay placeholder + this host)" >&2
 echo "    Relay placeholder: http://${RELAY_PLACEHOLDER_HOST}:${HTTP_PORT}"
 echo "    This host (peer): http://${PEER_IP}:${HTTP_PORT}"
 merge_two_node_addresses "$CONFIG_FILE" "$RELAY_PLACEHOLDER_HOST" "$PEER_IP" "$HTTP_PORT"
-echo "    Wrote MPCGroups[0].nodeAddresses (2 entries)."
+echo "    Wrote MPCGroups[0].nodeAddresses (2 entries)." >&2
+install_progress_topic_set provision-setup 70
+install_progress_topic_done provision-setup
 
 export SKIP_NODE_ADDRESS_MENU="${SKIP_NODE_ADDRESS_MENU:-1}"
 
@@ -466,8 +476,8 @@ if [ "$SKIP_AGENT_LLM_CONFIG_PATH" = true ]; then
     PC_ARGS+=(--no-agent-llm-config-path)
 fi
 
-echo ""
-echo "==> Running process_config.sh (${PC_ARGS[*]:-})"
+echo "" >&2
+echo "==> Running process_config.sh (${PC_ARGS[*]:-})" >&2
 export PROCESS_CONFIG_NONINTERACTIVE="${PROCESS_CONFIG_NONINTERACTIVE:-1}"
 # Preset Ed25519 bootstrap public key without a local seed: avoid mpc-auth generating a random nodeKey on empty Mongo.
 if [ -n "$PUBLIC_MGT_KEY_CLI" ]; then
