@@ -11,9 +11,10 @@
 #
 set -euo pipefail
 
-INSTALL_SCRIPT_VERSION="0.1.2"
+INSTALL_SCRIPT_VERSION="0.1.3"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${MPC_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+PROVISION_VENV="${MPC_PROVISION_VENV:-${REPO_DIR}/.venv-provision}"
 
 DRY_RUN=false
 NO_START=false
@@ -27,7 +28,7 @@ Usage:
   ./scripts/install-node-docker-desktop.sh [options]
 
 Docker Desktop local profile (not for VPS). Requires docker + docker compose v2.
-Installs Python/openssl deps in WSL when needed (VPS one-shot installs them via apt; desktop skips docker.io/systemd).
+Installs Python deps into ${REPO_DIR}/.venv-provision (PEP 668–safe; no system pip/apt required when venv works).
 Skips UFW (--no-firewall) and systemd.
 
 Provision options (at least one management key required):
@@ -92,65 +93,65 @@ preflight_fresh() {
 }
 
 python_provision_deps_ok() {
-    command -v python3 >/dev/null 2>&1 \
-        && python3 -c "import ruamel.yaml, cryptography" 2>/dev/null
+    if [ ! -x "${PROVISION_VENV}/bin/python3" ]; then
+        return 1
+    fi
+    "${PROVISION_VENV}/bin/python3" -c "import ruamel.yaml, cryptography" 2>/dev/null
 }
 
-install_desktop_python_deps() {
+ensure_provision_venv() {
     if python_provision_deps_ok; then
+        log "Using provision venv at ${PROVISION_VENV}"
         return 0
     fi
 
-    log "Installing Python dependencies (ruamel.yaml, cryptography) for provision-node.sh"
+    command -v python3 >/dev/null 2>&1 || die "python3 not found in WSL — sudo apt install -y python3"
 
-    if python3 -m pip --version >/dev/null 2>&1; then
-        if [ "$DRY_RUN" = true ]; then
-            printf '[dry-run] python3 -m pip install --user ruamel.yaml cryptography\n'
-        elif python3 -m pip install --user ruamel.yaml cryptography 2>/dev/null && python_provision_deps_ok; then
-            return 0
-        fi
-    elif [ "$DRY_RUN" = false ]; then
-        if python3 -m ensurepip --user --default-pip >/dev/null 2>&1 \
-            && python3 -m pip install --user ruamel.yaml cryptography 2>/dev/null \
-            && python_provision_deps_ok; then
-            return 0
-        fi
-    else
-        printf '[dry-run] python3 -m ensurepip --user && pip install --user ruamel.yaml cryptography\n'
+    if [ "$DRY_RUN" = true ]; then
+        printf '[dry-run] python3 -m venv %q\n' "$PROVISION_VENV"
+        printf '[dry-run] %q/bin/pip install ruamel.yaml cryptography\n' "$PROVISION_VENV"
+        return 0
     fi
 
-    if command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-        log "Trying passwordless sudo apt install for python3-ruamel.yaml python3-cryptography"
-        if [ "$DRY_RUN" = true ]; then
-            printf '[dry-run] sudo -n apt-get update && sudo -n apt-get install -y python3 python3-pip python3-ruamel.yaml python3-cryptography openssl curl git\n'
-        elif sudo -n apt-get update -qq \
-            && sudo -n apt-get install -y \
-                python3 \
-                python3-pip \
-                python3-ruamel.yaml \
-                python3-cryptography \
-                openssl \
-                curl \
-                git \
-            && python_provision_deps_ok; then
-            return 0
-        fi
-    fi
+    log "Creating provision venv at ${PROVISION_VENV} (PEP 668–safe Python deps for process_config)"
 
-    die "$(cat <<EOF
-Python packages required by provision-node.sh are missing (ruamel.yaml, cryptography).
-The VPS installer installs these via apt; the Docker Desktop profile does not install docker.io/systemd but needs these Python modules.
+    if ! python3 -m venv "$PROVISION_VENV" 2>/dev/null; then
+        log "python3 -m venv failed — trying passwordless apt install of python3-venv"
+        if command -v apt-get >/dev/null 2>&1 \
+            && command -v sudo >/dev/null 2>&1 \
+            && sudo -n true 2>/dev/null \
+            && sudo -n apt-get update -qq \
+            && sudo -n apt-get install -y python3-venv python3-full; then
+            python3 -m venv "$PROVISION_VENV" || die "python3 -m venv failed after installing python3-venv"
+        else
+            die "$(cat <<EOF
+Could not create Python venv at ${PROVISION_VENV}.
+Ubuntu/WSL often blocks system-wide pip (PEP 668); provision uses a venv instead.
 
-Run once in WSL (${REPO_DIR}):
+Run once in WSL:
   sudo apt update
-  sudo apt install -y python3-ruamel.yaml python3-cryptography openssl curl git
+  sudo apt install -y python3-venv openssl curl git
+  python3 -m venv ${PROVISION_VENV}
+  ${PROVISION_VENV}/bin/pip install ruamel.yaml cryptography
 
-Or without apt (user install):
-  python3 -m pip install --user ruamel.yaml cryptography
-
-Then re-run Install in the Docker extension (or ./scripts/install-node-docker-desktop.sh).
+Then re-run Install in the Docker extension.
 EOF
 )"
+        fi
+    fi
+
+    log "Installing ruamel.yaml and cryptography into provision venv"
+    "${PROVISION_VENV}/bin/pip" install --upgrade pip wheel >/dev/null 2>&1 || true
+    if ! "${PROVISION_VENV}/bin/pip" install ruamel.yaml cryptography; then
+        die "pip install into ${PROVISION_VENV} failed — check network access from WSL"
+    fi
+
+    python_provision_deps_ok || die "provision venv missing ruamel.yaml or cryptography after pip install"
+}
+
+activate_provision_venv() {
+    export VIRTUAL_ENV="$PROVISION_VENV"
+    export PATH="${PROVISION_VENV}/bin:${PATH}"
 }
 
 preflight_desktop_tools() {
@@ -209,7 +210,8 @@ log "Repo: $REPO_DIR"
 if [ "$DRY_RUN" = false ]; then
     preflight_docker
     preflight_fresh
-    install_desktop_python_deps
+    ensure_provision_venv
+    activate_provision_venv
     preflight_desktop_tools
 fi
 preflight_repo

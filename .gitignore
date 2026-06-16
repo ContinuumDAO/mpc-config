@@ -72,3 +72,6 @@ forge/broadcast/
 scripts/__pycache__/
 recipes/__pycache__/
 tools/__pycache__/
+
+# Docker Desktop install: provision/process_config Python deps (install-node-docker-desktop.sh)
+.venv-provision/
