@@ -1,8 +1,8 @@
 # Build from mpc-config repo root:
-#   docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.3 .
+#   docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.4 .
 #
 # Install extension (Windows / macOS Docker Desktop):
-#   docker extension install continuumdao/continuum-node-installer:0.1.3
+#   docker extension install continuumdao/continuum-node-installer:0.1.4
 #
 # Windows: install orchestration runs via host WSL → ~/mpc-config (no baked /mpc-config in this image).
 #
@@ -26,7 +26,7 @@ LABEL org.opencontainers.image.title="Continuum Node" \
     com.docker.extension.screenshots="[]" \
     com.docker.extension.detailed-description="Provision certificates, configs.yaml, and start the Continuum MPC stack via Docker Desktop. Windows: clones mpc-config to WSL ~/mpc-config and runs docker compose from there." \
     com.docker.extension.publisher-url="https://continuumdao.org" \
-    com.docker.extension.changelog="0.1.3: Avoid curl|bash pipe in host.cli.exec (SDK forbids shell operators); download then run orchestrator."
+    com.docker.extension.changelog="0.1.4: Desktop install runs without sudo (extension has no TTY for password prompt)."
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*

@@ -9,7 +9,7 @@
 #
 set -euo pipefail
 
-ORCHESTRATE_VERSION="0.1.0"
+ORCHESTRATE_VERSION="0.1.1"
 MPC_CONFIG_REPO="${MPC_CONFIG_REPO:-https://github.com/ContinuumDAO/mpc-config.git}"
 MPC_CONFIG_REF="${MPC_CONFIG_REF:-main}"
 REPO_DIR="${MPC_REPO_DIR:-${HOME}/mpc-config}"
@@ -114,11 +114,5 @@ clone_repo
 INSTALL_SH="$REPO_DIR/scripts/install-node-docker-desktop.sh"
 [ -x "$INSTALL_SH" ] || [ -f "$INSTALL_SH" ] || die "missing $INSTALL_SH after clone"
 
-log "Running install-node-docker-desktop.sh (sudo for provision-node.sh)"
-if [ "$(id -u)" -eq 0 ]; then
-    exec bash "$INSTALL_SH" --repo-dir "$REPO_DIR" "${INSTALL_ARGS[@]}"
-fi
-if command -v sudo >/dev/null 2>&1; then
-    exec sudo -E bash "$INSTALL_SH" --repo-dir "$REPO_DIR" "${INSTALL_ARGS[@]}"
-fi
-die "run as root or install sudo (provision-node.sh requires root)"
+log "Running install-node-docker-desktop.sh as $(whoami) (desktop profile — no sudo)"
+exec bash "$INSTALL_SH" --repo-dir "$REPO_DIR" "${INSTALL_ARGS[@]}"

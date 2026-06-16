@@ -52,7 +52,7 @@ Options:
       --install-systemd Pass --install-mpc-auth-systemd to process_config.sh
       --force-browser-certs  Pass --force-browser-https-certs
       --no-loopback       Do not enable BrowserLoopbackReadHTTP / omit --enable-loopback-http
-      --no-firewall       Pass --no-firewall to process_config.sh
+      --no-firewall       Pass --no-firewall to process_config.sh (desktop Docker extension: root not required)
       --no-agent-llm-config-path  Pass --no-agent-llm-config-path to process_config.sh
   -h, --help            Show this help
 
@@ -79,6 +79,16 @@ require_root() {
         echo "error: run as root (e.g. sudo $0)" >&2
         exit 1
     fi
+}
+
+require_root_or_desktop() {
+    if [ "$FIREWALL" = false ]; then
+        if [ "${EUID:-0}" -ne 0 ]; then
+            echo "==> Desktop / --no-firewall profile: running as $(whoami) (root not required)"
+        fi
+        return 0
+    fi
+    require_root
 }
 
 # Print normalized 0x + 40 lowercase hex on stdout; exit 1 if invalid or placeholder.
@@ -215,7 +225,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-require_root
+require_root_or_desktop
 
 if [ "${#LEGACY_ETH_ARG[@]}" -gt 0 ]; then
     if [ -n "$NODE_MGT_KEY_CLI" ] || [ -n "$PUBLIC_MGT_KEY_CLI" ]; then
