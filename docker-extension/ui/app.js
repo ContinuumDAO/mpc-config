@@ -15,10 +15,12 @@ const LOG_PANEL_VISIBLE = 'flex flex-col gap-2'
 const DESKTOP_ORCHESTRATE_SCRIPT_URL =
   'https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/desktop-local-orchestrate.sh'
 
-/** Shipped in metadata.json host.binaries — Docker copies this beside the extension on Windows. */
+/** Shipped host binary (metadata.json host.binaries) — sole Windows WSL entry point. */
 const WSL_HOST_WRAPPER = 'continuum-wsl.cmd'
 
-/** Standard desktop mpc-config location (WSL $HOME/mpc-config on Windows; ~/mpc-config on macOS). */
+/** Temp path inside WSL / macOS host for the downloaded orchestrator (no curl|bash pipe — SDK forbids shell operators). */
+const ORCHESTRATE_SCRIPT_PATH = '/tmp/continuum-desktop-orchestrate.sh'
+
 const MPC_DESKTOP_REPO_DISPLAY_PATH = '~/mpc-config'
 
 const WSL_SKIP_DISTROS = new Set(['docker-desktop', 'docker-desktop-data'])
@@ -47,9 +49,27 @@ function combinedExecOutput(result) {
   return normalizeHostOutput(`${result?.stdout ?? ''}${result?.stderr ?? ''}`)
 }
 
-/** Safe single-quoted string for bash -lc on WSL / macOS host. */
-function shSingleQuote(value) {
-  return `'${String(value).replace(/'/g, `'\"'\"'`)}'`
+function buildOrchestrateScriptArgs({ nodeMgtKey, publicMgtKey, nodeIp }) {
+  const eth = nodeMgtKey.trim()
+  const pub = publicMgtKey.trim()
+  const ip = nodeIp.trim()
+
+  if (!eth && !pub) {
+    throw new Error('Provide NodeMgtKey and/or PublicMgtKey')
+  }
+  if (!ip) {
+    throw new Error('Public IPv4 is required')
+  }
+
+  const scriptArgs = []
+  if (eth) {
+    scriptArgs.push('--node-mgt-key', eth)
+  }
+  if (pub) {
+    scriptArgs.push('--public-mgt-key', pub)
+  }
+  scriptArgs.push('--ip', ip)
+  return scriptArgs
 }
 
 function isValidWslDistroName(name) {
@@ -81,34 +101,6 @@ function parseWslDistroList(text) {
     distros,
     defaultDistro: defaultDistro ?? distros[0] ?? null,
   }
-}
-
-function buildOrchestrateShellCommand({ nodeMgtKey, publicMgtKey, nodeIp }) {
-  const eth = nodeMgtKey.trim()
-  const pub = publicMgtKey.trim()
-  const ip = nodeIp.trim()
-
-  if (!eth && !pub) {
-    throw new Error('Provide NodeMgtKey and/or PublicMgtKey')
-  }
-  if (!ip) {
-    throw new Error('Public IPv4 is required')
-  }
-
-  const args = []
-  if (eth) {
-    args.push('--node-mgt-key', shSingleQuote(eth))
-  }
-  if (pub) {
-    args.push('--public-mgt-key', shSingleQuote(pub))
-  }
-  args.push('--ip', shSingleQuote(ip))
-
-  return [
-    `curl -fsSL ${shSingleQuote(DESKTOP_ORCHESTRATE_SCRIPT_URL)}`,
-    '| bash -s --',
-    ...args,
-  ].join(' ')
 }
 
 function showError(resultPanel, message) {
@@ -155,19 +147,8 @@ function execSucceeded(result, { expectSubstring } = {}) {
   return code === 0
 }
 
-/**
- * Docker Desktop host.cli.exec only resolves binaries on PATH or shipped host.binaries.
- * Use continuum-wsl.cmd first, then cmd.exe /c wsl.exe fallbacks.
- */
-function buildWindowsWslExecAttempts(distro, tailArgs) {
-  const wslArgs = ['-d', distro, ...tailArgs]
-  return [
-    { label: WSL_HOST_WRAPPER, cmd: WSL_HOST_WRAPPER, args: wslArgs },
-    { label: 'cmd.exe → wsl.exe', cmd: 'cmd.exe', args: ['/c', 'wsl.exe', ...wslArgs] },
-    { label: 'cmd.exe → wsl', cmd: 'cmd.exe', args: ['/c', 'wsl', ...wslArgs] },
-    { label: 'wsl.exe', cmd: 'wsl.exe', args: wslArgs },
-    { label: 'wsl', cmd: 'wsl', args: wslArgs },
-  ]
+function wslHostArgs(distro, tailArgs) {
+  return ['-d', distro, ...tailArgs]
 }
 
 async function detectWindowsHost(cli, ddClient) {
@@ -184,41 +165,20 @@ async function probeWslEnvironment(cli, ddClient) {
     return { isWindows: false, wslAvailable: false, distros: [], defaultDistro: null, listOutput: '' }
   }
 
-  const listAttempts = [
-    { cmd: WSL_HOST_WRAPPER, args: ['-l', '-v'] },
-    { cmd: 'cmd.exe', args: ['/c', 'wsl.exe', '-l', '-v'] },
-    { cmd: 'cmd.exe', args: ['/c', 'wsl', '-l', '-v'] },
-    { cmd: 'wsl.exe', args: ['-l', '-v'] },
-    { cmd: 'wsl', args: ['-l', '-v'] },
-  ]
-
-  let listOutput = ''
-  let distros = []
-  let defaultDistro = null
-
-  for (const { cmd, args } of listAttempts) {
-    const probe = await execHostSimple(cli, cmd, args)
-    if (!probe.ok || !probe.result) continue
-
-    const out = combinedExecOutput(probe.result)
-    if (!out || /no installed distributions/i.test(out)) continue
-
-    const parsed = parseWslDistroList(out)
-    if (parsed.distros.length > 0) {
-      listOutput = out
-      distros = parsed.distros
-      defaultDistro = parsed.defaultDistro
-      break
-    }
-
-    if (/default version|kernel version|wsl/i.test(out)) {
-      listOutput = out
-    }
+  const probe = await execHostSimple(cli, WSL_HOST_WRAPPER, ['-l', '-v'])
+  if (!probe.ok || !probe.result) {
+    return { isWindows: true, wslAvailable: false, distros: [], defaultDistro: null, listOutput: '' }
   }
 
+  const listOutput = combinedExecOutput(probe.result)
+  if (!listOutput || /no installed distributions/i.test(listOutput)) {
+    return { isWindows: true, wslAvailable: false, distros: [], defaultDistro: null, listOutput: '' }
+  }
+
+  const { distros, defaultDistro } = parseWslDistroList(listOutput)
   return {
     isWindows: true,
-    wslAvailable: distros.length > 0 || listOutput.length > 0,
+    wslAvailable: distros.length > 0,
     distros,
     defaultDistro,
     listOutput,
@@ -264,60 +224,54 @@ function execHostStreaming(cli, cmd, args, logOutput) {
   })
 }
 
-async function resolveWindowsWslLauncher(cli, distro, logOutput) {
-  appendLog(logOutput, `Checking WSL distro "${distro}"…\n`)
+async function verifyWslDistro(cli, wslDistro, logOutput) {
+  appendLog(logOutput, `Checking WSL distro "${wslDistro}" via ${WSL_HOST_WRAPPER}…\n`)
 
-  for (const attempt of buildWindowsWslExecAttempts(distro, ['-e', 'echo', 'ok'])) {
-    appendLog(logOutput, `Trying ${attempt.label}…\n`)
-    const probe = await execHostSimple(cli, attempt.cmd, attempt.args)
-
-    if (!probe.ok) {
-      appendLog(
-        logOutput,
-        `[host exec error: ${probe.error instanceof Error ? probe.error.message : String(probe.error)}]\n`,
-      )
-      continue
-    }
-
-    const out = combinedExecOutput(probe.result)
-    const code = probe.result?.code
-    appendLog(logOutput, `[exit ${code ?? 'unknown'}]${out ? ` ${out}` : ''}\n`)
-
-    if (execSucceeded(probe.result, { expectSubstring: 'ok' })) {
-      appendLog(logOutput, `WSL distro "${distro}" is reachable via ${attempt.label}.\n\n`)
-      return attempt
-    }
-  }
-
-  return null
-}
-
-async function verifyWslDistro(cli, wslDistro, wslEnv, logOutput) {
-  const launcher = await resolveWindowsWslLauncher(cli, wslDistro, logOutput)
-  if (launcher) {
-    return launcher
-  }
-
-  if (wslEnv.distros.includes(wslDistro)) {
+  const probe = await execHostSimple(cli, WSL_HOST_WRAPPER, wslHostArgs(wslDistro, ['-e', 'echo', 'ok']))
+  if (!probe.ok) {
     appendLog(
       logOutput,
-      `Echo probe failed, but "${wslDistro}" appears in wsl -l -v — continuing with ${WSL_HOST_WRAPPER}.\n\n`,
+      `[host exec error: ${probe.error instanceof Error ? probe.error.message : String(probe.error)}]\n`,
     )
-    return { label: WSL_HOST_WRAPPER, cmd: WSL_HOST_WRAPPER, args: ['-d', wslDistro] }
+    return false
   }
 
-  return null
+  const out = combinedExecOutput(probe.result)
+  const code = probe.result?.code
+  appendLog(logOutput, `[exit ${code ?? 'unknown'}]${out ? ` ${out}` : ''}\n`)
+
+  if (execSucceeded(probe.result, { expectSubstring: 'ok' })) {
+    appendLog(logOutput, `WSL distro "${wslDistro}" is reachable.\n\n`)
+    return true
+  }
+
+  return false
 }
 
-async function runInstallOnHost(cli, shellCommand, launcher, wslDistro, logOutput) {
-  const tailArgs = ['bash', '-lc', shellCommand]
-  const args =
-    launcher.cmd === WSL_HOST_WRAPPER || launcher.cmd === 'wsl.exe' || launcher.cmd === 'wsl'
-      ? ['-d', wslDistro, ...tailArgs]
-      : [...launcher.args.slice(0, launcher.args.indexOf('-d') + 2), ...tailArgs]
+async function runInstallOnHost(cli, { useWsl, wslDistro, scriptArgs }, logOutput) {
+  appendLog(logOutput, 'Downloading orchestrator script…\n')
 
-  appendLog(logOutput, `Running install via ${launcher.label}…\n\n`)
-  return execHostStreaming(cli, launcher.cmd, args, logOutput)
+  const curlArgs = useWsl
+    ? wslHostArgs(wslDistro, ['curl', '-fsSL', DESKTOP_ORCHESTRATE_SCRIPT_URL, '-o', ORCHESTRATE_SCRIPT_PATH])
+    : ['-fsSL', DESKTOP_ORCHESTRATE_SCRIPT_URL, '-o', ORCHESTRATE_SCRIPT_PATH]
+
+  let result = await execHostStreaming(
+    cli,
+    useWsl ? WSL_HOST_WRAPPER : 'curl',
+    curlArgs,
+    logOutput,
+  )
+  if (result.code !== 0) {
+    return result
+  }
+
+  appendLog(logOutput, `\nRunning orchestrator via ${useWsl ? WSL_HOST_WRAPPER : 'bash'}…\n\n`)
+
+  const runArgs = useWsl
+    ? wslHostArgs(wslDistro, ['bash', ORCHESTRATE_SCRIPT_PATH, ...scriptArgs])
+    : [ORCHESTRATE_SCRIPT_PATH, ...scriptArgs]
+
+  return execHostStreaming(cli, useWsl ? WSL_HOST_WRAPPER : 'bash', runArgs, logOutput)
 }
 
 function applyDetectedWslDistro(wslDistroInput, wslEnv) {
@@ -376,14 +330,6 @@ function initExtensionUi() {
       return
     }
 
-    if (wslEnv.isWindows && wslEnv.wslAvailable) {
-      showStatus(
-        bootStatus,
-        'Ready — WSL detected. Confirm the distro name below matches the output of wsl -l -v, then Install node.',
-      )
-      return
-    }
-
     if (wslEnv.isWindows) {
       showStatus(
         bootStatus,
@@ -391,7 +337,7 @@ function initExtensionUi() {
       )
       showError(
         resultPanel,
-        'Could not auto-detect WSL from Docker Desktop. Quit and restart Docker Desktop, then reload this extension. Enter the exact distro name above and click Install.',
+        `Could not list WSL distros via ${WSL_HOST_WRAPPER}. Reinstall the extension so Docker copies the host binary, then quit and restart Docker Desktop.`,
       )
       return
     }
@@ -410,9 +356,9 @@ function initExtensionUi() {
     const publicMgtKey = document.getElementById('public-mgt-key')?.value ?? ''
     const nodeIp = document.getElementById('node-ip')?.value ?? ''
 
-    let shellCommand
+    let scriptArgs
     try {
-      shellCommand = buildOrchestrateShellCommand({ nodeMgtKey, publicMgtKey, nodeIp })
+      scriptArgs = buildOrchestrateScriptArgs({ nodeMgtKey, publicMgtKey, nodeIp })
     } catch (err) {
       showError(resultPanel, err instanceof Error ? err.message : String(err))
       installBtn.disabled = false
@@ -440,13 +386,12 @@ function initExtensionUi() {
       return
     }
 
-    let launcher = null
     if (useWsl) {
-      launcher = await verifyWslDistro(cli, wslDistro, wslEnv, logOutput)
-      if (!launcher) {
+      const distroOk = await verifyWslDistro(cli, wslDistro, logOutput)
+      if (!distroOk) {
         showError(
           resultPanel,
-          `Could not run commands in WSL distro "${wslDistro}". Quit Docker Desktop completely and start it again (no full PC reboot needed). Confirm the distro name matches wsl -l -v exactly (e.g. Ubuntu-26.04). See install log for probe details.`,
+          `Could not run commands in WSL distro "${wslDistro}" via ${WSL_HOST_WRAPPER}. Confirm the distro name matches wsl -l -v exactly. Reinstall the extension if the host binary is missing.`,
         )
         installBtn.disabled = false
         return
@@ -463,9 +408,9 @@ function initExtensionUi() {
     try {
       let result
       if (useWsl) {
-        result = await runInstallOnHost(cli, shellCommand, launcher, wslDistro, logOutput)
+        result = await runInstallOnHost(cli, { useWsl: true, wslDistro, scriptArgs }, logOutput)
       } else {
-        result = await execHostStreaming(cli, 'bash', ['-lc', shellCommand], logOutput)
+        result = await runInstallOnHost(cli, { useWsl: false, wslDistro: null, scriptArgs }, logOutput)
       }
 
       resultPanel.hidden = false

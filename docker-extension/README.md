@@ -4,7 +4,7 @@ Install a local Continuum MPC node on **Windows** or **macOS** using Docker Desk
 
 ## What it does
 
-1. Extension UI invokes **`host.cli.exec`** on the Windows host → **`wsl.exe`** → **`scripts/desktop-local-orchestrate.sh`** inside your WSL distro.
+1. Extension UI invokes **`host.cli.exec`** on the Windows host → shipped **`continuum-wsl.cmd`** → **`scripts/desktop-local-orchestrate.sh`** inside your WSL distro.
 2. Orchestrator **git clones** mpc-config to **`~/mpc-config`** (standard desktop path, same bind-mount layout as manual WSL / VPS).
 3. **`install-node-docker-desktop.sh`** runs there: `provision-node.sh` + `process_config.sh` (`--no-firewall`, no systemd), then **`docker compose up -d`** via Docker Desktop WSL integration.
 4. Stack containers (**mongo**, **mpc-auth**, **continuum-mcp**, **continuumdao-node-app**, etc.) appear under **Docker Desktop → Containers**.
@@ -25,7 +25,7 @@ The extension **backend image is UI-only** (no baked `/mpc-config`, no `docker.s
 After the image is published or built locally:
 
 ```bash
-docker extension install continuumdao/continuum-node-installer:0.1.2
+docker extension install continuumdao/continuum-node-installer:0.1.3
 ```
 
 Open **Docker Desktop → Extensions → Continuum Node** and complete the wizard.
@@ -35,8 +35,8 @@ Open **Docker Desktop → Extensions → Continuum Node** and complete the wizar
 From the **mpc-config repo root**:
 
 ```bash
-docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.2 .
-docker extension install continuumdao/continuum-node-installer:0.1.2   # requires Docker Desktop on host
+docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.3 .
+docker extension install continuumdao/continuum-node-installer:0.1.3   # requires Docker Desktop on host
 ```
 
 Push to Docker Hub (multi-arch recommended for Windows):
@@ -44,7 +44,7 @@ Push to Docker Hub (multi-arch recommended for Windows):
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
   -f docker-extension/Dockerfile \
-  -t continuumdao/continuum-node-installer:0.1.2 \
+  -t continuumdao/continuum-node-installer:0.1.3 \
   --push .
 ```
 
@@ -58,7 +58,7 @@ Compose templates ([`docker-compose.client.yml`](../docker-compose.client.yml)) 
 |-------|------|
 | mpc-config clone | WSL `~/mpc-config` |
 | Windows Explorer | `\\wsl$\<Distro>\home\<user>\mpc-config` |
-| Install orchestrator | Extension → `wsl.exe` → `desktop-local-orchestrate.sh` |
+| Install orchestrator | Extension → `continuum-wsl.cmd` → `desktop-local-orchestrate.sh` in WSL |
 | Docker engine | Docker Desktop (WSL integration for chosen distro) |
 | Protocol containers | Docker Desktop → **Containers** (mongo, app, continuum-mcp, continuumdao-node-app, …) |
 
@@ -69,7 +69,7 @@ The extension backend container does **not** bind-mount or bake `~/mpc-config`. 
 Run on a Windows machine with Docker Desktop — **not required to merge initial Linux implementation**.
 
 1. [ ] Docker Desktop + Extensions enabled + WSL2 engine + Ubuntu WSL integration
-2. [ ] `docker extension install continuumdao/continuum-node-installer:0.1.2`
+2. [ ] `docker extension install continuumdao/continuum-node-installer:0.1.3`
 3. [ ] Extension wizard completes → containers visible in Desktop **Containers**
 4. [ ] `mosquitto/config/certs` and `webTLS/config/certs` populated under repo; `mpc-auth` healthy
 5. [ ] Attach node at [mpa.continuumdao.org](https://mpa.continuumdao.org) via loopback/HTTPS URL
@@ -108,18 +108,22 @@ cd ~/mpc-config
 |------|---------|
 | `/ui` | Extension tab (built from `ui/`; styles synced from [continuumdao-node-app](https://github.com/ContinuumDAO/continuumdao-node-app) `app/globals.css`) |
 | `/metadata.json` | Extension manifest |
+| `/host/windows/continuum-wsl.cmd` | Windows host binary — sole WSL entry point for `host.cli.exec` |
 | `/docker-compose.yaml` | Minimal backend keeper container (no docker.sock, no mpc-config tree) |
 
 Live node data after install: **WSL `~/mpc-config`** (Windows) or **`~/mpc-config`** (macOS host shell).
+
+On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the extension is installed (`metadata.json` → `host.binaries`). All WSL list, probe, and install commands go through that wrapper.
 
 ## Troubleshooting
 
 | Symptom | Check |
 |---------|--------|
-| Could not run commands in WSL distro | Rebuild **0.1.2** (ships `continuum-wsl.cmd`). **Quit and restart Docker Desktop** — full PC reboot usually not needed. Distro name must match `wsl -l -v` exactly (e.g. `Ubuntu-26.04`). |
-| False “WSL is required” on Windows | Rebuild **0.1.2** — uses `wsl -l -v` not `wsl --status`; set exact distro name |
-| Install shows empty log panel | Rebuild **0.1.2** — fixes streaming `host.cli.exec` (install waits for output) |
-| Install button clears fields, no log output | Rebuild **0.1.2** — UI JS loads from `./assets/` (not `/assets/`). You should see **Ready** under the title. |
+| `shell operators are not allowed` in install log | Rebuild **0.1.3+** — orchestrator is downloaded with `curl -o` then run (no `\|` pipe through SDK) |
+| Could not run commands in WSL distro | Distro name must match `wsl -l -v` exactly. Reinstall extension so **`continuum-wsl.cmd`** is copied to the host. Quit and restart Docker Desktop. |
+| False “WSL is required” on Windows | Rebuild **0.1.3** — uses `wsl -l -v` not `wsl --status`; set exact distro name |
+| Install shows empty log panel | Rebuild **0.1.3** — fixes streaming `host.cli.exec` (install waits for output) |
+| Install button clears fields, no log output | Rebuild **0.1.3** — UI JS loads from `./assets/` (not `/assets/`). You should see **Ready** under the title. |
 | `Docker Desktop host CLI API unavailable` | Update Docker Desktop; reload extension |
 | `WSL is required on Windows` | Install WSL distro + enable integration in Docker Desktop |
 | `curl: 404` in install log | `desktop-local-orchestrate.sh` not on GitHub `main` yet — push mpc-config or install manually in WSL |
