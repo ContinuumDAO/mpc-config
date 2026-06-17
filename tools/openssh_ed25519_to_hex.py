@@ -11,7 +11,8 @@ Accepts:
   echo 'ssh-ed25519 AAAA... comment' | python3 tools/openssh_ed25519_to_hex.py
   echo 'AAAAC3NzaC1lZDI1NTE5AAAAI...' | python3 tools/openssh_ed25519_to_hex.py
 
-From a private key file instead, use tools/ed25519_private_to_pubkey_hex.py (needs cryptography).
+From a private key file instead, use tools/ed25519_private_to_pubkey_hex.py (public key)
+or tools/ed25519_private_to_seed_hex.py (32-byte private seed hex; needs cryptography).
 """
 
 from __future__ import annotations
