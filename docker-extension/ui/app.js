@@ -18,8 +18,20 @@ const DESKTOP_ORCHESTRATE_SCRIPT_URL =
 /** Shipped host binary (metadata.json host.binaries) — sole Windows WSL entry point. */
 const WSL_HOST_WRAPPER = 'continuum-wsl.cmd'
 
-/** Temp path inside WSL / macOS host for the downloaded orchestrator (no curl|bash pipe — SDK forbids shell operators). */
+/** Temp path on the host for the downloaded orchestrator (no curl|bash pipe — SDK forbids shell operators). */
 const ORCHESTRATE_SCRIPT_PATH = '/tmp/continuum-desktop-orchestrate.sh'
+
+const HOST_OS = {
+  WINDOWS: 'windows',
+  LINUX: 'linux',
+  MACOS: 'macos',
+}
+
+const HOST_OS_LABELS = {
+  [HOST_OS.WINDOWS]: 'Windows',
+  [HOST_OS.LINUX]: 'Linux',
+  [HOST_OS.MACOS]: 'macOS',
+}
 
 const MPC_DESKTOP_REPO_DISPLAY_PATH = '~/mpc-config'
 
@@ -312,11 +324,67 @@ function showLogPanel(logPanel) {
   logPanel.className = LOG_PANEL_VISIBLE
 }
 
-function isWindowsPlatform(ddClient) {
+function resolveHostOs(ddClient) {
   const platform = ddClient?.host?.platform ?? ddClient?.desktopUI?.host?.platform
-  if (platform === 'win32') return true
-  if (platform === 'darwin' || platform === 'linux') return false
+  if (platform === 'win32') return HOST_OS.WINDOWS
+  if (platform === 'linux') return HOST_OS.LINUX
+  if (platform === 'darwin') return HOST_OS.MACOS
   return null
+}
+
+async function detectWindowsHost(cli, ddClient) {
+  const hostOs = resolveHostOs(ddClient)
+  if (hostOs === HOST_OS.WINDOWS) return true
+  if (hostOs === HOST_OS.LINUX || hostOs === HOST_OS.MACOS) return false
+  const probe = await execHostSimple(cli, 'cmd', ['/c', 'ver'])
+  return probe.ok && probe.result?.code === 0
+}
+
+function getEffectiveHostOs(ddClient, hostOsSelect) {
+  const detected = resolveHostOs(ddClient)
+  if (detected) return detected
+  const selected = hostOsSelect?.value?.trim()
+  if (selected === HOST_OS.WINDOWS || selected === HOST_OS.LINUX || selected === HOST_OS.MACOS) {
+    return selected
+  }
+  return null
+}
+
+function applyHostOsUi({ hostOs, hostOsRow, hostOsSelect, wslDistroRow, installBtn, bootStatus }) {
+  if (hostOsRow && hostOsSelect) {
+    const showDropdown = hostOs === null
+    hostOsRow.hidden = !showDropdown
+    if (showDropdown) {
+      hostOsRow.classList.remove('hidden')
+    } else {
+      hostOsRow.classList.add('hidden')
+    }
+    if (hostOs && hostOsSelect.value !== hostOs) {
+      hostOsSelect.value = hostOs
+    }
+  }
+
+  if (wslDistroRow) {
+    const showWsl = hostOs === HOST_OS.WINDOWS
+    wslDistroRow.hidden = !showWsl
+    if (showWsl) {
+      wslDistroRow.classList.remove('hidden')
+    } else {
+      wslDistroRow.classList.add('hidden')
+    }
+  }
+
+  if (installBtn) {
+    installBtn.disabled = hostOs === HOST_OS.MACOS
+  }
+
+  if (bootStatus && hostOs === HOST_OS.MACOS) {
+    showStatus(
+      bootStatus,
+      'macOS install is not available yet — Windows and Linux are supported via Docker Desktop.',
+      false,
+    )
+  }
 }
 
 async function execHostSimple(cli, cmd, args) {
@@ -340,14 +408,6 @@ function execSucceeded(result, { expectSubstring } = {}) {
 
 function wslHostArgs(distro, tailArgs) {
   return ['-d', distro, ...tailArgs]
-}
-
-async function detectWindowsHost(cli, ddClient) {
-  const fromPlatform = isWindowsPlatform(ddClient)
-  if (fromPlatform === true) return true
-  if (fromPlatform === false) return false
-  const probe = await execHostSimple(cli, 'cmd', ['/c', 'ver'])
-  return probe.ok && probe.result?.code === 0
 }
 
 async function probeWslEnvironment(cli, ddClient) {
@@ -488,8 +548,10 @@ async function verifyWslDistro(cli, wslDistro, logOutput) {
   return false
 }
 
-async function runInstallOnHost(cli, { useWsl, wslDistro, scriptArgs }, logOutput, progressTracker) {
+async function runInstallOnHost(cli, { useWsl, wslDistro, profile, scriptArgs }, logOutput, progressTracker) {
   appendLog(logOutput, 'Downloading orchestrator script…\n')
+
+  const orchestrateArgs = ['--profile', profile, ...scriptArgs]
 
   const curlArgs = useWsl
     ? wslHostArgs(wslDistro, ['curl', '-fsSL', DESKTOP_ORCHESTRATE_SCRIPT_URL, '-o', ORCHESTRATE_SCRIPT_PATH])
@@ -514,9 +576,9 @@ async function runInstallOnHost(cli, { useWsl, wslDistro, scriptArgs }, logOutpu
         'CONTINUUM_INSTALL_PROGRESS=json',
         'bash',
         ORCHESTRATE_SCRIPT_PATH,
-        ...scriptArgs,
+        ...orchestrateArgs,
       ])
-    : ['env', 'CONTINUUM_INSTALL_PROGRESS=json', 'bash', ORCHESTRATE_SCRIPT_PATH, ...scriptArgs]
+    : ['env', 'CONTINUUM_INSTALL_PROGRESS=json', 'bash', ORCHESTRATE_SCRIPT_PATH, ...orchestrateArgs]
 
   return execHostStreaming(
     cli,
@@ -547,6 +609,8 @@ function initExtensionUi() {
   const resultPanel = document.getElementById('result-panel')
   const wslDistroRow = document.getElementById('wsl-distro-row')
   const wslDistroInput = document.getElementById('wsl-distro')
+  const hostOsRow = document.getElementById('host-os-row')
+  const hostOsSelect = document.getElementById('host-os')
   const bootStatus = document.getElementById('boot-status')
 
   if (!form || !installBtn || !logPanel || !logOutput || !resultPanel) {
@@ -570,27 +634,52 @@ function initExtensionUi() {
   const { ddClient, cli } = hostCli
   const progressTracker = createProgressTracker({ progressPanel, progressTopics, progressOverall })
   let wslEnv = { isWindows: false, wslAvailable: false, distros: [], defaultDistro: null, listOutput: '' }
+  let detectedHostOs = resolveHostOs(ddClient)
+
+  if (hostOsSelect && detectedHostOs) {
+    hostOsSelect.value = detectedHostOs
+  }
 
   void (async () => {
     wslEnv = await probeWslEnvironment(cli, ddClient)
+    const effectiveOs = getEffectiveHostOs(ddClient, hostOsSelect)
+    applyHostOsUi({
+      hostOs: effectiveOs,
+      hostOsRow,
+      hostOsSelect,
+      wslDistroRow,
+      installBtn,
+      bootStatus,
+    })
 
-    if (wslEnv.isWindows && wslDistroRow) {
-      wslDistroRow.hidden = false
+    if (effectiveOs === HOST_OS.WINDOWS && wslDistroInput) {
       applyDetectedWslDistro(wslDistroInput, wslEnv)
     }
 
-    if (wslEnv.distros.length > 0) {
+    if (effectiveOs === HOST_OS.MACOS) {
+      return
+    }
+
+    if (effectiveOs === null) {
       showStatus(
         bootStatus,
-        `Ready — detected WSL distros: ${wslEnv.distros.join(', ')}. Enter keys and public IPv4, then Install node.`,
+        'Select your host OS, then enter keys and public IPv4.',
       )
       return
     }
 
-    if (wslEnv.isWindows) {
+    if (effectiveOs === HOST_OS.WINDOWS && wslEnv.distros.length > 0) {
       showStatus(
         bootStatus,
-        'Ready — enter the exact WSL distro name from wsl -l -v (e.g. Ubuntu-26.04), keys, and public IPv4.',
+        `Ready (${HOST_OS_LABELS[effectiveOs]}) — detected WSL distros: ${wslEnv.distros.join(', ')}. Enter keys and public IPv4, then Install node.`,
+      )
+      return
+    }
+
+    if (effectiveOs === HOST_OS.WINDOWS) {
+      showStatus(
+        bootStatus,
+        'Ready (Windows) — enter the exact WSL distro name from wsl -l -v, keys, and public IPv4.',
       )
       showError(
         resultPanel,
@@ -599,8 +688,48 @@ function initExtensionUi() {
       return
     }
 
+    if (effectiveOs === HOST_OS.LINUX) {
+      showStatus(
+        bootStatus,
+        'Ready (Linux) — install uses sudo for packages, UFW, and systemd. Passwordless sudo recommended. Enter keys and public IPv4.',
+      )
+      return
+    }
+
     showStatus(bootStatus, 'Ready — enter keys and public IPv4, then Install node.')
   })()
+
+  hostOsSelect?.addEventListener('change', () => {
+    const effectiveOs = getEffectiveHostOs(ddClient, hostOsSelect)
+    applyHostOsUi({
+      hostOs: effectiveOs,
+      hostOsRow,
+      hostOsSelect,
+      wslDistroRow,
+      installBtn,
+      bootStatus,
+    })
+    if (effectiveOs === HOST_OS.WINDOWS) {
+      applyDetectedWslDistro(wslDistroInput, wslEnv)
+    }
+    resultPanel.hidden = true
+    resultPanel.textContent = ''
+    if (effectiveOs === HOST_OS.MACOS) {
+      return
+    }
+    if (effectiveOs === null) {
+      showStatus(bootStatus, 'Select your host OS, then enter keys and public IPv4.')
+      return
+    }
+    if (effectiveOs === HOST_OS.LINUX) {
+      showStatus(
+        bootStatus,
+        'Ready (Linux) — install uses sudo for packages, UFW, and systemd. Passwordless sudo recommended.',
+      )
+      return
+    }
+    showStatus(bootStatus, `Ready (${HOST_OS_LABELS[effectiveOs]}) — enter keys and public IPv4, then Install node.`)
+  })
 
   async function runInstall() {
     resultPanel.hidden = true
@@ -624,9 +753,30 @@ function initExtensionUi() {
     }
 
     wslEnv = await probeWslEnvironment(cli, ddClient)
-    applyDetectedWslDistro(wslDistroInput, wslEnv)
+    const hostOs = getEffectiveHostOs(ddClient, hostOsSelect)
+    applyHostOsUi({
+      hostOs,
+      hostOsRow,
+      hostOsSelect,
+      wslDistroRow,
+      installBtn,
+      bootStatus,
+    })
 
-    const useWsl = wslEnv.isWindows
+    if (!hostOs) {
+      showError(resultPanel, 'Select your host OS (Windows, Linux, or macOS).')
+      installBtn.disabled = false
+      return
+    }
+
+    if (hostOs === HOST_OS.MACOS) {
+      showError(resultPanel, 'macOS install is not available yet.')
+      installBtn.disabled = true
+      return
+    }
+
+    const useWsl = hostOs === HOST_OS.WINDOWS
+    const profile = hostOs === HOST_OS.LINUX ? 'linux' : 'windows'
     const wslDistro = (wslDistroInput?.value ?? wslEnv.defaultDistro ?? '').trim()
 
     if (useWsl && !wslDistro) {
@@ -659,16 +809,26 @@ function initExtensionUi() {
     appendLog(
       logOutput,
       useWsl
-        ? `Using WSL distro "${wslDistro}" — clone/install at ${MPC_DESKTOP_REPO_DISPLAY_PATH}, then docker compose up…\n\n`
-        : `Clone/install at ${MPC_DESKTOP_REPO_DISPLAY_PATH}, then docker compose up…\n\n`,
+        ? `Using WSL distro "${wslDistro}" (${HOST_OS_LABELS[hostOs]}) — clone/install at ${MPC_DESKTOP_REPO_DISPLAY_PATH}, then docker compose up…\n\n`
+        : `Using ${HOST_OS_LABELS[hostOs]} host — clone/install at ${MPC_DESKTOP_REPO_DISPLAY_PATH}, then docker compose up…\n\n`,
     )
 
     try {
       let result
       if (useWsl) {
-        result = await runInstallOnHost(cli, { useWsl: true, wslDistro, scriptArgs }, logOutput, progressTracker)
+        result = await runInstallOnHost(
+          cli,
+          { useWsl: true, wslDistro, profile, scriptArgs },
+          logOutput,
+          progressTracker,
+        )
       } else {
-        result = await runInstallOnHost(cli, { useWsl: false, wslDistro: null, scriptArgs }, logOutput, progressTracker)
+        result = await runInstallOnHost(
+          cli,
+          { useWsl: false, wslDistro: null, profile, scriptArgs },
+          logOutput,
+          progressTracker,
+        )
       }
 
       resultPanel.hidden = false
@@ -676,7 +836,7 @@ function initExtensionUi() {
         resultPanel.className = RESULT_PANEL_OK
         const repoHint = useWsl
           ? `<code class="font-mono text-[0.6875rem] text-[var(--text)]">${MPC_DESKTOP_REPO_DISPLAY_PATH}</code> in WSL (${wslDistro})`
-          : `<code class="font-mono text-[0.6875rem] text-[var(--text)]">${MPC_DESKTOP_REPO_DISPLAY_PATH}</code>`
+          : `<code class="font-mono text-[0.6875rem] text-[var(--text)]">${MPC_DESKTOP_REPO_DISPLAY_PATH}</code> on this machine`
         resultPanel.innerHTML =
           '<p class="m-0"><strong>Install finished.</strong> mpc-config is at ' +
           repoHint +
@@ -689,7 +849,8 @@ function initExtensionUi() {
     } catch (err) {
       showError(resultPanel, err instanceof Error ? err.message : String(err))
     } finally {
-      installBtn.disabled = false
+      const effectiveOs = getEffectiveHostOs(ddClient, hostOsSelect)
+      installBtn.disabled = effectiveOs === HOST_OS.MACOS
     }
   }
 

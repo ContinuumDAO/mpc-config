@@ -54,6 +54,23 @@
         ></p>
 
         <form id="install-form" class="flex flex-col gap-3">
+          <div id="host-os-row" class="flex flex-col gap-1.5 hidden" hidden>
+            <label class="flex flex-col gap-1.5">
+              <span class="font-sans text-[0.8125rem] text-[var(--text)]">Host operating system</span>
+              <select
+                id="host-os"
+                class="w-full rounded-[4px] border border-[var(--muted)] bg-[var(--bg)] px-3 py-2 font-sans text-[0.8125rem] text-[var(--text)] outline-none focus:border-[var(--primary)]"
+              >
+                <option value="windows">Windows</option>
+                <option value="linux">Linux</option>
+                <option value="macos">macOS</option>
+              </select>
+            </label>
+            <p class="m-0 font-sans text-[0.8125rem] text-[var(--muted)]">
+              Shown when Docker Desktop could not detect your OS automatically.
+            </p>
+          </div>
+
           <div id="wsl-distro-row" class="flex flex-col gap-1.5" hidden>
             <span class="font-sans text-[0.8125rem] text-[var(--text)]">WSL distro name (Windows)</span>
             <input
