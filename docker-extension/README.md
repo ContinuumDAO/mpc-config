@@ -9,7 +9,7 @@ The extension detects the host OS via `ddClient.host.platform` (`win32`, `linux`
 | Host OS | Install script | Execution |
 |---------|----------------|-----------|
 | **Windows** | [`install-node-docker-desktop.sh`](../scripts/install-node-docker-desktop.sh) | `continuum-wsl.cmd` → WSL → orchestrator `--profile windows` |
-| **Linux** | [`install-node-linux-docker-desktop.sh`](../scripts/install-node-linux-docker-desktop.sh) | Host `bash` → orchestrator `--profile linux` → `sudo` install |
+| **Linux** | [`install-node-linux-docker-desktop.sh`](../scripts/install-node-linux-docker-desktop.sh) | `continuum-linux.sh` → host `bash` → orchestrator `--profile linux` → `sudo` install |
 | **macOS** | *(not yet available)* | Install button disabled |
 
 Common flow:
@@ -134,9 +134,10 @@ bash /tmp/continuum-desktop-orchestrate.sh --profile linux --node-mgt-key "0x…
 | `/ui` | Extension tab (built from `ui/`) |
 | `/metadata.json` | Extension manifest |
 | `/host/windows/continuum-wsl.cmd` | Windows host binary — WSL entry point for `host.cli.exec` |
+| `/host/linux/continuum-linux.sh` | Linux host binary — delegates to host `PATH` (`curl`, `bash`, etc.) |
 | `/docker-compose.yaml` | Minimal backend keeper container |
 
-On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the extension is installed (`metadata.json` → `host.binaries`).
+On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the extension is installed (`metadata.json` → `host.binaries`). On Linux, it copies **`continuum-linux.sh`** the same way — `host.cli.exec` only runs shipped host binaries, not arbitrary system commands.
 
 ## Troubleshooting
 
@@ -146,6 +147,6 @@ On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the e
 | Linux `sudo` password prompt / install hangs | Configure passwordless sudo for your user, or run orchestrator manually in a terminal |
 | `this installer requires WSL2` on Windows | Run inside WSL, not PowerShell |
 | Could not run commands in WSL distro | Distro name must match `wsl -l -v` exactly |
-| `Docker Desktop host CLI API unavailable` | Update Docker Desktop; reload extension |
+| `spawn …/host/curl ENOENT` on Linux | Extension missing Linux host wrapper — reinstall a build that ships `continuum-linux.sh`, or run the orchestrator manually (see below) |
 | `docker info` fails in log | Start Docker Desktop |
 | `configs.yaml already exists` | Fresh install only; use Maintenance for updates |

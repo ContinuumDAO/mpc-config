@@ -18,6 +18,9 @@ const DESKTOP_ORCHESTRATE_SCRIPT_URL =
 /** Shipped host binary (metadata.json host.binaries) — sole Windows WSL entry point. */
 const WSL_HOST_WRAPPER = 'continuum-wsl.cmd'
 
+/** Shipped host binary (metadata.json host.binaries) — Linux host PATH delegate. */
+const LINUX_HOST_WRAPPER = 'continuum-linux.sh'
+
 /** Temp path on the host for the downloaded orchestrator (no curl|bash pipe — SDK forbids shell operators). */
 const ORCHESTRATE_SCRIPT_PATH = '/tmp/continuum-desktop-orchestrate.sh'
 
@@ -553,13 +556,15 @@ async function runInstallOnHost(cli, { useWsl, wslDistro, profile, scriptArgs },
 
   const orchestrateArgs = ['--profile', profile, ...scriptArgs]
 
+  const hostWrapper = useWsl ? WSL_HOST_WRAPPER : LINUX_HOST_WRAPPER
+
   const curlArgs = useWsl
     ? wslHostArgs(wslDistro, ['curl', '-fsSL', DESKTOP_ORCHESTRATE_SCRIPT_URL, '-o', ORCHESTRATE_SCRIPT_PATH])
-    : ['-fsSL', DESKTOP_ORCHESTRATE_SCRIPT_URL, '-o', ORCHESTRATE_SCRIPT_PATH]
+    : ['curl', '-fsSL', DESKTOP_ORCHESTRATE_SCRIPT_URL, '-o', ORCHESTRATE_SCRIPT_PATH]
 
   let result = await execHostStreaming(
     cli,
-    useWsl ? WSL_HOST_WRAPPER : 'curl',
+    hostWrapper,
     curlArgs,
     logOutput,
     null,
@@ -568,7 +573,7 @@ async function runInstallOnHost(cli, { useWsl, wslDistro, profile, scriptArgs },
     return result
   }
 
-  appendLog(logOutput, `\nRunning orchestrator via ${useWsl ? WSL_HOST_WRAPPER : 'bash'}…\n\n`)
+  appendLog(logOutput, `\nRunning orchestrator via ${hostWrapper}…\n\n`)
 
   const runArgs = useWsl
     ? wslHostArgs(wslDistro, [
@@ -578,11 +583,17 @@ async function runInstallOnHost(cli, { useWsl, wslDistro, profile, scriptArgs },
         ORCHESTRATE_SCRIPT_PATH,
         ...orchestrateArgs,
       ])
-    : ['env', 'CONTINUUM_INSTALL_PROGRESS=json', 'bash', ORCHESTRATE_SCRIPT_PATH, ...orchestrateArgs]
+    : [
+        'env',
+        'CONTINUUM_INSTALL_PROGRESS=json',
+        'bash',
+        ORCHESTRATE_SCRIPT_PATH,
+        ...orchestrateArgs,
+      ]
 
   return execHostStreaming(
     cli,
-    useWsl ? WSL_HOST_WRAPPER : 'bash',
+    hostWrapper,
     runArgs,
     logOutput,
     progressTracker,

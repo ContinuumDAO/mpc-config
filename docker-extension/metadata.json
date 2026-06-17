@@ -17,6 +17,11 @@
           {
             "path": "/host/windows/continuum-wsl.cmd"
           }
+        ],
+        "linux": [
+          {
+            "path": "/host/linux/continuum-linux.sh"
+          }
         ]
       }
     ]
