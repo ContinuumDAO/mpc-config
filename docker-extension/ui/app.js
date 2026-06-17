@@ -442,7 +442,7 @@ async function probeWslEnvironment(cli, ddClient) {
 /**
  * host.cli.exec with { stream } returns ExecProcess, not a Promise — wrap onClose.
  */
-function execHostStreaming(cli, cmd, args, logOutput, progressTracker) {
+function execHostStreaming(cli, cmd, args, logOutput, progressTracker, execOptions = {}) {
   return new Promise((resolve, reject) => {
     let settled = false
     let stdoutBuf = ''
@@ -520,7 +520,7 @@ function execHostStreaming(cli, cmd, args, logOutput, progressTracker) {
     }
 
     try {
-      cli.exec(cmd, args, { stream, splitOutputLines: true })
+      cli.exec(cmd, args, { stream, splitOutputLines: true, ...execOptions })
     } catch (error) {
       reject(error instanceof Error ? error : new Error(String(error)))
     }
@@ -552,52 +552,42 @@ async function verifyWslDistro(cli, wslDistro, logOutput) {
 }
 
 async function runInstallOnHost(cli, { useWsl, wslDistro, profile, scriptArgs }, logOutput, progressTracker) {
-  appendLog(logOutput, 'Downloading orchestrator script…\n')
-
   const orchestrateArgs = ['--profile', profile, ...scriptArgs]
 
-  const hostWrapper = useWsl ? WSL_HOST_WRAPPER : LINUX_HOST_WRAPPER
-
-  const curlArgs = useWsl
-    ? wslHostArgs(wslDistro, ['curl', '-fsSL', DESKTOP_ORCHESTRATE_SCRIPT_URL, '-o', ORCHESTRATE_SCRIPT_PATH])
-    : ['curl', '-fsSL', DESKTOP_ORCHESTRATE_SCRIPT_URL, '-o', ORCHESTRATE_SCRIPT_PATH]
-
-  let result = await execHostStreaming(
-    cli,
-    hostWrapper,
-    curlArgs,
-    logOutput,
-    null,
-  )
-  if (result.code !== 0) {
-    return result
+  if (useWsl) {
+    appendLog(logOutput, 'Downloading orchestrator script…\n')
+    const curlArgs = wslHostArgs(wslDistro, [
+      'curl',
+      '-fsSL',
+      DESKTOP_ORCHESTRATE_SCRIPT_URL,
+      '-o',
+      ORCHESTRATE_SCRIPT_PATH,
+    ])
+    const result = await execHostStreaming(cli, WSL_HOST_WRAPPER, curlArgs, logOutput, null)
+    if (result.code !== 0) {
+      return result
+    }
+    appendLog(logOutput, `\nRunning orchestrator via ${WSL_HOST_WRAPPER}…\n\n`)
+    const runArgs = wslHostArgs(wslDistro, [
+      'env',
+      'CONTINUUM_INSTALL_PROGRESS=json',
+      'bash',
+      ORCHESTRATE_SCRIPT_PATH,
+      ...orchestrateArgs,
+    ])
+    return execHostStreaming(cli, WSL_HOST_WRAPPER, runArgs, logOutput, progressTracker)
   }
 
-  appendLog(logOutput, `\nRunning orchestrator via ${hostWrapper}…\n\n`)
-
-  const runArgs = useWsl
-    ? wslHostArgs(wslDistro, [
-        'env',
-        'CONTINUUM_INSTALL_PROGRESS=json',
-        'bash',
-        ORCHESTRATE_SCRIPT_PATH,
-        ...orchestrateArgs,
-      ])
-    : [
-        'env',
-        'CONTINUUM_INSTALL_PROGRESS=json',
-        'bash',
-        ORCHESTRATE_SCRIPT_PATH,
-        ...orchestrateArgs,
-      ]
-
-  return execHostStreaming(
-    cli,
-    hostWrapper,
-    runArgs,
-    logOutput,
-    progressTracker,
-  )
+  // Linux: bundled orchestrator via wrapper (rewrites /tmp path; host exec cannot write there — curl exit 23).
+  appendLog(logOutput, `Running bundled orchestrator via ${LINUX_HOST_WRAPPER}…\n\n`)
+  const runArgs = [
+    'env',
+    'CONTINUUM_INSTALL_PROGRESS=json',
+    'bash',
+    ORCHESTRATE_SCRIPT_PATH,
+    ...orchestrateArgs,
+  ]
+  return execHostStreaming(cli, LINUX_HOST_WRAPPER, runArgs, logOutput, progressTracker)
 }
 
 function applyDetectedWslDistro(wslDistroInput, wslEnv) {

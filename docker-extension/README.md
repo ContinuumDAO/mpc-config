@@ -135,6 +135,7 @@ bash /tmp/continuum-desktop-orchestrate.sh --profile linux --node-mgt-key "0x…
 | `/metadata.json` | Extension manifest |
 | `/host/windows/continuum-wsl.cmd` | Windows host binary — WSL entry point for `host.cli.exec` |
 | `/host/linux/continuum-linux.sh` | Linux host binary — delegates to host `PATH` (`curl`, `bash`, etc.) |
+| `/host/linux/continuum-orchestrate.sh` | Bundled orchestrator (Linux skips curl download to `/tmp`) |
 | `/docker-compose.yaml` | Minimal backend keeper container |
 
 On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the extension is installed (`metadata.json` → `host.binaries`). On Linux, it copies **`continuum-linux.sh`** the same way — `host.cli.exec` only runs shipped host binaries, not arbitrary system commands.
@@ -148,5 +149,6 @@ On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the e
 | `this installer requires WSL2` on Windows | Run inside WSL, not PowerShell |
 | Could not run commands in WSL distro | Distro name must match `wsl -l -v` exactly |
 | `spawn …/host/curl ENOENT` on Linux | Extension missing Linux host wrapper — reinstall a build that ships `continuum-linux.sh`, or run the orchestrator manually (see below) |
+| `curl: (23) Failed writing body` on Linux | Host exec cannot write to `/tmp` — use a build that bundles `continuum-orchestrate.sh` (no curl download) |
 | `docker info` fails in log | Start Docker Desktop |
 | `configs.yaml already exists` | Fresh install only; use Maintenance for updates |

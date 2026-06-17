@@ -21,6 +21,9 @@
         "linux": [
           {
             "path": "/host/linux/continuum-linux.sh"
+          },
+          {
+            "path": "/host/linux/continuum-orchestrate.sh"
           }
         ]
       }
