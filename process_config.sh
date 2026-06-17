@@ -5989,8 +5989,10 @@ _apply_loopback_mongodb_owner_firewall_via_ufw_after_rules() {
 
     local ar="/etc/ufw/after.rules" mpc_tmp py_exit
     mpc_tmp=$(mktemp) || return 1
+    # Expand path now: RETURN trap survives into caller (apply_process_config_firewall) and would
+    # re-fire with an unbound local under set -u (load-install-progress.sh).
     # shellcheck disable=SC2064
-    trap 'rm -f "$mpc_tmp"' RETURN
+    trap "rm -f \"${mpc_tmp}\"" RETURN
 
     py_exit=0
     MPC_LOOPBACK_TMP="$mpc_tmp" MPC_FW_PORT="$mongo_port" python3 <<'PYCODE'
