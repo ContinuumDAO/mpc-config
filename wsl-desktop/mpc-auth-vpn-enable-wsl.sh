@@ -10,6 +10,13 @@ if [[ -n "${MPC_AUTH_WSL_ENV_FILE:-}" && -r "${MPC_AUTH_WSL_ENV_FILE}" ]]; then
 fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_lib.sh
+if [[ -f "${HERE}/_lib.sh" ]]; then
+	. "${HERE}/_lib.sh"
+else
+	. "${HERE}/../_lib.sh"
+fi
+
 WG_HOST_DIR="${MPC_AUTH_WIREGUARD_HOST_DIR:-/etc/wireguard}"
 WG_SRC_DIR="${MPC_AUTH_WIREGUARD_SRC_DIR:-/var/lib/mpc-auth-docker/wireguard}"
 STATE_FILE="${MPC_AUTH_VPN_STATE_FILE:-/var/lib/mpc-auth-docker/vpn-state.json}"
@@ -28,24 +35,24 @@ if ! command -v wg-quick >/dev/null 2>&1; then
 	exit 1
 fi
 
-mkdir -p "$WG_HOST_DIR"
-chmod 0700 "$WG_HOST_DIR"
-install -m 0600 "${WG_SRC_DIR}/wg0.conf" "${WG_HOST_DIR}/wg0.conf"
+wsl_desktop_sudo mkdir -p "$WG_HOST_DIR"
+wsl_desktop_sudo chmod 0700 "$WG_HOST_DIR"
+wsl_desktop_sudo install -m 0600 "${WG_SRC_DIR}/wg0.conf" "${WG_HOST_DIR}/wg0.conf"
 
 if [[ "$PROFILE" == "full" ]]; then
 	echo "mpc-auth-vpn-enable-wsl: warning — full-tunnel NAT is limited on WSL2; split-tunnel admin access is recommended." >&2
 	default_if="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"
 	default_if="${default_if:-eth0}"
-	{
-		echo ""
-		echo "# full-tunnel NAT (WSL — may be incomplete vs VPS)"
-		echo "PostUp = sysctl -w net.ipv4.ip_forward=1; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o ${default_if} -j MASQUERADE"
-		echo "PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o ${default_if} -j MASQUERADE"
-	} >>"${WG_HOST_DIR}/wg0.conf"
+	wsl_desktop_sudo tee -a "${WG_HOST_DIR}/wg0.conf" >/dev/null <<EOF
+
+# full-tunnel NAT (WSL — may be incomplete vs VPS)
+PostUp = sysctl -w net.ipv4.ip_forward=1; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o ${default_if} -j MASQUERADE
+PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o ${default_if} -j MASQUERADE
+EOF
 fi
 
-wg-quick down wg0 2>/dev/null || true
-wg-quick up "${WG_HOST_DIR}/wg0.conf"
+wsl_desktop_sudo wg-quick down wg0 2>/dev/null || true
+wsl_desktop_sudo wg-quick up "${WG_HOST_DIR}/wg0.conf"
 
 if command -v socat >/dev/null 2>&1; then
 	if [[ -f "$PROXY_PIDFILE" ]]; then
@@ -62,9 +69,9 @@ else
 	echo "mpc-auth-vpn-enable-wsl: socat not installed — run: sudo apt install socat" >&2
 fi
 
-mkdir -p "$(dirname "$STATE_FILE")"
+wsl_desktop_sudo mkdir -p "$(dirname "$STATE_FILE")"
 export STATE_FILE PROFILE LISTEN_PORT
-python3 - <<'PY'
+wsl_desktop_sudo env STATE_FILE="$STATE_FILE" PROFILE="$PROFILE" LISTEN_PORT="$LISTEN_PORT" python3 - <<'PY'
 import json, datetime, os
 path = os.environ["STATE_FILE"]
 payload = {

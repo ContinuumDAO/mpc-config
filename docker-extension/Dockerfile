@@ -26,7 +26,7 @@ LABEL org.opencontainers.image.title="Continuum Node" \
     com.docker.extension.screenshots="[]" \
     com.docker.extension.detailed-description="Provision certificates, configs.yaml, and start the Continuum MPC stack via Docker Desktop. Windows: clones mpc-config to WSL ~/mpc-config and runs docker compose from there." \
     com.docker.extension.publisher-url="https://continuumdao.org" \
-    com.docker.extension.changelog="0.1.16: fix install progress spinner (persistent DOM, full 360° rotation)."
+    com.docker.extension.changelog="0.1.16: fix install progress spinner; filter progress JSON from detail log."
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*

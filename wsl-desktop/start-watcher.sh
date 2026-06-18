@@ -25,7 +25,8 @@ if [[ -f "$pidfile" ]]; then
 	rm -f "$pidfile"
 fi
 
-mkdir -p "$(dirname "$logfile")" "$(dirname "$(wsl_desktop_pending_file)")" 2>/dev/null || true
+mkdir -p "$(dirname "$logfile")"
+wsl_desktop_sudo mkdir -p "$(dirname "$(wsl_desktop_pending_file)")" "$(dirname "$(wsl_desktop_pending_file)")/applied"
 
 nohup "$watcher" >>"$logfile" 2>&1 &
 echo $! >"$pidfile"

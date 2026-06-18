@@ -53,6 +53,85 @@ function getHostCli() {
 }
 
 const PROGRESS_PREFIX = '@continuum/progress\t'
+const PROGRESS_MARKER = '@continuum/progress'
+const PROGRESS_EVENT_TYPES = new Set(['init', 'sync', 'topic', 'overall', 'finish'])
+
+function progressPayloadFromLine(line) {
+  const trimmed = line.trimEnd()
+  if (!trimmed) return null
+  if (trimmed.startsWith(PROGRESS_PREFIX)) {
+    return trimmed.slice(PROGRESS_PREFIX.length)
+  }
+  if (trimmed.startsWith(PROGRESS_MARKER)) {
+    const rest = trimmed.slice(PROGRESS_MARKER.length).replace(/^\s+/, '')
+    return rest || null
+  }
+  if (trimmed.startsWith('{')) {
+    return trimmed
+  }
+  return null
+}
+
+function isProgressPayload(payload) {
+  if (!payload) return false
+  try {
+    const ev = JSON.parse(payload)
+    return Boolean(ev && typeof ev === 'object' && PROGRESS_EVENT_TYPES.has(ev.type))
+  } catch {
+    return false
+  }
+}
+
+function isProgressStreamLine(line) {
+  const payload = progressPayloadFromLine(line)
+  return payload !== null && isProgressPayload(payload)
+}
+
+function tryHandleProgressLine(line, progressTracker) {
+  const payload = progressPayloadFromLine(line)
+  if (!payload || !isProgressPayload(payload)) {
+    return false
+  }
+  progressTracker.handleEvent(JSON.parse(payload))
+  return true
+}
+
+function createProgressStreamFilter(progressTracker) {
+  let pendingPrefix = false
+
+  function handleLine(line) {
+    if (pendingPrefix) {
+      pendingPrefix = false
+      if (tryHandleProgressLine(`${PROGRESS_PREFIX}${line}`, progressTracker)) {
+        return true
+      }
+      line = `${PROGRESS_MARKER}\t${line}`
+    }
+
+    if (tryHandleProgressLine(line, progressTracker)) {
+      return true
+    }
+
+    const trimmed = line.trim()
+    if (trimmed === PROGRESS_MARKER || trimmed === '@continuum/progress') {
+      pendingPrefix = true
+      return true
+    }
+
+    if (isProgressStreamLine(line)) {
+      return true
+    }
+
+    return false
+  }
+
+  return {
+    handleLine,
+    flushPending() {
+      pendingPrefix = false
+    },
+  }
+}
 
 function topicSortKey(id) {
   if (id.startsWith('pull:')) return `2:${id}`
@@ -229,6 +308,7 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
     topics.clear()
     overallPct = 0
     spinnerOn = false
+    overallElements = null
     if (progressTopics) progressTopics.replaceChildren()
     if (progressOverall) progressOverall.replaceChildren()
     if (progressPanel) {
@@ -238,25 +318,6 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
   }
 
   return { handleEvent, reset }
-}
-
-function parseProgressLines(text, progressTracker, logOutput) {
-  let rest = text
-  let idx
-  while ((idx = rest.indexOf(PROGRESS_PREFIX)) !== -1) {
-    const before = rest.slice(0, idx)
-    if (before && logOutput) appendLog(logOutput, before)
-    rest = rest.slice(idx + PROGRESS_PREFIX.length)
-    const lineEnd = rest.indexOf('\n')
-    const jsonLine = lineEnd === -1 ? rest : rest.slice(0, lineEnd)
-    rest = lineEnd === -1 ? '' : rest.slice(lineEnd + 1)
-    try {
-      progressTracker.handleEvent(JSON.parse(jsonLine))
-    } catch {
-      if (logOutput) appendLog(logOutput, `${PROGRESS_PREFIX}${jsonLine}\n`)
-    }
-  }
-  if (rest && logOutput) appendLog(logOutput, rest)
 }
 
 function appendLog(logOutput, text) {
@@ -465,38 +526,47 @@ function execHostStreaming(cli, cmd, args, logOutput, progressTracker, execOptio
   return new Promise((resolve, reject) => {
     let settled = false
     let stdoutBuf = ''
+    const progressFilter = progressTracker ? createProgressStreamFilter(progressTracker) : null
 
-    const flushStdout = (final = false) => {
-      if (!stdoutBuf) return
-      if (progressTracker) {
-        parseProgressLines(stdoutBuf, progressTracker, logOutput)
-        stdoutBuf = ''
-        return
+    const drainStdoutLines = (flushPartial = false) => {
+      let nl
+      while ((nl = stdoutBuf.indexOf('\n')) !== -1) {
+        const line = stdoutBuf.slice(0, nl)
+        stdoutBuf = stdoutBuf.slice(nl + 1)
+        if (progressFilter?.handleLine(line)) {
+          continue
+        }
+        if (line.length > 0) {
+          appendLog(logOutput, `${line}\n`)
+        }
       }
-      if (final || stdoutBuf.includes('\n')) {
-        appendLog(logOutput, stdoutBuf.endsWith('\n') ? stdoutBuf : `${stdoutBuf}\n`)
+      if (flushPartial && stdoutBuf.length > 0) {
+        if (progressFilter?.handleLine(stdoutBuf)) {
+          stdoutBuf = ''
+          return
+        }
+        appendLog(logOutput, `${stdoutBuf}\n`)
         stdoutBuf = ''
+      }
+    }
+
+    const drainStderr = (stderr) => {
+      if (!stderr) return
+      const text = stderr.endsWith('\n') ? stderr : `${stderr}\n`
+      for (const line of text.split(/\r?\n/)) {
+        if (!line) continue
+        if (progressFilter?.handleLine(line)) {
+          continue
+        }
+        appendLog(logOutput, `${line}\n`)
       }
     }
 
     const finish = (exitCode) => {
       if (settled) return
       settled = true
-      if (progressTracker && stdoutBuf) {
-        const line = stdoutBuf
-        stdoutBuf = ''
-        if (line.startsWith(PROGRESS_PREFIX)) {
-          try {
-            progressTracker.handleEvent(JSON.parse(line.slice(PROGRESS_PREFIX.length)))
-          } catch {
-            appendLog(logOutput, `${line}\n`)
-          }
-        } else if (line.length > 0) {
-          appendLog(logOutput, `${line}\n`)
-        }
-      } else {
-        flushStdout(true)
-      }
+      drainStdoutLines(true)
+      progressFilter?.flushPending()
       appendLog(logOutput, `\n[process exited ${exitCode}]\n`)
       resolve({ code: exitCode })
     }
@@ -504,27 +574,20 @@ function execHostStreaming(cli, cmd, args, logOutput, progressTracker, execOptio
     const stream = {
       onOutput({ stdout, stderr }) {
         if (stdout) {
-          if (progressTracker) {
+          if (progressFilter) {
             stdoutBuf += stdout
-            let nl
-            while ((nl = stdoutBuf.indexOf('\n')) !== -1) {
-              const line = stdoutBuf.slice(0, nl)
-              stdoutBuf = stdoutBuf.slice(nl + 1)
-              if (line.startsWith(PROGRESS_PREFIX)) {
-                try {
-                  progressTracker.handleEvent(JSON.parse(line.slice(PROGRESS_PREFIX.length)))
-                } catch {
-                  appendLog(logOutput, `${line}\n`)
-                }
-              } else if (line.length > 0) {
-                appendLog(logOutput, `${line}\n`)
-              }
-            }
+            drainStdoutLines(false)
           } else {
             appendLog(logOutput, stdout.endsWith('\n') ? stdout : `${stdout}\n`)
           }
         }
-        if (stderr) appendLog(logOutput, stderr.endsWith('\n') ? stderr : `${stderr}\n`)
+        if (stderr) {
+          if (progressFilter) {
+            drainStderr(stderr)
+          } else {
+            appendLog(logOutput, stderr.endsWith('\n') ? stderr : `${stderr}\n`)
+          }
+        }
       },
       onError(error) {
         if (settled) return

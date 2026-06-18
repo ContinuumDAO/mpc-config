@@ -81,8 +81,12 @@ fi
 
 log "Installing WSL desktop host automation (repo ${REPO_DIR})"
 
-mkdir -p "$LIBEXEC" /var/lib/mpc-auth-docker/applied
-chmod 0755 /var/lib/mpc-auth-docker /var/lib/mpc-auth-docker/applied 2>/dev/null || true
+# shellcheck source=_lib.sh
+. "${WSL_ROOT}/_lib.sh"
+
+mkdir -p "$LIBEXEC"
+wsl_desktop_sudo mkdir -p /var/lib/mpc-auth-docker/applied
+wsl_desktop_sudo chmod 0755 /var/lib/mpc-auth-docker /var/lib/mpc-auth-docker/applied
 
 install -m 0755 \
 	"${SYSTEMD_ROOT}/mpc-auth-apply-pending-update.sh" \

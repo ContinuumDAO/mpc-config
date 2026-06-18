@@ -2,6 +2,15 @@
 # Shared helpers for wsl-desktop host automation (sourced, not executed).
 set -euo pipefail
 
+# Non-interactive sudo for Docker extension installs (passwordless sudo required).
+wsl_desktop_sudo() {
+	if [[ "$(id -u)" -eq 0 ]]; then
+		"$@"
+	else
+		sudo -n "$@"
+	fi
+}
+
 wsl_desktop_root() {
 	local src="${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}"
 	cd "$(dirname "$src")" && pwd
@@ -67,7 +76,9 @@ wsl_desktop_apply_pending() {
 	fi
 	export MPC_AUTH_WSL_ENV_FILE="$env_file"
 	export MPC_AUTH_SYNC_COMPOSE_ROLE_SCRIPT="${libexec}/mpc-auth-sync-compose-role.sh"
-	"$apply"
+	wsl_desktop_sudo env MPC_AUTH_WSL_ENV_FILE="$env_file" \
+		MPC_AUTH_SYNC_COMPOSE_ROLE_SCRIPT="${libexec}/mpc-auth-sync-compose-role.sh" \
+		"$apply"
 }
 
 wsl_desktop_apply_pending_vpn() {
@@ -80,5 +91,5 @@ wsl_desktop_apply_pending_vpn() {
 		return 1
 	fi
 	export MPC_AUTH_WSL_ENV_FILE="$env_file"
-	"$apply"
+	wsl_desktop_sudo env MPC_AUTH_WSL_ENV_FILE="$env_file" "$apply"
 }
