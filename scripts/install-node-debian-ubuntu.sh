@@ -461,7 +461,6 @@ if [ "$SKIP_PACKAGES" = false ]; then
         python3-pip \
         python3-ruamel.yaml \
         python3-cryptography \
-        mongodb-database-tools \
         jq
     install_progress_topic_set packages 85
     if [ "$DRY_RUN" = false ]; then
