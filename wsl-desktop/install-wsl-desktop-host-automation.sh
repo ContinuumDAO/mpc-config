@@ -115,9 +115,8 @@ if [[ -f "${SYSTEMD_ROOT}/mpc-auth-apply-pending-vpn.sh" ]]; then
 		"${LIBEXEC}/mpc-auth-apply-pending-vpn.sh"
 fi
 
-install -m 0755 \
-	"${WSL_ROOT}/mpc-auth-vpn-enable-wsl.sh" "${LIBEXEC}/mpc-auth-vpn-enable.sh" \
-	"${WSL_ROOT}/mpc-auth-vpn-disable-wsl.sh" "${LIBEXEC}/mpc-auth-vpn-disable.sh"
+install -m 0755 "${WSL_ROOT}/mpc-auth-vpn-enable-wsl.sh" "${LIBEXEC}/mpc-auth-vpn-enable.sh"
+install -m 0755 "${WSL_ROOT}/mpc-auth-vpn-disable-wsl.sh" "${LIBEXEC}/mpc-auth-vpn-disable.sh"
 
 ENV_FILE="${WSL_ROOT}/mpc-auth-docker.env"
 if [[ -f "${WSL_ROOT}/mpc-auth-docker.env" ]]; then
