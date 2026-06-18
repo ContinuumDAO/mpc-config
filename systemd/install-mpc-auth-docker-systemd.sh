@@ -35,6 +35,9 @@ if [[ "${EUID:-}" -ne 0 ]]; then
 fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HERE/.." && pwd)"
+# shellcheck source=../scripts/lib/ensure-vpn-host-packages.sh
+. "${REPO_ROOT}/scripts/lib/ensure-vpn-host-packages.sh"
 LIBEXEC="/usr/local/libexec/mpc-auth"
 UNIT_DIR="/etc/systemd/system"
 DEFAULT_ENV="/etc/default/mpc-auth-docker"
@@ -46,6 +49,9 @@ install -m 0755 \
 	"$HERE/mpc-auth-docker-update.sh" \
 	"$HERE/mpc-auth-apply-pending-update.sh" \
 	"$HERE/mpc-auth-apply-pending-reboot.sh" \
+	"$HERE/mpc-auth-apply-pending-vpn.sh" \
+	"$HERE/mpc-auth-vpn-enable.sh" \
+	"$HERE/mpc-auth-vpn-disable.sh" \
 	"$HERE/mpc-auth-apply-agent-llm-config.sh" \
 	"$HERE/mpc-auth-sync-compose-role.sh" \
 	"$LIBEXEC/"
@@ -74,6 +80,10 @@ install -m 0644 \
 	"$HERE/mpc-auth-docker-pending-update.service" \
 	"$HERE/mpc-auth-docker-pending-reboot.path" \
 	"$HERE/mpc-auth-docker-pending-reboot.service" \
+	"$HERE/mpc-auth-vpn-pending.path" \
+	"$HERE/mpc-auth-vpn-pending.service" \
+	"$HERE/mpc-auth-wireguard-wg0.service" \
+	"$HERE/mpc-auth-vpn-mgmt-proxy.service" \
 	"$HERE/mpc-auth-agent-llm-config.path" \
 	"$HERE/mpc-auth-agent-llm-config.service" \
 	"$UNIT_DIR/"
@@ -116,6 +126,14 @@ systemctl restart mpc-auth-docker-pending-reboot.path || systemctl start mpc-aut
 systemctl enable mpc-auth-agent-llm-config.path
 systemctl restart mpc-auth-agent-llm-config.path || systemctl start mpc-auth-agent-llm-config.path
 
+if ! ensure_vpn_host_packages; then
+	echo "WARNING: VPN host packages (wireguard, socat) not installed — POST /vpn/setEnabled will fail until they are." >&2
+	echo "  On Debian/Ubuntu: sudo apt install -y wireguard socat" >&2
+fi
+
+systemctl enable mpc-auth-vpn-pending.path
+systemctl restart mpc-auth-vpn-pending.path || systemctl start mpc-auth-vpn-pending.path
+
 echo
 echo "Installed:"
 echo "  $LIBEXEC/mpc-auth-docker-{restart,update}.sh + mpc-auth-apply-pending-{update,reboot}.sh"
@@ -129,6 +147,9 @@ echo "  $LIBEXEC/mpc-auth-apply-agent-llm-config.sh"
 echo "  $LIBEXEC/mpc-auth-apply-pending-update.sh"
 echo "  $LIBEXEC/mpc-auth-apply-pending-reboot.sh"
 echo "  $LIBEXEC/mpc-auth-sync-compose-role.sh (relay/client docker-compose.yml sync before restart)"
+echo "  $LIBEXEC/mpc-auth-apply-pending-vpn.sh + mpc-auth-vpn-{enable,disable}.sh (POST /vpn/setEnabled — WireGuard VPN)"
+echo "  $UNIT_DIR/mpc-auth-vpn-pending.{path,service} (bind-mount /var/lib/mpc-auth-docker in compose)"
+echo "  $UNIT_DIR/mpc-auth-wireguard-wg0.service + mpc-auth-vpn-mgmt-proxy.service"
 echo
 echo "Run: sudo systemctl start mpc-auth-docker-restart.service"
 echo "(Optional automation) mpc-auth-docker-pending-update.path watches /var/lib/mpc-auth-docker/pending-update.json — bind-mount that dir in compose."

@@ -1,0 +1,15 @@
+[Unit]
+Description=Proxy management API on wg0 for VPN clients (10.8.0.1:8080 -> 127.0.0.1:8080)
+After=mpc-auth-wireguard-wg0.service
+Requires=mpc-auth-wireguard-wg0.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/bin/socat TCP-LISTEN:8080,bind=10.8.0.1,reuseaddr,fork TCP:127.0.0.1:8080
+Restart=on-failure
+RestartSec=3
+StandardInput=null
+
+[Install]
+WantedBy=multi-user.target

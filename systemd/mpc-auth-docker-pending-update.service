@@ -1,7 +1,7 @@
 [Unit]
 Description=Apply mpc-auth image update when POST /updateMpcAuth drops pending-update.json (automated host pull)
 After=docker.socket network-online.target
-Requires=docker.socket
+Wants=docker.socket
 
 [Service]
 Type=oneshot

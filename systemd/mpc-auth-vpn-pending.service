@@ -1,0 +1,8 @@
+[Unit]
+Description=Apply mpc-auth WireGuard VPN enable/disable request
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-apply-pending-vpn.sh
+StandardInput=null

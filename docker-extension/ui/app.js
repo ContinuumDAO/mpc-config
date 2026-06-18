@@ -18,6 +18,9 @@ const DESKTOP_ORCHESTRATE_SCRIPT_URL =
 /** Shipped host binary (metadata.json host.binaries) — sole Windows WSL entry point. */
 const WSL_HOST_WRAPPER = 'continuum-wsl.cmd'
 
+/** Registers Windows logon Scheduled Task for WSL pending-update watcher. */
+const REGISTER_WATCHER_HOST_WRAPPER = 'continuum-register-watcher.cmd'
+
 /** Shipped host binary (metadata.json host.binaries) — Linux host PATH delegate. */
 const LINUX_HOST_WRAPPER = 'continuum-linux.sh'
 
@@ -834,16 +837,40 @@ function initExtensionUi() {
 
       resultPanel.hidden = false
       if (result?.code === 0) {
+        if (useWsl && wslDistro) {
+          appendLog(logOutput, `\nRegistering Windows logon task for WSL pending-update watcher (${REGISTER_WATCHER_HOST_WRAPPER})…\n`)
+          try {
+            const reg = await execHostSimple(cli, REGISTER_WATCHER_HOST_WRAPPER, [wslDistro])
+            const regOut = combinedExecOutput(reg.result)
+            if (regOut) appendLog(logOutput, `${regOut}\n`)
+            if (!reg.ok || !execSucceeded(reg.result)) {
+              appendLog(
+                logOutput,
+                `warning: logon task registration failed — run manually in WSL: ~/mpc-config/wsl-desktop/start-watcher.sh\n`,
+              )
+            }
+          } catch (regErr) {
+            appendLog(
+              logOutput,
+              `warning: could not register logon task (${regErr instanceof Error ? regErr.message : String(regErr)}). Start watcher manually: ~/mpc-config/wsl-desktop/start-watcher.sh\n`,
+            )
+          }
+        }
         resultPanel.className = RESULT_PANEL_OK
         const repoHint = useWsl
           ? `<code class="font-mono text-[0.6875rem] text-[var(--text)]">${MPC_DESKTOP_REPO_DISPLAY_PATH}</code> in WSL (${wslDistro})`
           : `<code class="font-mono text-[0.6875rem] text-[var(--text)]">${MPC_DESKTOP_REPO_DISPLAY_PATH}</code> on this machine`
+        const watcherNote = useWsl
+          ? ' Host restart automation: WSL pending-update watcher (status: <code class="font-mono text-[0.6875rem] text-[var(--text)]">~/mpc-config/wsl-desktop/status-watcher.sh</code> in WSL).'
+          : ''
         resultPanel.innerHTML =
           '<p class="m-0"><strong>Install finished.</strong> mpc-config is at ' +
           repoHint +
           '. Stack containers (mongo, mpc-auth, continuum-mcp, continuumdao-node-app) appear in Docker Desktop → Containers. ' +
           'Open continuumdao-node-app at <code class="font-mono text-[0.6875rem] text-[var(--text)]">http://127.0.0.1:3333</code> for Plain HTTP attach. ' +
-          'Back up <code class="font-mono text-[0.6875rem] text-[var(--text)]">bootstrap_key/</code> under that WSL directory if a new key was generated.</p>'
+          'Back up <code class="font-mono text-[0.6875rem] text-[var(--text)]">bootstrap_key/</code> under that WSL directory if a new key was generated.' +
+          watcherNote +
+          '</p>'
       } else {
         showError(resultPanel, `Install failed (exit ${result?.code ?? 'unknown'}). See log above.`)
       }

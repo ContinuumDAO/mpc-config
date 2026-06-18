@@ -100,14 +100,38 @@ CONTINUUM_INSTALL_PROGRESS=json sudo ./scripts/install-node-linux-docker-desktop
 
 ## Maintenance on desktop
 
-**Windows:** systemd is not installed — after `git pull` or config changes:
+**Windows (WSL + Docker Desktop):** systemd is not used in WSL. Host restart automation is a **pending-update file watcher** installed under `~/mpc-config/wsl-desktop/`:
+
+| Action | Mechanism |
+|--------|-----------|
+| Restart node service / image update | mpc-auth writes `/var/lib/mpc-auth-docker/pending-update.json` → WSL watcher → `mpc-auth-docker-update.sh` → `docker compose` in `~/mpc-config` |
+| WireGuard admin VPN | mpc-auth writes `/var/lib/mpc-auth-docker/pending-vpn.json` → same WSL watcher → `wg-quick` + socat on `10.8.0.1:8080` (split-tunnel recommended; full-tunnel NAT is limited on WSL2) |
+| Full host reboot | Not supported on Windows local nodes (Maintenance **Reboot** hidden in the node app) |
+
+After extension install, the UI registers a Windows **logon Scheduled Task** (`ContinuumNodeMpcAuthWatcher`) that runs `~/mpc-config/wsl-desktop/start-watcher.sh` in your WSL distro. Check status in WSL:
+
+```bash
+~/mpc-config/wsl-desktop/status-watcher.sh
+tail -f ~/mpc-config/wsl-desktop/watcher.log
+```
+
+Manual start/stop: `start-watcher.sh` / `stop-watcher.sh`. Re-install watcher (including VPN libexec): `bash ~/mpc-config/wsl-desktop/install-wsl-desktop-host-automation.sh --repo-dir ~/mpc-config`.
+
+**VPN on Windows:** allow **UDP 51820** through Windows Firewall for inbound WireGuard. Remote clients connecting to your home/office PC must reach the WSL WireGuard listener (WSL2 NAT/port forwarding may be required; split-tunnel admin access is the supported profile).
+
+**Linux (Docker Desktop):** systemd units are installed — Maintenance auto-restart uses `mpc-auth-docker-pending-update.path` (same as VPS). Docker Desktop hosts may lack the distro `docker.socket` unit; the pending-update service uses `Wants=docker.socket` so the path still runs.
+
+| Action | Mechanism |
+|--------|-----------|
+| Restart node service / image update | `pending-update.json` → `mpc-auth-docker-pending-update.path` |
+| WireGuard admin VPN | `pending-vpn.json` → `mpc-auth-vpn-pending.path` → `wg-quick@wg0` + socat on `10.8.0.1:8080` (requires `wireguard` + `socat` apt packages — installed by `install-node-linux-docker-desktop.sh`) |
+
+**Manual fallback (both profiles):**
 
 ```bash
 cd ~/mpc-config
-docker compose restart
+docker compose restart app
 ```
-
-**Linux:** systemd units are installed — Maintenance auto-restart may apply after config updates.
 
 ## Manual install without extension (advanced)
 

@@ -314,6 +314,12 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 - [`POST /postBootstrapKey`](#post-postbootstrapkey) — write **`bootstrap_key/ed25519_private.hex`** from **`ed25519PrivateSeedHex`** in the signed body when the file is absent; management-signed; **not** subject to maintenance quiescence (no **503** while draining).
 - [`POST /removeBootstrapKey`](#post-removebootstrapkey) — delete **`bootstrap_key/ed25519_private.hex`** if present; management-signed; **not** subject to maintenance quiescence.
 
+### WireGuard admin VPN (VPS, Linux Docker Desktop, Windows WSL)
+Enable/disable a host WireGuard server from the Node page **VPN Panel** on **relay and client** nodes. Requires **`MPC_AUTH_VPN_PENDING_FILE`** in **`docker-compose.relay.yml`** / **`docker-compose.client.yml`** (bind-mounted via generated **`docker-compose.yml`**) plus host automation: **`mpc-auth-vpn-pending.path`** on VPS and **Linux Docker Desktop** (systemd), or the **WSL pending watcher** on **Windows Docker Desktop**. See **`systemd/README.md`** and **`docker-extension/README.md`**.
+- [`GET /vpn/status`](#get-vpn-status) — read JWT; host automation availability, active state, endpoint, profiles.
+- [`POST /vpn/setEnabled`](#post-vpn-setenabled) — management-signed **`{ nonce, clientSig, nodeKey, enabled, profile? }`**; generates keys on first enable; writes **`pending-vpn.json`** for host **`wg-quick@wg0`**.
+- [`POST /vpn/clientConfig`](#post-vpn-clientconfig) — management-signed download of WireGuard client **`.conf`** (**`profile`**: **`split`** or **`full`**).
+
 ### Database integrity
 - [`GET /checkDatabase`](#get-checkdatabase) — MongoDB integrity report for configured group shards and local collections (**no** management signature; **no** deterministic-node / backup eligibility gate). See [MongoDB integrity](#mongodb-integrity-report-read-only).
 - [`POST /fixDatabase`](#post-fixdatabase) — Apply **automated** Mongo repairs from the integrity scan (**management-signed**; same deterministic-node eligibility as backup; **maintenance quiescence** until **`GET /maintenance/restartGate`** reports **`readyForProcessExit`**). See [MongoDB integrity](#mongodb-integrity-report-read-only).
@@ -404,6 +410,73 @@ The script uses the **second argument** as **`MPC_AUTH_EXPECTED_DIGEST`** for th
 **Recommended automation (no Docker socket in the app container):** install **`mpc-config`** **`systemd/mpc-auth-docker-pending-update.path`** + bind-mount **`/var/lib/mpc-auth-docker`** into the container (**`docker-compose*.yml`** in mpc-config). Implement in **mpc-auth**, after **`POST /updateMpcAuth`** succeeds and returns **`registryDigest`**, write **`/var/lib/mpc-auth-docker/pending-update.json`** atomically (**write temp → `rename`**). **`systemd.path`** invokes **`mpc-auth-apply-pending-update.sh`**, which runs **`mpc-auth-docker-update.sh`** on the host. See **`mpc-config/systemd/README.md`** → *Fully automated upgrades*.
 
 **Alternatively — Docker socket (`/var/run/docker.sock`) in the container:** **`docker`** CLI/API from mpc-auth avoids the trigger file but gives the container **full Docker API access** vs the host — usually worse for security than **systemd.path**.
+
+<a id="get-vpn-status"></a>
+#### `GET /vpn/status`
+
+Returns WireGuard VPN automation status for the **VPN Panel** in continuumdao-node-app. Read JWT on the management port (same as other attached-node reads).
+
+**Response `data` (typical):**
+```json
+{
+  "available": true,
+  "installed": true,
+  "active": false,
+  "listenPort": 51820,
+  "serverAddress": "10.8.0.1/24",
+  "vpnNetworkCidr": "10.8.0.0/24",
+  "endpointHost": "203.0.113.50",
+  "profiles": ["split", "full"],
+  "clientConfigured": true,
+  "pendingVpnPath": "/var/lib/mpc-auth-docker/pending-vpn.json",
+  "managementViaVpn": "http://10.8.0.1:8080",
+  "profile": "split"
+}
+```
+
+- **`available`**: **`true`** when **`MPC_AUTH_VPN_PENDING_FILE`** / **`MpcAuthVpnPendingPath`** is configured in compose (host apply via systemd on VPS/Linux Docker Desktop, or WSL watcher on Windows Docker Desktop).
+- **`active`**: read from host **`vpn-state.json`** (written by **`mpc-auth-vpn-enable.sh`** / **`disable`**).
+- **`profile`**: last applied host profile (**`split`** or **`full`**) when active.
+
+<a id="post-vpn-setenabled"></a>
+#### `POST /vpn/setEnabled`
+
+Management-signed JSON (canonical body with **`clientSig`** cleared for verification):
+
+```json
+{
+  "nonce": 10,
+  "clientSig": "0x… or 128-hex-ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
+  "enabled": true,
+  "profile": "split"
+}
+```
+
+- **`enabled`**: **`true`** to bring up **`wg0`** on the host; **`false`** to tear it down.
+- **`profile`**: **`split`** (default) — client **`AllowedIPs`** = VPN subnet only; reach management API at **`http://10.8.0.1:8080`** via host **`socat`** proxy. **`full`** — client routes **`0.0.0.0/0, ::/0`**; host enables NAT (**`PostUp`** on **`wg0`**).
+
+On first enable, mpc-auth generates server/client WireGuard keypairs under **`/var/lib/mpc-auth-docker/wireguard/`**, writes **`wg0.conf`**, then atomically writes **`pending-vpn.json`**. Host automation runs **`mpc-auth-apply-pending-vpn.sh`** (**`mpc-auth-vpn-pending.path`** on systemd hosts, WSL watcher on Windows Docker Desktop).
+
+**Response `data`:** **`pendingVpnWritten`**, **`pendingVpnFile`**, **`message`**, optional **`pendingVpnFileError`**.
+
+<a id="post-vpn-clientconfig"></a>
+#### `POST /vpn/clientConfig`
+
+Management-signed JSON:
+
+```json
+{
+  "nonce": 11,
+  "clientSig": "…",
+  "nodeKey": "<128-hex>",
+  "profile": "split"
+}
+```
+
+Returns **`configText`** (WireGuard INI) and suggested **`filename`**. Contains the **client private key** — treat like a secret; only download over TLS or SSH tunnel.
+
+**Split profile:** **`AllowedIPs = 10.8.0.0/24`** (or **`WireGuard.VpnNetworkCidr`**). **Full profile:** **`AllowedIPs = 0.0.0.0/0, ::/0`**, **`DNS`** from **`WireGuard.FullTunnelDns`**.
 
 <a id="mongodb-integrity-report-read-only"></a>
 ## MongoDB integrity report and automated repair
@@ -1653,6 +1726,11 @@ Returns comprehensive health status including MQTT connection, subscriptions, an
 - `mqtt.warnings`: Array of warning messages (if any)
 - `mongodb.connected`: `true` if MongoDB connection is healthy
 - `mongodb.error`: Error message if MongoDB connection failed
+- `vpn.available`: `true` when VPN host automation is configured (`MPC_AUTH_VPN_PENDING_FILE` in compose)
+- `vpn.active`: `true` when host WireGuard **`wg0`** is up (from **`vpn-state.json`**)
+- `vpn.profile`: `"split"` or `"full"` when active; empty when inactive
+
+**Note:** VPN health is informational only — an inactive VPN does **not** mark the node **`unhealthy`**.
 
 **HTTP status:** Always **`200 OK`** with a JSON body. When the node is unhealthy, **`code`** is **`1`**, **`error`** is non-empty, and **`data.status`** is **`"unhealthy"`** (do not rely on HTTP 503 — browsers and proxies often return a non-JSON body for 503, which breaks JSON consumers).
 
