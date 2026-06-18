@@ -183,9 +183,8 @@ ContinuumdaoNodeApp:
   HostPort: 3333
   EnablePlainHttpAttach: true
   NodeReadDiscoveryAllowPrivate: true
-  # When empty, defaults to: 127.0.0.1=host.docker.internal,localhost=host.docker.internal,::1=host.docker.internal
-  NodeReadDiscoveryLocalBindAliases: ""
-  NodeReadDiscoveryHairpinFallback: false
+  # Compose network hostname for mpc-auth when loopback discovery is proxied from the dashboard container (default: app).
+  NodeReadDiscoveryUpstreamHost: ""
 
 # -----------------------------------------------------------------------------
 # Continuum MCP server (continuumdao/continuum-mcp-server)

@@ -56,8 +56,6 @@ mpc_auth = (os.environ.get("DESKTOP_MPC_AUTH_SERVICE") or "app").strip() or "app
 if not compose_path:
     sys.exit(1)
 
-aliases = f"127.0.0.1={mpc_auth},localhost={mpc_auth},::1={mpc_auth}"
-
 y = YAML()
 y.preserve_quotes = True
 y.width = 4096
@@ -96,7 +94,8 @@ def normalize_env(env):
 
 
 env = normalize_env(dash.get("environment"))
-env["NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES"] = aliases
+env["NODE_READ_DISCOVERY_UPSTREAM_HOST"] = mpc_auth
+env.pop("NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES", None)
 env.pop("NODE_READ_DISCOVERY_HAIRPIN_FALLBACK", None)
 env.setdefault("NODE_READ_DISCOVERY_ALLOW_PRIVATE", "1")
 env.setdefault("ENABLE_PLAIN_HTTP_ATTACH", "1")
@@ -105,6 +104,6 @@ dash["environment"] = env
 with open(compose_path, "w", encoding="utf-8") as f:
     y.dump(compose, f)
 
-print(f"ok aliases={aliases}", flush=True)
+print(f"ok upstream_host={mpc_auth}", flush=True)
 PYDESKTOP
 }

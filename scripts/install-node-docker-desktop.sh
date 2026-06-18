@@ -391,6 +391,13 @@ fi
 
 configure_desktop_compose_discovery "$REPO_DIR" "$DRY_RUN"
 
+if [ "$DRY_RUN" = true ]; then
+    printf '[dry-run] bash %s/wsl-desktop/install-wsl-desktop-host-automation.sh --repo-dir %q\n' "$REPO_DIR" "$REPO_DIR"
+else
+    log "Installing WSL pending-update host automation (wsl-desktop watcher)"
+    bash "$REPO_DIR/wsl-desktop/install-wsl-desktop-host-automation.sh" --repo-dir "$REPO_DIR"
+fi
+
 if [ "$NO_START" = false ]; then
     log "Pulling images and starting Docker stack"
     if [ "$DRY_RUN" = true ]; then
@@ -420,6 +427,6 @@ Config and keys on disk: ${REPO_DIR}/configs.yaml, bootstrap_key/, added_keys/
 Next steps:
   1. Attach your node at https://mpa.continuumdao.org
   2. Back up ${REPO_DIR}/bootstrap_key/ if PublicMgtKey was auto-generated
-  3. systemd Maintenance auto-restart is not used on desktop — restart containers manually after config updates
+  3. Host restart automation: WSL pending-update watcher (see ~/mpc-config/wsl-desktop/status-watcher.sh). A Windows logon task is registered by the Docker extension after install.
 
 EOF

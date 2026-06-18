@@ -4593,9 +4593,7 @@ if not path_c or not path_compose:
 BEGIN = "  # BEGIN mpc-config continuumdao-node-app\n"
 END = "  # END mpc-config continuumdao-node-app\n"
 
-DEFAULT_ALIASES = (
-    "127.0.0.1=host.docker.internal,localhost=host.docker.internal,::1=host.docker.internal"
-)
+DEFAULT_UPSTREAM_HOST = "app"
 
 y = YAML()
 with open(path_c, encoding="utf-8") as f:
@@ -4634,8 +4632,7 @@ tag = "latest"
 host_port = 3333
 plain_attach = True
 disc_allow_private = True
-hairpin = False
-aliases = ""
+upstream_host = ""
 
 if na is None:
     pass  # defaults
@@ -4646,9 +4643,8 @@ elif isinstance(na, dict):
     host_port = scalar_int(na.get("HostPort"), host_port)
     plain_attach = scalar_bool(na.get("EnablePlainHttpAttach"), True)
     disc_allow_private = scalar_bool(na.get("NodeReadDiscoveryAllowPrivate"), True)
-    hairpin = scalar_bool(na.get("NodeReadDiscoveryHairpinFallback"), False)
-    if na.get("NodeReadDiscoveryLocalBindAliases") not in (None, ""):
-        aliases = str(na.get("NodeReadDiscoveryLocalBindAliases")).strip()
+    if na.get("NodeReadDiscoveryUpstreamHost") not in (None, ""):
+        upstream_host = str(na.get("NodeReadDiscoveryUpstreamHost")).strip()
 else:
     enabled = False
 
@@ -4671,10 +4667,10 @@ def yaml_sq(s):
     return "'" + str(s).replace("'", "''") + "'"
 
 
-if not aliases:
-    aliases_use = DEFAULT_ALIASES
+if not upstream_host:
+    upstream_use = DEFAULT_UPSTREAM_HOST
 else:
-    aliases_use = aliases
+    upstream_use = upstream_host
 
 try:
     with open(path_compose, encoding="utf-8") as f:
@@ -4691,13 +4687,6 @@ i0 = text.index(BEGIN)
 i1 = text.index(END) + len(END)
 
 if enabled:
-    hairpin_lines = ""
-    if hairpin:
-        hairpin_lines = (
-            '      NODE_READ_DISCOVERY_HAIRPIN_FALLBACK: "1"\n'
-        )
-
-    # f-strings cannot contain backslashes inside {…} (e.g. escaped quotes); use bindings.
     plain_attach_env = '"1"' if plain_attach else '"0"'
     disc_allow_private_env = '"1"' if disc_allow_private else '"0"'
 
@@ -4706,16 +4695,16 @@ if enabled:
         f"  dashboard:\n"
         f'    image: {yaml_sq(image + ":" + tag)}\n'
         f"    restart: unless-stopped\n"
-        f"    extra_hosts:\n"
-        f'      - "host.docker.internal:host-gateway"\n'
+        f"    depends_on:\n"
+        f"      app:\n"
+        f"        condition: service_started\n"
         f"    environment:\n"
         f"      ENABLE_PLAIN_HTTP_ATTACH: {plain_attach_env}\n"
         f"      NODE_READ_DISCOVERY_ALLOW_PRIVATE: {disc_allow_private_env}\n"
-        f"      NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES: {yaml_sq(aliases_use)}\n"
+        f"      NODE_READ_DISCOVERY_UPSTREAM_HOST: {yaml_sq(upstream_use)}\n"
         f'      DEFAULT_NODE_DISCOVERY_PORT: "{pub_port}"\n'
         f'      BROWSER_HTTPS_PORT: "{bh_use}"\n'
         f'      MANAGEMENT_API_PORT: "{mgt_port}"\n'
-        f"{hairpin_lines}"
         f"    ports:\n"
         f'      - "{host_port}:3000"\n'
         f"    networks:\n"

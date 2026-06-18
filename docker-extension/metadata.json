@@ -16,6 +16,9 @@
         "windows": [
           {
             "path": "/host/windows/continuum-wsl.cmd"
+          },
+          {
+            "path": "/host/windows/continuum-register-watcher.cmd"
           }
         ],
         "linux": [

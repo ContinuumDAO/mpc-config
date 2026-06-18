@@ -127,7 +127,7 @@ services:
     environment:
       ENABLE_PLAIN_HTTP_ATTACH: "1"
       NODE_READ_DISCOVERY_ALLOW_PRIVATE: "1"
-      NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES: "127.0.0.1=host.docker.internal,localhost=host.docker.internal,::1=host.docker.internal"
+      NODE_READ_DISCOVERY_UPSTREAM_HOST: "app"
       DEFAULT_NODE_DISCOVERY_PORT: "18080"
       BROWSER_HTTPS_PORT: "8443"
       MANAGEMENT_API_PORT: "8080"
