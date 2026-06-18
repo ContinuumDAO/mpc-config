@@ -39,7 +39,7 @@ The extension **backend image is UI-only** (no baked `/mpc-config`, no `docker.s
 After the image is published or built locally:
 
 ```bash
-docker extension install continuumdao/continuum-node-installer:0.1.7
+docker extension install continuumdao/continuum-node-installer:0.1.16
 ```
 
 Open **Docker Desktop → Extensions → Continuum Node** and complete the wizard.
@@ -50,8 +50,8 @@ From the **mpc-config repo root**:
 
 ```bash
 cd docker-extension/ui && npm ci && npm run build && cd ../..
-docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.7 .
-docker extension install continuumdao/continuum-node-installer:0.1.7   # requires Docker Desktop on host
+docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.16 .
+docker extension install continuumdao/continuum-node-installer:0.1.16   # requires Docker Desktop on host
 ```
 
 Push to Docker Hub (multi-arch recommended for Windows):
@@ -59,7 +59,7 @@ Push to Docker Hub (multi-arch recommended for Windows):
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
   -f docker-extension/Dockerfile \
-  -t continuumdao/continuum-node-installer:0.1.7 \
+  -t continuumdao/continuum-node-installer:0.1.16 \
   --push .
 ```
 
@@ -175,5 +175,5 @@ On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the e
 | `spawn …/host/curl ENOENT` on Linux | Extension missing Linux host wrapper — reinstall a build that ships `continuum-linux.sh`, or run the orchestrator manually (see below) |
 | `curl: (23) Failed writing body` on Linux | Host exec cannot write to `/tmp` — use a build that bundles `continuum-orchestrate.sh` (no curl download) |
 | `dashboard` / `continuum-mcp` exit 139 (~10s restart loop) | Broken `node:22.22.3-bookworm-slim` base on Docker Hub (truncated `/usr/local/bin/node`). Pin image tags to a rebuild with digest-pinned Node base, or use `v1.1.9` / `v1.0.41` until republished |
-| `docker info` fails in log | Start Docker Desktop |
+| `apt` hangs on `mongodb-database-tools` | Stale `~/mpc-config` from a failed attempt — run `cd ~/mpc-config && git pull`, or remove the directory and retry Install |
 | `configs.yaml already exists` | Fresh install only; use Maintenance for updates |

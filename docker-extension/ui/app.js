@@ -64,6 +64,41 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
   const topics = new Map()
   let overallPct = 0
   let spinnerOn = false
+  /** @type {{ fill: HTMLElement, pctSpan: HTMLElement, spinner: HTMLElement } | null} */
+  let overallElements = null
+
+  function ensureOverallElements() {
+    if (overallElements) return overallElements
+    if (!progressOverall) return null
+
+    const row = document.createElement('div')
+    row.className = 'install-progress-overall-row'
+
+    const labelEl = document.createElement('span')
+    labelEl.className = 'install-progress-label font-medium'
+    labelEl.textContent = 'Overall'
+
+    const track = document.createElement('div')
+    track.className = 'install-progress-track'
+    const fill = document.createElement('div')
+    fill.className = 'install-progress-fill'
+    track.appendChild(fill)
+
+    const tail = document.createElement('span')
+    tail.className = 'install-progress-pct flex items-center justify-end gap-1'
+    const pctSpan = document.createElement('span')
+    const spinner = document.createElement('span')
+    spinner.className = 'install-progress-spinner'
+    spinner.setAttribute('aria-hidden', 'true')
+    spinner.hidden = true
+
+    tail.append(pctSpan, spinner)
+    row.append(labelEl, track, tail)
+    progressOverall.appendChild(row)
+
+    overallElements = { fill, pctSpan, spinner }
+    return overallElements
+  }
 
   function applyTopicList(list, { replace = false } = {}) {
     if (replace) topics.clear()
@@ -119,37 +154,18 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
   }
 
   function renderOverall() {
-    if (!progressOverall) return
-    progressOverall.replaceChildren()
+    const els = ensureOverallElements()
+    if (!els) return
 
-    const row = document.createElement('div')
-    row.className = 'install-progress-overall-row'
-
-    const labelEl = document.createElement('span')
-    labelEl.className = 'install-progress-label font-medium'
-    labelEl.textContent = 'Overall'
-
-    const track = document.createElement('div')
-    track.className = 'install-progress-track'
-    const fill = document.createElement('div')
-    fill.className = 'install-progress-fill'
-    if (spinnerOn) fill.classList.add('is-active')
-    fill.style.width = `${Math.max(0, Math.min(100, overallPct))}%`
-    track.appendChild(fill)
-
-    const tail = document.createElement('span')
-    tail.className = 'install-progress-pct flex items-center justify-end gap-1'
-    tail.innerHTML = `<span>${Math.round(overallPct)}%</span>`
+    els.fill.style.width = `${Math.max(0, Math.min(100, overallPct))}%`
+    els.fill.classList.toggle('is-active', spinnerOn)
+    els.pctSpan.textContent = `${Math.round(overallPct)}%`
+    els.spinner.hidden = !spinnerOn
     if (spinnerOn) {
-      const spin = document.createElement('span')
-      spin.className = 'install-progress-spinner'
-      spin.setAttribute('aria-hidden', 'true')
-      spin.setAttribute('aria-label', 'Working')
-      tail.appendChild(spin)
+      els.spinner.setAttribute('aria-label', 'Working')
+    } else {
+      els.spinner.removeAttribute('aria-label')
     }
-
-    row.append(labelEl, track, tail)
-    progressOverall.appendChild(row)
   }
 
   function renderAll() {

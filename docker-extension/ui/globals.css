@@ -171,6 +171,7 @@ h6 {
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: install-progress-spin 0.75s linear infinite;
+  transform-origin: center center;
   flex-shrink: 0;
 }
 

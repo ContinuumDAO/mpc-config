@@ -10,7 +10,7 @@
 #
 set -euo pipefail
 
-ORCHESTRATE_VERSION="0.1.9"
+ORCHESTRATE_VERSION="0.1.10"
 MPC_CONFIG_REPO="${MPC_CONFIG_REPO:-https://github.com/ContinuumDAO/mpc-config.git}"
 MPC_CONFIG_REF="${MPC_CONFIG_REF:-main}"
 REPO_DIR="${MPC_REPO_DIR:-${HOME}/mpc-config}"
@@ -55,6 +55,7 @@ EOF
 }
 
 log() { printf '==> %s\n' "$*" >&2; }
+warn() { printf 'warning: %s\n' "$*" >&2; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 require_git() {
@@ -79,7 +80,17 @@ detect_profile() {
 
 clone_repo() {
     if [ -d "$REPO_DIR/.git" ]; then
-        log "Using existing mpc-config at $REPO_DIR"
+        if [ -f "$REPO_DIR/configs.yaml" ]; then
+            log "Using existing mpc-config at $REPO_DIR"
+            return 0
+        fi
+        log "Updating existing mpc-config checkout at $REPO_DIR (fresh install retry)"
+        git -C "$REPO_DIR" fetch --depth 1 origin "$MPC_CONFIG_REF" 2>/dev/null \
+            || warn "git fetch failed — using existing checkout"
+        git -C "$REPO_DIR" checkout "$MPC_CONFIG_REF" 2>/dev/null \
+            || warn "git checkout ${MPC_CONFIG_REF} failed — using existing checkout"
+        git -C "$REPO_DIR" pull --ff-only origin "$MPC_CONFIG_REF" 2>/dev/null \
+            || warn "git pull failed — using existing checkout"
         return 0
     fi
     if [ -e "$REPO_DIR" ]; then
