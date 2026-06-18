@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch for mpc-auth WireGuard VPN enable/disable trigger (pending-vpn.json)
+
+[Path]
+PathChanged=/var/lib/mpc-auth-docker/pending-vpn.json
+
+[Install]
+WantedBy=multi-user.target

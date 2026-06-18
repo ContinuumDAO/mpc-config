@@ -184,7 +184,9 @@ wait_for_apt_lock() {
 packages_already_installed() {
     command -v git >/dev/null 2>&1 \
         && command -v python3 >/dev/null 2>&1 \
-        && python3 -c "import ruamel.yaml, cryptography" 2>/dev/null
+        && python3 -c "import ruamel.yaml, cryptography" 2>/dev/null \
+        && command -v wg-quick >/dev/null 2>&1 \
+        && command -v socat >/dev/null 2>&1
 }
 
 maybe_auto_skip_packages() {
@@ -195,6 +197,20 @@ maybe_auto_skip_packages() {
         warn "Required packages already installed — skipping apt"
         SKIP_PACKAGES=true
     fi
+}
+
+ensure_vpn_host_packages() {
+    if command -v wg-quick >/dev/null 2>&1 && command -v socat >/dev/null 2>&1; then
+        return 0
+    fi
+    if [ "$DRY_RUN" = true ]; then
+        printf '[dry-run] apt-get install -y wireguard socat\n'
+        return 0
+    fi
+    log "Installing wireguard and socat (VPN host automation)"
+    wait_for_apt_lock
+    apt-get -o "DPkg::Lock::Timeout=${APT_LOCK_WAIT_SECS:-300}" install -y wireguard socat \
+        || warn "wireguard/socat install failed — VPN enable from the node app will fail until packages are installed"
 }
 
 preflight_docker() {
@@ -366,10 +382,14 @@ if [ "$SKIP_PACKAGES" = false ]; then
         python3-ruamel.yaml \
         python3-cryptography \
         mongodb-database-tools \
+        wireguard \
+        socat \
         jq
     install_progress_spinner_stop
     install_progress_topic_done packages
 fi
+
+ensure_vpn_host_packages
 
 if [ "$SKIP_CLONE" = false ]; then
     log "Cloning mpc-config to ${REPO_DIR}"
@@ -457,5 +477,6 @@ Next steps:
   1. Attach your node at https://mpa.continuumdao.org
   2. Back up ${REPO_DIR}/bootstrap_key/ if PublicMgtKey was auto-generated
   3. Use MPA Maintenance for guided updates when available
+  4. VPN: enable from the node app VPN panel; host applies via pending-vpn.json + mpc-auth-vpn-pending.path (same as VPS; open UDP 51820 if remote clients connect)
 
 EOF

@@ -4687,6 +4687,69 @@
                 ]
             }
         },
+        "/vpn/status": {
+            "get": {
+                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /vpn/status).",
+                "consumes": ["application/json"],
+                "produces": ["application/json"],
+                "tags": ["Management API"],
+                "summary": "GET vpn status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": { "$ref": "#/definitions/node.APIResponse" }
+                    }
+                }
+            }
+        },
+        "/vpn/setEnabled": {
+            "post": {
+                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /vpn/setEnabled).",
+                "consumes": ["application/json"],
+                "produces": ["application/json"],
+                "tags": ["Management API"],
+                "summary": "POST vpn setEnabled",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": { "$ref": "#/definitions/node.APIResponse" }
+                    }
+                },
+                "parameters": [{
+                    "in": "body",
+                    "name": "body",
+                    "required": true,
+                    "schema": {
+                        "type": "object",
+                        "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                    }
+                }]
+            }
+        },
+        "/vpn/clientConfig": {
+            "post": {
+                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /vpn/clientConfig).",
+                "consumes": ["application/json"],
+                "produces": ["application/json"],
+                "tags": ["Management API"],
+                "summary": "POST vpn clientConfig",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": { "$ref": "#/definitions/node.APIResponse" }
+                    }
+                },
+                "parameters": [{
+                    "in": "body",
+                    "name": "body",
+                    "required": true,
+                    "schema": {
+                        "type": "object",
+                        "description": "Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md"
+                    }
+                }]
+            }
+        },
         "/updateMpcAuth": {
             "post": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /updateMpcAuth).",

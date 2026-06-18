@@ -54,12 +54,14 @@ services:
     # Image: default continuumdao/mpc-auth:latest; override with MPC_AUTH_COMPOSE_APP_IMAGE.
     image: ${MPC_AUTH_COMPOSE_APP_IMAGE:-continuumdao/mpc-auth:latest}
     restart: always
-    # pending-update.json / pending-reboot.json under /var/lib/mpc-auth-docker (systemd); agent LLM config beside compose (see agent_llm_config volume).
+    # pending-update.json / pending-reboot.json / pending-vpn.json under /var/lib/mpc-auth-docker (systemd); agent LLM config beside compose (see agent_llm_config volume).
     environment:
       GOLOG_FILE: logs/MPCAuthCore.log
       GOLOG_OUTPUT: file
       MPC_AUTH_DOCKER_PENDING_UPDATE_FILE: /var/lib/mpc-auth-docker/pending-update.json
       MPC_AUTH_PENDING_REBOOT_FILE: /var/lib/mpc-auth-docker/pending-reboot.json
+      MPC_AUTH_VPN_PENDING_FILE: /var/lib/mpc-auth-docker/pending-vpn.json
+      MPC_AUTH_VPN_STATE_FILE: /var/lib/mpc-auth-docker/vpn-state.json
       MPC_AUTH_AGENT_LLM_CONFIG_FILE: /app/agent_llm_config/agent-llm-config.json
       MPC_AUTH_USER_FOLDER: /app/user_folder
       MPC_AGENT_MCP_SERVER_URL: "http://continuum-mcp:8446/mcp"
@@ -83,7 +85,7 @@ services:
       mosquitto:
         condition: service_started
     volumes:
-      # Writable host dir: mpc-auth may write pending-update.json / pending-reboot.json for systemd automation (see systemd/README.md).
+      # Writable host dir: mpc-auth may write pending-update.json / pending-reboot.json / pending-vpn.json for systemd automation (see systemd/README.md).
       - /var/lib/mpc-auth-docker:/var/lib/mpc-auth-docker
       # Writable so POST /configUpdateImplement can merge planned YAML via ruamel (read-only causes apply failures).
       - ./configs.yaml:/app/configs.yaml

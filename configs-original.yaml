@@ -133,6 +133,16 @@ ManagementAPIsPort: 8080
 # and docker-compose *.yml env MPC_AUTH_DOCKER_PENDING_UPDATE_FILE / MPC_AUTH_PENDING_REBOOT_FILE).
 # MpcAuthDockerPendingUpdatePath: /var/lib/mpc-auth-docker/pending-update.json
 # MpcAuthPendingRebootPath: /var/lib/mpc-auth-docker/pending-reboot.json
+# MpcAuthVpnPendingPath: /var/lib/mpc-auth-docker/pending-vpn.json
+# MpcAuthVpnStatePath: /var/lib/mpc-auth-docker/vpn-state.json
+#
+# WireGuard admin VPN (VPS systemd hosts — enable/disable from Node page VPN Panel):
+# WireGuard:
+#   ListenPort: 51820
+#   ServerAddressCidr: 10.8.0.1/24
+#   ClientAddressCidr: 10.8.0.2/32
+#   VpnNetworkCidr: 10.8.0.0/24
+#   FullTunnelDns: 1.1.1.1
 #
 # Note: Compose defaults to continuumdao/mpc-auth:latest — GET /version returns Data.version as the application semver (e.g. v1.1)
 # baked into that image at build time, not the Docker tag string.

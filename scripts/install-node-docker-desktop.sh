@@ -206,6 +206,31 @@ try_apt_python_venv_packages() {
     fi
 }
 
+try_apt_vpn_packages() {
+    command -v wg-quick >/dev/null 2>&1 && command -v socat >/dev/null 2>&1 && return 0
+    command -v apt-get >/dev/null 2>&1 || return 1
+    command -v sudo >/dev/null 2>&1 || return 1
+    sudo -n true 2>/dev/null || return 1
+    log "Trying passwordless apt install of wireguard-tools and socat (VPN host automation)"
+    sudo -n apt-get update -qq || return 1
+    sudo -n apt-get install -y wireguard-tools socat || return 1
+}
+
+ensure_vpn_host_tools() {
+    if command -v wg-quick >/dev/null 2>&1 && command -v socat >/dev/null 2>&1; then
+        return 0
+    fi
+    if [ "$DRY_RUN" = true ]; then
+        printf '[dry-run] sudo apt install -y wireguard-tools socat\n'
+        return 0
+    fi
+    if try_apt_vpn_packages; then
+        log "WireGuard host tools ready (wg-quick, socat)"
+        return 0
+    fi
+    warn "wireguard-tools and/or socat missing — VPN enable from the node app will fail until you run: sudo apt install -y wireguard-tools socat"
+}
+
 manual_provision_python_instructions() {
     local py_minor
     py_minor="$(python3_minor_version 2>/dev/null || echo "3.x")"
@@ -391,6 +416,8 @@ fi
 
 configure_desktop_compose_discovery "$REPO_DIR" "$DRY_RUN"
 
+ensure_vpn_host_tools
+
 if [ "$DRY_RUN" = true ]; then
     printf '[dry-run] bash %s/wsl-desktop/install-wsl-desktop-host-automation.sh --repo-dir %q\n' "$REPO_DIR" "$REPO_DIR"
 else
@@ -428,5 +455,6 @@ Next steps:
   1. Attach your node at https://mpa.continuumdao.org
   2. Back up ${REPO_DIR}/bootstrap_key/ if PublicMgtKey was auto-generated
   3. Host restart automation: WSL pending-update watcher (see ~/mpc-config/wsl-desktop/status-watcher.sh). A Windows logon task is registered by the Docker extension after install.
+  4. VPN: enable from the node app VPN panel; host applies via pending-vpn.json + the same WSL watcher (UDP 51820 must reach WSL for remote clients).
 
 EOF

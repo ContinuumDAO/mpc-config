@@ -27,6 +27,10 @@ UNIT_FILES=(
 	"mpc-auth-docker-pending-update.service"
 	"mpc-auth-docker-pending-reboot.path"
 	"mpc-auth-docker-pending-reboot.service"
+	"mpc-auth-vpn-pending.path"
+	"mpc-auth-vpn-pending.service"
+	"mpc-auth-wireguard-wg0.service"
+	"mpc-auth-vpn-mgmt-proxy.service"
 )
 
 LIBEXEC_SCRIPTS=(
@@ -34,6 +38,9 @@ LIBEXEC_SCRIPTS=(
 	"mpc-auth-docker-update.sh"
 	"mpc-auth-apply-pending-update.sh"
 	"mpc-auth-apply-pending-reboot.sh"
+	"mpc-auth-apply-pending-vpn.sh"
+	"mpc-auth-vpn-enable.sh"
+	"mpc-auth-vpn-disable.sh"
 )
 
 KEEP_ENV=false
@@ -53,7 +60,7 @@ mpc-config systemd/install-mpc-auth-docker-systemd.sh.
 
 Options:
   --keep-env              Keep /etc/default/mpc-auth-docker (still removes units + libexec).
-  --purge-var-lib         Delete /var/lib/mpc-auth-docker (pending-update/reboot JSON, applied/*.json).
+  --purge-var-lib         Delete /var/lib/mpc-auth-docker (pending-update/reboot/vpn JSON, wireguard/, applied/*.json).
   --purge-env-backups     Remove /etc/default/mpc-auth-docker.bak.* created by the installer.
   --journal-vacuum-time=T  Run journalctl --vacuum-time=T for the WHOLE system journal (not unit-specific).
                            Requires --force-global-journal-vacuum (safety gate).

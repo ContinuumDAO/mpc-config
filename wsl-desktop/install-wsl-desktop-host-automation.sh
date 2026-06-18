@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install WSL host automation for Windows Docker Desktop (pending-update.json watcher).
+# Install WSL host automation for Windows Docker Desktop (pending-update.json + pending-vpn.json watcher).
 # Reuses systemd/ scripts from this repo — no WSL systemd required.
 #
 # Usage:
@@ -16,7 +16,7 @@ Usage:
   bash wsl-desktop/install-wsl-desktop-host-automation.sh --repo-dir PATH
 
 Installs libexec copies, repo-local mpc-auth-docker.env, /var/lib/mpc-auth-docker,
-and starts the pending-update watcher.
+and starts the pending-update + pending-vpn watcher.
 EOF
 }
 
@@ -67,6 +67,13 @@ for f in mpc-auth-apply-pending-update.sh mpc-auth-docker-update.sh mpc-auth-syn
 	fi
 done
 
+for f in mpc-auth-vpn-enable-wsl.sh mpc-auth-vpn-disable-wsl.sh; do
+	if [[ ! -f "${WSL_ROOT}/${f}" ]]; then
+		echo "error: missing ${WSL_ROOT}/${f}" >&2
+		exit 1
+	fi
+done
+
 if [[ "$DRY_RUN" = true ]]; then
 	printf '[dry-run] install wsl-desktop host automation under %q\n' "$WSL_ROOT"
 	exit 0
@@ -96,6 +103,18 @@ sed -i 's|^if \[\[ -r /etc/default/mpc-auth-docker \]\]; then|if [[ -n "${MPC_AU
 sed -i 's|/usr/local/libexec/mpc-auth/mpc-auth-sync-compose-role.sh|"$(cd "$(dirname "${BASH_SOURCE[0]}")" \&\& pwd)/mpc-auth-sync-compose-role.sh"|' \
 	"${LIBEXEC}/mpc-auth-docker-update.sh"
 
+if [[ -f "${SYSTEMD_ROOT}/mpc-auth-apply-pending-vpn.sh" ]]; then
+	install -m 0755 "${SYSTEMD_ROOT}/mpc-auth-apply-pending-vpn.sh" "${LIBEXEC}/mpc-auth-apply-pending-vpn.sh"
+	sed -i 's|LIBEXEC="/usr/local/libexec/mpc-auth"|LIBEXEC="'"${LIBEXEC}"'"|' \
+		"${LIBEXEC}/mpc-auth-apply-pending-vpn.sh"
+	sed -i 's|^set -euo pipefail|set -euo pipefail\nif [[ -n "${MPC_AUTH_WSL_ENV_FILE:-}" \&\& -r "${MPC_AUTH_WSL_ENV_FILE}" ]]; then\n\t# shellcheck source=/dev/null\n\t. "${MPC_AUTH_WSL_ENV_FILE}"\nfi|' \
+		"${LIBEXEC}/mpc-auth-apply-pending-vpn.sh"
+fi
+
+install -m 0755 \
+	"${WSL_ROOT}/mpc-auth-vpn-enable-wsl.sh" "${LIBEXEC}/mpc-auth-vpn-enable.sh" \
+	"${WSL_ROOT}/mpc-auth-vpn-disable-wsl.sh" "${LIBEXEC}/mpc-auth-vpn-disable.sh"
+
 ENV_FILE="${WSL_ROOT}/mpc-auth-docker.env"
 if [[ -f "${WSL_ROOT}/mpc-auth-docker.env" ]]; then
 	:
@@ -121,3 +140,4 @@ log "WSL desktop host automation ready."
 log "  status: ${WSL_ROOT}/status-watcher.sh"
 log "  log:    ${WSL_ROOT}/watcher.log"
 log "  manual: ${LIBEXEC}/mpc-auth-docker-restart.sh"
+log "  VPN:    pending-vpn.json → ${LIBEXEC}/mpc-auth-apply-pending-vpn.sh"

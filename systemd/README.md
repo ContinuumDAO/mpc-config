@@ -77,6 +77,12 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 | **`mpc-auth-docker-pending-reboot.path`** | Watches **`/var/lib/mpc-auth-docker/pending-reboot.json`**; starts apply service when mpc-auth writes the file (after **`POST /reboot`**). |
 | **`mpc-auth-docker-pending-reboot.service`** | Oneshot: runs **`mpc-auth-apply-pending-reboot.sh`** → host **`systemctl reboot`**. |
 | **`mpc-auth-apply-pending-reboot.sh`** | Claims **`pending-reboot.json`**, archives to **`applied/`**, runs **`systemctl reboot`** (with inhibitor bypass when supported). |
+| **`mpc-auth-vpn-pending.path`** | Watches **`/var/lib/mpc-auth-docker/pending-vpn.json`**; starts apply service when mpc-auth writes the file (after **`POST /vpn/setEnabled`**). |
+| **`mpc-auth-vpn-pending.service`** | Oneshot: runs **`mpc-auth-apply-pending-vpn.sh`** → **`mpc-auth-vpn-enable.sh`** or **`mpc-auth-vpn-disable.sh`**. |
+| **`mpc-auth-wireguard-wg0.service`** | **`wg-quick up/down wg0`** — WireGuard server interface. |
+| **`mpc-auth-vpn-mgmt-proxy.service`** | **`socat`** on **`10.8.0.1:8080`** → **`127.0.0.1:8080`** so VPN clients reach the management API. |
+
+**Compose:** **`docker-compose.relay.yml`** and **`docker-compose.client.yml`** both set **`MPC_AUTH_VPN_PENDING_FILE`** / **`MPC_AUTH_VPN_STATE_FILE`** and bind-mount **`/var/lib/mpc-auth-docker`**. **`process_config.sh`** copies the relay or client template to **`docker-compose.yml`** and can patch older compose files via **`apply_docker_compose_vpn_env`**.
 
 ### Update script behavior
 
