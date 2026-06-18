@@ -365,7 +365,6 @@ if [ "$SKIP_PACKAGES" = false ]; then
         python3-pip \
         python3-ruamel.yaml \
         python3-cryptography \
-        mongodb-database-tools \
         jq
     install_progress_spinner_stop
     install_progress_topic_done packages

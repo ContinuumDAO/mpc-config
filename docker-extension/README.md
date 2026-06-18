@@ -150,5 +150,6 @@ On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the e
 | Could not run commands in WSL distro | Distro name must match `wsl -l -v` exactly |
 | `spawn …/host/curl ENOENT` on Linux | Extension missing Linux host wrapper — reinstall a build that ships `continuum-linux.sh`, or run the orchestrator manually (see below) |
 | `curl: (23) Failed writing body` on Linux | Host exec cannot write to `/tmp` — use a build that bundles `continuum-orchestrate.sh` (no curl download) |
+| `dashboard` / `continuum-mcp` exit 139 (~10s restart loop) | Broken `node:22.22.3-bookworm-slim` base on Docker Hub (truncated `/usr/local/bin/node`). Pin image tags to a rebuild with digest-pinned Node base, or use `v1.1.9` / `v1.0.41` until republished |
 | `docker info` fails in log | Start Docker Desktop |
 | `configs.yaml already exists` | Fresh install only; use Maintenance for updates |
