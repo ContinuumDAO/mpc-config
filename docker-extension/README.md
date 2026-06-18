@@ -171,6 +171,7 @@ On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the e
 | macOS Install disabled | Expected — macOS script not yet available |
 | Linux `sudo` password prompt / install hangs | Configure passwordless sudo for your user, or run orchestrator manually in a terminal |
 | `this installer requires WSL2` on Windows | Run inside WSL, not PowerShell |
+| `passwordless sudo required` / install stops before clone | From PowerShell: `wsl -d <distro> -u root`, then `visudo` and add `<user> ALL=(ALL) NOPASSWD: ALL`. Verify: `wsl -d <distro> bash -lc 'sudo -n true && echo OK'` |
 | Could not run commands in WSL distro | Distro name must match `wsl -l -v` exactly |
 | `spawn …/host/curl ENOENT` on Linux | Extension missing Linux host wrapper — reinstall a build that ships `continuum-linux.sh`, or run the orchestrator manually (see below) |
 | `curl: (23) Failed writing body` on Linux | Host exec cannot write to `/tmp` — use a build that bundles `continuum-orchestrate.sh` (no curl download) |

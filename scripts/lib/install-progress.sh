@@ -108,6 +108,7 @@ install_progress__profile_topics() {
             install_progress__register_topic start-stack "Start containers" "$INSTALL_PROGRESS_START_STACK_WEIGHT"
             ;;
         desktop)
+            install_progress__register_topic passwordless-sudo "Passwordless sudo" 2
             install_progress__register_topic clone "Clone mpc-config" 2
             install_progress__register_topic python-deps "Python dependencies" 3
             install_progress__register_topic provision-setup "Node config bootstrap" 2
@@ -152,6 +153,7 @@ install_progress__profile_topics_nosync() {
             install_progress__register_topic_no_sync start-stack "Start containers" "$INSTALL_PROGRESS_START_STACK_WEIGHT"
             ;;
         desktop)
+            install_progress__register_topic_no_sync passwordless-sudo "Passwordless sudo" 2
             install_progress__register_topic_no_sync clone "Clone mpc-config" 2
             install_progress__register_topic_no_sync python-deps "Python dependencies" 3
             install_progress__register_topic_no_sync provision-setup "Node config bootstrap" 2

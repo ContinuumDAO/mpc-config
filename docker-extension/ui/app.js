@@ -493,6 +493,61 @@ function wslHostArgs(distro, tailArgs) {
   return ['-d', distro, ...tailArgs]
 }
 
+function formatPasswordlessSudoInstructions(wslDistro, wslUser) {
+  return (
+    `Passwordless sudo required for Docker Desktop install on Windows.\n\n` +
+    `WSL user: ${wslUser}\n` +
+    `WSL distro: ${wslDistro}\n\n` +
+    `The Docker extension runs the installer as your default WSL user and cannot type your sudo password.\n` +
+    `Host automation (/var/lib/mpc-auth-docker), apt packages, and maintenance restart/update all need sudo -n.\n\n` +
+    `Configure passwordless sudo from Windows PowerShell:\n\n` +
+    `  wsl -d ${wslDistro} -u root\n\n` +
+    `Then in the root WSL shell:\n\n` +
+    `  visudo\n\n` +
+    `Add this line (replace ${wslUser} if your username differs):\n\n` +
+    `  ${wslUser} ALL=(ALL) NOPASSWD: ALL\n\n` +
+    `Verify as your normal WSL user (exit the root shell first):\n\n` +
+    `  wsl -d ${wslDistro}\n` +
+    `  sudo -n true && echo OK\n\n` +
+    `Then click Install again in the Docker extension.`
+  )
+}
+
+async function verifyWslPasswordlessSudo(cli, wslDistro, logOutput) {
+  appendLog(logOutput, `Checking passwordless sudo for default WSL user in "${wslDistro}"…\n`)
+
+  const userProbe = await execHostSimple(cli, WSL_HOST_WRAPPER, wslHostArgs(wslDistro, ['whoami']))
+  const wslUser =
+    userProbe.ok && userProbe.result ? combinedExecOutput(userProbe.result).trim() : '<your-wsl-user>'
+
+  const sudoProbe = await execHostSimple(
+    cli,
+    WSL_HOST_WRAPPER,
+    wslHostArgs(wslDistro, ['bash', '-lc', 'command -v sudo >/dev/null && sudo -n true']),
+  )
+
+  if (!sudoProbe.ok) {
+    appendLog(
+      logOutput,
+      `[host exec error: ${sudoProbe.error instanceof Error ? sudoProbe.error.message : String(sudoProbe.error)}]\n`,
+    )
+    appendLog(logOutput, `\n${formatPasswordlessSudoInstructions(wslDistro, wslUser)}\n`)
+    return false
+  }
+
+  const sudoOut = combinedExecOutput(sudoProbe.result)
+  const sudoCode = sudoProbe.result?.code
+  appendLog(logOutput, `[exit ${sudoCode ?? 'unknown'}] user=${wslUser}${sudoOut ? ` ${sudoOut}` : ''}\n`)
+
+  if (execSucceeded(sudoProbe.result)) {
+    appendLog(logOutput, `Passwordless sudo OK for WSL user "${wslUser}".\n\n`)
+    return true
+  }
+
+  appendLog(logOutput, `\n${formatPasswordlessSudoInstructions(wslDistro, wslUser)}\n`)
+  return false
+}
+
 async function probeWslEnvironment(cli, ddClient) {
   const isWindows = await detectWindowsHost(cli, ddClient)
   if (!isWindows) {
@@ -883,6 +938,16 @@ function initExtensionUi() {
         showError(
           resultPanel,
           `Could not run commands in WSL distro "${wslDistro}" via ${WSL_HOST_WRAPPER}. Confirm the distro name matches wsl -l -v exactly. Reinstall the extension if the host binary is missing.`,
+        )
+        installBtn.disabled = false
+        return
+      }
+
+      const sudoOk = await verifyWslPasswordlessSudo(cli, wslDistro, logOutput)
+      if (!sudoOk) {
+        showError(
+          resultPanel,
+          `Passwordless sudo is required for WSL user in "${wslDistro}". See the install log for visudo steps, then retry Install.`,
         )
         installBtn.disabled = false
         return
