@@ -35,6 +35,9 @@ if [[ "${EUID:-}" -ne 0 ]]; then
 fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HERE/.." && pwd)"
+# shellcheck source=../scripts/lib/ensure-vpn-host-packages.sh
+. "${REPO_ROOT}/scripts/lib/ensure-vpn-host-packages.sh"
 LIBEXEC="/usr/local/libexec/mpc-auth"
 UNIT_DIR="/etc/systemd/system"
 DEFAULT_ENV="/etc/default/mpc-auth-docker"
@@ -122,6 +125,11 @@ systemctl restart mpc-auth-docker-pending-reboot.path || systemctl start mpc-aut
 
 systemctl enable mpc-auth-agent-llm-config.path
 systemctl restart mpc-auth-agent-llm-config.path || systemctl start mpc-auth-agent-llm-config.path
+
+if ! ensure_vpn_host_packages; then
+	echo "WARNING: VPN host packages (wireguard, socat) not installed — POST /vpn/setEnabled will fail until they are." >&2
+	echo "  On Debian/Ubuntu: sudo apt install -y wireguard socat" >&2
+fi
 
 systemctl enable mpc-auth-vpn-pending.path
 systemctl restart mpc-auth-vpn-pending.path || systemctl start mpc-auth-vpn-pending.path

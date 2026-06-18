@@ -84,6 +84,8 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 
 **Compose:** **`docker-compose.relay.yml`** and **`docker-compose.client.yml`** both set **`MPC_AUTH_VPN_PENDING_FILE`** / **`MPC_AUTH_VPN_STATE_FILE`** and bind-mount **`/var/lib/mpc-auth-docker`**. **`process_config.sh`** copies the relay or client template to **`docker-compose.yml`** and can patch older compose files via **`apply_docker_compose_vpn_env`**.
 
+**Host packages (VPS / Linux Docker Desktop):** **`wireguard`** and **`socat`** must be installed on the host (`wg-quick`, `socat`). Fresh installs via **`scripts/install-node-debian-ubuntu.sh`** include them; **`install-mpc-auth-docker-systemd.sh`** also runs **`apt install wireguard socat`** when missing (e.g. after **`git pull`** + **`process_config.sh`** on an older node).
+
 ### Update script behavior
 
 1. Reads optional `/etc/default/mpc-auth-docker` (`MPC_AUTH_CONTAINER_NAME`, **`MPC_AUTH_EXPECTED_DIGEST`**, `MPC_AUTH_POST_UPDATE_CMD`, …).
