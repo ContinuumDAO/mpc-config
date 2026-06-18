@@ -36,8 +36,10 @@ COPY docker-extension/metadata.json /metadata.json
 COPY docker-extension/docker-compose.yaml /docker-compose.yaml
 COPY docker-extension/continuum-icon.svg /continuum-icon.svg
 COPY docker-extension/host/windows/continuum-wsl.cmd /host/windows/continuum-wsl.cmd
+COPY docker-extension/host/windows/continuum-register-watcher.cmd /host/windows/continuum-register-watcher.cmd
 COPY docker-extension/host/linux/continuum-linux.sh /host/linux/continuum-linux.sh
-RUN chmod +x /host/linux/continuum-linux.sh
+COPY docker-extension/host/linux/continuum-orchestrate.sh /host/linux/continuum-orchestrate.sh
+RUN chmod +x /host/linux/continuum-linux.sh /host/linux/continuum-orchestrate.sh
 COPY docker-extension/vm/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

@@ -16,11 +16,17 @@
         "windows": [
           {
             "path": "/host/windows/continuum-wsl.cmd"
+          },
+          {
+            "path": "/host/windows/continuum-register-watcher.cmd"
           }
         ],
         "linux": [
           {
             "path": "/host/linux/continuum-linux.sh"
+          },
+          {
+            "path": "/host/linux/continuum-orchestrate.sh"
           }
         ]
       }

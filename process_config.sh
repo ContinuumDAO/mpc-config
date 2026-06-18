@@ -4469,6 +4469,7 @@ configure_docker_compose() {
         apply_docker_compose_continuumdao_node_app "$docker_compose_file" "$configs_yaml_path" || true
         apply_docker_compose_continuum_mcp_server "$docker_compose_file" "$configs_yaml_path" || true
         apply_docker_compose_agent_llm_config_env "$docker_compose_file" "${5:-1}" || true
+        apply_docker_compose_vpn_env "$docker_compose_file" || true
         apply_docker_compose_agent_llm_config_defaults_volume "$docker_compose_file" "${5:-1}" || true
         if [ "$is_relay_node" = "true" ]; then
             apply_docker_compose_relay_mqtt_hairpin_extra_hosts "$docker_compose_file" "$configs_yaml_path" || true
@@ -4593,9 +4594,7 @@ if not path_c or not path_compose:
 BEGIN = "  # BEGIN mpc-config continuumdao-node-app\n"
 END = "  # END mpc-config continuumdao-node-app\n"
 
-DEFAULT_ALIASES = (
-    "127.0.0.1=host.docker.internal,localhost=host.docker.internal,::1=host.docker.internal"
-)
+DEFAULT_UPSTREAM_HOST = "app"
 
 y = YAML()
 with open(path_c, encoding="utf-8") as f:
@@ -4634,8 +4633,7 @@ tag = "latest"
 host_port = 3333
 plain_attach = True
 disc_allow_private = True
-hairpin = False
-aliases = ""
+upstream_host = ""
 
 if na is None:
     pass  # defaults
@@ -4646,9 +4644,8 @@ elif isinstance(na, dict):
     host_port = scalar_int(na.get("HostPort"), host_port)
     plain_attach = scalar_bool(na.get("EnablePlainHttpAttach"), True)
     disc_allow_private = scalar_bool(na.get("NodeReadDiscoveryAllowPrivate"), True)
-    hairpin = scalar_bool(na.get("NodeReadDiscoveryHairpinFallback"), False)
-    if na.get("NodeReadDiscoveryLocalBindAliases") not in (None, ""):
-        aliases = str(na.get("NodeReadDiscoveryLocalBindAliases")).strip()
+    if na.get("NodeReadDiscoveryUpstreamHost") not in (None, ""):
+        upstream_host = str(na.get("NodeReadDiscoveryUpstreamHost")).strip()
 else:
     enabled = False
 
@@ -4671,10 +4668,10 @@ def yaml_sq(s):
     return "'" + str(s).replace("'", "''") + "'"
 
 
-if not aliases:
-    aliases_use = DEFAULT_ALIASES
+if not upstream_host:
+    upstream_use = DEFAULT_UPSTREAM_HOST
 else:
-    aliases_use = aliases
+    upstream_use = upstream_host
 
 try:
     with open(path_compose, encoding="utf-8") as f:
@@ -4691,13 +4688,6 @@ i0 = text.index(BEGIN)
 i1 = text.index(END) + len(END)
 
 if enabled:
-    hairpin_lines = ""
-    if hairpin:
-        hairpin_lines = (
-            '      NODE_READ_DISCOVERY_HAIRPIN_FALLBACK: "1"\n'
-        )
-
-    # f-strings cannot contain backslashes inside {…} (e.g. escaped quotes); use bindings.
     plain_attach_env = '"1"' if plain_attach else '"0"'
     disc_allow_private_env = '"1"' if disc_allow_private else '"0"'
 
@@ -4706,16 +4696,16 @@ if enabled:
         f"  dashboard:\n"
         f'    image: {yaml_sq(image + ":" + tag)}\n'
         f"    restart: unless-stopped\n"
-        f"    extra_hosts:\n"
-        f'      - "host.docker.internal:host-gateway"\n'
+        f"    depends_on:\n"
+        f"      app:\n"
+        f"        condition: service_started\n"
         f"    environment:\n"
         f"      ENABLE_PLAIN_HTTP_ATTACH: {plain_attach_env}\n"
         f"      NODE_READ_DISCOVERY_ALLOW_PRIVATE: {disc_allow_private_env}\n"
-        f"      NODE_READ_DISCOVERY_LOCAL_BIND_ALIASES: {yaml_sq(aliases_use)}\n"
+        f"      NODE_READ_DISCOVERY_UPSTREAM_HOST: {yaml_sq(upstream_use)}\n"
         f'      DEFAULT_NODE_DISCOVERY_PORT: "{pub_port}"\n'
         f'      BROWSER_HTTPS_PORT: "{bh_use}"\n'
         f'      MANAGEMENT_API_PORT: "{mgt_port}"\n'
-        f"{hairpin_lines}"
         f"    ports:\n"
         f'      - "{host_port}:3000"\n'
         f"    networks:\n"
@@ -5035,6 +5025,110 @@ PYCOMPOSEAGENT
             return 1
             ;;
     esac
+}
+
+# Ensure MPC_AUTH_VPN_* env lines exist in docker-compose app environment (relay and client templates).
+apply_docker_compose_vpn_env() {
+    local file="$1"
+    if [ ! -f "$file" ]; then
+        return 0
+    fi
+    if ! command -v python3 &>/dev/null; then
+        print_warning "python3 not found — could not adjust VPN env in docker-compose.yml"
+        return 1
+    fi
+    local _action
+    _action=$(
+        COMPOSE_VPN_FILE="$file" python3 << 'PYCOMPOSEVPN'
+import os
+import re
+import sys
+
+path = os.environ.get("COMPOSE_VPN_FILE", "")
+pending_line = "      MPC_AUTH_VPN_PENDING_FILE: /var/lib/mpc-auth-docker/pending-vpn.json\n"
+state_line = "      MPC_AUTH_VPN_STATE_FILE: /var/lib/mpc-auth-docker/vpn-state.json\n"
+pat_pending = re.compile(r"^\s*#?\s*MPC_AUTH_VPN_PENDING_FILE:\s*")
+pat_state = re.compile(r"^\s*#?\s*MPC_AUTH_VPN_STATE_FILE:\s*")
+reboot_pat = re.compile(r"^\s*MPC_AUTH_PENDING_REBOOT_FILE:")
+
+if not path:
+    print("skip", flush=True)
+    sys.exit(0)
+
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+except OSError as e:
+    sys.stderr.write(f"{path}: {e}\n")
+    print("error", flush=True)
+    sys.exit(1)
+
+out = []
+found_pending = False
+found_state = False
+changed = False
+for line in lines:
+    if pat_pending.match(line):
+        found_pending = True
+        if line != pending_line:
+            changed = True
+        out.append(pending_line)
+        continue
+    if pat_state.match(line):
+        found_state = True
+        if line != state_line:
+            changed = True
+        out.append(state_line)
+        continue
+    out.append(line)
+
+if not found_pending or not found_state:
+    insert_at = None
+    for i, line in enumerate(out):
+        if reboot_pat.match(line):
+            insert_at = i + 1
+            break
+    if insert_at is None:
+        print("none", flush=True)
+        sys.exit(0)
+    block = []
+    if not found_pending:
+        block.append(pending_line)
+    if not found_state:
+        block.append(state_line)
+    out[insert_at:insert_at] = block
+    changed = True
+
+if not changed:
+    print("noop", flush=True)
+    sys.exit(0)
+
+with open(path, "w", encoding="utf-8") as f:
+    f.writelines(out)
+print("insert" if not (found_pending and found_state) else "set", flush=True)
+PYCOMPOSEVPN
+    )
+    case "$_action" in
+        set|insert)
+            print_success "docker-compose.yml: MPC_AUTH_VPN_PENDING_FILE + MPC_AUTH_VPN_STATE_FILE (relay and client compose)"
+            ;;
+        none)
+            print_warning "docker-compose.yml: could not insert VPN env (MPC_AUTH_PENDING_REBOOT_FILE line missing)"
+            ;;
+        skip|noop) ;;
+        error)
+            print_warning "docker-compose.yml: failed to adjust VPN env"
+            return 1
+            ;;
+    esac
+}
+
+_process_config_ensure_vpn_compose_env() {
+    local cf="${REPO_ROOT}/docker-compose.yml"
+    if [ ! -f "$cf" ]; then
+        return 0
+    fi
+    apply_docker_compose_vpn_env "$cf" || true
 }
 
 # Bind-mount agent_llm_config.defaults so GET /listMcpServers and GET /listWebhooks see catalog updates after git pull.
@@ -6553,7 +6647,7 @@ _process_config_sync_mpc_auth_libexec_from_repo() {
     if [ ! -d /etc/systemd/system ]; then
         return 0
     fi
-    if [ ! -f /etc/systemd/system/mpc-auth-docker-restart.service ] && [ ! -f /etc/systemd/system/mpc-auth-docker-pending-update.service ] && [ ! -f /etc/systemd/system/mpc-auth-docker-pending-reboot.service ]; then
+    if [ ! -f /etc/systemd/system/mpc-auth-docker-restart.service ] && [ ! -f /etc/systemd/system/mpc-auth-docker-pending-update.service ] && [ ! -f /etc/systemd/system/mpc-auth-docker-pending-reboot.service ] && [ ! -f /etc/systemd/system/mpc-auth-vpn-pending.path ]; then
         return 0
     fi
     local sd_root ins_script
@@ -7015,6 +7109,7 @@ main() {
     _process_config_sync_mpc_auth_docker_compose_workdir
     _process_config_sync_mpc_auth_docker_dashboard_keys "$CONFIG_FILE"
     _process_config_ensure_agent_llm_config_defaults_compose_volume
+    _process_config_ensure_vpn_compose_env
     _process_config_sync_mpc_auth_libexec_from_repo "$SKIP_SYSTEMD"
     install_progress_topic_if_registered set configure-node 92 2>/dev/null || true
 

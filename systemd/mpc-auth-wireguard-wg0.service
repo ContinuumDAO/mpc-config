@@ -1,0 +1,15 @@
+[Unit]
+Description=WireGuard VPN interface wg0 (Continuum MPC node admin VPN)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/bin/wg-quick up wg0
+ExecStop=/usr/bin/wg-quick down wg0
+StandardInput=null
+
+[Install]
+WantedBy=multi-user.target

@@ -265,7 +265,9 @@ packages_already_installed() {
     command -v docker >/dev/null 2>&1 \
         && command -v git >/dev/null 2>&1 \
         && command -v python3 >/dev/null 2>&1 \
-        && python3 -c "import ruamel.yaml, cryptography" 2>/dev/null
+        && python3 -c "import ruamel.yaml, cryptography" 2>/dev/null \
+        && command -v wg-quick >/dev/null 2>&1 \
+        && command -v socat >/dev/null 2>&1
 }
 
 maybe_auto_skip_packages() {
@@ -461,6 +463,9 @@ if [ "$SKIP_PACKAGES" = false ]; then
         python3-pip \
         python3-ruamel.yaml \
         python3-cryptography \
+        mongodb-database-tools \
+        wireguard \
+        socat \
         jq
     install_progress_topic_set packages 85
     if [ "$DRY_RUN" = false ]; then
@@ -472,6 +477,11 @@ if [ "$SKIP_PACKAGES" = false ]; then
     install_progress_topic_done packages
     log "Packages phase complete"
 fi
+
+# shellcheck source=lib/ensure-vpn-host-packages.sh
+. "${SCRIPT_DIR}/lib/ensure-vpn-host-packages.sh"
+export CONTINUUM_INSTALL_DRY_RUN="$DRY_RUN"
+ensure_vpn_host_packages || warn "wireguard/socat missing — VPN enable will fail until: sudo apt install -y wireguard socat"
 
 if [ "$SKIP_USER" = false ]; then
     log "Ensuring OS user ${MPC_USER} with password-protected sudo"

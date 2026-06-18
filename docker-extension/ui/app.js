@@ -18,6 +18,9 @@ const DESKTOP_ORCHESTRATE_SCRIPT_URL =
 /** Shipped host binary (metadata.json host.binaries) — sole Windows WSL entry point. */
 const WSL_HOST_WRAPPER = 'continuum-wsl.cmd'
 
+/** Registers Windows logon Scheduled Task for WSL pending-update watcher. */
+const REGISTER_WATCHER_HOST_WRAPPER = 'continuum-register-watcher.cmd'
+
 /** Shipped host binary (metadata.json host.binaries) — Linux host PATH delegate. */
 const LINUX_HOST_WRAPPER = 'continuum-linux.sh'
 
@@ -442,7 +445,7 @@ async function probeWslEnvironment(cli, ddClient) {
 /**
  * host.cli.exec with { stream } returns ExecProcess, not a Promise — wrap onClose.
  */
-function execHostStreaming(cli, cmd, args, logOutput, progressTracker) {
+function execHostStreaming(cli, cmd, args, logOutput, progressTracker, execOptions = {}) {
   return new Promise((resolve, reject) => {
     let settled = false
     let stdoutBuf = ''
@@ -520,7 +523,7 @@ function execHostStreaming(cli, cmd, args, logOutput, progressTracker) {
     }
 
     try {
-      cli.exec(cmd, args, { stream, splitOutputLines: true })
+      cli.exec(cmd, args, { stream, splitOutputLines: true, ...execOptions })
     } catch (error) {
       reject(error instanceof Error ? error : new Error(String(error)))
     }
@@ -552,52 +555,42 @@ async function verifyWslDistro(cli, wslDistro, logOutput) {
 }
 
 async function runInstallOnHost(cli, { useWsl, wslDistro, profile, scriptArgs }, logOutput, progressTracker) {
-  appendLog(logOutput, 'Downloading orchestrator script…\n')
-
   const orchestrateArgs = ['--profile', profile, ...scriptArgs]
 
-  const hostWrapper = useWsl ? WSL_HOST_WRAPPER : LINUX_HOST_WRAPPER
-
-  const curlArgs = useWsl
-    ? wslHostArgs(wslDistro, ['curl', '-fsSL', DESKTOP_ORCHESTRATE_SCRIPT_URL, '-o', ORCHESTRATE_SCRIPT_PATH])
-    : ['curl', '-fsSL', DESKTOP_ORCHESTRATE_SCRIPT_URL, '-o', ORCHESTRATE_SCRIPT_PATH]
-
-  let result = await execHostStreaming(
-    cli,
-    hostWrapper,
-    curlArgs,
-    logOutput,
-    null,
-  )
-  if (result.code !== 0) {
-    return result
+  if (useWsl) {
+    appendLog(logOutput, 'Downloading orchestrator script…\n')
+    const curlArgs = wslHostArgs(wslDistro, [
+      'curl',
+      '-fsSL',
+      DESKTOP_ORCHESTRATE_SCRIPT_URL,
+      '-o',
+      ORCHESTRATE_SCRIPT_PATH,
+    ])
+    const result = await execHostStreaming(cli, WSL_HOST_WRAPPER, curlArgs, logOutput, null)
+    if (result.code !== 0) {
+      return result
+    }
+    appendLog(logOutput, `\nRunning orchestrator via ${WSL_HOST_WRAPPER}…\n\n`)
+    const runArgs = wslHostArgs(wslDistro, [
+      'env',
+      'CONTINUUM_INSTALL_PROGRESS=json',
+      'bash',
+      ORCHESTRATE_SCRIPT_PATH,
+      ...orchestrateArgs,
+    ])
+    return execHostStreaming(cli, WSL_HOST_WRAPPER, runArgs, logOutput, progressTracker)
   }
 
-  appendLog(logOutput, `\nRunning orchestrator via ${hostWrapper}…\n\n`)
-
-  const runArgs = useWsl
-    ? wslHostArgs(wslDistro, [
-        'env',
-        'CONTINUUM_INSTALL_PROGRESS=json',
-        'bash',
-        ORCHESTRATE_SCRIPT_PATH,
-        ...orchestrateArgs,
-      ])
-    : [
-        'env',
-        'CONTINUUM_INSTALL_PROGRESS=json',
-        'bash',
-        ORCHESTRATE_SCRIPT_PATH,
-        ...orchestrateArgs,
-      ]
-
-  return execHostStreaming(
-    cli,
-    hostWrapper,
-    runArgs,
-    logOutput,
-    progressTracker,
-  )
+  // Linux: bundled orchestrator via wrapper (rewrites /tmp path; host exec cannot write there — curl exit 23).
+  appendLog(logOutput, `Running bundled orchestrator via ${LINUX_HOST_WRAPPER}…\n\n`)
+  const runArgs = [
+    'env',
+    'CONTINUUM_INSTALL_PROGRESS=json',
+    'bash',
+    ORCHESTRATE_SCRIPT_PATH,
+    ...orchestrateArgs,
+  ]
+  return execHostStreaming(cli, LINUX_HOST_WRAPPER, runArgs, logOutput, progressTracker)
 }
 
 function applyDetectedWslDistro(wslDistroInput, wslEnv) {
@@ -844,16 +837,40 @@ function initExtensionUi() {
 
       resultPanel.hidden = false
       if (result?.code === 0) {
+        if (useWsl && wslDistro) {
+          appendLog(logOutput, `\nRegistering Windows logon task for WSL pending-update watcher (${REGISTER_WATCHER_HOST_WRAPPER})…\n`)
+          try {
+            const reg = await execHostSimple(cli, REGISTER_WATCHER_HOST_WRAPPER, [wslDistro])
+            const regOut = combinedExecOutput(reg.result)
+            if (regOut) appendLog(logOutput, `${regOut}\n`)
+            if (!reg.ok || !execSucceeded(reg.result)) {
+              appendLog(
+                logOutput,
+                `warning: logon task registration failed — run manually in WSL: ~/mpc-config/wsl-desktop/start-watcher.sh\n`,
+              )
+            }
+          } catch (regErr) {
+            appendLog(
+              logOutput,
+              `warning: could not register logon task (${regErr instanceof Error ? regErr.message : String(regErr)}). Start watcher manually: ~/mpc-config/wsl-desktop/start-watcher.sh\n`,
+            )
+          }
+        }
         resultPanel.className = RESULT_PANEL_OK
         const repoHint = useWsl
           ? `<code class="font-mono text-[0.6875rem] text-[var(--text)]">${MPC_DESKTOP_REPO_DISPLAY_PATH}</code> in WSL (${wslDistro})`
           : `<code class="font-mono text-[0.6875rem] text-[var(--text)]">${MPC_DESKTOP_REPO_DISPLAY_PATH}</code> on this machine`
+        const watcherNote = useWsl
+          ? ' Host restart automation: WSL pending-update watcher (status: <code class="font-mono text-[0.6875rem] text-[var(--text)]">~/mpc-config/wsl-desktop/status-watcher.sh</code> in WSL).'
+          : ''
         resultPanel.innerHTML =
           '<p class="m-0"><strong>Install finished.</strong> mpc-config is at ' +
           repoHint +
           '. Stack containers (mongo, mpc-auth, continuum-mcp, continuumdao-node-app) appear in Docker Desktop → Containers. ' +
           'Open continuumdao-node-app at <code class="font-mono text-[0.6875rem] text-[var(--text)]">http://127.0.0.1:3333</code> for Plain HTTP attach. ' +
-          'Back up <code class="font-mono text-[0.6875rem] text-[var(--text)]">bootstrap_key/</code> under that WSL directory if a new key was generated.</p>'
+          'Back up <code class="font-mono text-[0.6875rem] text-[var(--text)]">bootstrap_key/</code> under that WSL directory if a new key was generated.' +
+          watcherNote +
+          '</p>'
       } else {
         showError(resultPanel, `Install failed (exit ${result?.code ?? 'unknown'}). See log above.`)
       }

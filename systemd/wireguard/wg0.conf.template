@@ -1,0 +1,13 @@
+# WireGuard server interface for Continuum MPC node admin VPN.
+# mpc-auth renders keys into /var/lib/mpc-auth-docker/wireguard/wg0.conf; the host copies to /etc/wireguard/.
+# PostUp/PostDown for full-tunnel NAT are appended by mpc-auth-vpn-enable.sh when profile=full.
+
+[Interface]
+Address = 10.8.0.1/24
+ListenPort = 51820
+PrivateKey = SERVER_PRIVATE_KEY_PLACEHOLDER
+SaveConfig = false
+
+[Peer]
+PublicKey = CLIENT_PUBLIC_KEY_PLACEHOLDER
+AllowedIPs = 10.8.0.2/32
