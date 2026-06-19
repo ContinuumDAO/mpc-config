@@ -56,6 +56,8 @@ Full options: **`./scripts/install-node-debian-ubuntu.sh --help`**
 
 ## Docker Desktop (Windows local)
 
+**Step-by-step (Windows 11 + WSL2):** **[`docs/INSTALL_NODE_WINDOWS_DOCKER_DESKTOP.md`](docs/INSTALL_NODE_WINDOWS_DOCKER_DESKTOP.md)** — home router port forwarding: **[`docs/PORT_FORWARDING_HOME_NETWORK.md`](docs/PORT_FORWARDING_HOME_NETWORK.md)**.
+
 For **Windows + this machine** in the Continuum node app, the primary install path is the **Docker Desktop Extension** (not the VPS curl script). It provisions certs, `configs.yaml`, and runs `docker compose up -d` via Docker Desktop — without apt docker, UFW, systemd, or the `mpcnode` OS user.
 
 **Canonical repo path on desktop:** **`~/mpc-config`** in your WSL distro (Windows) or home directory (macOS). Same `configs.yaml`, `bootstrap_key/`, `added_keys/`, and generated `docker-compose.yml` layout as other installs. From Windows Explorer: `\\wsl$\<Distro>\home\<user>\mpc-config`.

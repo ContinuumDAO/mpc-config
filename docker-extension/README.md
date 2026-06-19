@@ -2,6 +2,8 @@
 
 Install a local Continuum MPC node on **Windows** or **Linux** using Docker Desktop. This is the **primary** path for Windows local installs from the [Continuum node app](https://github.com/ContinuumDAO/continuumdao-node-app). Remote VPS installs use the [VPS one-shot script](../scripts/install-node-debian-ubuntu.sh). **macOS** is listed in the UI but install is not yet available.
 
+**Windows 11 end-user guide:** [`docs/INSTALL_NODE_WINDOWS_DOCKER_DESKTOP.md`](../docs/INSTALL_NODE_WINDOWS_DOCKER_DESKTOP.md) (router NAT: [`docs/PORT_FORWARDING_HOME_NETWORK.md`](../docs/PORT_FORWARDING_HOME_NETWORK.md)).
+
 ## What it does
 
 The extension detects the host OS via `ddClient.host.platform` (`win32`, `linux`, `darwin`). If detection fails, the user selects Windows, Linux, or macOS from a dropdown.
