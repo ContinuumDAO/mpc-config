@@ -22,17 +22,22 @@ if [ -n "$CONTINUUM_INSTALL_SCRIPT_DIR" ] && [ -f "${CONTINUUM_INSTALL_SCRIPT_DI
 else
     _bootstrap_tmp="$(mktemp -d 2>/dev/null || echo "/tmp/continuum-bootstrap-$$")"
     _raw_base="https://raw.githubusercontent.com/ContinuumDAO/mpc-config/${MPC_CONFIG_REF:-main}"
-    if curl -fsSL "${_raw_base}/scripts/lib/load-install-progress.sh" -o "${_bootstrap_tmp}/load-install-progress.sh" 2>/dev/null; then
+    mkdir -p "${_bootstrap_tmp}/lib"
+    if curl -fsSL "${_raw_base}/scripts/lib/load-install-progress.sh" -o "${_bootstrap_tmp}/lib/load-install-progress.sh" 2>/dev/null; then
         CONTINUUM_INSTALL_SCRIPT_DIR="${_bootstrap_tmp}"
         # shellcheck source=/dev/null
-        . "${_bootstrap_tmp}/load-install-progress.sh"
+        . "${_bootstrap_tmp}/lib/load-install-progress.sh"
+        if curl -fsSL "${_raw_base}/scripts/lib/install-progress-docker.sh" -o "${_bootstrap_tmp}/lib/install-progress-docker.sh" 2>/dev/null; then
+            # shellcheck source=/dev/null
+            . "${_bootstrap_tmp}/lib/install-progress-docker.sh"
+        fi
     else
         CONTINUUM_INSTALL_PROGRESS=off
         export CONTINUUM_INSTALL_PROGRESS
     fi
 fi
 
-INSTALL_SCRIPT_VERSION="1.0.7"
+INSTALL_SCRIPT_VERSION="1.0.8"
 INSTALL_LOG="${INSTALL_LOG:-/var/log/continuumdao-mpc-install.log}"
 
 MPC_CONFIG_REPO="${MPC_CONFIG_REPO:-https://github.com/ContinuumDAO/mpc-config.git}"
@@ -594,6 +599,18 @@ if [ "$NO_START" = false ]; then
         if ! docker compose version >/dev/null 2>&1; then
             die "'docker compose' (v2) is required — see scripts/docker-V2_debian_ubuntu.sh"
         fi
+        _docker_progress_lib="${REPO_DIR}/scripts/lib/install-progress-docker.sh"
+        if [ ! -f "$_docker_progress_lib" ]; then
+            _docker_progress_lib="${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/install-progress-docker.sh"
+        fi
+        if [ ! -f "$_docker_progress_lib" ]; then
+            _raw_base="https://raw.githubusercontent.com/ContinuumDAO/mpc-config/${MPC_CONFIG_REF:-main}"
+            mkdir -p "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib"
+            _docker_progress_lib="${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/install-progress-docker.sh"
+            curl -fsSL "${_raw_base}/scripts/lib/install-progress-docker.sh" -o "$_docker_progress_lib"
+        fi
+        # shellcheck source=/dev/null
+        . "$_docker_progress_lib"
         install_progress_docker_pull_and_up "$REPO_DIR"
         log "Running containers:"
         docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || docker ps
