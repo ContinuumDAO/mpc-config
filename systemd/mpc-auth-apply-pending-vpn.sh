@@ -8,6 +8,7 @@ PENDING_FILE="${MPC_AUTH_VPN_PENDING_FILE:-/var/lib/mpc-auth-docker/pending-vpn.
 LIBEXEC="/usr/local/libexec/mpc-auth"
 ENABLE_SCRIPT="${LIBEXEC}/mpc-auth-vpn-enable.sh"
 DISABLE_SCRIPT="${LIBEXEC}/mpc-auth-vpn-disable.sh"
+STATE_FILE="${MPC_AUTH_VPN_STATE_FILE:-/var/lib/mpc-auth-docker/vpn-state.json}"
 DONE_DIR="$(dirname "$PENDING_FILE")/applied"
 PROCESSING="${PENDING_FILE}.processing"
 
@@ -56,24 +57,54 @@ print(f"export MPC_AUTH_VPN_PROFILE={shlex.quote(profile)}")
 PY
 )" || abort_bad_json
 
-run_apply() {
-	local script="$1"
-	if [[ ! -x "$script" ]]; then
-		echo "mpc-auth-apply-pending-vpn: missing ${script}" >&2
-		mv -f "$PROCESSING" "${DONE_DIR}/failed-$(_stamp).noscript.json" || true
-		exit 1
-	fi
-	export MPC_AUTH_VPN_PROFILE
-	if "$script"; then
-		mv -f "$PROCESSING" "${DONE_DIR}/ok-$(_stamp).json" || rm -f "$PROCESSING"
-		exit 0
-	fi
+finalize_ok() {
+	mv -f "$PROCESSING" "${DONE_DIR}/ok-$(_stamp).json" || rm -f "$PROCESSING"
+	exit 0
+}
+
+finalize_fail() {
 	mv -f "$PROCESSING" "${DONE_DIR}/failed-$(_stamp).apply.json" || true
 	exit 1
 }
 
+run_script() {
+	local script="$1"
+	if [[ ! -x "$script" ]]; then
+		echo "mpc-auth-apply-pending-vpn: missing ${script}" >&2
+		finalize_fail
+	fi
+	export MPC_AUTH_VPN_PROFILE
+	"$script"
+}
+
+active_vpn_profile() {
+	if [[ ! -f "$STATE_FILE" ]]; then
+		return 0
+	fi
+	python3 - <<'PY'
+import json, os, sys
+path = os.environ.get("STATE_FILE", "")
+try:
+    with open(path, encoding="utf-8") as f:
+        d = json.load(f)
+except (OSError, json.JSONDecodeError):
+    sys.exit(0)
+if not d.get("active"):
+    sys.exit(0)
+print((d.get("profile") or "").strip().lower())
+PY
+}
+
 if [[ "$MPC_AUTH_VPN_ACTION" == "enable" ]]; then
-	run_apply "$ENABLE_SCRIPT"
+	export STATE_FILE
+	cur_profile="$(active_vpn_profile || true)"
+	if [[ -n "$cur_profile" && "$cur_profile" != "$MPC_AUTH_VPN_PROFILE" ]]; then
+		echo "mpc-auth-apply-pending-vpn: switching VPN profile ${cur_profile} -> ${MPC_AUTH_VPN_PROFILE} (disable then enable)"
+		run_script "$DISABLE_SCRIPT"
+	fi
+	run_script "$ENABLE_SCRIPT"
+	finalize_ok
 else
-	run_apply "$DISABLE_SCRIPT"
+	run_script "$DISABLE_SCRIPT"
+	finalize_ok
 fi
