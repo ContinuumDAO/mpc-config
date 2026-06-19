@@ -8,7 +8,8 @@ Type=oneshot
 RemainAfterExit=yes
 EnvironmentFile=-/etc/default/mpc-auth-docker
 ExecStart=/usr/bin/wg-quick up wg0
-ExecStop=/usr/bin/wg-quick down wg0
+# Ignore stop failure when wg0 is already down (common after disable before re-enable).
+ExecStop=-/usr/bin/wg-quick down wg0
 StandardInput=null
 
 [Install]

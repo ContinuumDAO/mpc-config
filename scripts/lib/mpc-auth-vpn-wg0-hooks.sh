@@ -40,15 +40,15 @@ import os
 import sys
 
 path = os.environ["WG0_CONF"]
-post_up = os.environ["WG0_POST_UP"].strip()
-post_down = os.environ["WG0_POST_DOWN"].strip()
+post_up_cmds = [ln.strip() for ln in os.environ.get("WG0_POST_UP", "").splitlines() if ln.strip()]
+post_down_cmds = [ln.strip() for ln in os.environ.get("WG0_POST_DOWN", "").splitlines() if ln.strip()]
 
 with open(path, encoding="utf-8") as f:
     lines = f.readlines()
 
 def is_hook(line: str) -> bool:
     s = line.strip()
-    return s.startswith("PostUp =") or s.startswith("PostDown =")
+    return s.startswith("PostUp") or s.startswith("PostDown")
 
 out = []
 inserted = False
@@ -56,9 +56,12 @@ for line in lines:
     if is_hook(line):
         continue
     if not inserted and line.strip() == "[Peer]":
-        out.append(f"PostUp = {post_up}\n")
-        out.append(f"PostDown = {post_down}\n")
-        out.append("\n")
+        for cmd in post_up_cmds:
+            out.append(f"PostUp = {cmd}\n")
+        for cmd in post_down_cmds:
+            out.append(f"PostDown = {cmd}\n")
+        if post_up_cmds or post_down_cmds:
+            out.append("\n")
         inserted = True
     out.append(line)
 
@@ -109,7 +112,7 @@ mpc_auth_vpn_prepare_wg0_conf() {
 	fi
 
 	local post_up post_down
-	post_up="$(IFS='; '; echo "${post_up_parts[*]}")"
-	post_down="$(IFS='; '; echo "${post_down_parts[*]}")"
+	post_up="$(printf '%s\n' "${post_up_parts[@]}")"
+	post_down="$(printf '%s\n' "${post_down_parts[@]}")"
 	mpc_auth_vpn_insert_wg0_hooks "$wg0_conf" "$post_up" "$post_down"
 }
