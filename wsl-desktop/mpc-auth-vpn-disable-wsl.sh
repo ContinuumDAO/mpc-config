@@ -9,6 +9,13 @@ if [[ -n "${MPC_AUTH_WSL_ENV_FILE:-}" && -r "${MPC_AUTH_WSL_ENV_FILE}" ]]; then
 fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_lib.sh
+if [[ -f "${HERE}/_lib.sh" ]]; then
+	. "${HERE}/_lib.sh"
+else
+	. "${HERE}/../_lib.sh"
+fi
+
 WG_HOST_DIR="${MPC_AUTH_WIREGUARD_HOST_DIR:-/etc/wireguard}"
 STATE_FILE="${MPC_AUTH_VPN_STATE_FILE:-/var/lib/mpc-auth-docker/vpn-state.json}"
 LISTEN_PORT="${MPC_AUTH_WIREGUARD_LISTEN_PORT:-51820}"
@@ -23,14 +30,14 @@ if [[ -f "$PROXY_PIDFILE" ]]; then
 fi
 
 if command -v wg-quick >/dev/null 2>&1; then
-	wg-quick down wg0 2>/dev/null || true
+	wsl_desktop_sudo wg-quick down wg0 2>/dev/null || true
 elif [[ -f "${WG_HOST_DIR}/wg0.conf" ]]; then
-	wg-quick down "${WG_HOST_DIR}/wg0.conf" 2>/dev/null || true
+	wsl_desktop_sudo wg-quick down "${WG_HOST_DIR}/wg0.conf" 2>/dev/null || true
 fi
 
-mkdir -p "$(dirname "$STATE_FILE")"
+wsl_desktop_sudo mkdir -p "$(dirname "$STATE_FILE")"
 export STATE_FILE LISTEN_PORT
-python3 - <<'PY'
+wsl_desktop_sudo env STATE_FILE="$STATE_FILE" LISTEN_PORT="$LISTEN_PORT" python3 - <<'PY'
 import json, datetime, os
 path = os.environ["STATE_FILE"]
 payload = {

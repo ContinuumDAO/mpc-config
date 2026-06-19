@@ -83,6 +83,68 @@ preflight_wsl() {
     die "this installer requires WSL2 on Windows Docker Desktop (run inside your WSL distro, not PowerShell)"
 }
 
+passwordless_sudo_instruction_message() {
+    local wsl_user="${1:-$(whoami)}"
+    local wsl_distro="${2:-${WSL_DISTRO_NAME:-<your-wsl-distro>}}"
+    cat <<EOF
+passwordless sudo required for Docker Desktop install on Windows.
+
+WSL user: ${wsl_user}
+WSL distro: ${wsl_distro}
+
+The Docker extension runs the installer as your default WSL user and cannot type your sudo password.
+Host automation (/var/lib/mpc-auth-docker), apt packages, and maintenance restart/update all need sudo -n.
+
+Configure passwordless sudo from Windows PowerShell:
+
+  wsl -d ${wsl_distro} -u root
+
+Then in the root WSL shell:
+
+  visudo
+
+Add this line (replace ${wsl_user} if your username differs):
+
+  ${wsl_user} ALL=(ALL) NOPASSWD: ALL
+
+Verify as your normal WSL user (exit the root shell first):
+
+  wsl -d ${wsl_distro}
+  sudo -n true && echo OK
+
+Then click Install again in the Docker extension.
+EOF
+}
+
+preflight_passwordless_sudo() {
+    local wsl_user wsl_distro reason=""
+    wsl_user="$(whoami)"
+    wsl_distro="${WSL_DISTRO_NAME:-<your-wsl-distro>}"
+
+    if [ "$(id -u)" -eq 0 ]; then
+        warn "running install as root — prefer default WSL user with passwordless sudo"
+        return 0
+    fi
+
+    if ! command -v sudo >/dev/null 2>&1; then
+        reason="sudo is not installed in WSL"
+        die "$(passwordless_sudo_instruction_message "$wsl_user" "$wsl_distro")"$'\n'"(${reason})"
+    fi
+
+    if sudo -n true 2>/dev/null; then
+        log "Passwordless sudo OK for WSL user ${wsl_user}"
+        return 0
+    fi
+
+    if groups "$wsl_user" 2>/dev/null | grep -qE '(^|[[:space:]])sudo([[:space:]]|$)|(^|[[:space:]])wheel([[:space:]]|$)'; then
+        reason="user ${wsl_user} is in sudo/wheel but sudo -n failed (password still required)"
+    else
+        reason="user ${wsl_user} is not in the sudo group or has no NOPASSWD rule"
+    fi
+
+    die "$(passwordless_sudo_instruction_message "$wsl_user" "$wsl_distro")"$'\n'"(${reason})"
+}
+
 log() { printf '==> %s\n' "$*" >&2; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
 die() {
@@ -373,6 +435,9 @@ fi
 
 if [ "$DRY_RUN" = false ]; then
     preflight_wsl
+    install_progress_topic_begin passwordless-sudo "Passwordless sudo"
+    preflight_passwordless_sudo
+    install_progress_topic_done passwordless-sudo
     preflight_docker
     preflight_fresh
     install_progress_topic_begin python-deps

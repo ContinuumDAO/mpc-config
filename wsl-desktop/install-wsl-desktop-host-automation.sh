@@ -81,8 +81,12 @@ fi
 
 log "Installing WSL desktop host automation (repo ${REPO_DIR})"
 
-mkdir -p "$LIBEXEC" /var/lib/mpc-auth-docker/applied
-chmod 0755 /var/lib/mpc-auth-docker /var/lib/mpc-auth-docker/applied 2>/dev/null || true
+# shellcheck source=_lib.sh
+. "${WSL_ROOT}/_lib.sh"
+
+mkdir -p "$LIBEXEC"
+wsl_desktop_sudo mkdir -p /var/lib/mpc-auth-docker/applied
+wsl_desktop_sudo chmod 0755 /var/lib/mpc-auth-docker /var/lib/mpc-auth-docker/applied
 
 install -m 0755 \
 	"${SYSTEMD_ROOT}/mpc-auth-apply-pending-update.sh" \
@@ -111,9 +115,8 @@ if [[ -f "${SYSTEMD_ROOT}/mpc-auth-apply-pending-vpn.sh" ]]; then
 		"${LIBEXEC}/mpc-auth-apply-pending-vpn.sh"
 fi
 
-install -m 0755 \
-	"${WSL_ROOT}/mpc-auth-vpn-enable-wsl.sh" "${LIBEXEC}/mpc-auth-vpn-enable.sh" \
-	"${WSL_ROOT}/mpc-auth-vpn-disable-wsl.sh" "${LIBEXEC}/mpc-auth-vpn-disable.sh"
+install -m 0755 "${WSL_ROOT}/mpc-auth-vpn-enable-wsl.sh" "${LIBEXEC}/mpc-auth-vpn-enable.sh"
+install -m 0755 "${WSL_ROOT}/mpc-auth-vpn-disable-wsl.sh" "${LIBEXEC}/mpc-auth-vpn-disable.sh"
 
 ENV_FILE="${WSL_ROOT}/mpc-auth-docker.env"
 if [[ -f "${WSL_ROOT}/mpc-auth-docker.env" ]]; then

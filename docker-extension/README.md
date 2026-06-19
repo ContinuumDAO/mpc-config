@@ -41,7 +41,7 @@ The extension **backend image is UI-only** (no baked `/mpc-config`, no `docker.s
 After the image is published or built locally:
 
 ```bash
-docker extension install continuumdao/continuum-node-installer:0.1.7
+docker extension install continuumdao/continuum-node-installer:0.1.16
 ```
 
 Open **Docker Desktop → Extensions → Continuum Node** and complete the wizard.
@@ -52,8 +52,8 @@ From the **mpc-config repo root**:
 
 ```bash
 cd docker-extension/ui && npm ci && npm run build && cd ../..
-docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.7 .
-docker extension install continuumdao/continuum-node-installer:0.1.7   # requires Docker Desktop on host
+docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.16 .
+docker extension install continuumdao/continuum-node-installer:0.1.16   # requires Docker Desktop on host
 ```
 
 Push to Docker Hub (multi-arch recommended for Windows):
@@ -61,7 +61,7 @@ Push to Docker Hub (multi-arch recommended for Windows):
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
   -f docker-extension/Dockerfile \
-  -t continuumdao/continuum-node-installer:0.1.7 \
+  -t continuumdao/continuum-node-installer:0.1.16 \
   --push .
 ```
 
@@ -173,8 +173,10 @@ On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the e
 | macOS Install disabled | Expected — macOS script not yet available |
 | Linux `sudo` password prompt / install hangs | Configure passwordless sudo for your user, or run orchestrator manually in a terminal |
 | `this installer requires WSL2` on Windows | Run inside WSL, not PowerShell |
+| `passwordless sudo required` / install stops before clone | From PowerShell: `wsl -d <distro> -u root`, then `visudo` and add `<user> ALL=(ALL) NOPASSWD: ALL`. Verify: `wsl -d <distro> bash -lc 'sudo -n true && echo OK'` |
 | Could not run commands in WSL distro | Distro name must match `wsl -l -v` exactly |
 | `spawn …/host/curl ENOENT` on Linux | Extension missing Linux host wrapper — reinstall a build that ships `continuum-linux.sh`, or run the orchestrator manually (see below) |
 | `curl: (23) Failed writing body` on Linux | Host exec cannot write to `/tmp` — use a build that bundles `continuum-orchestrate.sh` (no curl download) |
-| `docker info` fails in log | Start Docker Desktop |
+| `dashboard` / `continuum-mcp` exit 139 (~10s restart loop) | Broken `node:22.22.3-bookworm-slim` base on Docker Hub (truncated `/usr/local/bin/node`). Pin image tags to a rebuild with digest-pinned Node base, or use `v1.1.9` / `v1.0.41` until republished |
+| `apt` hangs on `mongodb-database-tools` | Stale `~/mpc-config` from a failed attempt — run `cd ~/mpc-config && git pull`, or remove the directory and retry Install |
 | `configs.yaml already exists` | Fresh install only; use Maintenance for updates |

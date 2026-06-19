@@ -54,6 +54,7 @@ install -m 0755 \
 	"$HERE/mpc-auth-vpn-disable.sh" \
 	"$HERE/mpc-auth-apply-agent-llm-config.sh" \
 	"$HERE/mpc-auth-sync-compose-role.sh" \
+	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-wg0-hooks.sh" \
 	"$LIBEXEC/"
 
 if [[ "$INSTALL_ENV" == true ]]; then

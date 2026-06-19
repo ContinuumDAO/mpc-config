@@ -463,7 +463,6 @@ if [ "$SKIP_PACKAGES" = false ]; then
         python3-pip \
         python3-ruamel.yaml \
         python3-cryptography \
-        mongodb-database-tools \
         wireguard \
         socat \
         jq
@@ -482,6 +481,7 @@ fi
 . "${SCRIPT_DIR}/lib/ensure-vpn-host-packages.sh"
 export CONTINUUM_INSTALL_DRY_RUN="$DRY_RUN"
 ensure_vpn_host_packages || warn "wireguard/socat missing — VPN enable will fail until: sudo apt install -y wireguard socat"
+log "WireGuard host packages ready. If admin VPN handshakes fail later, allow inbound UDP 51820 in the VPS provider firewall (UFW rules are applied automatically on enable)."
 
 if [ "$SKIP_USER" = false ]; then
     log "Ensuring OS user ${MPC_USER} with password-protected sudo"
@@ -615,5 +615,6 @@ Next steps:
   2. Attach your node at https://mpa.continuumdao.org
   3. Back up ${REPO_DIR}/bootstrap_key/ if PublicMgtKey was auto-generated
   4. Configure peer IPs and MQTT certs in the MPA Nodes page
+  5. Admin VPN (optional): enable from the MPA VPN Panel; allow inbound UDP 51820 in your VPS provider firewall if the client shows 0 B received
 
 EOF

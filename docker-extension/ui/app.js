@@ -53,6 +53,85 @@ function getHostCli() {
 }
 
 const PROGRESS_PREFIX = '@continuum/progress\t'
+const PROGRESS_MARKER = '@continuum/progress'
+const PROGRESS_EVENT_TYPES = new Set(['init', 'sync', 'topic', 'overall', 'finish'])
+
+function progressPayloadFromLine(line) {
+  const trimmed = line.trimEnd()
+  if (!trimmed) return null
+  if (trimmed.startsWith(PROGRESS_PREFIX)) {
+    return trimmed.slice(PROGRESS_PREFIX.length)
+  }
+  if (trimmed.startsWith(PROGRESS_MARKER)) {
+    const rest = trimmed.slice(PROGRESS_MARKER.length).replace(/^\s+/, '')
+    return rest || null
+  }
+  if (trimmed.startsWith('{')) {
+    return trimmed
+  }
+  return null
+}
+
+function isProgressPayload(payload) {
+  if (!payload) return false
+  try {
+    const ev = JSON.parse(payload)
+    return Boolean(ev && typeof ev === 'object' && PROGRESS_EVENT_TYPES.has(ev.type))
+  } catch {
+    return false
+  }
+}
+
+function isProgressStreamLine(line) {
+  const payload = progressPayloadFromLine(line)
+  return payload !== null && isProgressPayload(payload)
+}
+
+function tryHandleProgressLine(line, progressTracker) {
+  const payload = progressPayloadFromLine(line)
+  if (!payload || !isProgressPayload(payload)) {
+    return false
+  }
+  progressTracker.handleEvent(JSON.parse(payload))
+  return true
+}
+
+function createProgressStreamFilter(progressTracker) {
+  let pendingPrefix = false
+
+  function handleLine(line) {
+    if (pendingPrefix) {
+      pendingPrefix = false
+      if (tryHandleProgressLine(`${PROGRESS_PREFIX}${line}`, progressTracker)) {
+        return true
+      }
+      line = `${PROGRESS_MARKER}\t${line}`
+    }
+
+    if (tryHandleProgressLine(line, progressTracker)) {
+      return true
+    }
+
+    const trimmed = line.trim()
+    if (trimmed === PROGRESS_MARKER || trimmed === '@continuum/progress') {
+      pendingPrefix = true
+      return true
+    }
+
+    if (isProgressStreamLine(line)) {
+      return true
+    }
+
+    return false
+  }
+
+  return {
+    handleLine,
+    flushPending() {
+      pendingPrefix = false
+    },
+  }
+}
 
 function topicSortKey(id) {
   if (id.startsWith('pull:')) return `2:${id}`
@@ -64,6 +143,41 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
   const topics = new Map()
   let overallPct = 0
   let spinnerOn = false
+  /** @type {{ fill: HTMLElement, pctSpan: HTMLElement, spinner: HTMLElement } | null} */
+  let overallElements = null
+
+  function ensureOverallElements() {
+    if (overallElements) return overallElements
+    if (!progressOverall) return null
+
+    const row = document.createElement('div')
+    row.className = 'install-progress-overall-row'
+
+    const labelEl = document.createElement('span')
+    labelEl.className = 'install-progress-label font-medium'
+    labelEl.textContent = 'Overall'
+
+    const track = document.createElement('div')
+    track.className = 'install-progress-track'
+    const fill = document.createElement('div')
+    fill.className = 'install-progress-fill'
+    track.appendChild(fill)
+
+    const tail = document.createElement('span')
+    tail.className = 'install-progress-pct flex items-center justify-end gap-1'
+    const pctSpan = document.createElement('span')
+    const spinner = document.createElement('span')
+    spinner.className = 'install-progress-spinner'
+    spinner.setAttribute('aria-hidden', 'true')
+    spinner.hidden = true
+
+    tail.append(pctSpan, spinner)
+    row.append(labelEl, track, tail)
+    progressOverall.appendChild(row)
+
+    overallElements = { fill, pctSpan, spinner }
+    return overallElements
+  }
 
   function applyTopicList(list, { replace = false } = {}) {
     if (replace) topics.clear()
@@ -119,37 +233,18 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
   }
 
   function renderOverall() {
-    if (!progressOverall) return
-    progressOverall.replaceChildren()
+    const els = ensureOverallElements()
+    if (!els) return
 
-    const row = document.createElement('div')
-    row.className = 'install-progress-overall-row'
-
-    const labelEl = document.createElement('span')
-    labelEl.className = 'install-progress-label font-medium'
-    labelEl.textContent = 'Overall'
-
-    const track = document.createElement('div')
-    track.className = 'install-progress-track'
-    const fill = document.createElement('div')
-    fill.className = 'install-progress-fill'
-    if (spinnerOn) fill.classList.add('is-active')
-    fill.style.width = `${Math.max(0, Math.min(100, overallPct))}%`
-    track.appendChild(fill)
-
-    const tail = document.createElement('span')
-    tail.className = 'install-progress-pct flex items-center justify-end gap-1'
-    tail.innerHTML = `<span>${Math.round(overallPct)}%</span>`
+    els.fill.style.width = `${Math.max(0, Math.min(100, overallPct))}%`
+    els.fill.classList.toggle('is-active', spinnerOn)
+    els.pctSpan.textContent = `${Math.round(overallPct)}%`
+    els.spinner.hidden = !spinnerOn
     if (spinnerOn) {
-      const spin = document.createElement('span')
-      spin.className = 'install-progress-spinner'
-      spin.setAttribute('aria-hidden', 'true')
-      spin.setAttribute('aria-label', 'Working')
-      tail.appendChild(spin)
+      els.spinner.setAttribute('aria-label', 'Working')
+    } else {
+      els.spinner.removeAttribute('aria-label')
     }
-
-    row.append(labelEl, track, tail)
-    progressOverall.appendChild(row)
   }
 
   function renderAll() {
@@ -213,6 +308,7 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
     topics.clear()
     overallPct = 0
     spinnerOn = false
+    overallElements = null
     if (progressTopics) progressTopics.replaceChildren()
     if (progressOverall) progressOverall.replaceChildren()
     if (progressPanel) {
@@ -222,25 +318,6 @@ function createProgressTracker({ progressPanel, progressTopics, progressOverall 
   }
 
   return { handleEvent, reset }
-}
-
-function parseProgressLines(text, progressTracker, logOutput) {
-  let rest = text
-  let idx
-  while ((idx = rest.indexOf(PROGRESS_PREFIX)) !== -1) {
-    const before = rest.slice(0, idx)
-    if (before && logOutput) appendLog(logOutput, before)
-    rest = rest.slice(idx + PROGRESS_PREFIX.length)
-    const lineEnd = rest.indexOf('\n')
-    const jsonLine = lineEnd === -1 ? rest : rest.slice(0, lineEnd)
-    rest = lineEnd === -1 ? '' : rest.slice(lineEnd + 1)
-    try {
-      progressTracker.handleEvent(JSON.parse(jsonLine))
-    } catch {
-      if (logOutput) appendLog(logOutput, `${PROGRESS_PREFIX}${jsonLine}\n`)
-    }
-  }
-  if (rest && logOutput) appendLog(logOutput, rest)
 }
 
 function appendLog(logOutput, text) {
@@ -416,6 +493,61 @@ function wslHostArgs(distro, tailArgs) {
   return ['-d', distro, ...tailArgs]
 }
 
+function formatPasswordlessSudoInstructions(wslDistro, wslUser) {
+  return (
+    `Passwordless sudo required for Docker Desktop install on Windows.\n\n` +
+    `WSL user: ${wslUser}\n` +
+    `WSL distro: ${wslDistro}\n\n` +
+    `The Docker extension runs the installer as your default WSL user and cannot type your sudo password.\n` +
+    `Host automation (/var/lib/mpc-auth-docker), apt packages, and maintenance restart/update all need sudo -n.\n\n` +
+    `Configure passwordless sudo from Windows PowerShell:\n\n` +
+    `  wsl -d ${wslDistro} -u root\n\n` +
+    `Then in the root WSL shell:\n\n` +
+    `  visudo\n\n` +
+    `Add this line (replace ${wslUser} if your username differs):\n\n` +
+    `  ${wslUser} ALL=(ALL) NOPASSWD: ALL\n\n` +
+    `Verify as your normal WSL user (exit the root shell first):\n\n` +
+    `  wsl -d ${wslDistro}\n` +
+    `  sudo -n true && echo OK\n\n` +
+    `Then click Install again in the Docker extension.`
+  )
+}
+
+async function verifyWslPasswordlessSudo(cli, wslDistro, logOutput) {
+  appendLog(logOutput, `Checking passwordless sudo for default WSL user in "${wslDistro}"…\n`)
+
+  const userProbe = await execHostSimple(cli, WSL_HOST_WRAPPER, wslHostArgs(wslDistro, ['whoami']))
+  const wslUser =
+    userProbe.ok && userProbe.result ? combinedExecOutput(userProbe.result).trim() : '<your-wsl-user>'
+
+  const sudoProbe = await execHostSimple(
+    cli,
+    WSL_HOST_WRAPPER,
+    wslHostArgs(wslDistro, ['bash', '-lc', 'command -v sudo >/dev/null && sudo -n true']),
+  )
+
+  if (!sudoProbe.ok) {
+    appendLog(
+      logOutput,
+      `[host exec error: ${sudoProbe.error instanceof Error ? sudoProbe.error.message : String(sudoProbe.error)}]\n`,
+    )
+    appendLog(logOutput, `\n${formatPasswordlessSudoInstructions(wslDistro, wslUser)}\n`)
+    return false
+  }
+
+  const sudoOut = combinedExecOutput(sudoProbe.result)
+  const sudoCode = sudoProbe.result?.code
+  appendLog(logOutput, `[exit ${sudoCode ?? 'unknown'}] user=${wslUser}${sudoOut ? ` ${sudoOut}` : ''}\n`)
+
+  if (execSucceeded(sudoProbe.result)) {
+    appendLog(logOutput, `Passwordless sudo OK for WSL user "${wslUser}".\n\n`)
+    return true
+  }
+
+  appendLog(logOutput, `\n${formatPasswordlessSudoInstructions(wslDistro, wslUser)}\n`)
+  return false
+}
+
 async function probeWslEnvironment(cli, ddClient) {
   const isWindows = await detectWindowsHost(cli, ddClient)
   if (!isWindows) {
@@ -449,38 +581,47 @@ function execHostStreaming(cli, cmd, args, logOutput, progressTracker, execOptio
   return new Promise((resolve, reject) => {
     let settled = false
     let stdoutBuf = ''
+    const progressFilter = progressTracker ? createProgressStreamFilter(progressTracker) : null
 
-    const flushStdout = (final = false) => {
-      if (!stdoutBuf) return
-      if (progressTracker) {
-        parseProgressLines(stdoutBuf, progressTracker, logOutput)
-        stdoutBuf = ''
-        return
+    const drainStdoutLines = (flushPartial = false) => {
+      let nl
+      while ((nl = stdoutBuf.indexOf('\n')) !== -1) {
+        const line = stdoutBuf.slice(0, nl)
+        stdoutBuf = stdoutBuf.slice(nl + 1)
+        if (progressFilter?.handleLine(line)) {
+          continue
+        }
+        if (line.length > 0) {
+          appendLog(logOutput, `${line}\n`)
+        }
       }
-      if (final || stdoutBuf.includes('\n')) {
-        appendLog(logOutput, stdoutBuf.endsWith('\n') ? stdoutBuf : `${stdoutBuf}\n`)
+      if (flushPartial && stdoutBuf.length > 0) {
+        if (progressFilter?.handleLine(stdoutBuf)) {
+          stdoutBuf = ''
+          return
+        }
+        appendLog(logOutput, `${stdoutBuf}\n`)
         stdoutBuf = ''
+      }
+    }
+
+    const drainStderr = (stderr) => {
+      if (!stderr) return
+      const text = stderr.endsWith('\n') ? stderr : `${stderr}\n`
+      for (const line of text.split(/\r?\n/)) {
+        if (!line) continue
+        if (progressFilter?.handleLine(line)) {
+          continue
+        }
+        appendLog(logOutput, `${line}\n`)
       }
     }
 
     const finish = (exitCode) => {
       if (settled) return
       settled = true
-      if (progressTracker && stdoutBuf) {
-        const line = stdoutBuf
-        stdoutBuf = ''
-        if (line.startsWith(PROGRESS_PREFIX)) {
-          try {
-            progressTracker.handleEvent(JSON.parse(line.slice(PROGRESS_PREFIX.length)))
-          } catch {
-            appendLog(logOutput, `${line}\n`)
-          }
-        } else if (line.length > 0) {
-          appendLog(logOutput, `${line}\n`)
-        }
-      } else {
-        flushStdout(true)
-      }
+      drainStdoutLines(true)
+      progressFilter?.flushPending()
       appendLog(logOutput, `\n[process exited ${exitCode}]\n`)
       resolve({ code: exitCode })
     }
@@ -488,27 +629,20 @@ function execHostStreaming(cli, cmd, args, logOutput, progressTracker, execOptio
     const stream = {
       onOutput({ stdout, stderr }) {
         if (stdout) {
-          if (progressTracker) {
+          if (progressFilter) {
             stdoutBuf += stdout
-            let nl
-            while ((nl = stdoutBuf.indexOf('\n')) !== -1) {
-              const line = stdoutBuf.slice(0, nl)
-              stdoutBuf = stdoutBuf.slice(nl + 1)
-              if (line.startsWith(PROGRESS_PREFIX)) {
-                try {
-                  progressTracker.handleEvent(JSON.parse(line.slice(PROGRESS_PREFIX.length)))
-                } catch {
-                  appendLog(logOutput, `${line}\n`)
-                }
-              } else if (line.length > 0) {
-                appendLog(logOutput, `${line}\n`)
-              }
-            }
+            drainStdoutLines(false)
           } else {
             appendLog(logOutput, stdout.endsWith('\n') ? stdout : `${stdout}\n`)
           }
         }
-        if (stderr) appendLog(logOutput, stderr.endsWith('\n') ? stderr : `${stderr}\n`)
+        if (stderr) {
+          if (progressFilter) {
+            drainStderr(stderr)
+          } else {
+            appendLog(logOutput, stderr.endsWith('\n') ? stderr : `${stderr}\n`)
+          }
+        }
       },
       onError(error) {
         if (settled) return
@@ -804,6 +938,16 @@ function initExtensionUi() {
         showError(
           resultPanel,
           `Could not run commands in WSL distro "${wslDistro}" via ${WSL_HOST_WRAPPER}. Confirm the distro name matches wsl -l -v exactly. Reinstall the extension if the host binary is missing.`,
+        )
+        installBtn.disabled = false
+        return
+      }
+
+      const sudoOk = await verifyWslPasswordlessSudo(cli, wslDistro, logOutput)
+      if (!sudoOk) {
+        showError(
+          resultPanel,
+          `Passwordless sudo is required for WSL user in "${wslDistro}". See the install log for visudo steps, then retry Install.`,
         )
         installBtn.disabled = false
         return

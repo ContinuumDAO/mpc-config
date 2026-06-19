@@ -13,7 +13,7 @@ vpn_pending="$(wsl_desktop_vpn_pending_file)"
 pending_dir="$(dirname "$pending")"
 logfile="$(wsl_desktop_logfile)"
 
-mkdir -p "$pending_dir" "${pending_dir}/applied" 2>/dev/null || true
+wsl_desktop_sudo mkdir -p "$pending_dir" "${pending_dir}/applied"
 
 log() {
 	printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" | tee -a "$logfile" >&2

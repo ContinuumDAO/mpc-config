@@ -41,6 +41,7 @@ LIBEXEC_SCRIPTS=(
 	"mpc-auth-apply-pending-vpn.sh"
 	"mpc-auth-vpn-enable.sh"
 	"mpc-auth-vpn-disable.sh"
+	"mpc-auth-vpn-wg0-hooks.sh"
 )
 
 KEEP_ENV=false
