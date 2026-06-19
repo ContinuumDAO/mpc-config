@@ -32,7 +32,7 @@ else
     fi
 fi
 
-INSTALL_SCRIPT_VERSION="1.0.6"
+INSTALL_SCRIPT_VERSION="1.0.7"
 INSTALL_LOG="${INSTALL_LOG:-/var/log/continuumdao-mpc-install.log}"
 
 MPC_CONFIG_REPO="${MPC_CONFIG_REPO:-https://github.com/ContinuumDAO/mpc-config.git}"
@@ -478,7 +478,16 @@ if [ "$SKIP_PACKAGES" = false ]; then
 fi
 
 # shellcheck source=lib/ensure-vpn-host-packages.sh
-. "${SCRIPT_DIR}/lib/ensure-vpn-host-packages.sh"
+if [ -z "${CONTINUUM_INSTALL_SCRIPT_DIR:-}" ]; then
+    CONTINUUM_INSTALL_SCRIPT_DIR="$(mktemp -d 2>/dev/null || echo "/tmp/continuum-bootstrap-$$")"
+fi
+_ensure_vpn_lib="${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/ensure-vpn-host-packages.sh"
+if [ ! -f "$_ensure_vpn_lib" ]; then
+    _raw_base="https://raw.githubusercontent.com/ContinuumDAO/mpc-config/${MPC_CONFIG_REF:-main}"
+    mkdir -p "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib"
+    curl -fsSL "${_raw_base}/scripts/lib/ensure-vpn-host-packages.sh" -o "$_ensure_vpn_lib"
+fi
+. "$_ensure_vpn_lib"
 export CONTINUUM_INSTALL_DRY_RUN="$DRY_RUN"
 ensure_vpn_host_packages || warn "wireguard/socat missing — VPN enable will fail until: sudo apt install -y wireguard socat"
 log "WireGuard host packages ready. If admin VPN handshakes fail later, allow inbound UDP 51820 in the VPS provider firewall (UFW rules are applied automatically on enable)."
