@@ -69,12 +69,13 @@ finalize_fail() {
 
 run_script() {
 	local script="$1"
+	shift
 	if [[ ! -x "$script" ]]; then
 		echo "mpc-auth-apply-pending-vpn: missing ${script}" >&2
 		finalize_fail
 	fi
 	export MPC_AUTH_VPN_PROFILE
-	"$script"
+	"$script" "$@"
 }
 
 active_vpn_profile() {
@@ -102,7 +103,7 @@ if [[ "$MPC_AUTH_VPN_ACTION" == "enable" ]]; then
 		echo "mpc-auth-apply-pending-vpn: switching VPN profile ${cur_profile} -> ${MPC_AUTH_VPN_PROFILE} (disable then enable)"
 		run_script "$DISABLE_SCRIPT"
 	fi
-	run_script "$ENABLE_SCRIPT"
+	run_script "$ENABLE_SCRIPT" "$MPC_AUTH_VPN_PROFILE"
 	finalize_ok
 else
 	run_script "$DISABLE_SCRIPT"

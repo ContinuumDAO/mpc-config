@@ -23,7 +23,19 @@ STATE_FILE="${MPC_AUTH_VPN_STATE_FILE:-/var/lib/mpc-auth-docker/vpn-state.json}"
 LISTEN_PORT="${MPC_AUTH_WIREGUARD_LISTEN_PORT:-51820}"
 VPN_CIDR="${MPC_AUTH_WIREGUARD_VPN_CIDR:-10.8.0.0/24}"
 MGMT_PORT="${MPC_AUTH_VPN_MGMT_PORT:-8080}"
-PROFILE="${MPC_AUTH_VPN_PROFILE:-split}"
+
+normalize_vpn_profile() {
+	local v="${1:-${MPC_AUTH_VPN_PROFILE:-split}}"
+	v="${v,,}"
+	v="${v// /}"
+	if [[ "$v" != "split" && "$v" != "full" ]]; then
+		v="split"
+	fi
+	printf '%s' "$v"
+}
+
+PROFILE="$(normalize_vpn_profile "${1:-}")"
+echo "mpc-auth-vpn-enable: profile=${PROFILE}" >&2
 
 if [[ ! -f "${WG_SRC_DIR}/wg0.conf" ]]; then
 	echo "mpc-auth-vpn-enable: missing ${WG_SRC_DIR}/wg0.conf (mpc-auth must write WireGuard config first)" >&2
