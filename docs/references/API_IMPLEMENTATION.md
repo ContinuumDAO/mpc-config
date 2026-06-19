@@ -437,6 +437,9 @@ Returns WireGuard VPN automation status for the **VPN Panel** in continuumdao-no
 - **`available`**: **`true`** when **`MPC_AUTH_VPN_PENDING_FILE`** / **`MpcAuthVpnPendingPath`** is configured in compose (host apply via systemd on VPS/Linux Docker Desktop, or WSL watcher on Windows Docker Desktop).
 - **`active`**: read from host **`vpn-state.json`** (written by **`mpc-auth-vpn-enable.sh`** / **`disable`**).
 - **`profile`**: last applied host profile (**`split`** or **`full`**) when active.
+- **`endpointHost`**: public IP/hostname for the WireGuard client **`Endpoint`** on **this** node. With placeholder **`nodeN_key`** maps, mpc-auth matches **`KeyList`** index and/or host egress IP against **`nodeAddresses`** (not the relay's first entry). Override with **`WireGuard.EndpointHost`** in **`configs.yaml`**.
+
+**Host firewall:** on UFW + Docker VPS hosts, **`mpc-auth-vpn-enable.sh`** adds **`PostUp`** **`iptables`** rules so UDP **`51820`** reaches **`wg0`** (see **`systemd/README.md`**). Some cloud panels also require **inbound UDP 51820** at the provider layer.
 
 <a id="post-vpn-setenabled"></a>
 #### `POST /vpn/setEnabled`

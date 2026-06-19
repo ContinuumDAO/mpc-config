@@ -4,6 +4,18 @@
 
 set -euo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${HERE}/mpc-auth-vpn-wg0-hooks.sh" ]]; then
+	# shellcheck source=mpc-auth-vpn-wg0-hooks.sh
+	. "${HERE}/mpc-auth-vpn-wg0-hooks.sh"
+elif [[ -f "${HERE}/../scripts/lib/mpc-auth-vpn-wg0-hooks.sh" ]]; then
+	# shellcheck source=../scripts/lib/mpc-auth-vpn-wg0-hooks.sh
+	. "${HERE}/../scripts/lib/mpc-auth-vpn-wg0-hooks.sh"
+else
+	echo "mpc-auth-vpn-enable: missing mpc-auth-vpn-wg0-hooks.sh (re-run install-mpc-auth-docker-systemd.sh)" >&2
+	exit 1
+fi
+
 LIBEXEC="/usr/local/libexec/mpc-auth"
 WG_HOST_DIR="${MPC_AUTH_WIREGUARD_HOST_DIR:-/etc/wireguard}"
 WG_SRC_DIR="${MPC_AUTH_WIREGUARD_SRC_DIR:-/var/lib/mpc-auth-docker/wireguard}"
@@ -27,21 +39,7 @@ mkdir -p "$WG_HOST_DIR"
 chmod 0700 "$WG_HOST_DIR"
 install -m 0600 "${WG_SRC_DIR}/wg0.conf" "${WG_HOST_DIR}/wg0.conf"
 
-if [[ "$PROFILE" == "full" ]]; then
-	default_if="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"
-	default_if="${default_if:-eth0}"
-	{
-		echo ""
-		echo "# full-tunnel NAT (appended by mpc-auth-vpn-enable.sh)"
-		echo "PostUp = sysctl -w net.ipv4.ip_forward=1; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o ${default_if} -j MASQUERADE"
-		echo "PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o ${default_if} -j MASQUERADE"
-	} >>"${WG_HOST_DIR}/wg0.conf"
-fi
-
-if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "Status: active"; then
-	ufw allow "${LISTEN_PORT}/udp" comment 'Continuum WireGuard VPN' || true
-	ufw allow from "${VPN_CIDR}" to any port "${MGMT_PORT}" proto tcp comment 'Continuum VPN management API' || true
-fi
+mpc_auth_vpn_prepare_wg0_conf "${WG_HOST_DIR}/wg0.conf" "$PROFILE" "$LISTEN_PORT" "$VPN_CIDR" "$MGMT_PORT"
 
 systemctl daemon-reload
 systemctl enable mpc-auth-wireguard-wg0.service

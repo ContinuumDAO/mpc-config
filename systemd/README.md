@@ -86,6 +86,21 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 
 **Host packages (VPS / Linux Docker Desktop):** **`wireguard`** and **`socat`** must be installed on the host (`wg-quick`, `socat`). Fresh installs via **`scripts/install-node-debian-ubuntu.sh`** include them; **`install-mpc-auth-docker-systemd.sh`** also runs **`apt install wireguard socat`** when missing (e.g. after **`git pull`** + **`process_config.sh`** on an older node).
 
+### WireGuard VPN — host firewall (UFW + Docker)
+
+On VPS hosts with **UFW active** and **Docker**, `ufw allow 51820/udp` alone is often **not enough**: handshake packets can reach **`eth0`** but WireGuard never completes (client shows **`0 B received`**). **`mpc-auth-vpn-enable.sh`** (via **`scripts/lib/mpc-auth-vpn-wg0-hooks.sh`**) therefore:
+
+1. Adds UFW allow rules for **`51820/udp`**, **`8080/tcp` from the VPN CIDR**, and **`allow in on wg0`**
+2. Inserts **`PostUp` / `PostDown`** **`iptables -I INPUT`** rules under **`[Interface]`** in **`/etc/wireguard/wg0.conf`** (must be **before** **`[Peer]`** — never append at EOF)
+
+**Provider firewall:** many VPS panels (Contabo, etc.) also filter **inbound UDP 51820** before traffic hits the VM. Open that in the provider panel if tcpdump on the host shows **no** packets on **`51820`**.
+
+**Multi-node groups:** **`GET /vpn/status`** **`endpointHost`** and downloaded client configs use **this node's** public IP (KeyList index + egress IP match in **`nodeAddresses`**), not the relay's first entry. Optional override: **`WireGuard.EndpointHost`** in **`configs.yaml`** (mpc-auth).
+
+**Operator flow (no SSH after install):** MPA **VPN Panel** → **`POST /vpn/setEnabled`** → host applies **`wg0`** + mgmt proxy → download client **`.conf`** → **`wg-quick up`** on the workstation. Verify with **`curl http://10.8.0.1:8080/health`** over the tunnel (ping is optional).
+
+**Do not** edit **`PostUp`** manually at the bottom of **`wg0.conf`**. Re-enable VPN from the panel (or run **`mpc-auth-vpn-enable.sh`**) after **`git pull`** so hooks are regenerated.
+
 ### Update script behavior
 
 1. Reads optional `/etc/default/mpc-auth-docker` (`MPC_AUTH_CONTAINER_NAME`, **`MPC_AUTH_EXPECTED_DIGEST`**, `MPC_AUTH_POST_UPDATE_CMD`, …).
