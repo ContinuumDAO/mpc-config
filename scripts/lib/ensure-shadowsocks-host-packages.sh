@@ -9,8 +9,15 @@ _ensure_shadowsocks_host_tools_present() {
 	command -v ssserver >/dev/null 2>&1 && command -v sslocal >/dev/null 2>&1
 }
 
+_ensure_shadowsocks_cleanup_tmpdir() {
+	local dir="${1:-}"
+	if [[ -n "$dir" && -d "$dir" ]]; then
+		rm -rf "$dir"
+	fi
+}
+
 _ensure_shadowsocks_install_static_binaries() {
-	local arch os base url tmpdir
+	local arch os base url tmpdir=""
 	if ! command -v curl >/dev/null 2>&1; then
 		return 1
 	fi
@@ -29,15 +36,23 @@ _ensure_shadowsocks_install_static_binaries() {
 	base="https://github.com/shadowsocks/shadowsocks-rust/releases/download/${SHADOWSOCKS_RUST_VERSION}"
 	url="${base}/shadowsocks-${SHADOWSOCKS_RUST_VERSION}.${arch}-${os}.tar.xz"
 	tmpdir="$(mktemp -d)"
-	trap 'rm -rf "$tmpdir"' RETURN
 	if ! curl -fsSL "$url" -o "${tmpdir}/ss.tar.xz"; then
+		_ensure_shadowsocks_cleanup_tmpdir "$tmpdir"
 		return 1
 	fi
 	if ! tar -xJf "${tmpdir}/ss.tar.xz" -C "$tmpdir"; then
+		_ensure_shadowsocks_cleanup_tmpdir "$tmpdir"
 		return 1
 	fi
-	install -m 0755 "${tmpdir}/ssserver" "${SHADOWSOCKS_RUST_INSTALL_DIR}/ssserver"
-	install -m 0755 "${tmpdir}/sslocal" "${SHADOWSOCKS_RUST_INSTALL_DIR}/sslocal"
+	if ! install -m 0755 "${tmpdir}/ssserver" "${SHADOWSOCKS_RUST_INSTALL_DIR}/ssserver"; then
+		_ensure_shadowsocks_cleanup_tmpdir "$tmpdir"
+		return 1
+	fi
+	if ! install -m 0755 "${tmpdir}/sslocal" "${SHADOWSOCKS_RUST_INSTALL_DIR}/sslocal"; then
+		_ensure_shadowsocks_cleanup_tmpdir "$tmpdir"
+		return 1
+	fi
+	_ensure_shadowsocks_cleanup_tmpdir "$tmpdir"
 	_ensure_shadowsocks_host_tools_present
 }
 
@@ -67,5 +82,6 @@ ensure_shadowsocks_host_packages() {
 		return 0
 	fi
 	printf 'warning: shadowsocks-rust (ssserver, sslocal) not installed — VPN obfuscation unavailable\n' >&2
+	printf '  Install manually as root: curl release tarball to /usr/local/bin or apt install shadowsocks-rust\n' >&2
 	return 1
 }
