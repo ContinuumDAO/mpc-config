@@ -1,0 +1,3 @@
+[workspace]
+members = ["continuum-lwo-client", "continuum-lwo-server"]
+resolver = "2"

@@ -4,13 +4,20 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${HERE}/mpc-auth-vpn-ss-hooks.sh" ]]; then
-	# shellcheck source=mpc-auth-vpn-ss-hooks.sh
-	. "${HERE}/mpc-auth-vpn-ss-hooks.sh"
-elif [[ -f "${HERE}/../scripts/lib/mpc-auth-vpn-ss-hooks.sh" ]]; then
-	# shellcheck source=../scripts/lib/mpc-auth-vpn-ss-hooks.sh
-	. "${HERE}/../scripts/lib/mpc-auth-vpn-ss-hooks.sh"
-fi
+_lib() {
+	local name="$1"
+	if [[ -f "${HERE}/${name}" ]]; then
+		# shellcheck source=/dev/null
+		. "${HERE}/${name}"
+	elif [[ -f "${HERE}/../scripts/lib/${name}" ]]; then
+		# shellcheck source=/dev/null
+		. "${HERE}/../scripts/lib/${name}"
+	fi
+}
+
+_lib mpc-auth-vpn-ss-hooks.sh
+_lib mpc-auth-vpn-wg-obfuscator-hooks.sh
+_lib mpc-auth-vpn-obfuscation-hooks.sh
 
 WG_HOST_DIR="${MPC_AUTH_WIREGUARD_HOST_DIR:-/etc/wireguard}"
 STATE_FILE="${MPC_AUTH_VPN_STATE_FILE:-/var/lib/mpc-auth-docker/vpn-state.json}"
@@ -18,24 +25,25 @@ LISTEN_PORT="${MPC_AUTH_WIREGUARD_LISTEN_PORT:-51820}"
 VPN_CIDR="${MPC_AUTH_WIREGUARD_VPN_CIDR:-10.8.0.0/24}"
 MGMT_PORT="${MPC_AUTH_VPN_MGMT_PORT:-8080}"
 SS_PORT="${MPC_AUTH_SHADOWSOCKS_LISTEN_PORT:-8388}"
+WO_PORT="${MPC_AUTH_WG_OBFUSCATOR_LISTEN_PORT:-51822}"
 
 if [[ -f "$STATE_FILE" ]] && command -v python3 >/dev/null 2>&1; then
-	SS_PORT="$(python3 - "$STATE_FILE" "$SS_PORT" <<'PY'
-import json, sys
-path, default = sys.argv[1], int(sys.argv[2])
+	eval "$(python3 - "$STATE_FILE" <<'PY'
+import json, os, shlex, sys
+path = sys.argv[1]
 try:
     with open(path, encoding="utf-8") as f:
         d = json.load(f)
 except (OSError, json.JSONDecodeError, ValueError):
-    print(default)
     raise SystemExit(0)
-print(int(d.get("shadowsocksListenPort", default)))
+print(f"export SS_PORT={shlex.quote(str(int(d.get('shadowsocksListenPort', 8388))))}")
+print(f"export WO_PORT={shlex.quote(str(int(d.get('wgObfuscatorListenPort', 51822))))}")
 PY
-)" || SS_PORT="${MPC_AUTH_SHADOWSOCKS_LISTEN_PORT:-8388}"
+)" || true
 fi
 
-if declare -F mpc_auth_vpn_stop_shadowsocks_systemd >/dev/null 2>&1; then
-	mpc_auth_vpn_stop_shadowsocks_systemd
+if declare -F mpc_auth_vpn_stop_obfuscation_systemd >/dev/null 2>&1; then
+	mpc_auth_vpn_stop_obfuscation_systemd
 fi
 
 if command -v systemctl >/dev/null 2>&1; then
@@ -51,6 +59,7 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "Status: 
 	ufw delete allow "${LISTEN_PORT}/udp" 2>/dev/null || true
 	ufw delete allow "${SS_PORT}/tcp" 2>/dev/null || true
 	ufw delete allow "${SS_PORT}/udp" 2>/dev/null || true
+	ufw delete allow "${WO_PORT}/udp" 2>/dev/null || true
 	ufw delete allow from "${VPN_CIDR}" to any port "${MGMT_PORT}" proto tcp 2>/dev/null || true
 	default_if="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"
 	default_if="${default_if:-eth0}"

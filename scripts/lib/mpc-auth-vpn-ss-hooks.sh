@@ -3,16 +3,19 @@
 # Sourced by mpc-auth-vpn-enable/disable scripts on systemd and desktop hosts.
 
 # mpc_auth_vpn_normalize_obfuscation [VALUE]
-mpc_auth_vpn_normalize_obfuscation() {
-	local v="${1:-${MPC_AUTH_VPN_OBFUSCATION:-none}}"
-	v="${v,,}"
-	v="${v// /}"
-	if [[ "$v" == "shadowsocks" ]]; then
-		printf '%s' "shadowsocks"
-	else
-		printf '%s' "none"
-	fi
-}
+# Deprecated: use mpc-auth-vpn-obfuscation-hooks.sh. Kept as alias when sourced alone.
+if ! declare -F mpc_auth_vpn_normalize_obfuscation >/dev/null 2>&1; then
+	mpc_auth_vpn_normalize_obfuscation() {
+		local v="${1:-${MPC_AUTH_VPN_OBFUSCATION:-none}}"
+		v="${v,,}"
+		v="${v// /}"
+		if [[ "$v" == "shadowsocks" ]]; then
+			printf '%s' "shadowsocks"
+		else
+			printf '%s' "none"
+		fi
+	}
+fi
 
 # mpc_auth_vpn_shadowsocks_config_path
 mpc_auth_vpn_shadowsocks_config_path() {

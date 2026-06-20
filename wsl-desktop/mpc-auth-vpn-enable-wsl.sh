@@ -22,6 +22,8 @@ REPO_ROOT="$(cd "${HERE}/.." && pwd)"
 . "${REPO_ROOT}/scripts/lib/mpc-auth-vpn-wg0-hooks.sh"
 # shellcheck source=../scripts/lib/mpc-auth-vpn-ss-hooks.sh
 . "${REPO_ROOT}/scripts/lib/mpc-auth-vpn-ss-hooks.sh"
+# shellcheck source=../scripts/lib/mpc-auth-vpn-obfuscation-hooks.sh
+. "${REPO_ROOT}/scripts/lib/mpc-auth-vpn-obfuscation-hooks.sh"
 
 WG_HOST_DIR="${MPC_AUTH_WIREGUARD_HOST_DIR:-/etc/wireguard}"
 WG_SRC_DIR="${MPC_AUTH_WIREGUARD_SRC_DIR:-/var/lib/mpc-auth-docker/wireguard}"

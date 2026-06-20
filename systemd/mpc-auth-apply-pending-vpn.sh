@@ -53,7 +53,7 @@ if action not in ("enable", "disable"):
     sys.exit(2)
 if profile not in ("split", "full"):
     profile = "split"
-if obfuscation not in ("none", "shadowsocks"):
+if obfuscation not in ("none", "shadowsocks", "wg_obfuscator", "lwo", "udp2raw"):
     obfuscation = "none"
 print(f"export MPC_AUTH_VPN_ACTION={shlex.quote(action)}")
 print(f"export MPC_AUTH_VPN_PROFILE={shlex.quote(profile)}")

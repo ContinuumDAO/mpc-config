@@ -40,6 +40,8 @@ REPO_ROOT="$(cd "$HERE/.." && pwd)"
 . "${REPO_ROOT}/scripts/lib/ensure-vpn-host-packages.sh"
 # shellcheck source=../scripts/lib/ensure-shadowsocks-host-packages.sh
 . "${REPO_ROOT}/scripts/lib/ensure-shadowsocks-host-packages.sh"
+# shellcheck source=../scripts/lib/ensure-wg-obfuscator-host-packages.sh
+. "${REPO_ROOT}/scripts/lib/ensure-wg-obfuscator-host-packages.sh"
 LIBEXEC="/usr/local/libexec/mpc-auth"
 UNIT_DIR="/etc/systemd/system"
 DEFAULT_ENV="/etc/default/mpc-auth-docker"
@@ -58,6 +60,8 @@ install -m 0755 \
 	"$HERE/mpc-auth-sync-compose-role.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-wg0-hooks.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-ss-hooks.sh" \
+	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-wg-obfuscator-hooks.sh" \
+	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-obfuscation-hooks.sh" \
 	"$LIBEXEC/"
 
 if [[ "$INSTALL_ENV" == true ]]; then
@@ -89,6 +93,7 @@ install -m 0644 \
 	"$HERE/mpc-auth-wireguard-wg0.service" \
 	"$HERE/mpc-auth-vpn-mgmt-proxy.service" \
 	"$HERE/mpc-auth-shadowsocks.service" \
+	"$HERE/mpc-auth-wg-obfuscator.service" \
 	"$HERE/mpc-auth-agent-llm-config.path" \
 	"$HERE/mpc-auth-agent-llm-config.service" \
 	"$UNIT_DIR/"
@@ -137,8 +142,12 @@ if ! ensure_vpn_host_packages; then
 fi
 
 if ! ensure_shadowsocks_host_packages; then
-	echo "WARNING: shadowsocks-rust (ssserver) not installed — VPN obfuscation unavailable until installed." >&2
+	echo "WARNING: shadowsocks-rust (ssserver) not installed — VPN Shadowsocks obfuscation unavailable until installed." >&2
 	echo "  On Debian/Ubuntu: sudo apt install -y shadowsocks-rust (or re-run install with optional package helper)" >&2
+fi
+
+if ! ensure_wg_obfuscator_host_packages; then
+	echo "WARNING: wg-obfuscator not installed — VPN wg_obfuscator obfuscation unavailable until installed." >&2
 fi
 
 systemctl enable mpc-auth-vpn-pending.path
@@ -159,7 +168,7 @@ echo "  $LIBEXEC/mpc-auth-apply-pending-reboot.sh"
 echo "  $LIBEXEC/mpc-auth-sync-compose-role.sh (relay/client docker-compose.yml sync before restart)"
 echo "  $LIBEXEC/mpc-auth-apply-pending-vpn.sh + mpc-auth-vpn-{enable,disable}.sh (POST /vpn/setEnabled — WireGuard VPN)"
 echo "  $UNIT_DIR/mpc-auth-vpn-pending.{path,service} (bind-mount /var/lib/mpc-auth-docker in compose)"
-	echo "  $UNIT_DIR/mpc-auth-wireguard-wg0.service + mpc-auth-vpn-mgmt-proxy.service + mpc-auth-shadowsocks.service"
+	echo "  $UNIT_DIR/mpc-auth-wireguard-wg0.service + mpc-auth-vpn-mgmt-proxy.service + mpc-auth-shadowsocks.service + mpc-auth-wg-obfuscator.service"
 echo
 echo "Run: sudo systemctl start mpc-auth-docker-restart.service"
 echo "(Optional automation) mpc-auth-docker-pending-update.path watches /var/lib/mpc-auth-docker/pending-update.json — bind-mount that dir in compose."

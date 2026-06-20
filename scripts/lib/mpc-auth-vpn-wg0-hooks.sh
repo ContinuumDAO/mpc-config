@@ -7,22 +7,31 @@ mpc_auth_vpn_ufw_active() {
 	command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "Status: active"
 }
 
-# mpc_auth_vpn_apply_ufw_rules LISTEN_PORT VPN_CIDR MGMT_PORT [OBFUSCATION] [SS_PORT]
+# mpc_auth_vpn_apply_ufw_rules LISTEN_PORT VPN_CIDR MGMT_PORT [OBFUSCATION] [TRANSPORT_PORT]
 mpc_auth_vpn_apply_ufw_rules() {
 	local listen_port="${1:-51820}"
 	local vpn_cidr="${2:-10.8.0.0/24}"
 	local mgmt_port="${3:-8080}"
 	local obfuscation="${4:-none}"
-	local ss_port="${5:-8388}"
+	local transport_port="${5:-8388}"
 	if ! mpc_auth_vpn_ufw_active; then
 		return 0
 	fi
-	if [[ "$obfuscation" == "shadowsocks" ]]; then
-		ufw allow "${ss_port}/tcp" comment 'Continuum Shadowsocks obfuscation' || true
-		ufw allow "${ss_port}/udp" comment 'Continuum Shadowsocks obfuscation' || true
-	else
+	case "$obfuscation" in
+	shadowsocks)
+		ufw allow "${transport_port}/tcp" comment 'Continuum Shadowsocks obfuscation' || true
+		ufw allow "${transport_port}/udp" comment 'Continuum Shadowsocks obfuscation' || true
+		;;
+	wg_obfuscator | lwo)
+		ufw allow "${transport_port}/udp" comment "Continuum ${obfuscation} obfuscation" || true
+		;;
+	udp2raw)
+		ufw allow "${transport_port}/tcp" comment 'Continuum udp2raw obfuscation' || true
+		;;
+	*)
 		ufw allow "${listen_port}/udp" comment 'Continuum WireGuard VPN' || true
-	fi
+		;;
+	esac
 	ufw allow from "${vpn_cidr}" to any port "${mgmt_port}" proto tcp comment 'Continuum VPN management API' || true
 	ufw allow in on wg0 comment 'Continuum WireGuard wg0' || true
 }
@@ -81,7 +90,7 @@ with open(path, "w", encoding="utf-8") as f:
 PY
 }
 
-# mpc_auth_vpn_prepare_wg0_conf WG0_CONF PROFILE LISTEN_PORT [VPN_CIDR] [MGMT_PORT] [OBFUSCATION] [SS_PORT]
+# mpc_auth_vpn_prepare_wg0_conf WG0_CONF PROFILE LISTEN_PORT [VPN_CIDR] [MGMT_PORT] [OBFUSCATION] [TRANSPORT_PORT]
 # Copies are expected already installed at WG0_CONF. Adds UFW rules and wg-quick hooks when needed.
 mpc_auth_vpn_prepare_wg0_conf() {
 	local wg0_conf="$1"
@@ -90,7 +99,7 @@ mpc_auth_vpn_prepare_wg0_conf() {
 	local vpn_cidr="${4:-10.8.0.0/24}"
 	local mgmt_port="${5:-8080}"
 	local obfuscation="${6:-${MPC_AUTH_VPN_OBFUSCATION:-none}}"
-	local ss_port="${7:-${MPC_AUTH_SHADOWSOCKS_LISTEN_PORT:-8388}}"
+	local transport_port="${7:-${MPC_AUTH_VPN_TRANSPORT_PORT:-8388}}"
 
 	local -a post_up_parts=()
 	local -a post_down_parts=()
@@ -114,22 +123,27 @@ mpc_auth_vpn_prepare_wg0_conf() {
 		fi
 	fi
 
-	if [[ "$obfuscation" == "shadowsocks" ]]; then
+	case "$obfuscation" in
+	shadowsocks | wg_obfuscator | lwo | udp2raw)
 		post_up_parts+=("iptables -I INPUT -p udp --dport ${listen_port} ! -i lo -j DROP")
 		post_down_parts+=("iptables -D INPUT -p udp --dport ${listen_port} ! -i lo -j DROP || true")
-	fi
+		;;
+	esac
 
 	if mpc_auth_vpn_ufw_active; then
-		mpc_auth_vpn_apply_ufw_rules "$listen_port" "$vpn_cidr" "$mgmt_port" "$obfuscation" "$ss_port"
-		if [[ "$obfuscation" == "shadowsocks" ]]; then
+		mpc_auth_vpn_apply_ufw_rules "$listen_port" "$vpn_cidr" "$mgmt_port" "$obfuscation" "$transport_port"
+		case "$obfuscation" in
+		shadowsocks | wg_obfuscator | lwo | udp2raw)
 			post_up_parts+=("iptables -I INPUT -i wg0 -j ACCEPT")
 			post_down_parts+=("iptables -D INPUT -i wg0 -j ACCEPT || true")
-		else
+			;;
+		*)
 			post_up_parts+=("iptables -I INPUT -p udp --dport ${listen_port} -j ACCEPT")
 			post_up_parts+=("iptables -I INPUT -i wg0 -j ACCEPT")
 			post_down_parts+=("iptables -D INPUT -p udp --dport ${listen_port} -j ACCEPT || true")
 			post_down_parts+=("iptables -D INPUT -i wg0 -j ACCEPT || true")
-		fi
+			;;
+		esac
 	fi
 
 	if [[ ${#post_up_parts[@]} -eq 0 ]]; then
