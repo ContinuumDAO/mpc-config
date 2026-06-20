@@ -42,6 +42,8 @@ REPO_ROOT="$(cd "$HERE/.." && pwd)"
 . "${REPO_ROOT}/scripts/lib/ensure-shadowsocks-host-packages.sh"
 # shellcheck source=../scripts/lib/ensure-wg-obfuscator-host-packages.sh
 . "${REPO_ROOT}/scripts/lib/ensure-wg-obfuscator-host-packages.sh"
+# shellcheck source=../scripts/lib/write-vpn-host-obfuscation-capabilities.sh
+. "${REPO_ROOT}/scripts/lib/write-vpn-host-obfuscation-capabilities.sh"
 LIBEXEC="/usr/local/libexec/mpc-auth"
 UNIT_DIR="/etc/systemd/system"
 DEFAULT_ENV="/etc/default/mpc-auth-docker"
@@ -149,6 +151,8 @@ fi
 if ! ensure_wg_obfuscator_host_packages; then
 	echo "WARNING: wg-obfuscator not installed — VPN wg_obfuscator obfuscation unavailable until installed." >&2
 fi
+
+write_vpn_host_obfuscation_capabilities /var/lib/mpc-auth-docker || true
 
 systemctl enable mpc-auth-vpn-pending.path
 systemctl restart mpc-auth-vpn-pending.path || systemctl start mpc-auth-vpn-pending.path
