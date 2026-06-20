@@ -190,6 +190,7 @@ echo "  $LIBEXEC/mpc-auth-sync-compose-role.sh (relay/client docker-compose.yml 
 echo "  $LIBEXEC/mpc-auth-apply-pending-vpn.sh + mpc-auth-vpn-{enable,disable}.sh (POST /vpn/setEnabled — WireGuard VPN)"
 echo "  $UNIT_DIR/mpc-auth-vpn-pending.{path,service} (bind-mount /var/lib/mpc-auth-docker in compose)"
 echo "  $UNIT_DIR/mpc-auth-wireguard-wg0.service + mpc-auth-vpn-mgmt-proxy.service + mpc-auth-shadowsocks.service + mpc-auth-wg-obfuscator.service + mpc-auth-udp2raw.service + mpc-auth-lwo.service"
+echo "  ${HERE}/write-vpn-host-obfuscation-capabilities.sh (refresh vpn-host-obfuscation.json after obfuscation binary install)"
 echo
 echo "Run: sudo systemctl start mpc-auth-docker-restart.service"
 echo "(Optional automation) mpc-auth-docker-pending-update.path watches /var/lib/mpc-auth-docker/pending-update.json — bind-mount that dir in compose."
