@@ -1,0 +1,102 @@
+(function(){const t=document.createElement("link").relList;if(t&&t.supports&&t.supports("modulepreload"))return;for(const s of document.querySelectorAll('link[rel="modulepreload"]'))n(s);new MutationObserver(s=>{for(const i of s)if(i.type==="childList")for(const c of i.addedNodes)c.tagName==="LINK"&&c.rel==="modulepreload"&&n(c)}).observe(document,{childList:!0,subtree:!0});function r(s){const i={};return s.integrity&&(i.integrity=s.integrity),s.referrerPolicy&&(i.referrerPolicy=s.referrerPolicy),s.crossOrigin==="use-credentials"?i.credentials="include":s.crossOrigin==="anonymous"?i.credentials="omit":i.credentials="same-origin",i}function n(s){if(s.ep)return;s.ep=!0;const i=r(s);fetch(s.href,i)}})();function we(){const e=window==null?void 0:window.ddClient;if(!e)throw new Error("Are you using this extension in a browser? Extensions can only be used in Docker DesktopIf you are using Docker Desktop, please make sure you are using the latest version.");return e}const de="m-0 rounded-[4px] border px-3 py-2 font-sans text-[0.8125rem]",ye=`${de} border-[var(--muted)] text-[var(--muted)]`,Ee=`${de} border-[color-mix(in_srgb,var(--accent3)_55%,var(--muted))] text-[var(--accent3)]`,fe="m-0 rounded-[4px] border bg-[color-mix(in_srgb,var(--surface)_88%,var(--bg))] p-3 font-sans text-[0.8125rem] leading-relaxed",Le=`${fe} border-[color-mix(in_srgb,var(--accent2)_55%,var(--muted))] text-[var(--text)]`,ke=`${fe} border-[color-mix(in_srgb,var(--accent3)_55%,var(--muted))] text-[var(--accent3)]`,be="flex flex-col gap-2",ve="https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/desktop-local-orchestrate.sh",N="continuum-wsl.cmd",te="continuum-register-watcher.cmd",We="continuum-linux.sh",j="continuum-macos.sh",ne="continuum-register-launchagent.sh",K="/tmp/continuum-desktop-orchestrate.sh",f={WINDOWS:"windows",LINUX:"linux",MACOS:"macos"},H={[f.WINDOWS]:"Windows",[f.LINUX]:"Linux",[f.MACOS]:"macOS"},U="~/mpc-config",V="Ready (macOS) — the macOS install script is now available on Docker Desktop. Requires passwordless sudo for /var/lib/mpc-auth-docker. Enter keys and public IPv4, then Install node.",xe=new Set(["docker-desktop","docker-desktop-data"]);function Oe(){var r,n;const e=we(),t=(n=(r=e==null?void 0:e.extension)==null?void 0:r.host)==null?void 0:n.cli;if(!(t!=null&&t.exec))throw new Error("Docker Desktop host CLI API unavailable — update Docker Desktop and reload the extension.");return{ddClient:e,cli:t}}const z="@continuum/progress	",B="@continuum/progress",$e=new Set(["init","sync","topic","overall","finish"]);function me(e){const t=e.trimEnd();return t?t.startsWith(z)?t.slice(z.length):t.startsWith(B)?t.slice(B.length).replace(/^\s+/,"")||null:t.startsWith("{")?t:null:null}function pe(e){if(!e)return!1;try{const t=JSON.parse(e);return!!(t&&typeof t=="object"&&$e.has(t.type))}catch{return!1}}function Pe(e){const t=me(e);return t!==null&&pe(t)}function se(e,t){const r=me(e);return!r||!pe(r)?!1:(t.handleEvent(JSON.parse(r)),!0)}function Ie(e){let t=!1;function r(n){if(t){if(t=!1,se(`${z}${n}`,e))return!0;n=`${B}	${n}`}if(se(n,e))return!0;const s=n.trim();return s===B||s==="@continuum/progress"?(t=!0,!0):!!Pe(n)}return{handleLine:r,flushPending(){t=!1}}}function re(e){return e.startsWith("pull:")?`2:${e}`:e==="start-stack"?"3:start-stack":`1:${e}`}function Ae({progressPanel:e,progressTopics:t,progressOverall:r}){const n=new Map;let s=0,i=!1,c=null;function l(){if(c)return c;if(!r)return null;const o=document.createElement("div");o.className="install-progress-overall-row";const p=document.createElement("span");p.className="install-progress-label font-medium",p.textContent="Overall";const P=document.createElement("div");P.className="install-progress-track";const u=document.createElement("div");u.className="install-progress-fill",P.appendChild(u);const x=document.createElement("span");x.className="install-progress-pct flex items-center justify-end gap-1";const v=document.createElement("span"),m=document.createElement("span");return m.className="install-progress-spinner",m.setAttribute("aria-hidden","true"),m.hidden=!0,x.append(v,m),o.append(p,P,x),r.appendChild(o),c={fill:u,pctSpan:v,spinner:m},c}function L(o,{replace:p=!1}={}){var P,u,x,v;p&&n.clear();for(const m of o??[])m!=null&&m.id&&n.set(m.id,{label:m.label??((P=n.get(m.id))==null?void 0:P.label)??m.id,pct:typeof m.pct=="number"?m.pct:((u=n.get(m.id))==null?void 0:u.pct)??0,state:m.state??((x=n.get(m.id))==null?void 0:x.state)??"pending",weight:m.weight??((v=n.get(m.id))==null?void 0:v.weight)??1})}function S(){for(const o of n.values())o.pct=100,o.state!=="failed"&&(o.state="done")}function h(){return[...n.entries()].sort(([o],[p])=>re(o).localeCompare(re(p)))}function y(o,p,P,u){const x=document.createElement("div");x.className="install-progress-row",x.dataset.topicId=o;const v=document.createElement("span");v.className="install-progress-label",(u==="done"||u==="skipped")&&v.classList.add("is-done"),u==="failed"&&v.classList.add("is-failed"),v.textContent=p,v.title=p;const m=document.createElement("div");m.className="install-progress-track";const k=document.createElement("div");k.className="install-progress-fill",u==="active"&&k.classList.add("is-active"),u==="failed"&&k.classList.add("is-failed"),k.style.width=`${Math.max(0,Math.min(100,P))}%`,m.appendChild(k);const O=document.createElement("span");return O.className="install-progress-pct",O.textContent=`${Math.round(P)}%`,x.append(v,m,O),x}function g(){const o=l();o&&(o.fill.style.width=`${Math.max(0,Math.min(100,s))}%`,o.fill.classList.toggle("is-active",i),o.pctSpan.textContent=`${Math.round(s)}%`,o.spinner.hidden=!i,i?o.spinner.setAttribute("aria-label","Working"):o.spinner.removeAttribute("aria-label"))}function _(){if(t){t.replaceChildren();for(const[o,p]of h())t.appendChild(y(o,p.label,p.pct??0,p.state??"pending"));g()}}function W(){e&&(e.hidden=!1,e.classList.remove("hidden"))}function a(o){if(!(!o||typeof o!="object"))switch(o.type){case"init":L(o.topics,{replace:!0}),W(),_();break;case"sync":L(o.topics),W(),_();break;case"topic":{if(!o.id)break;const p=n.get(o.id)??{label:o.id,pct:0,state:"pending"};p.pct=typeof o.pct=="number"?o.pct:p.pct,p.state=o.state??p.state,n.set(o.id,p),W(),_();break}case"overall":s=typeof o.pct=="number"?o.pct:s,i=o.spinner===!0,W(),g();break;case"finish":i=!1,o.ok===!0&&(S(),s=100),_();break}}function w(){n.clear(),s=0,i=!1,c=null,t&&t.replaceChildren(),r&&r.replaceChildren(),e&&(e.hidden=!0,e.classList.add("hidden"))}return{handleEvent:a,reset:w}}function d(e,t){e.textContent+=t,e.scrollTop=e.scrollHeight}function he(e){return String(e??"").replace(/\u0000/g,"").trim()}function R(e){return he(`${(e==null?void 0:e.stdout)??""}${(e==null?void 0:e.stderr)??""}`)}function Ne({nodeMgtKey:e,publicMgtKey:t,nodeIp:r}){const n=e.trim(),s=t.trim(),i=r.trim();if(!n&&!s)throw new Error("Provide NodeMgtKey and/or PublicMgtKey");if(!i)throw new Error("Public IPv4 is required");const c=[];return n&&c.push("--node-mgt-key",n),s&&c.push("--public-mgt-key",s),c.push("--ip",i),c}function _e(e){const t=e.trim();return!t||t.length>64?!1:/^[\w.-]+$/.test(t)}function Re(e){const t=[];let r=null;const n=he(e);for(const s of n.split(/\r?\n/)){const i=s.match(/^\s*(\*?)\s*([^\s]+)\s+/);if(!i)continue;const c=i[1],l=i[2];l==="NAME"||xe.has(l)||(t.push(l),c==="*"&&(r=l))}return{distros:t,defaultDistro:r??t[0]??null}}function A(e,t){e.hidden=!1,e.className=ke,e.textContent=t}function $(e,t,r=!1){e&&(e.hidden=!1,e.className=r?Ee:ye,e.textContent=t)}function De(e){e.hidden=!1,e.className=be}function Y(e){var r,n,s;const t=((r=e==null?void 0:e.host)==null?void 0:r.platform)??((s=(n=e==null?void 0:e.desktopUI)==null?void 0:n.host)==null?void 0:s.platform);return t==="win32"?f.WINDOWS:t==="linux"?f.LINUX:t==="darwin"?f.MACOS:null}async function Te(e,t){var s;const r=Y(t);if(r===f.WINDOWS)return!0;if(r===f.LINUX||r===f.MACOS)return!1;const n=await D(e,"cmd",["/c","ver"]);return n.ok&&((s=n.result)==null?void 0:s.code)===0}function X(e,t){var s;const r=Y(e);if(r)return r;const n=(s=t==null?void 0:t.value)==null?void 0:s.trim();return n===f.WINDOWS||n===f.LINUX||n===f.MACOS?n:null}function q({hostOs:e,hostOsRow:t,hostOsSelect:r,wslDistroRow:n,installBtn:s,bootStatus:i}){if(t&&r){const c=e===null;t.hidden=!c,c?t.classList.remove("hidden"):t.classList.add("hidden"),e&&r.value!==e&&(r.value=e)}if(n){const c=e===f.WINDOWS;n.hidden=!c,c?n.classList.remove("hidden"):n.classList.add("hidden")}s&&(s.disabled=!1),i&&e===f.MACOS&&$(i,V,!1)}async function D(e,t,r){try{return{ok:!0,result:await e.exec(t,r)}}catch(n){return{ok:!1,error:n}}}function C(e,{expectSubstring:t}={}){if(!e)return!1;const r=R(e),n=e.code;return t&&r.includes(t)?n===void 0||n===0||n===null:n===0}function M(e,t){return["-d",e,...t]}function oe(e,t){return`Passwordless sudo required for Docker Desktop install on Windows.
+
+WSL user: ${t}
+WSL distro: ${e}
+
+The Docker extension runs the installer as your default WSL user and cannot type your sudo password.
+Host automation (/var/lib/mpc-auth-docker), apt packages, and maintenance restart/update all need sudo -n.
+
+Configure passwordless sudo from Windows PowerShell:
+
+  wsl -d ${e} -u root
+
+Then in the root WSL shell:
+
+  visudo
+
+Add this line (replace ${t} if your username differs):
+
+  ${t} ALL=(ALL) NOPASSWD: ALL
+
+Verify as your normal WSL user (exit the root shell first):
+
+  wsl -d ${e}
+  sudo -n true && echo OK
+
+Then click Install again in the Docker extension.`}async function Ce(e,t,r){var L;d(r,`Checking passwordless sudo for default WSL user in "${t}"…
+`);const n=await D(e,N,M(t,["whoami"])),s=n.ok&&n.result?R(n.result).trim():"<your-wsl-user>",i=await D(e,N,M(t,["bash","-lc","command -v sudo >/dev/null && sudo -n true"]));if(!i.ok)return d(r,`[host exec error: ${i.error instanceof Error?i.error.message:String(i.error)}]
+`),d(r,`
+${oe(t,s)}
+`),!1;const c=R(i.result),l=(L=i.result)==null?void 0:L.code;return d(r,`[exit ${l??"unknown"}] user=${s}${c?` ${c}`:""}
+`),C(i.result)?(d(r,`Passwordless sudo OK for WSL user "${s}".
+
+`),!0):(d(r,`
+${oe(t,s)}
+`),!1)}function ie(e){return`Passwordless sudo required for Docker Desktop install on macOS.
+
+macOS user: ${e}
+
+The Docker extension runs the installer as your user and cannot type your sudo password.
+Host automation (/var/lib/mpc-auth-docker) and VPN (wg-quick) need sudo -n.
+
+Configure passwordless sudo in Terminal:
+
+  sudo visudo
+
+Add this line (replace ${e} if your username differs):
+
+  ${e} ALL=(ALL) NOPASSWD: ALL
+
+Verify:
+
+  sudo -n true && echo OK
+
+Then click Install again in the Docker extension.`}async function Me(e,t){var l;d(t,`Checking passwordless sudo on macOS…
+`);const r=await D(e,j,["whoami"]),n=r.ok&&r.result?R(r.result).trim():"<your-macos-user>",s=await D(e,j,["bash","-lc","command -v sudo >/dev/null && sudo -n true"]);if(!s.ok)return d(t,`[host exec error: ${s.error instanceof Error?s.error.message:String(s.error)}]
+`),d(t,`
+${ie(n)}
+`),!1;const i=R(s.result),c=(l=s.result)==null?void 0:l.code;return d(t,`[exit ${c??"unknown"}] user=${n}${i?` ${i}`:""}
+`),C(s.result)?(d(t,`Passwordless sudo OK for macOS user "${n}".
+
+`),!0):(d(t,`
+${ie(n)}
+`),!1)}async function ae(e,t){if(!await Te(e,t))return{isWindows:!1,wslAvailable:!1,distros:[],defaultDistro:null,listOutput:""};const n=await D(e,N,["-l","-v"]);if(!n.ok||!n.result)return{isWindows:!0,wslAvailable:!1,distros:[],defaultDistro:null,listOutput:""};const s=R(n.result);if(!s||/no installed distributions/i.test(s))return{isWindows:!0,wslAvailable:!1,distros:[],defaultDistro:null,listOutput:""};const{distros:i,defaultDistro:c}=Re(s);return{isWindows:!0,wslAvailable:i.length>0,distros:i,defaultDistro:c,listOutput:s}}function G(e,t,r,n,s,i={}){return new Promise((c,l)=>{let L=!1,S="";const h=s?Ie(s):null,y=(a=!1)=>{let w;for(;(w=S.indexOf(`
+`))!==-1;){const o=S.slice(0,w);S=S.slice(w+1),!(h!=null&&h.handleLine(o))&&o.length>0&&d(n,`${o}
+`)}if(a&&S.length>0){if(h!=null&&h.handleLine(S)){S="";return}d(n,`${S}
+`),S=""}},g=a=>{if(!a)return;const w=a.endsWith(`
+`)?a:`${a}
+`;for(const o of w.split(/\r?\n/))o&&(h!=null&&h.handleLine(o)||d(n,`${o}
+`))},_=a=>{L||(L=!0,y(!0),h==null||h.flushPending(),d(n,`
+[process exited ${a}]
+`),c({code:a}))},W={onOutput({stdout:a,stderr:w}){a&&(h?(S+=a,y(!1)):d(n,a.endsWith(`
+`)?a:`${a}
+`)),w&&(h?g(w):d(n,w.endsWith(`
+`)?w:`${w}
+`))},onError(a){if(L)return;L=!0;const w=(a==null?void 0:a.message)??String(a);d(n,`
+[stream error] ${w}
+`),l(a instanceof Error?a:new Error(w))},onClose(a){_(typeof a=="number"?a:1)}};try{e.exec(t,r,{stream:W,splitOutputLines:!0,...i})}catch(a){l(a instanceof Error?a:new Error(String(a)))}})}async function He(e,t,r){var c;d(r,`Checking WSL distro "${t}" via ${N}…
+`);const n=await D(e,N,M(t,["-e","echo","ok"]));if(!n.ok)return d(r,`[host exec error: ${n.error instanceof Error?n.error.message:String(n.error)}]
+`),!1;const s=R(n.result),i=(c=n.result)==null?void 0:c.code;return d(r,`[exit ${i??"unknown"}]${s?` ${s}`:""}
+`),C(n.result,{expectSubstring:"ok"})?(d(r,`WSL distro "${t}" is reachable.
+
+`),!0):!1}async function ce(e,{useWsl:t,wslDistro:r,profile:n,scriptArgs:s},i,c){const l=["--profile",n,...s];if(t){d(i,`Downloading orchestrator script…
+`);const h=M(r,["curl","-fsSL",ve,"-o",K]),y=await G(e,N,h,i,null);if(y.code!==0)return y;d(i,`
+Running orchestrator via ${N}…
+
+`);const g=M(r,["env","CONTINUUM_INSTALL_PROGRESS=json","bash",K,...l]);return G(e,N,g,i,c)}const L=n==="macos"?j:We;d(i,`Running bundled orchestrator via ${L}…
+
+`);const S=["env","CONTINUUM_INSTALL_PROGRESS=json","bash",K,...l];return G(e,L,S,i,c)}function le(e,t){if(!e||!t.defaultDistro)return;const r=e.value.trim();(!r||r==="Ubuntu")&&(e.value=t.defaultDistro)}function ue(){const e=document.getElementById("install-form"),t=document.getElementById("install-btn"),r=document.getElementById("log-panel"),n=document.getElementById("log-output"),s=document.getElementById("progress-panel"),i=document.getElementById("progress-topics"),c=document.getElementById("progress-overall"),l=document.getElementById("result-panel"),L=document.getElementById("wsl-distro-row"),S=document.getElementById("wsl-distro"),h=document.getElementById("host-os-row"),y=document.getElementById("host-os"),g=document.getElementById("boot-status");if(!e||!t||!r||!n||!l){$(g,"Extension UI failed to initialize (missing DOM). Rebuild the extension image.",!0);return}let _;try{_=Oe()}catch(u){$(g,u instanceof Error?u.message:String(u),!0),t.disabled=!0;return}const{ddClient:W,cli:a}=_,w=Ae({progressPanel:s,progressTopics:i,progressOverall:c});let o={distros:[],defaultDistro:null},p=Y(W);y&&p&&(y.value=p),(async()=>{o=await ae(a,W);const u=X(W,y);if(q({hostOs:u,hostOsRow:h,hostOsSelect:y,wslDistroRow:L,installBtn:t,bootStatus:g}),u===f.WINDOWS&&S&&le(S,o),u===f.MACOS){$(g,V);return}if(u===null){$(g,"Select your host OS, then enter keys and public IPv4.");return}if(u===f.WINDOWS&&o.distros.length>0){$(g,`Ready (${H[u]}) — detected WSL distros: ${o.distros.join(", ")}. Enter keys and public IPv4, then Install node.`);return}if(u===f.WINDOWS){$(g,"Ready (Windows) — enter the exact WSL distro name from wsl -l -v, keys, and public IPv4."),A(l,`Could not list WSL distros via ${N}. Reinstall the extension so Docker copies the host binary, then quit and restart Docker Desktop.`);return}if(u===f.LINUX){$(g,"Ready (Linux) — install uses sudo for packages, UFW, and systemd. Passwordless sudo recommended. Enter keys and public IPv4.");return}$(g,"Ready — enter keys and public IPv4, then Install node.")})(),y==null||y.addEventListener("change",()=>{const u=X(W,y);if(q({hostOs:u,hostOsRow:h,hostOsSelect:y,wslDistroRow:L,installBtn:t,bootStatus:g}),u===f.WINDOWS&&le(S,o),l.hidden=!0,l.textContent="",u===f.MACOS){$(g,V);return}if(u===null){$(g,"Select your host OS, then enter keys and public IPv4.");return}if(u===f.LINUX){$(g,"Ready (Linux) — install uses sudo for packages, UFW, and systemd. Passwordless sudo recommended.");return}$(g,`Ready (${H[u]}) — enter keys and public IPv4, then Install node.`)});async function P(){var F,Q,Z;l.hidden=!0,l.textContent="",De(r),n.textContent="",w.reset(),t.disabled=!0;const u=((F=document.getElementById("node-mgt-key"))==null?void 0:F.value)??"",x=((Q=document.getElementById("public-mgt-key"))==null?void 0:Q.value)??"",v=((Z=document.getElementById("node-ip"))==null?void 0:Z.value)??"";let m;try{m=Ne({nodeMgtKey:u,publicMgtKey:x,nodeIp:v})}catch(E){A(l,E instanceof Error?E.message:String(E)),t.disabled=!1;return}o=await ae(a,W);const k=X(W,y);if(q({hostOs:k,hostOsRow:h,hostOsSelect:y,wslDistroRow:L,installBtn:t,bootStatus:g}),!k){A(l,"Select your host OS (Windows, Linux, or macOS)."),t.disabled=!1;return}if(k===f.MACOS&&!await Me(a,n)){A(l,"Passwordless sudo is required on macOS. See the install log for visudo steps, then retry Install."),t.disabled=!1;return}const O=k===f.WINDOWS,J=k===f.LINUX?"linux":k===f.MACOS?"macos":"windows",I=((S==null?void 0:S.value)??o.defaultDistro??"").trim();if(O&&!I){A(l,"Enter your WSL distro name (run wsl -l -v in PowerShell — e.g. Ubuntu-26.04)."),t.disabled=!1;return}if(O&&!_e(I)){A(l,"Enter a valid WSL distro name (e.g. Ubuntu-26.04). Run wsl -l -v in PowerShell."),t.disabled=!1;return}if(O){if(!await He(a,I,n)){A(l,`Could not run commands in WSL distro "${I}" via ${N}. Confirm the distro name matches wsl -l -v exactly. Reinstall the extension if the host binary is missing.`),t.disabled=!1;return}if(!await Ce(a,I,n)){A(l,`Passwordless sudo is required for WSL user in "${I}". See the install log for visudo steps, then retry Install.`),t.disabled=!1;return}}d(n,O?`Using WSL distro "${I}" (${H[k]}) — clone/install at ${U}, then docker compose up…
+
+`:`Using ${H[k]} host — clone/install at ${U}, then docker compose up…
+
+`);try{let E;if(O?E=await ce(a,{useWsl:!0,wslDistro:I,profile:J,scriptArgs:m},n,w):E=await ce(a,{useWsl:!1,wslDistro:null,profile:J,scriptArgs:m},n,w),l.hidden=!1,(E==null?void 0:E.code)===0){if(O&&I){d(n,`
+Registering Windows logon task for WSL pending-update watcher (${te})…
+`);try{const b=await D(a,te,[I]),T=R(b.result);T&&d(n,`${T}
+`),(!b.ok||!C(b.result))&&d(n,`warning: logon task registration failed — run manually in WSL: ~/mpc-config/wsl-desktop/start-watcher.sh
+`)}catch(b){d(n,`warning: could not register logon task (${b instanceof Error?b.message:String(b)}). Start watcher manually: ~/mpc-config/wsl-desktop/start-watcher.sh
+`)}}else if(k===f.MACOS){d(n,`
+Registering macOS launchd LaunchAgent for pending-update watcher (${ne})…
+`);try{const b=await D(a,ne,[]),T=R(b.result);T&&d(n,`${T}
+`),(!b.ok||!C(b.result))&&d(n,`warning: LaunchAgent registration failed — run manually: ~/mpc-config/macos-desktop/install-launchagent.sh --repo-dir ~/mpc-config
+`)}catch(b){d(n,`warning: could not register LaunchAgent (${b instanceof Error?b.message:String(b)}). Start watcher manually: ~/mpc-config/macos-desktop/start-watcher.sh
+`)}}l.className=Le;const ee=O?`<code class="font-mono text-[0.6875rem] text-[var(--text)]">${U}</code> in WSL (${I})`:`<code class="font-mono text-[0.6875rem] text-[var(--text)]">${U}</code> on this machine`,ge=O?' Host restart automation: WSL pending-update watcher (status: <code class="font-mono text-[0.6875rem] text-[var(--text)]">~/mpc-config/wsl-desktop/status-watcher.sh</code> in WSL).':k===f.MACOS?' Host restart automation: macOS pending-update watcher (status: <code class="font-mono text-[0.6875rem] text-[var(--text)]">~/mpc-config/macos-desktop/status-watcher.sh</code>).':k===f.LINUX?" Host restart automation: systemd pending-update.path on this Linux host.":"",Se=O?" under that WSL directory":" on this machine";l.innerHTML='<p class="m-0"><strong>Install finished.</strong> mpc-config is at '+ee+'. Stack containers (mongo, mpc-auth, continuum-mcp, continuumdao-node-app) appear in Docker Desktop → Containers. Open continuumdao-node-app at <code class="font-mono text-[0.6875rem] text-[var(--text)]">http://127.0.0.1:3333</code> for Plain HTTP attach. Back up <code class="font-mono text-[0.6875rem] text-[var(--text)]">bootstrap_key/</code>'+Se+" if a new key was generated."+ge+"</p>"}else A(l,`Install failed (exit ${(E==null?void 0:E.code)??"unknown"}). See log above.`)}catch(E){A(l,E instanceof Error?E.message:String(E))}finally{t.disabled=!1}}t.addEventListener("click",()=>{P()}),e.addEventListener("submit",u=>{u.preventDefault(),P()})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",ue):ue();

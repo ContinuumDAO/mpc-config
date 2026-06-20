@@ -47,6 +47,9 @@ const HOST_OS_LABELS = {
 
 const MPC_DESKTOP_REPO_DISPLAY_PATH = '~/mpc-config'
 
+const MACOS_READY_STATUS =
+  'Ready (macOS) — the macOS install script is now available on Docker Desktop. Requires passwordless sudo for /var/lib/mpc-auth-docker. Enter keys and public IPv4, then Install node.'
+
 const WSL_SKIP_DISTROS = new Set(['docker-desktop', 'docker-desktop-data'])
 
 function getHostCli() {
@@ -468,11 +471,7 @@ function applyHostOsUi({ hostOs, hostOsRow, hostOsSelect, wslDistroRow, installB
   }
 
   if (bootStatus && hostOs === HOST_OS.MACOS) {
-    showStatus(
-      bootStatus,
-      'Ready (macOS) — install uses passwordless sudo for /var/lib/mpc-auth-docker. Enter keys and public IPv4, then Install node.',
-      false,
-    )
+    showStatus(bootStatus, MACOS_READY_STATUS, false)
   }
 }
 
@@ -853,10 +852,7 @@ function initExtensionUi() {
     }
 
     if (effectiveOs === HOST_OS.MACOS) {
-      showStatus(
-        bootStatus,
-        'Ready (macOS) — install uses passwordless sudo for /var/lib/mpc-auth-docker. Enter keys and public IPv4, then Install node.',
-      )
+      showStatus(bootStatus, MACOS_READY_STATUS)
       return
     }
 
@@ -915,10 +911,7 @@ function initExtensionUi() {
     resultPanel.hidden = true
     resultPanel.textContent = ''
     if (effectiveOs === HOST_OS.MACOS) {
-      showStatus(
-        bootStatus,
-        'Ready (macOS) — install uses passwordless sudo for /var/lib/mpc-auth-docker.',
-      )
+      showStatus(bootStatus, MACOS_READY_STATUS)
       return
     }
     if (effectiveOs === null) {
