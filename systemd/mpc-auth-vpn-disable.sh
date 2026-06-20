@@ -52,6 +52,10 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "Status: 
 	ufw delete allow "${SS_PORT}/tcp" 2>/dev/null || true
 	ufw delete allow "${SS_PORT}/udp" 2>/dev/null || true
 	ufw delete allow from "${VPN_CIDR}" to any port "${MGMT_PORT}" proto tcp 2>/dev/null || true
+	default_if="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"
+	default_if="${default_if:-eth0}"
+	ufw delete route allow in on wg0 out on "${default_if}" 2>/dev/null || true
+	ufw delete route allow in on "${default_if}" out on wg0 2>/dev/null || true
 fi
 
 mkdir -p "$(dirname "$STATE_FILE")"

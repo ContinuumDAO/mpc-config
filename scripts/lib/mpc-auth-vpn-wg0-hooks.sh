@@ -100,12 +100,18 @@ mpc_auth_vpn_prepare_wg0_conf() {
 		default_if="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"
 		default_if="${default_if:-eth0}"
 		post_up_parts+=("sysctl -w net.ipv4.ip_forward=1")
-		post_up_parts+=("iptables -A FORWARD -i wg0 -j ACCEPT")
-		post_up_parts+=("iptables -A FORWARD -o wg0 -j ACCEPT")
-		post_up_parts+=("iptables -t nat -A POSTROUTING -o ${default_if} -j MASQUERADE")
-		post_down_parts+=("iptables -D FORWARD -i wg0 -j ACCEPT || true")
-		post_down_parts+=("iptables -D FORWARD -o wg0 -j ACCEPT || true")
-		post_down_parts+=("iptables -t nat -D POSTROUTING -o ${default_if} -j MASQUERADE || true")
+		post_up_parts+=("iptables -A FORWARD -i wg0 -o ${default_if} -j ACCEPT")
+		post_up_parts+=("iptables -A FORWARD -i ${default_if} -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT")
+		post_up_parts+=("iptables -t nat -A POSTROUTING -s ${vpn_cidr} -o ${default_if} -j MASQUERADE")
+		post_down_parts+=("iptables -D FORWARD -i wg0 -o ${default_if} -j ACCEPT || true")
+		post_down_parts+=("iptables -D FORWARD -i ${default_if} -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT || true")
+		post_down_parts+=("iptables -t nat -D POSTROUTING -s ${vpn_cidr} -o ${default_if} -j MASQUERADE || true")
+		if mpc_auth_vpn_ufw_active; then
+			post_up_parts+=("ufw route allow in on wg0 out on ${default_if} || true")
+			post_up_parts+=("ufw route allow in on ${default_if} out on wg0 || true")
+			post_down_parts+=("ufw route delete allow in on wg0 out on ${default_if} || true")
+			post_down_parts+=("ufw route delete allow in on ${default_if} out on wg0 || true")
+		fi
 	fi
 
 	if [[ "$obfuscation" == "shadowsocks" ]]; then
