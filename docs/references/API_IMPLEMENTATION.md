@@ -314,11 +314,15 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 - [`POST /postBootstrapKey`](#post-postbootstrapkey) — write **`bootstrap_key/ed25519_private.hex`** from **`ed25519PrivateSeedHex`** in the signed body when the file is absent; management-signed; **not** subject to maintenance quiescence (no **503** while draining).
 - [`POST /removeBootstrapKey`](#post-removebootstrapkey) — delete **`bootstrap_key/ed25519_private.hex`** if present; management-signed; **not** subject to maintenance quiescence.
 
-### WireGuard admin VPN (VPS, Linux Docker Desktop, Windows WSL)
-Enable/disable a host WireGuard server from the Node page **VPN Panel** on **relay and client** nodes. Requires **`MPC_AUTH_VPN_PENDING_FILE`** in **`docker-compose.relay.yml`** / **`docker-compose.client.yml`** (bind-mounted via generated **`docker-compose.yml`**) plus host automation: **`mpc-auth-vpn-pending.path`** on VPS and **Linux Docker Desktop** (systemd), or the **WSL pending watcher** on **Windows Docker Desktop**. See **`systemd/README.md`** and **`docker-extension/README.md`**.
-- [`GET /vpn/status`](#get-vpn-status) — read JWT; host automation availability, active state, endpoint, profiles.
-- [`POST /vpn/setEnabled`](#post-vpn-setenabled) — management-signed **`{ nonce, clientSig, nodeKey, enabled, profile? }`**; generates keys on first enable; writes **`pending-vpn.json`** for host **`wg-quick@wg0`**.
-- [`POST /vpn/clientConfig`](#post-vpn-clientconfig) — management-signed download of WireGuard client **`.conf`** (**`profile`**: **`split`** or **`full`**).
+### WireGuard admin VPN (VPS, Linux Docker Desktop, Windows WSL, macOS)
+Enable/disable a host WireGuard server from the Node page **VPN Panel** on **relay and client** nodes. Optional **Shadowsocks transport obfuscation** hides WireGuard UDP from DPI (see [Shadowsocks obfuscation](#shadowsocks-transport-obfuscation)). Requires **`MPC_AUTH_VPN_PENDING_FILE`** in **`docker-compose.relay.yml`** / **`docker-compose.client.yml`** (bind-mounted via generated **`docker-compose.yml`**) plus host automation: **`mpc-auth-vpn-pending.path`** on VPS and **Linux Docker Desktop** (systemd), or the **WSL / macOS pending watcher** on Docker Desktop. See **`systemd/README.md`** and **`docker-extension/README.md`**.
+- [`GET /vpn/status`](#get-vpn-status) — read JWT; host automation availability, active state, endpoint, profiles, obfuscation fields.
+- [`POST /vpn/setEnabled`](#post-vpn-setenabled) — management-signed **`{ nonce, clientSig, nodeKey, enabled, profile?, obfuscation? }`**; generates keys on first enable; writes **`pending-vpn.json`** for host **`wg-quick@wg0`** (+ **`ssserver`** when obfuscated).
+- [`POST /vpn/clientConfig`](#post-vpn-clientconfig) — management-signed download of WireGuard client **`.conf`** (**`profile`**: **`split`** or **`full`**); when obfuscation is active, returns a bundle including **`sslocal`** tunnel JSON.
+
+**mpc-auth implementation:** see [`MPC_AUTH_VPN_SHADOWSOCKS.md`](./MPC_AUTH_VPN_SHADOWSOCKS.md). Reference config generator: **`scripts/lib/mpc-auth-vpn-shadowsocks-config.py`**.
+
+**VPN Panel UI:** see [`vpn-panel/VpnPanelObfuscation.md`](./vpn-panel/VpnPanelObfuscation.md).
 
 ### Database integrity
 - [`GET /checkDatabase`](#get-checkdatabase) — MongoDB integrity report for configured group shards and local collections (**no** management signature; **no** deterministic-node / backup eligibility gate). See [MongoDB integrity](#mongodb-integrity-report-read-only).
@@ -430,16 +434,36 @@ Returns WireGuard VPN automation status for the **VPN Panel** in continuumdao-no
   "clientConfigured": true,
   "pendingVpnPath": "/var/lib/mpc-auth-docker/pending-vpn.json",
   "managementViaVpn": "http://10.8.0.1:8080",
-  "profile": "split"
+  "profile": "split",
+  "obfuscation": "none",
+  "obfuscationAvailable": true,
+  "shadowsocksListenPort": 8388,
+  "shadowsocksMethod": "chacha20-ietf-poly1305",
+  "directWireGuardBlocked": false
 }
 ```
 
-- **`available`**: **`true`** when **`MPC_AUTH_VPN_PENDING_FILE`** / **`MpcAuthVpnPendingPath`** is configured in compose (host apply via systemd on VPS/Linux Docker Desktop, or WSL watcher on Windows Docker Desktop).
+- **`available`**: **`true`** when **`MPC_AUTH_VPN_PENDING_FILE`** / **`MpcAuthVpnPendingPath`** is configured in compose (host apply via systemd on VPS/Linux Docker Desktop, or WSL/macOS watcher on Docker Desktop).
 - **`active`**: read from host **`vpn-state.json`** (written by **`mpc-auth-vpn-enable.sh`** / **`disable`**).
 - **`profile`**: last applied host profile (**`split`** or **`full`**) when active.
-- **`endpointHost`**: public IP/hostname for the WireGuard client **`Endpoint`** on **this** node. With placeholder **`nodeN_key`** maps, mpc-auth matches **`KeyList`** index and/or host egress IP against **`nodeAddresses`** (not the relay's first entry). Override with **`WireGuard.EndpointHost`** in **`configs.yaml`**.
+- **`obfuscation`**: **`none`** or **`shadowsocks`** — from **`vpn-state.json`** when active; **`none`** when inactive.
+- **`obfuscationAvailable`**: **`true`** when host has **`ssserver`** on **`PATH`** and host profile supports obfuscation (**VPS**, **Linux Docker Desktop**). **`false`** on WSL/macOS desktop profiles until fully validated (panel should hide the toggle).
+- **`shadowsocksListenPort`** / **`shadowsocksMethod`**: from **`configs.yaml`** **`Shadowsocks.*`** and persisted server config.
+- **`directWireGuardBlocked`**: **`true`** when obfuscation is active and host blocks public UDP **`51820`** (iptables **`! -i lo`** DROP).
+- **`endpointHost`**: public IP/hostname for the WireGuard client **`Endpoint`** on **this** node when **`obfuscation`** is **`none`**. When **`shadowsocks`**, client **`Endpoint`** is **`127.0.0.1:<localTunnelPort>`** (default **`51821`**) via **`sslocal`** tunnel — **`endpointHost`** still identifies the Shadowsocks server address for **`sslocal`** JSON.
 
-**Host firewall:** on UFW + Docker VPS hosts, **`mpc-auth-vpn-enable.sh`** adds **`PostUp`** **`iptables`** rules so UDP **`51820`** reaches **`wg0`** (see **`systemd/README.md`**). Some cloud panels also require **inbound UDP 51820** at the provider layer.
+**Host firewall:** on UFW + Docker VPS hosts, **`mpc-auth-vpn-enable.sh`** adds **`PostUp`** **`iptables`** rules so UDP **`51820`** reaches **`wg0`** when **`obfuscation`** is **`none`** (see **`systemd/README.md`**). With **`obfuscation: shadowsocks`**, public UDP **`51820`** is blocked and TCP/UDP **`Shadowsocks.ListenPort`** (default **`8388`**) must be open at UFW and the cloud provider. Some cloud panels also require **inbound UDP 51820** (direct mode) or **TCP+UDP 8388** (obfuscated mode) at the provider layer.
+
+<a id="shadowsocks-transport-obfuscation"></a>
+#### Shadowsocks transport obfuscation
+
+When **`obfuscation`** is **`shadowsocks`**, WireGuard packets travel inside a [shadowsocks-rust](https://github.com/shadowsocks/shadowsocks-rust) UDP tunnel:
+
+1. **Node host** runs **`ssserver`** (systemd **`mpc-auth-shadowsocks.service`** on VPS/Linux Docker Desktop; background process on WSL/macOS).
+2. **Operator client** runs **`sslocal`** in **tunnel** mode (`protocol: tunnel`, `mode: udp_only`) forwarding to **`127.0.0.1:51820`** on the server.
+3. **WireGuard client** uses **`Endpoint = 127.0.0.1:51821`** (default local tunnel port) and reduced **MTU** (default **`1280`**).
+
+Server config template: **`systemd/shadowsocks/ssserver.json.template`**. Client tunnel template: **`systemd/shadowsocks/sslocal-tunnel.json.template`**.
 
 <a id="post-vpn-setenabled"></a>
 #### `POST /vpn/setEnabled`
@@ -452,14 +476,22 @@ Management-signed JSON (canonical body with **`clientSig`** cleared for verifica
   "clientSig": "0x… or 128-hex-ed25519",
   "nodeKey": "<128-hex from GET /getNodeKey>",
   "enabled": true,
-  "profile": "split"
+  "profile": "split",
+  "obfuscation": "shadowsocks"
 }
 ```
 
 - **`enabled`**: **`true`** to bring up **`wg0`** on the host; **`false`** to tear it down.
 - **`profile`**: **`split`** (default) — client **`AllowedIPs`** = VPN subnet only; reach management API at **`http://10.8.0.1:8080`** via host **`socat`** proxy. **`full`** — client routes **`0.0.0.0/0, ::/0`**; host enables NAT (**`PostUp`** on **`wg0`**).
+- **`obfuscation`**: **`none`** (default) — direct UDP **`51820`**. **`shadowsocks`** — generate/read Shadowsocks password, write **`/var/lib/mpc-auth-docker/shadowsocks/ssserver.json`**, include **`obfuscation`** in **`pending-vpn.json`**. Rejected with **`400`** when **`obfuscationAvailable`** is **`false`**.
 
-On first enable, mpc-auth generates server/client WireGuard keypairs under **`/var/lib/mpc-auth-docker/wireguard/`**, writes **`wg0.conf`**, then atomically writes **`pending-vpn.json`**. Host automation runs **`mpc-auth-apply-pending-vpn.sh`** (**`mpc-auth-vpn-pending.path`** on systemd hosts, WSL watcher on Windows Docker Desktop).
+On first enable, mpc-auth generates server/client WireGuard keypairs under **`/var/lib/mpc-auth-docker/wireguard/`**, writes **`wg0.conf`**, then atomically writes **`pending-vpn.json`**:
+
+```json
+{ "action": "enable", "profile": "split", "obfuscation": "shadowsocks" }
+```
+
+Host automation runs **`mpc-auth-apply-pending-vpn.sh`** (**`mpc-auth-vpn-pending.path`** on systemd hosts, WSL/macOS watcher on Docker Desktop). Profile or obfuscation changes trigger disable-then-enable.
 
 **Response `data`:** **`pendingVpnWritten`**, **`pendingVpnFile`**, **`message`**, optional **`pendingVpnFileError`**.
 
@@ -477,9 +509,24 @@ Management-signed JSON:
 }
 ```
 
-Returns **`configText`** (WireGuard INI) and suggested **`filename`**. Contains the **client private key** — treat like a secret; only download over TLS or SSH tunnel.
+Returns WireGuard client configuration. When **`obfuscation`** is **`none`**, response **`data`** includes **`configText`** and **`filename`** (legacy shape).
+
+When **`obfuscation`** is **`shadowsocks`** (read from **`vpn-state.json`** or request body override), **`data`** includes:
+
+| Field | Purpose |
+|-------|---------|
+| **`wireGuardConfigText`** | WG **`.conf`** with **`Endpoint = 127.0.0.1:51821`**, **`MTU = 1280`** |
+| **`shadowsocksLocalConfigText`** | **`sslocal`** JSON (tunnel mode) |
+| **`shadowsocksUri`** | Optional **`ss://…`** for mobile clients |
+| **`setupInstructions`** | Operator steps: run **`sslocal`**, then **`wg-quick up`** |
+| **`filename`** | Suggested WG filename (e.g. **`continuum-wg0-obfuscated.conf`**) |
+| **`shadowsocksLocalFilename`** | e.g. **`continuum-sslocal.json`** |
+
+Contains the **client private key** and **Shadowsocks password** — treat like secrets; only download over TLS or SSH tunnel.
 
 **Split profile:** **`AllowedIPs = 10.8.0.0/24`** (or **`WireGuard.VpnNetworkCidr`**). **Full profile:** **`AllowedIPs = 0.0.0.0/0, ::/0`**, **`DNS`** from **`WireGuard.FullTunnelDns`**.
+
+Logic reference: **`scripts/lib/mpc-auth-vpn-shadowsocks-config.py`** **`client`** subcommand.
 
 <a id="mongodb-integrity-report-read-only"></a>
 ## MongoDB integrity report and automated repair
@@ -1732,6 +1779,8 @@ Returns comprehensive health status including MQTT connection, subscriptions, an
 - `vpn.available`: `true` when VPN host automation is configured (`MPC_AUTH_VPN_PENDING_FILE` in compose)
 - `vpn.active`: `true` when host WireGuard **`wg0`** is up (from **`vpn-state.json`**)
 - `vpn.profile`: `"split"` or `"full"` when active; empty when inactive
+- `vpn.obfuscation`: `"none"` or `"shadowsocks"` when active (informational)
+- `vpn.directWireGuardBlocked`: `true` when obfuscation blocks public UDP **`51820`**
 
 **Note:** VPN health is informational only — an inactive VPN does **not** mark the node **`unhealthy`**.
 

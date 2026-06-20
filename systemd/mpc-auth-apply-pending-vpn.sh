@@ -47,13 +47,17 @@ with open(path) as f:
     d = json.load(f)
 action = (d.get("action") or "").strip().lower()
 profile = (d.get("profile") or "split").strip().lower()
+obfuscation = (d.get("obfuscation") or "none").strip().lower()
 if action not in ("enable", "disable"):
     sys.stderr.write(f"mpc-auth-apply-pending-vpn: unexpected action {action!r}\n")
     sys.exit(2)
 if profile not in ("split", "full"):
     profile = "split"
+if obfuscation not in ("none", "shadowsocks"):
+    obfuscation = "none"
 print(f"export MPC_AUTH_VPN_ACTION={shlex.quote(action)}")
 print(f"export MPC_AUTH_VPN_PROFILE={shlex.quote(profile)}")
+print(f"export MPC_AUTH_VPN_OBFUSCATION={shlex.quote(obfuscation)}")
 PY
 )" || abort_bad_json
 
@@ -75,6 +79,7 @@ run_script() {
 		finalize_fail
 	fi
 	export MPC_AUTH_VPN_PROFILE
+	export MPC_AUTH_VPN_OBFUSCATION
 	"$script" "$@"
 }
 
@@ -96,11 +101,30 @@ print((d.get("profile") or "").strip().lower())
 PY
 }
 
+active_vpn_obfuscation() {
+	if [[ ! -f "$STATE_FILE" ]]; then
+		return 0
+	fi
+	python3 - <<'PY'
+import json, os, sys
+path = os.environ.get("STATE_FILE", "")
+try:
+    with open(path, encoding="utf-8") as f:
+        d = json.load(f)
+except (OSError, json.JSONDecodeError):
+    sys.exit(0)
+if not d.get("active"):
+    sys.exit(0)
+print((d.get("obfuscation") or "none").strip().lower())
+PY
+}
+
 if [[ "$MPC_AUTH_VPN_ACTION" == "enable" ]]; then
 	export STATE_FILE
 	cur_profile="$(active_vpn_profile || true)"
-	if [[ -n "$cur_profile" && "$cur_profile" != "$MPC_AUTH_VPN_PROFILE" ]]; then
-		echo "mpc-auth-apply-pending-vpn: switching VPN profile ${cur_profile} -> ${MPC_AUTH_VPN_PROFILE} (disable then enable)"
+	cur_obfuscation="$(active_vpn_obfuscation || true)"
+	if [[ -n "$cur_profile" && ( "$cur_profile" != "$MPC_AUTH_VPN_PROFILE" || "$cur_obfuscation" != "$MPC_AUTH_VPN_OBFUSCATION" ) ]]; then
+		echo "mpc-auth-apply-pending-vpn: switching VPN profile ${cur_profile}/${cur_obfuscation} -> ${MPC_AUTH_VPN_PROFILE}/${MPC_AUTH_VPN_OBFUSCATION} (disable then enable)"
 		run_script "$DISABLE_SCRIPT"
 	fi
 	run_script "$ENABLE_SCRIPT" "$MPC_AUTH_VPN_PROFILE"

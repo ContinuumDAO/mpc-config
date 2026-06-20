@@ -28,6 +28,17 @@
           {
             "path": "/host/linux/continuum-orchestrate.sh"
           }
+        ],
+        "darwin": [
+          {
+            "path": "/host/darwin/continuum-macos.sh"
+          },
+          {
+            "path": "/host/darwin/continuum-orchestrate.sh"
+          },
+          {
+            "path": "/host/darwin/continuum-register-launchagent.sh"
+          }
         ]
       }
     ]

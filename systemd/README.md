@@ -81,10 +81,11 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 | **`mpc-auth-vpn-pending.service`** | Oneshot: runs **`mpc-auth-apply-pending-vpn.sh`** → **`mpc-auth-vpn-enable.sh`** or **`mpc-auth-vpn-disable.sh`**. |
 | **`mpc-auth-wireguard-wg0.service`** | **`wg-quick up/down wg0`** — WireGuard server interface. |
 | **`mpc-auth-vpn-mgmt-proxy.service`** | **`socat`** on **`10.8.0.1:8080`** → **`127.0.0.1:8080`** so VPN clients reach the management API. |
+| **`mpc-auth-shadowsocks.service`** | **`ssserver`** for optional WireGuard transport obfuscation (**`/var/lib/mpc-auth-docker/shadowsocks/ssserver.json`**). |
 
 **Compose:** **`docker-compose.relay.yml`** and **`docker-compose.client.yml`** both set **`MPC_AUTH_VPN_PENDING_FILE`** / **`MPC_AUTH_VPN_STATE_FILE`** and bind-mount **`/var/lib/mpc-auth-docker`**. **`process_config.sh`** copies the relay or client template to **`docker-compose.yml`** and can patch older compose files via **`apply_docker_compose_vpn_env`**.
 
-**Host packages (VPS / Linux Docker Desktop):** **`wireguard`** and **`socat`** must be installed on the host (`wg-quick`, `socat`). Fresh installs via **`scripts/install-node-debian-ubuntu.sh`** include them; **`install-mpc-auth-docker-systemd.sh`** also runs **`apt install wireguard socat`** when missing (e.g. after **`git pull`** + **`process_config.sh`** on an older node).
+**Host packages (VPS / Linux Docker Desktop):** **`wireguard`** and **`socat`** must be installed on the host (`wg-quick`, `socat`). Fresh installs via **`scripts/install-node-debian-ubuntu.sh`** include them; **`install-mpc-auth-docker-systemd.sh`** also runs **`apt install wireguard socat`** when missing (e.g. after **`git pull`** + **`process_config.sh`** on an older node). **Shadowsocks obfuscation** optionally installs **`shadowsocks-rust`** via **`ensure_shadowsocks_host_packages`** (warn-only — VPN works without it).
 
 ### WireGuard VPN — host firewall (UFW + Docker)
 
@@ -100,6 +101,19 @@ On VPS hosts with **UFW active** and **Docker**, `ufw allow 51820/udp` alone is 
 **Operator flow (no SSH after install):** MPA **VPN Panel** → **`POST /vpn/setEnabled`** → host applies **`wg0`** + mgmt proxy → download client **`.conf`** → **`wg-quick up`** on the workstation. Verify with **`curl http://10.8.0.1:8080/health`** over the tunnel (ping is optional).
 
 **Do not** edit **`PostUp`** manually at the bottom of **`wg0.conf`**. Re-enable VPN from the panel (or run **`mpc-auth-vpn-enable.sh`**) after **`git pull`** so hooks are regenerated.
+
+### Shadowsocks transport obfuscation (optional)
+
+When the VPN Panel enables **`obfuscation: shadowsocks`** (mpc-auth writes **`pending-vpn.json`** with that field):
+
+1. **`mpc-auth-vpn-enable.sh`** starts **`mpc-auth-shadowsocks.service`** (**`ssserver`**) and adds **`iptables`** **`DROP`** for public UDP **`51820`** (non-loopback).
+2. UFW allows **`Shadowsocks.ListenPort`** (default **`8388`**) TCP+UDP instead of **`51820/udp`**.
+3. Operators download **`sslocal`** tunnel JSON + modified WireGuard client config from **`POST /vpn/clientConfig`**.
+4. Client workflow: **`sslocal -c continuum-sslocal.json`**, then **`wg-quick up`** (Endpoint **`127.0.0.1:51821`**).
+
+Requires **shadowsocks-rust** on the host (**`ensure_shadowsocks_host_packages`** — optional, warn-only at install). See **`docs/references/MPC_AUTH_VPN_SHADOWSOCKS.md`** and **`docs/references/API_IMPLEMENTATION.md`** (Shadowsocks section).
+
+**Provider firewall:** open **TCP+UDP 8388** (or configured SS port), not UDP 51820, when obfuscation is active.
 
 ### Update script behavior
 

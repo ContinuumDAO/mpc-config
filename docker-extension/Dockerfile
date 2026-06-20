@@ -1,8 +1,8 @@
 # Build from mpc-config repo root:
-#   docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.16 .
+#   docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.17 .
 #
-# Install extension (Windows / macOS Docker Desktop):
-#   docker extension install continuumdao/continuum-node-installer:0.1.16
+# Install extension (Windows / Linux / macOS Docker Desktop):
+#   docker extension install continuumdao/continuum-node-installer:0.1.17
 #
 # Windows: install orchestration runs via host WSL → ~/mpc-config (no baked /mpc-config in this image).
 #
@@ -24,9 +24,9 @@ LABEL org.opencontainers.image.title="Continuum Node" \
     com.docker.desktop.extension.api.version=">= 0.3.3" \
     com.docker.desktop.extension.icon="continuum-icon.svg" \
     com.docker.extension.screenshots="[]" \
-    com.docker.extension.detailed-description="Provision certificates, configs.yaml, and start the Continuum MPC stack via Docker Desktop. Windows: clones mpc-config to WSL ~/mpc-config and runs docker compose from there." \
+    com.docker.extension.detailed-description="Provision certificates, configs.yaml, and start the Continuum MPC stack via Docker Desktop. Windows: clones mpc-config to WSL ~/mpc-config. macOS/Linux: clones to ~/mpc-config on the host." \
     com.docker.extension.publisher-url="https://continuumdao.org" \
-    com.docker.extension.changelog="0.1.16: fix install progress spinner; filter progress JSON from detail log."
+    com.docker.extension.changelog="0.1.17: macOS Docker Desktop install; darwin host binaries; pending-update watcher + launchd."
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -40,6 +40,10 @@ COPY docker-extension/host/windows/continuum-register-watcher.cmd /host/windows/
 COPY docker-extension/host/linux/continuum-linux.sh /host/linux/continuum-linux.sh
 COPY docker-extension/host/linux/continuum-orchestrate.sh /host/linux/continuum-orchestrate.sh
 RUN chmod +x /host/linux/continuum-linux.sh /host/linux/continuum-orchestrate.sh
+COPY docker-extension/host/darwin/continuum-macos.sh /host/darwin/continuum-macos.sh
+COPY docker-extension/host/darwin/continuum-orchestrate.sh /host/darwin/continuum-orchestrate.sh
+COPY docker-extension/host/darwin/continuum-register-launchagent.sh /host/darwin/continuum-register-launchagent.sh
+RUN chmod +x /host/darwin/continuum-macos.sh /host/darwin/continuum-orchestrate.sh /host/darwin/continuum-register-launchagent.sh
 COPY docker-extension/vm/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

@@ -24,6 +24,12 @@ const REGISTER_WATCHER_HOST_WRAPPER = 'continuum-register-watcher.cmd'
 /** Shipped host binary (metadata.json host.binaries) — Linux host PATH delegate. */
 const LINUX_HOST_WRAPPER = 'continuum-linux.sh'
 
+/** Shipped host binary (metadata.json host.binaries) — macOS host PATH delegate. */
+const MACOS_HOST_WRAPPER = 'continuum-macos.sh'
+
+/** Registers macOS launchd LaunchAgent for pending-update watcher. */
+const REGISTER_LAUNCHAGENT_HOST_WRAPPER = 'continuum-register-launchagent.sh'
+
 /** Temp path on the host for the downloaded orchestrator (no curl|bash pipe — SDK forbids shell operators). */
 const ORCHESTRATE_SCRIPT_PATH = '/tmp/continuum-desktop-orchestrate.sh'
 
@@ -458,13 +464,13 @@ function applyHostOsUi({ hostOs, hostOsRow, hostOsSelect, wslDistroRow, installB
   }
 
   if (installBtn) {
-    installBtn.disabled = hostOs === HOST_OS.MACOS
+    installBtn.disabled = false
   }
 
   if (bootStatus && hostOs === HOST_OS.MACOS) {
     showStatus(
       bootStatus,
-      'macOS install is not available yet — Windows and Linux are supported via Docker Desktop.',
+      'Ready (macOS) — install uses passwordless sudo for /var/lib/mpc-auth-docker. Enter keys and public IPv4, then Install node.',
       false,
     )
   }
@@ -545,6 +551,57 @@ async function verifyWslPasswordlessSudo(cli, wslDistro, logOutput) {
   }
 
   appendLog(logOutput, `\n${formatPasswordlessSudoInstructions(wslDistro, wslUser)}\n`)
+  return false
+}
+
+function formatMacPasswordlessSudoInstructions(macUser) {
+  return (
+    `Passwordless sudo required for Docker Desktop install on macOS.\n\n` +
+    `macOS user: ${macUser}\n\n` +
+    `The Docker extension runs the installer as your user and cannot type your sudo password.\n` +
+    `Host automation (/var/lib/mpc-auth-docker) and VPN (wg-quick) need sudo -n.\n\n` +
+    `Configure passwordless sudo in Terminal:\n\n` +
+    `  sudo visudo\n\n` +
+    `Add this line (replace ${macUser} if your username differs):\n\n` +
+    `  ${macUser} ALL=(ALL) NOPASSWD: ALL\n\n` +
+    `Verify:\n\n` +
+    `  sudo -n true && echo OK\n\n` +
+    `Then click Install again in the Docker extension.`
+  )
+}
+
+async function verifyMacPasswordlessSudo(cli, logOutput) {
+  appendLog(logOutput, 'Checking passwordless sudo on macOS…\n')
+
+  const userProbe = await execHostSimple(cli, MACOS_HOST_WRAPPER, ['whoami'])
+  const macUser =
+    userProbe.ok && userProbe.result ? combinedExecOutput(userProbe.result).trim() : '<your-macos-user>'
+
+  const sudoProbe = await execHostSimple(cli, MACOS_HOST_WRAPPER, [
+    'bash',
+    '-lc',
+    'command -v sudo >/dev/null && sudo -n true',
+  ])
+
+  if (!sudoProbe.ok) {
+    appendLog(
+      logOutput,
+      `[host exec error: ${sudoProbe.error instanceof Error ? sudoProbe.error.message : String(sudoProbe.error)}]\n`,
+    )
+    appendLog(logOutput, `\n${formatMacPasswordlessSudoInstructions(macUser)}\n`)
+    return false
+  }
+
+  const sudoOut = combinedExecOutput(sudoProbe.result)
+  const sudoCode = sudoProbe.result?.code
+  appendLog(logOutput, `[exit ${sudoCode ?? 'unknown'}] user=${macUser}${sudoOut ? ` ${sudoOut}` : ''}\n`)
+
+  if (execSucceeded(sudoProbe.result)) {
+    appendLog(logOutput, `Passwordless sudo OK for macOS user "${macUser}".\n\n`)
+    return true
+  }
+
+  appendLog(logOutput, `\n${formatMacPasswordlessSudoInstructions(macUser)}\n`)
   return false
 }
 
@@ -715,8 +772,9 @@ async function runInstallOnHost(cli, { useWsl, wslDistro, profile, scriptArgs },
     return execHostStreaming(cli, WSL_HOST_WRAPPER, runArgs, logOutput, progressTracker)
   }
 
-  // Linux: bundled orchestrator via wrapper (rewrites /tmp path; host exec cannot write there — curl exit 23).
-  appendLog(logOutput, `Running bundled orchestrator via ${LINUX_HOST_WRAPPER}…\n\n`)
+  // Linux / macOS: bundled orchestrator via wrapper (rewrites /tmp path; host exec cannot write there — curl exit 23).
+  const hostWrapper = profile === 'macos' ? MACOS_HOST_WRAPPER : LINUX_HOST_WRAPPER
+  appendLog(logOutput, `Running bundled orchestrator via ${hostWrapper}…\n\n`)
   const runArgs = [
     'env',
     'CONTINUUM_INSTALL_PROGRESS=json',
@@ -724,7 +782,7 @@ async function runInstallOnHost(cli, { useWsl, wslDistro, profile, scriptArgs },
     ORCHESTRATE_SCRIPT_PATH,
     ...orchestrateArgs,
   ]
-  return execHostStreaming(cli, LINUX_HOST_WRAPPER, runArgs, logOutput, progressTracker)
+  return execHostStreaming(cli, hostWrapper, runArgs, logOutput, progressTracker)
 }
 
 function applyDetectedWslDistro(wslDistroInput, wslEnv) {
@@ -795,6 +853,10 @@ function initExtensionUi() {
     }
 
     if (effectiveOs === HOST_OS.MACOS) {
+      showStatus(
+        bootStatus,
+        'Ready (macOS) — install uses passwordless sudo for /var/lib/mpc-auth-docker. Enter keys and public IPv4, then Install node.',
+      )
       return
     }
 
@@ -853,6 +915,10 @@ function initExtensionUi() {
     resultPanel.hidden = true
     resultPanel.textContent = ''
     if (effectiveOs === HOST_OS.MACOS) {
+      showStatus(
+        bootStatus,
+        'Ready (macOS) — install uses passwordless sudo for /var/lib/mpc-auth-docker.',
+      )
       return
     }
     if (effectiveOs === null) {
@@ -908,13 +974,20 @@ function initExtensionUi() {
     }
 
     if (hostOs === HOST_OS.MACOS) {
-      showError(resultPanel, 'macOS install is not available yet.')
-      installBtn.disabled = true
-      return
+      const sudoOk = await verifyMacPasswordlessSudo(cli, logOutput)
+      if (!sudoOk) {
+        showError(
+          resultPanel,
+          'Passwordless sudo is required on macOS. See the install log for visudo steps, then retry Install.',
+        )
+        installBtn.disabled = false
+        return
+      }
     }
 
     const useWsl = hostOs === HOST_OS.WINDOWS
-    const profile = hostOs === HOST_OS.LINUX ? 'linux' : 'windows'
+    const profile =
+      hostOs === HOST_OS.LINUX ? 'linux' : hostOs === HOST_OS.MACOS ? 'macos' : 'windows'
     const wslDistro = (wslDistroInput?.value ?? wslEnv.defaultDistro ?? '').trim()
 
     if (useWsl && !wslDistro) {
@@ -999,6 +1072,27 @@ function initExtensionUi() {
               `warning: could not register logon task (${regErr instanceof Error ? regErr.message : String(regErr)}). Start watcher manually: ~/mpc-config/wsl-desktop/start-watcher.sh\n`,
             )
           }
+        } else if (hostOs === HOST_OS.MACOS) {
+          appendLog(
+            logOutput,
+            `\nRegistering macOS launchd LaunchAgent for pending-update watcher (${REGISTER_LAUNCHAGENT_HOST_WRAPPER})…\n`,
+          )
+          try {
+            const reg = await execHostSimple(cli, REGISTER_LAUNCHAGENT_HOST_WRAPPER, [])
+            const regOut = combinedExecOutput(reg.result)
+            if (regOut) appendLog(logOutput, `${regOut}\n`)
+            if (!reg.ok || !execSucceeded(reg.result)) {
+              appendLog(
+                logOutput,
+                'warning: LaunchAgent registration failed — run manually: ~/mpc-config/macos-desktop/install-launchagent.sh --repo-dir ~/mpc-config\n',
+              )
+            }
+          } catch (regErr) {
+            appendLog(
+              logOutput,
+              `warning: could not register LaunchAgent (${regErr instanceof Error ? regErr.message : String(regErr)}). Start watcher manually: ~/mpc-config/macos-desktop/start-watcher.sh\n`,
+            )
+          }
         }
         resultPanel.className = RESULT_PANEL_OK
         const repoHint = useWsl
@@ -1006,13 +1100,22 @@ function initExtensionUi() {
           : `<code class="font-mono text-[0.6875rem] text-[var(--text)]">${MPC_DESKTOP_REPO_DISPLAY_PATH}</code> on this machine`
         const watcherNote = useWsl
           ? ' Host restart automation: WSL pending-update watcher (status: <code class="font-mono text-[0.6875rem] text-[var(--text)]">~/mpc-config/wsl-desktop/status-watcher.sh</code> in WSL).'
-          : ''
+          : hostOs === HOST_OS.MACOS
+            ? ' Host restart automation: macOS pending-update watcher (status: <code class="font-mono text-[0.6875rem] text-[var(--text)]">~/mpc-config/macos-desktop/status-watcher.sh</code>).'
+            : hostOs === HOST_OS.LINUX
+              ? ' Host restart automation: systemd pending-update.path on this Linux host.'
+              : ''
+        const backupHint = useWsl
+          ? ' under that WSL directory'
+          : ' on this machine'
         resultPanel.innerHTML =
           '<p class="m-0"><strong>Install finished.</strong> mpc-config is at ' +
           repoHint +
           '. Stack containers (mongo, mpc-auth, continuum-mcp, continuumdao-node-app) appear in Docker Desktop → Containers. ' +
           'Open continuumdao-node-app at <code class="font-mono text-[0.6875rem] text-[var(--text)]">http://127.0.0.1:3333</code> for Plain HTTP attach. ' +
-          'Back up <code class="font-mono text-[0.6875rem] text-[var(--text)]">bootstrap_key/</code> under that WSL directory if a new key was generated.' +
+          'Back up <code class="font-mono text-[0.6875rem] text-[var(--text)]">bootstrap_key/</code>' +
+          backupHint +
+          ' if a new key was generated.' +
           watcherNote +
           '</p>'
       } else {
@@ -1021,8 +1124,7 @@ function initExtensionUi() {
     } catch (err) {
       showError(resultPanel, err instanceof Error ? err.message : String(err))
     } finally {
-      const effectiveOs = getEffectiveHostOs(ddClient, hostOsSelect)
-      installBtn.disabled = effectiveOs === HOST_OS.MACOS
+      installBtn.disabled = false
     }
   }
 

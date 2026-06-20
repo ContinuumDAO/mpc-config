@@ -1,0 +1,16 @@
+{
+  "server": "ENDPOINT_HOST_PLACEHOLDER",
+  "server_port": 8388,
+  "password": "SHADOWSOCKS_PASSWORD_PLACEHOLDER",
+  "method": "chacha20-ietf-poly1305",
+  "locals": [
+    {
+      "protocol": "tunnel",
+      "mode": "udp_only",
+      "local_address": "127.0.0.1",
+      "local_port": 51821,
+      "forward_address": "127.0.0.1",
+      "forward_port": 51820
+    }
+  ]
+}

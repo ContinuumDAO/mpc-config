@@ -15,6 +15,16 @@ else
 	echo "mpc-auth-vpn-enable: missing mpc-auth-vpn-wg0-hooks.sh (re-run install-mpc-auth-docker-systemd.sh)" >&2
 	exit 1
 fi
+if [[ -f "${HERE}/mpc-auth-vpn-ss-hooks.sh" ]]; then
+	# shellcheck source=mpc-auth-vpn-ss-hooks.sh
+	. "${HERE}/mpc-auth-vpn-ss-hooks.sh"
+elif [[ -f "${HERE}/../scripts/lib/mpc-auth-vpn-ss-hooks.sh" ]]; then
+	# shellcheck source=../scripts/lib/mpc-auth-vpn-ss-hooks.sh
+	. "${HERE}/../scripts/lib/mpc-auth-vpn-ss-hooks.sh"
+else
+	echo "mpc-auth-vpn-enable: missing mpc-auth-vpn-ss-hooks.sh (re-run install-mpc-auth-docker-systemd.sh)" >&2
+	exit 1
+fi
 
 LIBEXEC="/usr/local/libexec/mpc-auth"
 WG_HOST_DIR="${MPC_AUTH_WIREGUARD_HOST_DIR:-/etc/wireguard}"
@@ -35,10 +45,20 @@ normalize_vpn_profile() {
 }
 
 PROFILE="$(normalize_vpn_profile "${1:-}")"
-echo "mpc-auth-vpn-enable: profile=${PROFILE}" >&2
+OBFUSCATION="$(mpc_auth_vpn_normalize_obfuscation "${MPC_AUTH_VPN_OBFUSCATION:-}")"
+export MPC_AUTH_VPN_OBFUSCATION="$OBFUSCATION"
+SS_PORT="$(mpc_auth_vpn_read_shadowsocks_listen_port)"
+export MPC_AUTH_SHADOWSOCKS_LISTEN_PORT="$SS_PORT"
+
+echo "mpc-auth-vpn-enable: profile=${PROFILE} obfuscation=${OBFUSCATION}" >&2
 
 if [[ ! -f "${WG_SRC_DIR}/wg0.conf" ]]; then
 	echo "mpc-auth-vpn-enable: missing ${WG_SRC_DIR}/wg0.conf (mpc-auth must write WireGuard config first)" >&2
+	exit 1
+fi
+
+if [[ "$OBFUSCATION" == "shadowsocks" && ! -f "$(mpc_auth_vpn_shadowsocks_config_path)" ]]; then
+	echo "mpc-auth-vpn-enable: missing $(mpc_auth_vpn_shadowsocks_config_path) (mpc-auth must write Shadowsocks config first)" >&2
 	exit 1
 fi
 
@@ -51,11 +71,15 @@ mkdir -p "$WG_HOST_DIR"
 chmod 0700 "$WG_HOST_DIR"
 install -m 0600 "${WG_SRC_DIR}/wg0.conf" "${WG_HOST_DIR}/wg0.conf"
 
-mpc_auth_vpn_prepare_wg0_conf "${WG_HOST_DIR}/wg0.conf" "$PROFILE" "$LISTEN_PORT" "$VPN_CIDR" "$MGMT_PORT"
+mpc_auth_vpn_prepare_wg0_conf "${WG_HOST_DIR}/wg0.conf" "$PROFILE" "$LISTEN_PORT" "$VPN_CIDR" "$MGMT_PORT" "$OBFUSCATION" "$SS_PORT"
 
 systemctl daemon-reload
 systemctl enable mpc-auth-wireguard-wg0.service
 systemctl restart mpc-auth-wireguard-wg0.service
+
+if [[ "$OBFUSCATION" == "shadowsocks" ]]; then
+	mpc_auth_vpn_start_shadowsocks_systemd
+fi
 
 if command -v socat >/dev/null 2>&1; then
 	systemctl enable mpc-auth-vpn-mgmt-proxy.service
@@ -65,19 +89,24 @@ else
 fi
 
 mkdir -p "$(dirname "$STATE_FILE")"
-export STATE_FILE PROFILE LISTEN_PORT
+export STATE_FILE PROFILE LISTEN_PORT OBFUSCATION SS_PORT
 python3 - <<'PY'
 import json, datetime, os
 path = os.environ["STATE_FILE"]
+obfuscation = os.environ.get("OBFUSCATION", "none")
 payload = {
     "active": True,
     "profile": os.environ.get("PROFILE", "split"),
+    "obfuscation": obfuscation,
     "listenPort": int(os.environ.get("LISTEN_PORT", "51820")),
+    "directWireGuardBlocked": obfuscation == "shadowsocks",
     "updatedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }
+if obfuscation == "shadowsocks":
+    payload["shadowsocksListenPort"] = int(os.environ.get("SS_PORT", "8388"))
 with open(path + ".tmp", "w") as f:
     json.dump(payload, f)
 os.rename(path + ".tmp", path)
 PY
 
-echo "mpc-auth-vpn-enable: WireGuard VPN enabled (profile=${PROFILE})"
+echo "mpc-auth-vpn-enable: WireGuard VPN enabled (profile=${PROFILE}, obfuscation=${OBFUSCATION})"

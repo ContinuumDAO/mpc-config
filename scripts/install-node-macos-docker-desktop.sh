@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Local MPC node install for Docker Desktop on Windows (WSL2).
-# Uses existing provision + process_config; skips apt docker, UFW, and systemd.
+# Local MPC node install for Docker Desktop on macOS.
+# Uses existing provision + process_config; skips UFW and systemd.
 #
-# Run inside WSL with Docker Desktop WSL integration, or via the Continuum extension
-# (host CLI → wsl.exe → desktop-local-orchestrate.sh → this script → ~/mpc-config).
+# Run via the Continuum extension (host CLI → desktop-local-orchestrate.sh --profile macos)
+# or manually after clone to ~/mpc-config:
 #
-#   ./scripts/install-node-docker-desktop.sh \
+#   ./scripts/install-node-macos-docker-desktop.sh \
 #     --node-mgt-key "0xYour40Hex..." \
 #     --ip "203.0.113.50"
 #
@@ -25,13 +25,12 @@ else
     export CONTINUUM_INSTALL_PROGRESS
 fi
 
-INSTALL_SCRIPT_VERSION="0.2.0"
+INSTALL_SCRIPT_VERSION="0.1.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${MPC_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 PROVISION_VENV="${MPC_PROVISION_VENV:-${REPO_DIR}/.venv-provision}"
 PROVISION_PY_DIR="${MPC_PROVISION_PY_DIR:-${REPO_DIR}/.provision-py}"
 GET_PIP_URL="${GET_PIP_URL:-https://bootstrap.pypa.io/get-pip.py}"
-MPC_AUTH_COMPOSE_SERVICE="${MPC_AUTH_COMPOSE_SERVICE:-app}"
 
 DRY_RUN=false
 NO_START=false
@@ -42,10 +41,10 @@ PROVISION_ARGS=()
 usage() {
     cat <<'EOF'
 Usage:
-  ./scripts/install-node-docker-desktop.sh [options]
+  ./scripts/install-node-macos-docker-desktop.sh [options]
 
-Windows Docker Desktop + WSL2 profile (not for VPS or native Linux). Requires docker + docker compose v2.
-Installs Python deps into .venv-provision or .provision-py (PEP 668–safe; no sudo apt when pip --target works).
+macOS Docker Desktop profile. Requires docker + docker compose v2 from Docker Desktop.
+Installs Homebrew packages (wireguard-tools, socat, yq) when brew is available.
 Skips UFW (--no-firewall) and systemd.
 
 Provision options (at least one management key required):
@@ -67,82 +66,9 @@ Environment:
   MPC_REPO_DIR                Same as --repo-dir
 
 Notes:
-  - Maintenance auto-restart via systemd paths is not available on desktop.
-  - After updates, restart manually: cd mpc-config && docker compose restart
-  - Dashboard discovery is configured post-provision so the dashboard container reaches mpc-auth via the compose service "app".
+  - Host restart/update automation: macos-desktop pending watcher + launchd LaunchAgent.
+  - Passwordless sudo recommended for extension-driven install (/var/lib/mpc-auth-docker).
 EOF
-}
-
-preflight_wsl() {
-    if [ -n "${WSL_DISTRO_NAME:-}" ]; then
-        return 0
-    fi
-    if [ -r /proc/version ] && grep -qi microsoft /proc/version 2>/dev/null; then
-        return 0
-    fi
-    die "this installer requires WSL2 on Windows Docker Desktop (run inside your WSL distro, not PowerShell)"
-}
-
-passwordless_sudo_instruction_message() {
-    local wsl_user="${1:-$(whoami)}"
-    local wsl_distro="${2:-${WSL_DISTRO_NAME:-<your-wsl-distro>}}"
-    cat <<EOF
-passwordless sudo required for Docker Desktop install on Windows.
-
-WSL user: ${wsl_user}
-WSL distro: ${wsl_distro}
-
-The Docker extension runs the installer as your default WSL user and cannot type your sudo password.
-Host automation (/var/lib/mpc-auth-docker), apt packages, and maintenance restart/update all need sudo -n.
-
-Configure passwordless sudo from Windows PowerShell:
-
-  wsl -d ${wsl_distro} -u root
-
-Then in the root WSL shell:
-
-  visudo
-
-Add this line (replace ${wsl_user} if your username differs):
-
-  ${wsl_user} ALL=(ALL) NOPASSWD: ALL
-
-Verify as your normal WSL user (exit the root shell first):
-
-  wsl -d ${wsl_distro}
-  sudo -n true && echo OK
-
-Then click Install again in the Docker extension.
-EOF
-}
-
-preflight_passwordless_sudo() {
-    local wsl_user wsl_distro reason=""
-    wsl_user="$(whoami)"
-    wsl_distro="${WSL_DISTRO_NAME:-<your-wsl-distro>}"
-
-    if [ "$(id -u)" -eq 0 ]; then
-        warn "running install as root — prefer default WSL user with passwordless sudo"
-        return 0
-    fi
-
-    if ! command -v sudo >/dev/null 2>&1; then
-        reason="sudo is not installed in WSL"
-        die "$(passwordless_sudo_instruction_message "$wsl_user" "$wsl_distro")"$'\n'"(${reason})"
-    fi
-
-    if sudo -n true 2>/dev/null; then
-        log "Passwordless sudo OK for WSL user ${wsl_user}"
-        return 0
-    fi
-
-    if groups "$wsl_user" 2>/dev/null | grep -qE '(^|[[:space:]])sudo([[:space:]]|$)|(^|[[:space:]])wheel([[:space:]]|$)'; then
-        reason="user ${wsl_user} is in sudo/wheel but sudo -n failed (password still required)"
-    else
-        reason="user ${wsl_user} is not in the sudo group or has no NOPASSWD rule"
-    fi
-
-    die "$(passwordless_sudo_instruction_message "$wsl_user" "$wsl_distro")"$'\n'"(${reason})"
 }
 
 log() { printf '==> %s\n' "$*" >&2; }
@@ -161,9 +87,62 @@ run_or_dry() {
     fi
 }
 
+preflight_darwin() {
+    if [ "$(uname -s 2>/dev/null || true)" != "Darwin" ]; then
+        die "this installer requires macOS (Darwin)"
+    fi
+}
+
+passwordless_sudo_instruction_message() {
+    local mac_user="${1:-$(whoami)}"
+    cat <<EOF
+passwordless sudo required for Docker Desktop install on macOS.
+
+macOS user: ${mac_user}
+
+The Docker extension runs the installer as your user and cannot type your sudo password.
+Host automation (/var/lib/mpc-auth-docker) and VPN (wg-quick) need sudo -n.
+
+Configure passwordless sudo:
+
+  sudo visudo
+
+Add this line (replace ${mac_user} if your username differs):
+
+  ${mac_user} ALL=(ALL) NOPASSWD: ALL
+
+Verify:
+
+  sudo -n true && echo OK
+
+Then click Install again in the Docker extension.
+EOF
+}
+
+preflight_passwordless_sudo() {
+    local mac_user
+    mac_user="$(whoami)"
+
+    if [ "$(id -u)" -eq 0 ]; then
+        warn "running install as root — prefer your macOS user with passwordless sudo"
+        return 0
+    fi
+
+    if ! command -v sudo >/dev/null 2>&1; then
+        die "sudo not found on macOS"
+    fi
+
+    if sudo -n true 2>/dev/null; then
+        log "Passwordless sudo OK for macOS user ${mac_user}"
+        return 0
+    fi
+
+    die "$(passwordless_sudo_instruction_message "$mac_user")"
+}
+
 preflight_docker() {
     if ! command -v docker >/dev/null 2>&1; then
-        die "docker not found — start Docker Desktop and enable WSL integration for your Ubuntu distro"
+        die "docker not found — install and start Docker Desktop for Mac"
     fi
     if ! docker info >/dev/null 2>&1; then
         die "docker info failed — is Docker Desktop running?"
@@ -220,7 +199,7 @@ try_pip_target_provision_deps() {
     command -v python3 >/dev/null 2>&1 || return 1
     python3 -m pip --version >/dev/null 2>&1 || return 1
 
-    log "Installing ruamel.yaml + cryptography via pip --target ${PROVISION_PY_DIR} (no python3-venv required)"
+    log "Installing ruamel.yaml + cryptography via pip --target ${PROVISION_PY_DIR}"
     rm -rf "${PROVISION_PY_DIR}"
     mkdir -p "${PROVISION_PY_DIR}"
     if ! python3 -m pip install --target "${PROVISION_PY_DIR}" ruamel.yaml cryptography; then
@@ -250,87 +229,28 @@ try_venv_provision_deps() {
     python_provision_deps_ok
 }
 
-try_apt_python_venv_packages() {
-    command -v apt-get >/dev/null 2>&1 || return 1
-    command -v sudo >/dev/null 2>&1 || return 1
-    sudo -n true 2>/dev/null || return 1
-
-    local py_minor
-    py_minor="$(python3_minor_version 2>/dev/null || true)"
-    log "Trying passwordless apt install of python venv packages (python${py_minor}-venv / python3-venv)"
-    sudo -n apt-get update -qq || return 1
-    if [ -n "$py_minor" ]; then
-        sudo -n apt-get install -y "python${py_minor}-venv" python3-venv python3-full 2>/dev/null \
-            || sudo -n apt-get install -y python3-venv python3-full 2>/dev/null \
-            || return 1
-    else
-        sudo -n apt-get install -y python3-venv python3-full || return 1
+try_brew_python() {
+    command -v brew >/dev/null 2>&1 || return 1
+    if ! python3 -c 'import venv' 2>/dev/null; then
+        log "Trying brew install python@3 (venv support)"
+        brew install python@3 2>/dev/null || brew install python3 2>/dev/null || return 1
     fi
-}
-
-try_apt_vpn_packages() {
-    command -v wg-quick >/dev/null 2>&1 && command -v socat >/dev/null 2>&1 && return 0
-    command -v apt-get >/dev/null 2>&1 || return 1
-    command -v sudo >/dev/null 2>&1 || return 1
-    sudo -n true 2>/dev/null || return 1
-    log "Trying passwordless apt install of wireguard-tools and socat (VPN host automation)"
-    sudo -n apt-get update -qq || return 1
-    sudo -n apt-get install -y wireguard-tools socat || return 1
-}
-
-ensure_vpn_host_tools() {
-    if command -v wg-quick >/dev/null 2>&1 && command -v socat >/dev/null 2>&1; then
-        return 0
-    fi
-    if [ "$DRY_RUN" = true ]; then
-        printf '[dry-run] sudo apt install -y wireguard-tools socat\n'
-        return 0
-    fi
-    if try_apt_vpn_packages; then
-        log "WireGuard host tools ready (wg-quick, socat)"
-        return 0
-    fi
-    warn "wireguard-tools and/or socat missing — VPN enable from the node app will fail until you run: sudo apt install -y wireguard-tools socat"
-}
-
-ensure_shadowsocks_host_tools() {
-    if command -v ssserver >/dev/null 2>&1 && command -v sslocal >/dev/null 2>&1; then
-        return 0
-    fi
-    if [ "$DRY_RUN" = true ]; then
-        printf '[dry-run] optional shadowsocks-rust install\n'
-        return 0
-    fi
-    local ss_lib="${REPO_DIR}/scripts/lib/ensure-shadowsocks-host-packages.sh"
-    if [ -f "$ss_lib" ]; then
-        # shellcheck source=lib/ensure-shadowsocks-host-packages.sh
-        . "$ss_lib"
-        ensure_shadowsocks_host_packages || warn "shadowsocks-rust missing — VPN obfuscation unavailable"
-        return 0
-    fi
-    warn "shadowsocks-rust not installed — VPN obfuscation unavailable"
 }
 
 manual_provision_python_instructions() {
-    local py_minor
-    py_minor="$(python3_minor_version 2>/dev/null || echo "3.x")"
     cat <<EOF
-Could not install Python deps (ruamel.yaml, cryptography) without interactive sudo.
-The Docker extension cannot enter your WSL sudo password.
+Could not install Python deps (ruamel.yaml, cryptography).
 
-Option A — pip --target (often works on Ubuntu ${py_minor} without python3-venv):
+Option A — pip --target:
   cd ${REPO_DIR}
   python3 -m pip install --target .provision-py ruamel.yaml cryptography
-  PYTHONPATH=${REPO_DIR}/.provision-py ./scripts/install-node-docker-desktop.sh ...
+  PYTHONPATH=${REPO_DIR}/.provision-py ./scripts/install-node-macos-docker-desktop.sh ...
 
-Option B — venv (requires python3-venv once):
-  sudo apt update
-  sudo apt install -y python${py_minor}-venv openssl curl git
+Option B — Homebrew + venv:
+  brew install python@3
   python3 -m venv ${PROVISION_VENV}
   ${PROVISION_VENV}/bin/pip install ruamel.yaml cryptography
-  ./scripts/install-node-docker-desktop.sh ...
-
-Then re-run Install in the Docker extension.
+  ./scripts/install-node-macos-docker-desktop.sh ...
 EOF
 }
 
@@ -344,8 +264,8 @@ ensure_provision_python_deps() {
         return 0
     fi
 
-    command -v python3 >/dev/null 2>&1 || die "python3 not found in WSL — sudo apt install -y python3"
-    command -v curl >/dev/null 2>&1 || die "curl not found — sudo apt install -y curl"
+    command -v python3 >/dev/null 2>&1 || die "python3 not found — brew install python@3"
+    command -v curl >/dev/null 2>&1 || die "curl not found"
 
     if [ "$DRY_RUN" = true ]; then
         printf '[dry-run] pip --target %q OR python3 -m venv %q\n' "$PROVISION_PY_DIR" "$PROVISION_VENV"
@@ -359,6 +279,8 @@ ensure_provision_python_deps() {
         return 0
     fi
 
+    try_brew_python
+
     if try_venv_provision_deps standard; then
         log "Provision Python deps ready (venv)"
         return 0
@@ -367,13 +289,6 @@ ensure_provision_python_deps() {
     if try_venv_provision_deps without-pip; then
         log "Provision Python deps ready (venv --without-pip + get-pip)"
         return 0
-    fi
-
-    if try_apt_python_venv_packages; then
-        if try_venv_provision_deps standard || try_venv_provision_deps without-pip; then
-            log "Provision Python deps ready (venv after apt)"
-            return 0
-        fi
     fi
 
     die "$(manual_provision_python_instructions)"
@@ -392,10 +307,63 @@ activate_provision_python() {
     die "provision Python environment not activated"
 }
 
+try_brew_vpn_packages() {
+    command -v brew >/dev/null 2>&1 || return 1
+    local missing=()
+    command -v wg-quick >/dev/null 2>&1 || missing+=(wireguard-tools)
+    command -v socat >/dev/null 2>&1 || missing+=(socat)
+    command -v yq >/dev/null 2>&1 || missing+=(yq)
+    if [ "${#missing[@]}" -eq 0 ]; then
+        return 0
+    fi
+    log "Installing brew packages: ${missing[*]}"
+    brew install "${missing[@]}"
+}
+
+ensure_vpn_host_tools() {
+    if command -v wg-quick >/dev/null 2>&1 && command -v socat >/dev/null 2>&1; then
+        return 0
+    fi
+    if [ "$DRY_RUN" = true ]; then
+        printf '[dry-run] brew install wireguard-tools socat\n'
+        return 0
+    fi
+    if try_brew_vpn_packages; then
+        log "WireGuard host tools ready (wg-quick, socat)"
+        return 0
+    fi
+    warn "wireguard-tools and/or socat missing — VPN enable from the node app will fail until you run: brew install wireguard-tools socat"
+}
+
+ensure_shadowsocks_host_tools() {
+    if command -v ssserver >/dev/null 2>&1 && command -v sslocal >/dev/null 2>&1; then
+        return 0
+    fi
+    if [ "$DRY_RUN" = true ]; then
+        printf '[dry-run] brew install shadowsocks-rust (optional)\n'
+        return 0
+    fi
+    local ss_lib="${REPO_DIR}/scripts/lib/ensure-shadowsocks-host-packages.sh"
+    if [ -f "$ss_lib" ]; then
+        # shellcheck source=lib/ensure-shadowsocks-host-packages.sh
+        . "$ss_lib"
+        ensure_shadowsocks_host_packages || warn "shadowsocks-rust missing — VPN obfuscation unavailable"
+        return 0
+    fi
+    warn "shadowsocks-rust not installed — VPN obfuscation unavailable"
+}
+
 preflight_desktop_tools() {
-    command -v openssl >/dev/null 2>&1 || warn "openssl not found — process_config may fail (sudo apt install openssl)"
-    command -v curl >/dev/null 2>&1 || warn "curl not found — sudo apt install curl"
-    command -v git >/dev/null 2>&1 || warn "git not found — sudo apt install git"
+    command -v openssl >/dev/null 2>&1 || warn "openssl not found — brew install openssl"
+    command -v curl >/dev/null 2>&1 || warn "curl not found"
+    command -v git >/dev/null 2>&1 || warn "git not found — brew install git"
+    if ! command -v yq >/dev/null 2>&1; then
+        if [ "$DRY_RUN" = true ]; then
+            printf '[dry-run] brew install yq\n'
+        else
+            try_brew_vpn_packages || warn "yq not found — brew install yq (process_config may need it)"
+        fi
+    fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -442,7 +410,7 @@ if [ "${#PROVISION_ARGS[@]}" -eq 0 ]; then
     die "provide --node-mgt-key and/or --public-mgt-key (try --help)"
 fi
 
-log "ContinuumDAO MPC node Windows Docker Desktop install (v${INSTALL_SCRIPT_VERSION})"
+log "ContinuumDAO MPC node macOS Docker Desktop install (v${INSTALL_SCRIPT_VERSION})"
 log "Repo: $REPO_DIR"
 
 export CONTINUUM_INSTALL_DRY_RUN="$DRY_RUN"
@@ -452,7 +420,7 @@ if [ -d "$REPO_DIR/.git" ]; then
 fi
 
 if [ "$DRY_RUN" = false ]; then
-    preflight_wsl
+    preflight_darwin
     install_progress_topic_begin passwordless-sudo "Passwordless sudo"
     preflight_passwordless_sudo
     install_progress_topic_done passwordless-sudo
@@ -503,10 +471,10 @@ ensure_vpn_host_tools
 ensure_shadowsocks_host_tools
 
 if [ "$DRY_RUN" = true ]; then
-    printf '[dry-run] bash %s/wsl-desktop/install-wsl-desktop-host-automation.sh --repo-dir %q\n' "$REPO_DIR" "$REPO_DIR"
+    printf '[dry-run] bash %s/macos-desktop/install-macos-desktop-host-automation.sh --repo-dir %q\n' "$REPO_DIR" "$REPO_DIR"
 else
-    log "Installing WSL pending-update host automation (wsl-desktop watcher)"
-    bash "$REPO_DIR/wsl-desktop/install-wsl-desktop-host-automation.sh" --repo-dir "$REPO_DIR"
+    log "Installing macOS pending-update host automation (macos-desktop watcher + launchd)"
+    bash "$REPO_DIR/macos-desktop/install-macos-desktop-host-automation.sh" --repo-dir "$REPO_DIR"
 fi
 
 if [ "$NO_START" = false ]; then
@@ -529,7 +497,7 @@ install_progress_finish true
 
 cat <<EOF
 
-Node provision complete (Windows Docker Desktop / WSL2).
+Node provision complete (macOS Docker Desktop).
 Repo: ${REPO_DIR}
 
 Docker Desktop: mpc-auth, mongo, continuum-mcp, and node-app containers are listed under Containers.
@@ -538,7 +506,7 @@ Config and keys on disk: ${REPO_DIR}/configs.yaml, bootstrap_key/, added_keys/
 Next steps:
   1. Attach your node at https://mpa.continuumdao.org
   2. Back up ${REPO_DIR}/bootstrap_key/ if PublicMgtKey was auto-generated
-  3. Host restart automation: WSL pending-update watcher (see ~/mpc-config/wsl-desktop/status-watcher.sh). A Windows logon task is registered by the Docker extension after install.
-  4. VPN: enable from the node app VPN panel; host applies via pending-vpn.json + the same WSL watcher (UDP 51820 must reach WSL for remote clients).
+  3. Host restart automation: macos-desktop pending watcher (see ~/mpc-config/macos-desktop/status-watcher.sh). LaunchAgent: com.continuumdao.mpc-auth-watcher.
+  4. VPN: enable from the node app VPN panel; host applies via pending-vpn.json + the same watcher (allow UDP 51820 in macOS firewall).
 
 EOF

@@ -1,0 +1,15 @@
+[Unit]
+Description=Shadowsocks server for WireGuard transport obfuscation (Continuum MPC)
+After=network-online.target
+PartOf=mpc-auth-wireguard-wg0.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/bin/env ssserver -c /var/lib/mpc-auth-docker/shadowsocks/ssserver.json
+Restart=on-failure
+RestartSec=5
+StandardInput=null
+
+[Install]
+WantedBy=multi-user.target

@@ -497,6 +497,18 @@ export CONTINUUM_INSTALL_DRY_RUN="$DRY_RUN"
 ensure_vpn_host_packages || warn "wireguard/socat missing — VPN enable will fail until: sudo apt install -y wireguard socat"
 log "WireGuard host packages ready. If admin VPN handshakes fail later, allow inbound UDP 51820 in the VPS provider firewall (UFW rules are applied automatically on enable)."
 
+_ensure_ss_lib="${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/ensure-shadowsocks-host-packages.sh"
+if [ ! -f "$_ensure_ss_lib" ]; then
+    _raw_base="${_raw_base:-https://raw.githubusercontent.com/ContinuumDAO/mpc-config/${MPC_CONFIG_REF:-main}}"
+    mkdir -p "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib"
+    curl -fsSL "${_raw_base}/scripts/lib/ensure-shadowsocks-host-packages.sh" -o "$_ensure_ss_lib" 2>/dev/null || true
+fi
+if [ -f "$_ensure_ss_lib" ]; then
+    # shellcheck source=lib/ensure-shadowsocks-host-packages.sh
+    . "$_ensure_ss_lib"
+    ensure_shadowsocks_host_packages || warn "shadowsocks-rust missing — VPN obfuscation unavailable until installed"
+fi
+
 if [ "$SKIP_USER" = false ]; then
     log "Ensuring OS user ${MPC_USER} with password-protected sudo"
     install_progress_topic_begin os-user

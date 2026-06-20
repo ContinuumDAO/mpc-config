@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Enable WireGuard admin VPN in WSL (Windows Docker Desktop profile — no systemd).
-# Invoked by libexec/mpc-auth-apply-pending-vpn.sh via the WSL pending watcher.
+# Enable WireGuard admin VPN on macOS (Docker Desktop profile — no systemd).
+# Invoked by libexec/mpc-auth-apply-pending-vpn.sh via the macOS pending watcher.
 
 set -euo pipefail
 
-if [[ -n "${MPC_AUTH_WSL_ENV_FILE:-}" && -r "${MPC_AUTH_WSL_ENV_FILE}" ]]; then
+if [[ -n "${MPC_AUTH_MACOS_ENV_FILE:-}" && -r "${MPC_AUTH_MACOS_ENV_FILE}" ]]; then
+	# shellcheck source=/dev/null
+	. "${MPC_AUTH_MACOS_ENV_FILE}"
+elif [[ -n "${MPC_AUTH_WSL_ENV_FILE:-}" && -r "${MPC_AUTH_WSL_ENV_FILE}" ]]; then
 	# shellcheck source=/dev/null
 	. "${MPC_AUTH_WSL_ENV_FILE}"
 fi
@@ -23,7 +26,7 @@ REPO_ROOT="$(cd "${HERE}/.." && pwd)"
 # shellcheck source=../scripts/lib/mpc-auth-vpn-ss-hooks.sh
 . "${REPO_ROOT}/scripts/lib/mpc-auth-vpn-ss-hooks.sh"
 
-WG_HOST_DIR="${MPC_AUTH_WIREGUARD_HOST_DIR:-/etc/wireguard}"
+WG_HOST_DIR="$(macos_desktop_wireguard_host_dir)"
 WG_SRC_DIR="${MPC_AUTH_WIREGUARD_SRC_DIR:-/var/lib/mpc-auth-docker/wireguard}"
 STATE_FILE="${MPC_AUTH_VPN_STATE_FILE:-/var/lib/mpc-auth-docker/vpn-state.json}"
 LISTEN_PORT="${MPC_AUTH_WIREGUARD_LISTEN_PORT:-51820}"
@@ -49,43 +52,43 @@ export MPC_AUTH_VPN_OBFUSCATION="$OBFUSCATION"
 SS_PORT="$(mpc_auth_vpn_read_shadowsocks_listen_port)"
 export MPC_AUTH_SHADOWSOCKS_LISTEN_PORT="$SS_PORT"
 
-echo "mpc-auth-vpn-enable-wsl: profile=${PROFILE} obfuscation=${OBFUSCATION}" >&2
+echo "mpc-auth-vpn-enable-macos: profile=${PROFILE} obfuscation=${OBFUSCATION}" >&2
 
 if [[ ! -f "${WG_SRC_DIR}/wg0.conf" ]]; then
-	echo "mpc-auth-vpn-enable-wsl: missing ${WG_SRC_DIR}/wg0.conf (mpc-auth must write WireGuard config first)" >&2
+	echo "mpc-auth-vpn-enable-macos: missing ${WG_SRC_DIR}/wg0.conf (mpc-auth must write WireGuard config first)" >&2
 	exit 1
 fi
 
 if [[ "$OBFUSCATION" == "shadowsocks" && ! -f "$(mpc_auth_vpn_shadowsocks_config_path)" ]]; then
-	echo "mpc-auth-vpn-enable-wsl: missing $(mpc_auth_vpn_shadowsocks_config_path)" >&2
+	echo "mpc-auth-vpn-enable-macos: missing $(mpc_auth_vpn_shadowsocks_config_path)" >&2
 	exit 1
 fi
 
 if ! command -v wg-quick >/dev/null 2>&1; then
-	echo "mpc-auth-vpn-enable-wsl: wg-quick not found — run: sudo apt install wireguard-tools" >&2
+	echo "mpc-auth-vpn-enable-macos: wg-quick not found — run: brew install wireguard-tools" >&2
 	exit 1
 fi
 
 if [[ "$PROFILE" == "full" ]]; then
-	echo "mpc-auth-vpn-enable-wsl: warning — full-tunnel NAT is limited on WSL2; split-tunnel admin access is recommended." >&2
+	echo "mpc-auth-vpn-enable-macos: warning — full-tunnel NAT is limited on macOS Docker Desktop; split-tunnel admin access is recommended." >&2
 fi
 
 if [[ "$OBFUSCATION" == "shadowsocks" ]]; then
-	echo "mpc-auth-vpn-enable-wsl: warning — Shadowsocks obfuscation on WSL2 requires Windows Firewall + port forwarding for TCP/UDP ${SS_PORT}." >&2
+	echo "mpc-auth-vpn-enable-macos: warning — allow TCP/UDP ${SS_PORT} through macOS Firewall for remote Shadowsocks clients." >&2
 fi
 
-wsl_desktop_sudo mkdir -p "$WG_HOST_DIR"
-wsl_desktop_sudo chmod 0700 "$WG_HOST_DIR"
-wsl_desktop_sudo install -m 0600 "${WG_SRC_DIR}/wg0.conf" "${WG_HOST_DIR}/wg0.conf"
+macos_desktop_sudo mkdir -p "$WG_HOST_DIR"
+macos_desktop_sudo chmod 0700 "$WG_HOST_DIR"
+macos_desktop_sudo install -m 0600 "${WG_SRC_DIR}/wg0.conf" "${WG_HOST_DIR}/wg0.conf"
 
 _tmp_hooks="$(mktemp)"
 cp "${WG_SRC_DIR}/wg0.conf" "$_tmp_hooks"
 mpc_auth_vpn_prepare_wg0_conf "$_tmp_hooks" "$PROFILE" "$LISTEN_PORT" "$VPN_CIDR" "$MGMT_PORT" "$OBFUSCATION" "$SS_PORT"
-wsl_desktop_sudo install -m 0600 "$_tmp_hooks" "${WG_HOST_DIR}/wg0.conf"
+macos_desktop_sudo install -m 0600 "$_tmp_hooks" "${WG_HOST_DIR}/wg0.conf"
 rm -f "$_tmp_hooks"
 
-wsl_desktop_sudo wg-quick down wg0 2>/dev/null || true
-wsl_desktop_sudo wg-quick up "${WG_HOST_DIR}/wg0.conf"
+macos_desktop_sudo wg-quick down wg0 2>/dev/null || true
+macos_desktop_sudo wg-quick up "${WG_HOST_DIR}/wg0.conf"
 
 if [[ "$OBFUSCATION" == "shadowsocks" ]]; then
 	mpc_auth_vpn_start_shadowsocks_background "$SS_PIDFILE" "$SS_LOG"
@@ -103,12 +106,12 @@ if command -v socat >/dev/null 2>&1; then
 		>>"${HERE}/../vpn-mgmt-proxy.log" 2>&1 &
 	echo $! >"$PROXY_PIDFILE"
 else
-	echo "mpc-auth-vpn-enable-wsl: socat not installed — run: sudo apt install socat" >&2
+	echo "mpc-auth-vpn-enable-macos: socat not installed — run: brew install socat" >&2
 fi
 
-wsl_desktop_sudo mkdir -p "$(dirname "$STATE_FILE")"
+macos_desktop_sudo mkdir -p "$(dirname "$STATE_FILE")"
 export STATE_FILE PROFILE LISTEN_PORT OBFUSCATION SS_PORT
-wsl_desktop_sudo env STATE_FILE="$STATE_FILE" PROFILE="$PROFILE" LISTEN_PORT="$LISTEN_PORT" OBFUSCATION="$OBFUSCATION" SS_PORT="$SS_PORT" python3 - <<'PY'
+macos_desktop_sudo env STATE_FILE="$STATE_FILE" PROFILE="$PROFILE" LISTEN_PORT="$LISTEN_PORT" OBFUSCATION="$OBFUSCATION" SS_PORT="$SS_PORT" python3 - <<'PY'
 import json, datetime, os
 path = os.environ["STATE_FILE"]
 obfuscation = os.environ.get("OBFUSCATION", "none")
@@ -118,7 +121,7 @@ payload = {
     "obfuscation": obfuscation,
     "listenPort": int(os.environ.get("LISTEN_PORT", "51820")),
     "directWireGuardBlocked": obfuscation == "shadowsocks",
-    "hostProfile": "wsl_desktop",
+    "hostProfile": "macos_desktop",
     "updatedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }
 if obfuscation == "shadowsocks":
@@ -128,4 +131,4 @@ with open(path + ".tmp", "w") as f:
 os.rename(path + ".tmp", path)
 PY
 
-echo "mpc-auth-vpn-enable-wsl: WireGuard VPN enabled in WSL (profile=${PROFILE}, obfuscation=${OBFUSCATION})"
+echo "mpc-auth-vpn-enable-macos: WireGuard VPN enabled (profile=${PROFILE}, obfuscation=${OBFUSCATION})"

@@ -390,6 +390,18 @@ fi
 
 ensure_vpn_host_packages
 
+_ensure_ss_lib="${CONTINUUM_INSTALL_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)}/lib/ensure-shadowsocks-host-packages.sh"
+if [ ! -f "$_ensure_ss_lib" ]; then
+    _raw_base="https://raw.githubusercontent.com/ContinuumDAO/mpc-config/${MPC_CONFIG_REF:-main}"
+    mkdir -p "$(dirname "$_ensure_ss_lib")"
+    curl -fsSL "${_raw_base}/scripts/lib/ensure-shadowsocks-host-packages.sh" -o "$_ensure_ss_lib" 2>/dev/null || true
+fi
+if [ -f "$_ensure_ss_lib" ]; then
+    # shellcheck source=lib/ensure-shadowsocks-host-packages.sh
+    . "$_ensure_ss_lib"
+    ensure_shadowsocks_host_packages || warn "shadowsocks-rust missing — VPN obfuscation unavailable until installed"
+fi
+
 if [ "$SKIP_CLONE" = false ]; then
     log "Cloning mpc-config to ${REPO_DIR}"
     install_progress_topic_begin clone

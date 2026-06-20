@@ -145,6 +145,13 @@ ManagementAPIsPort: 8080
 #   FullTunnelDns: 1.1.1.1
 #   EndpointHost: 203.0.113.51  # optional: override WireGuard client Endpoint (this node's public IP). Default: mpc-auth matches KeyList + egress IP in nodeAddresses (not the relay).
 #
+# Shadowsocks transport obfuscation (optional — WireGuard over shadowsocks-rust tunnel):
+# Shadowsocks:
+#   ListenPort: 8388
+#   Method: chacha20-ietf-poly1305
+#   LocalTunnelPort: 51821   # sslocal tunnel port on client; WireGuard Endpoint becomes 127.0.0.1:51821
+#   ClientMtu: 1280
+#
 # Note: Compose defaults to continuumdao/mpc-auth:latest — GET /version returns Data.version as the application semver (e.g. v1.1)
 # baked into that image at build time, not the Docker tag string.
 #
