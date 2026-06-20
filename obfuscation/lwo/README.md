@@ -6,6 +6,17 @@ Reference: Mullvad [`tunnel-obfuscation/src/lwo.rs`](https://github.com/mullvad/
 
 ## Build
 
+Vendored **prebuilt binaries** for Debian/Ubuntu VPS hosts live under `prebuilt/debian-ubuntu/{x86_64,aarch64}/`. The systemd install script installs them automatically — no Rust toolchain required on the node.
+
+### Maintainers: rebuild prebuilts
+
+```bash
+cd obfuscation/lwo
+./build-prebuilt.sh   # needs cargo + gcc-aarch64-linux-gnu on amd64 build hosts
+```
+
+### From source (dev / non-Debian hosts)
+
 ```bash
 cd obfuscation/lwo
 cargo build --release
@@ -13,7 +24,7 @@ install -m 0755 target/release/continuum-lwo-server /usr/local/bin/
 install -m 0755 target/release/continuum-lwo-client /usr/local/bin/
 ```
 
-Or run the systemd install script on the VPS host — it calls `ensure_lwo_host_packages` when `cargo` is available.
+Or run the systemd install script on the VPS host — it calls `ensure_lwo_host_packages` which prefers prebuilt on Debian/Ubuntu.
 
 mpc-auth exposes `lwo` in `availableObfuscations` when both binaries are on PATH (recorded in `vpn-host-obfuscation.json`).
 

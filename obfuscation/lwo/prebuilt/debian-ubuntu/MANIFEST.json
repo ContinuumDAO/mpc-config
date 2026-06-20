@@ -1,0 +1,19 @@
+{
+  "version": "0.1.0",
+  "platforms": {
+    "x86_64": {
+      "continuum-lwo-server": "x86_64/continuum-lwo-server",
+      "continuum-lwo-client": "x86_64/continuum-lwo-client"
+    },
+    "aarch64": {
+      "continuum-lwo-server": "aarch64/continuum-lwo-server",
+      "continuum-lwo-client": "aarch64/continuum-lwo-client"
+    }
+  },
+  "targetOs": [
+    "debian",
+    "ubuntu"
+  ],
+  "builtAt": "2026-06-20T18:05:32Z",
+  "note": "glibc-linked ELF for Debian/Ubuntu amd64 and arm64 VPS hosts"
+}
