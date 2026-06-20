@@ -1,0 +1,15 @@
+[Unit]
+Description=udp2raw server for WireGuard transport obfuscation (Continuum MPC)
+After=network-online.target
+PartOf=mpc-auth-wireguard-wg0.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-udp2raw-run.sh
+Restart=on-failure
+RestartSec=5
+StandardInput=null
+
+[Install]
+WantedBy=multi-user.target

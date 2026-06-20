@@ -68,6 +68,12 @@ mpc_auth_vpn_start_obfuscation_systemd() {
 	wg_obfuscator)
 		mpc_auth_vpn_start_wg_obfuscator_systemd
 		;;
+	lwo)
+		mpc_auth_vpn_start_lwo_systemd
+		;;
+	udp2raw)
+		mpc_auth_vpn_start_udp2raw_systemd
+		;;
 	*)
 		return 0
 		;;
@@ -80,11 +86,15 @@ mpc_auth_vpn_stop_obfuscation_systemd() {
 	if [[ -z "$obfuscation" ]]; then
 		mpc_auth_vpn_stop_shadowsocks_systemd
 		mpc_auth_vpn_stop_wg_obfuscator_systemd
+		mpc_auth_vpn_stop_lwo_systemd
+		mpc_auth_vpn_stop_udp2raw_systemd
 		return 0
 	fi
 	obfuscation="$(mpc_auth_vpn_normalize_obfuscation "$obfuscation")"
 	case "$obfuscation" in
 	shadowsocks) mpc_auth_vpn_stop_shadowsocks_systemd ;;
 	wg_obfuscator) mpc_auth_vpn_stop_wg_obfuscator_systemd ;;
+	lwo) mpc_auth_vpn_stop_lwo_systemd ;;
+	udp2raw) mpc_auth_vpn_stop_udp2raw_systemd ;;
 	esac
 }

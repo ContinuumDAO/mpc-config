@@ -42,6 +42,10 @@ REPO_ROOT="$(cd "$HERE/.." && pwd)"
 . "${REPO_ROOT}/scripts/lib/ensure-shadowsocks-host-packages.sh"
 # shellcheck source=../scripts/lib/ensure-wg-obfuscator-host-packages.sh
 . "${REPO_ROOT}/scripts/lib/ensure-wg-obfuscator-host-packages.sh"
+# shellcheck source=../scripts/lib/ensure-udp2raw-host-packages.sh
+. "${REPO_ROOT}/scripts/lib/ensure-udp2raw-host-packages.sh"
+# shellcheck source=../scripts/lib/ensure-lwo-host-packages.sh
+. "${REPO_ROOT}/scripts/lib/ensure-lwo-host-packages.sh"
 # shellcheck source=../scripts/lib/write-vpn-host-obfuscation-capabilities.sh
 . "${REPO_ROOT}/scripts/lib/write-vpn-host-obfuscation-capabilities.sh"
 LIBEXEC="/usr/local/libexec/mpc-auth"
@@ -63,7 +67,10 @@ install -m 0755 \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-wg0-hooks.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-ss-hooks.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-wg-obfuscator-hooks.sh" \
+	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-lwo-hooks.sh" \
+	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-udp2raw-hooks.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-obfuscation-hooks.sh" \
+	"${REPO_ROOT}/scripts/lib/mpc-auth-udp2raw-run.sh" \
 	"$LIBEXEC/"
 
 if [[ "$INSTALL_ENV" == true ]]; then
@@ -96,6 +103,8 @@ install -m 0644 \
 	"$HERE/mpc-auth-vpn-mgmt-proxy.service" \
 	"$HERE/mpc-auth-shadowsocks.service" \
 	"$HERE/mpc-auth-wg-obfuscator.service" \
+	"$HERE/mpc-auth-udp2raw.service" \
+	"$HERE/mpc-auth-lwo.service" \
 	"$HERE/mpc-auth-agent-llm-config.path" \
 	"$HERE/mpc-auth-agent-llm-config.service" \
 	"$UNIT_DIR/"
@@ -152,6 +161,14 @@ if ! ensure_wg_obfuscator_host_packages; then
 	echo "WARNING: wg-obfuscator not installed — VPN wg_obfuscator obfuscation unavailable until installed." >&2
 fi
 
+if ! ensure_udp2raw_host_packages; then
+	echo "WARNING: udp2raw not installed — VPN udp2raw obfuscation unavailable until installed." >&2
+fi
+
+if ! ensure_lwo_host_packages; then
+	echo "WARNING: continuum-lwo not installed — VPN lwo obfuscation unavailable until installed." >&2
+fi
+
 write_vpn_host_obfuscation_capabilities /var/lib/mpc-auth-docker || true
 
 systemctl enable mpc-auth-vpn-pending.path
@@ -172,7 +189,7 @@ echo "  $LIBEXEC/mpc-auth-apply-pending-reboot.sh"
 echo "  $LIBEXEC/mpc-auth-sync-compose-role.sh (relay/client docker-compose.yml sync before restart)"
 echo "  $LIBEXEC/mpc-auth-apply-pending-vpn.sh + mpc-auth-vpn-{enable,disable}.sh (POST /vpn/setEnabled — WireGuard VPN)"
 echo "  $UNIT_DIR/mpc-auth-vpn-pending.{path,service} (bind-mount /var/lib/mpc-auth-docker in compose)"
-	echo "  $UNIT_DIR/mpc-auth-wireguard-wg0.service + mpc-auth-vpn-mgmt-proxy.service + mpc-auth-shadowsocks.service + mpc-auth-wg-obfuscator.service"
+echo "  $UNIT_DIR/mpc-auth-wireguard-wg0.service + mpc-auth-vpn-mgmt-proxy.service + mpc-auth-shadowsocks.service + mpc-auth-wg-obfuscator.service + mpc-auth-udp2raw.service + mpc-auth-lwo.service"
 echo
 echo "Run: sudo systemctl start mpc-auth-docker-restart.service"
 echo "(Optional automation) mpc-auth-docker-pending-update.path watches /var/lib/mpc-auth-docker/pending-update.json — bind-mount that dir in compose."

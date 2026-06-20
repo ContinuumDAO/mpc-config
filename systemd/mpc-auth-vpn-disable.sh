@@ -17,6 +17,8 @@ _lib() {
 
 _lib mpc-auth-vpn-ss-hooks.sh
 _lib mpc-auth-vpn-wg-obfuscator-hooks.sh
+_lib mpc-auth-vpn-lwo-hooks.sh
+_lib mpc-auth-vpn-udp2raw-hooks.sh
 _lib mpc-auth-vpn-obfuscation-hooks.sh
 
 WG_HOST_DIR="${MPC_AUTH_WIREGUARD_HOST_DIR:-/etc/wireguard}"
@@ -26,6 +28,8 @@ VPN_CIDR="${MPC_AUTH_WIREGUARD_VPN_CIDR:-10.8.0.0/24}"
 MGMT_PORT="${MPC_AUTH_VPN_MGMT_PORT:-8080}"
 SS_PORT="${MPC_AUTH_SHADOWSOCKS_LISTEN_PORT:-8388}"
 WO_PORT="${MPC_AUTH_WG_OBFUSCATOR_LISTEN_PORT:-51822}"
+LWO_PORT="${MPC_AUTH_LWO_LISTEN_PORT:-51824}"
+U2_PORT="${MPC_AUTH_UDP2RAW_LISTEN_PORT:-443}"
 
 if [[ -f "$STATE_FILE" ]] && command -v python3 >/dev/null 2>&1; then
 	eval "$(python3 - "$STATE_FILE" <<'PY'
@@ -38,6 +42,8 @@ except (OSError, json.JSONDecodeError, ValueError):
     raise SystemExit(0)
 print(f"export SS_PORT={shlex.quote(str(int(d.get('shadowsocksListenPort', 8388))))}")
 print(f"export WO_PORT={shlex.quote(str(int(d.get('wgObfuscatorListenPort', 51822))))}")
+print(f"export LWO_PORT={shlex.quote(str(int(d.get('lwoListenPort', 51824))))}")
+print(f"export U2_PORT={shlex.quote(str(int(d.get('udp2rawListenPort', 443))))}")
 PY
 )" || true
 fi
@@ -60,6 +66,8 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "Status: 
 	ufw delete allow "${SS_PORT}/tcp" 2>/dev/null || true
 	ufw delete allow "${SS_PORT}/udp" 2>/dev/null || true
 	ufw delete allow "${WO_PORT}/udp" 2>/dev/null || true
+	ufw delete allow "${LWO_PORT}/udp" 2>/dev/null || true
+	ufw delete allow "${U2_PORT}/tcp" 2>/dev/null || true
 	ufw delete allow from "${VPN_CIDR}" to any port "${MGMT_PORT}" proto tcp 2>/dev/null || true
 	default_if="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"
 	default_if="${default_if:-eth0}"

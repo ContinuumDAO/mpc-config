@@ -1,0 +1,16 @@
+[package]
+name = "continuum-lwo-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "continuum-lwo-server"
+path = "src/main.rs"
+
+[dependencies]
+continuum-lwo-core = { path = "../continuum-lwo-core" }
+rand = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "sync"] }

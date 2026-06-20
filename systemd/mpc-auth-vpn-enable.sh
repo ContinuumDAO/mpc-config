@@ -22,6 +22,8 @@ _lib() {
 _lib mpc-auth-vpn-wg0-hooks.sh
 _lib mpc-auth-vpn-ss-hooks.sh
 _lib mpc-auth-vpn-wg-obfuscator-hooks.sh
+_lib mpc-auth-vpn-lwo-hooks.sh
+_lib mpc-auth-vpn-udp2raw-hooks.sh
 _lib mpc-auth-vpn-obfuscation-hooks.sh
 
 LIBEXEC="/usr/local/libexec/mpc-auth"
@@ -56,6 +58,14 @@ wg_obfuscator)
 	TRANSPORT_PORT="$(mpc_auth_vpn_read_wg_obfuscator_listen_port)"
 	export MPC_AUTH_WG_OBFUSCATOR_LISTEN_PORT="$TRANSPORT_PORT"
 	;;
+lwo)
+	TRANSPORT_PORT="$(mpc_auth_vpn_read_lwo_listen_port)"
+	export MPC_AUTH_LWO_LISTEN_PORT="$TRANSPORT_PORT"
+	;;
+udp2raw)
+	TRANSPORT_PORT="$(mpc_auth_vpn_read_udp2raw_listen_port)"
+	export MPC_AUTH_UDP2RAW_LISTEN_PORT="$TRANSPORT_PORT"
+	;;
 esac
 export MPC_AUTH_VPN_TRANSPORT_PORT="$TRANSPORT_PORT"
 
@@ -73,6 +83,16 @@ fi
 
 if [[ "$OBFUSCATION" == "wg_obfuscator" && ! -f "$(mpc_auth_vpn_wg_obfuscator_config_path)" ]]; then
 	echo "mpc-auth-vpn-enable: missing $(mpc_auth_vpn_wg_obfuscator_config_path) (mpc-auth must write wg-obfuscator config first)" >&2
+	exit 1
+fi
+
+if [[ "$OBFUSCATION" == "lwo" && ! -f "$(mpc_auth_vpn_lwo_server_config_path)" ]]; then
+	echo "mpc-auth-vpn-enable: missing $(mpc_auth_vpn_lwo_server_config_path) (mpc-auth must write LWO config first)" >&2
+	exit 1
+fi
+
+if [[ "$OBFUSCATION" == "udp2raw" && ! -f "$(mpc_auth_vpn_udp2raw_server_env_path)" ]]; then
+	echo "mpc-auth-vpn-enable: missing $(mpc_auth_vpn_udp2raw_server_env_path) (mpc-auth must write udp2raw config first)" >&2
 	exit 1
 fi
 
@@ -121,6 +141,10 @@ if obfuscation == "shadowsocks" and transport_port > 0:
     payload["shadowsocksListenPort"] = transport_port
 if obfuscation == "wg_obfuscator" and transport_port > 0:
     payload["wgObfuscatorListenPort"] = transport_port
+if obfuscation == "lwo" and transport_port > 0:
+    payload["lwoListenPort"] = transport_port
+if obfuscation == "udp2raw" and transport_port > 0:
+    payload["udp2rawListenPort"] = transport_port
 with open(path + ".tmp", "w") as f:
     json.dump(payload, f)
 os.rename(path + ".tmp", path)

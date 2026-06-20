@@ -1,0 +1,12 @@
+[package]
+name = "continuum-lwo-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rand = "0.9"
+thiserror = "2"
+
+[dev-dependencies]
+rand = "0.9"
