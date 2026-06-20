@@ -64,12 +64,14 @@ _ensure_wg_obfuscator_install_static_binary() {
 		;;
 	esac
 	local bin=""
-	if [[ -x "${tmpdir}/wg-obfuscator" ]]; then
+	if [[ -f "${tmpdir}/wg-obfuscator/wg-obfuscator" && -x "${tmpdir}/wg-obfuscator/wg-obfuscator" ]]; then
+		bin="${tmpdir}/wg-obfuscator/wg-obfuscator"
+	elif [[ -f "${tmpdir}/wg-obfuscator" && -x "${tmpdir}/wg-obfuscator" ]]; then
 		bin="${tmpdir}/wg-obfuscator"
 	elif [[ -x "${tmpdir}/wg-obfuscator-${WG_OBFUSCATOR_VERSION}/wg-obfuscator" ]]; then
 		bin="${tmpdir}/wg-obfuscator-${WG_OBFUSCATOR_VERSION}/wg-obfuscator"
 	else
-		bin="$(find "$tmpdir" -maxdepth 2 -type f -name 'wg-obfuscator' -perm -111 2>/dev/null | head -n1 || true)"
+		bin="$(find "$tmpdir" -type f -name 'wg-obfuscator' -perm -111 2>/dev/null | head -n1 || true)"
 	fi
 	if [[ -z "$bin" || ! -x "$bin" ]]; then
 		_ensure_wg_obfuscator_cleanup_tmpdir "$tmpdir"
