@@ -237,7 +237,7 @@ On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the e
 
 | Symptom | Check |
 |---------|--------|
-| macOS Install fails (passwordless sudo) | Configure `sudo -n` via `visudo` — see install log |
+| macOS Install fails (passwordless sudo) | Run `sudo -k && sudo -n true` in Terminal (not just `sudo -n` after a recent login). Visudo line must match the user shown in the install log (`Docker Desktop host exec user:`). Reinstall the extension after updating — host binaries ship inside the image. |
 | macOS watcher not running | `bash ~/mpc-config/macos-desktop/install-launchagent.sh --repo-dir ~/mpc-config` |
 | Linux `sudo` password prompt / install hangs | Configure passwordless sudo for your user, or run orchestrator manually in a terminal |
 | `this installer requires WSL2` on Windows | Run inside WSL, not PowerShell |

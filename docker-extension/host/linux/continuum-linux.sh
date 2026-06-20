@@ -7,6 +7,9 @@
 # download and run the bundled script instead of /tmp/continuum-desktop-orchestrate.sh.
 set -euo pipefail
 
+# Docker Desktop host.cli.exec may run with a minimal PATH.
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+
 HOST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ORCHESTRATE="${HOST_DIR}/continuum-orchestrate.sh"
 

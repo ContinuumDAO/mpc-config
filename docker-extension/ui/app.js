@@ -480,6 +480,10 @@ async function execHostSimple(cli, cmd, args) {
     const result = await cli.exec(cmd, args)
     return { ok: true, result }
   } catch (error) {
+    // Some Docker Desktop builds reject the promise on non-zero exit but still attach stdout/stderr/code.
+    if (error && typeof error === 'object' && ('code' in error || 'stdout' in error || 'stderr' in error)) {
+      return { ok: true, result: error }
+    }
     return { ok: false, error }
   }
 }
@@ -563,8 +567,10 @@ function formatMacPasswordlessSudoInstructions(macUser) {
     `  sudo visudo\n\n` +
     `Add this line (replace ${macUser} if your username differs):\n\n` +
     `  ${macUser} ALL=(ALL) NOPASSWD: ALL\n\n` +
-    `Verify:\n\n` +
+    `Verify (clears any cached sudo ticket first):\n\n` +
+    `  sudo -k\n` +
     `  sudo -n true && echo OK\n\n` +
+    `The visudo line must match the macOS user Docker Desktop runs as (shown in the install log).\n\n` +
     `Then click Install again in the Docker extension.`
   )
 }
@@ -572,20 +578,28 @@ function formatMacPasswordlessSudoInstructions(macUser) {
 async function verifyMacPasswordlessSudo(cli, logOutput) {
   appendLog(logOutput, 'Checking passwordless sudo on macOS…\n')
 
-  const userProbe = await execHostSimple(cli, MACOS_HOST_WRAPPER, ['whoami'])
+  const userProbe = await execHostSimple(cli, MACOS_HOST_WRAPPER, ['/usr/bin/whoami'])
   const macUser =
     userProbe.ok && userProbe.result ? combinedExecOutput(userProbe.result).trim() : '<your-macos-user>'
 
-  const sudoProbe = await execHostSimple(cli, MACOS_HOST_WRAPPER, [
-    'bash',
-    '-lc',
-    'command -v sudo >/dev/null && sudo -n true',
-  ])
+  if (!userProbe.ok) {
+    appendLog(
+      logOutput,
+      `[host exec error (whoami): ${userProbe.error instanceof Error ? userProbe.error.message : String(userProbe.error)}]\n`,
+    )
+    appendLog(logOutput, `\n${formatMacPasswordlessSudoInstructions(macUser)}\n`)
+    return false
+  }
+
+  appendLog(logOutput, `Docker Desktop host exec user: ${macUser}\n`)
+
+  // Use absolute paths — host.cli.exec often has no/minimal PATH (unlike Terminal).
+  const sudoProbe = await execHostSimple(cli, MACOS_HOST_WRAPPER, ['/usr/bin/sudo', '-n', 'true'])
 
   if (!sudoProbe.ok) {
     appendLog(
       logOutput,
-      `[host exec error: ${sudoProbe.error instanceof Error ? sudoProbe.error.message : String(sudoProbe.error)}]\n`,
+      `[host exec error (sudo): ${sudoProbe.error instanceof Error ? sudoProbe.error.message : String(sudoProbe.error)}]\n`,
     )
     appendLog(logOutput, `\n${formatMacPasswordlessSudoInstructions(macUser)}\n`)
     return false
@@ -600,6 +614,10 @@ async function verifyMacPasswordlessSudo(cli, logOutput) {
     return true
   }
 
+  appendLog(
+    logOutput,
+    'sudo -n failed in Docker Desktop host exec (Terminal may still work via a cached sudo ticket or a different user).\n',
+  )
   appendLog(logOutput, `\n${formatMacPasswordlessSudoInstructions(macUser)}\n`)
   return false
 }

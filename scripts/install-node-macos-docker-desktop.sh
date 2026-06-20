@@ -111,9 +111,12 @@ Add this line (replace ${mac_user} if your username differs):
 
   ${mac_user} ALL=(ALL) NOPASSWD: ALL
 
-Verify:
+Verify (clears any cached sudo ticket first):
 
+  sudo -k
   sudo -n true && echo OK
+
+The visudo line must match the macOS user shown when the extension runs whoami.
 
 Then click Install again in the Docker extension.
 EOF
