@@ -1,0 +1,15 @@
+[Unit]
+Description=WireGuard peer egress interface wg-egress
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/bin/wg-quick up wg-egress
+ExecStop=-/usr/bin/wg-quick down wg-egress
+StandardInput=null
+
+[Install]
+WantedBy=multi-user.target

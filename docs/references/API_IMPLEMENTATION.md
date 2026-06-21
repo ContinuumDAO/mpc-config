@@ -528,6 +528,24 @@ Contains the **client private key** and **Shadowsocks password** — treat like 
 
 Logic reference: **`scripts/lib/mpc-auth-vpn-shadowsocks-config.py`** **`client`** subcommand.
 
+<a id="peer-egress-vpn-wg-egress"></a>
+### Peer egress VPN (`wg-egress`, Option 1)
+
+Separate from admin **`wg0`**: optional **full-exit** routing through a configured peer’s public IP. Consumers receive WireGuard (+ optional Shadowsocks) only — **no management API** on **`10.9.0.1:8080`**. Access is scoped to **`GET /getConfiguredNodeKeys`** peers; **auto-revoke** when a peer disappears from the configured roster.
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/vpn/egress/status` | Read (also on PublicDiscoveryPort) | Local egress state, `countryCode`, `sharingEnabled`, rate limits |
+| GET | `/vpn/egress/availableExits` | Read | Configured peers offering active egress |
+| POST | `/vpn/egress/setSharing` | Management sig | Enable/disable offering egress; `obfuscation`, `defaultRateLimitMbps` |
+| POST | `/vpn/egress/requestClientConfig` | Management sig | On consumer node: `{ targetAddress }` → fetches config from peer |
+| POST | `/vpn/egress/issueClientConfig` | Open on egress node | `{ consumerNodeKey }` — issues per-consumer keys (configured-list check) |
+| POST | `/vpn/egress/revokePeer` | Management sig | Remove consumer peer key |
+
+Host automation: **`pending-vpn-egress.json`** → **`mpc-auth-vpn-egress-pending.path`** → **`wg-quick@wg-egress`** with NAT + optional **`tc`** per peer (**`peer-rate-limits.json`**). Env: **`MPC_AUTH_VPN_EGRESS_PENDING_FILE`**, **`MPC_AUTH_VPN_EGRESS_STATE_FILE`**.
+
+Default ports: WireGuard **`51830`**, Shadowsocks egress **`8390`** (separate from admin VPN).
+
 <a id="mongodb-integrity-report-read-only"></a>
 ## MongoDB integrity report and automated repair
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=Shadowsocks server for wg-egress transport obfuscation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/bin/ssserver -c /var/lib/mpc-auth-docker/shadowsocks-egress/ssserver.json
+Restart=on-failure
+RestartSec=3
+StandardInput=null
+
+[Install]
+WantedBy=multi-user.target

@@ -44,6 +44,8 @@ services:
       MPC_AUTH_PENDING_REBOOT_FILE: /var/lib/mpc-auth-docker/pending-reboot.json
       MPC_AUTH_VPN_PENDING_FILE: /var/lib/mpc-auth-docker/pending-vpn.json
       MPC_AUTH_VPN_STATE_FILE: /var/lib/mpc-auth-docker/vpn-state.json
+      MPC_AUTH_VPN_EGRESS_PENDING_FILE: /var/lib/mpc-auth-docker/pending-vpn-egress.json
+      MPC_AUTH_VPN_EGRESS_STATE_FILE: /var/lib/mpc-auth-docker/vpn-egress-state.json
       MPC_AUTH_AGENT_LLM_CONFIG_FILE: /app/agent_llm_config/agent-llm-config.json
       MPC_AUTH_USER_FOLDER: /app/user_folder
       MPC_AGENT_MCP_SERVER_URL: "http://continuum-mcp:8446/mcp"

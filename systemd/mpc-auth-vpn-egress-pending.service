@@ -1,0 +1,12 @@
+[Unit]
+Description=Apply mpc-auth pending-vpn-egress.json (wg-egress enable/disable/sync)
+After=mpc-auth-vpn-egress-pending.path
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-apply-pending-vpn-egress.sh
+StandardInput=null
+
+[Install]
+WantedBy=multi-user.target
