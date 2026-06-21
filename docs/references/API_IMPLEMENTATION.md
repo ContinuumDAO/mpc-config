@@ -544,6 +544,8 @@ Separate from admin **`wg0`**: optional **full-exit** routing through a configur
 
 Host automation: **`pending-vpn-egress.json`** → **`mpc-auth-vpn-egress-pending.path`** → **`wg-quick@wg-egress`** with NAT + optional **`tc`** per peer (**`peer-rate-limits.json`**). Env: **`MPC_AUTH_VPN_EGRESS_PENDING_FILE`**, **`MPC_AUTH_VPN_EGRESS_STATE_FILE`**.
 
+**`process_config.sh`** (host firewall step): adds UFW allow for egress WireGuard UDP (**`WireGuardEgress.ListenPort`**, default **51830**) and Shadowsocks egress TCP+UDP (**`ShadowsocksEgress.ListenPort`**, default **8390**), and prints provider-panel reminders to open the same ports at the cloud firewall.
+
 Default ports: WireGuard **`51830`**, Shadowsocks egress **`8390`** (separate from admin VPN).
 
 <a id="mongodb-integrity-report-read-only"></a>

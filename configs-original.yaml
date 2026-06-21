@@ -135,6 +135,8 @@ ManagementAPIsPort: 8080
 # MpcAuthPendingRebootPath: /var/lib/mpc-auth-docker/pending-reboot.json
 # MpcAuthVpnPendingPath: /var/lib/mpc-auth-docker/pending-vpn.json
 # MpcAuthVpnStatePath: /var/lib/mpc-auth-docker/vpn-state.json
+# MpcAuthVpnEgressPendingPath: /var/lib/mpc-auth-docker/pending-vpn-egress.json
+# MpcAuthVpnEgressStatePath: /var/lib/mpc-auth-docker/vpn-egress-state.json
 #
 # WireGuard admin VPN (VPS systemd hosts — enable/disable from Node page VPN Panel):
 # WireGuard:
@@ -145,11 +147,26 @@ ManagementAPIsPort: 8080
 #   FullTunnelDns: 1.1.1.1
 #   EndpointHost: 203.0.113.51  # optional: override WireGuard client Endpoint (this node's public IP). Default: mpc-auth matches KeyList + egress IP in nodeAddresses (not the relay).
 #
+# Peer egress VPN (wg-egress — country exit for configured peers; separate from admin wg0):
+# WireGuardEgress:
+#   ListenPort: 51830
+#   ServerAddressCidr: 10.9.0.1/24
+#   VpnNetworkCidr: 10.9.0.0/24
+#   FullTunnelDns: 1.1.1.1
+#   EndpointHost: 203.0.113.51  # optional; same semantics as WireGuard.EndpointHost
+#
 # Shadowsocks transport obfuscation (optional — WireGuard over shadowsocks-rust tunnel):
 # Shadowsocks:
 #   ListenPort: 8388
 #   Method: chacha20-ietf-poly1305
 #   LocalTunnelPort: 51821   # sslocal tunnel port on client; WireGuard Endpoint becomes 127.0.0.1:51821
+#   ClientMtu: 1280
+#
+# Shadowsocks for peer egress (separate ports from admin VPN — process_config.sh opens UFW + reminds provider panel):
+# ShadowsocksEgress:
+#   ListenPort: 8390
+#   Method: chacha20-ietf-poly1305
+#   LocalTunnelPort: 51831
 #   ClientMtu: 1280
 #
 # Note: Compose defaults to continuumdao/mpc-auth:latest — GET /version returns Data.version as the application semver (e.g. v1.1)

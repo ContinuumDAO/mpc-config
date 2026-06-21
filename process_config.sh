@@ -5047,8 +5047,12 @@ import sys
 path = os.environ.get("COMPOSE_VPN_FILE", "")
 pending_line = "      MPC_AUTH_VPN_PENDING_FILE: /var/lib/mpc-auth-docker/pending-vpn.json\n"
 state_line = "      MPC_AUTH_VPN_STATE_FILE: /var/lib/mpc-auth-docker/vpn-state.json\n"
+egress_pending_line = "      MPC_AUTH_VPN_EGRESS_PENDING_FILE: /var/lib/mpc-auth-docker/pending-vpn-egress.json\n"
+egress_state_line = "      MPC_AUTH_VPN_EGRESS_STATE_FILE: /var/lib/mpc-auth-docker/vpn-egress-state.json\n"
 pat_pending = re.compile(r"^\s*#?\s*MPC_AUTH_VPN_PENDING_FILE:\s*")
 pat_state = re.compile(r"^\s*#?\s*MPC_AUTH_VPN_STATE_FILE:\s*")
+pat_egress_pending = re.compile(r"^\s*#?\s*MPC_AUTH_VPN_EGRESS_PENDING_FILE:\s*")
+pat_egress_state = re.compile(r"^\s*#?\s*MPC_AUTH_VPN_EGRESS_STATE_FILE:\s*")
 reboot_pat = re.compile(r"^\s*MPC_AUTH_PENDING_REBOOT_FILE:")
 
 if not path:
@@ -5066,6 +5070,8 @@ except OSError as e:
 out = []
 found_pending = False
 found_state = False
+found_egress_pending = False
+found_egress_state = False
 changed = False
 for line in lines:
     if pat_pending.match(line):
@@ -5080,9 +5086,21 @@ for line in lines:
             changed = True
         out.append(state_line)
         continue
+    if pat_egress_pending.match(line):
+        found_egress_pending = True
+        if line != egress_pending_line:
+            changed = True
+        out.append(egress_pending_line)
+        continue
+    if pat_egress_state.match(line):
+        found_egress_state = True
+        if line != egress_state_line:
+            changed = True
+        out.append(egress_state_line)
+        continue
     out.append(line)
 
-if not found_pending or not found_state:
+if not found_pending or not found_state or not found_egress_pending or not found_egress_state:
     insert_at = None
     for i, line in enumerate(out):
         if reboot_pat.match(line):
@@ -5096,6 +5114,10 @@ if not found_pending or not found_state:
         block.append(pending_line)
     if not found_state:
         block.append(state_line)
+    if not found_egress_pending:
+        block.append(egress_pending_line)
+    if not found_egress_state:
+        block.append(egress_state_line)
     out[insert_at:insert_at] = block
     changed = True
 
@@ -5105,12 +5127,12 @@ if not changed:
 
 with open(path, "w", encoding="utf-8") as f:
     f.writelines(out)
-print("insert" if not (found_pending and found_state) else "set", flush=True)
+print("insert" if not (found_pending and found_state and found_egress_pending and found_egress_state) else "set", flush=True)
 PYCOMPOSEVPN
     )
     case "$_action" in
         set|insert)
-            print_success "docker-compose.yml: MPC_AUTH_VPN_PENDING_FILE + MPC_AUTH_VPN_STATE_FILE (relay and client compose)"
+            print_success "docker-compose.yml: MPC_AUTH_VPN_* + MPC_AUTH_VPN_EGRESS_* env (relay and client compose)"
             ;;
         none)
             print_warning "docker-compose.yml: could not insert VPN env (MPC_AUTH_PENDING_REBOOT_FILE line missing)"
@@ -5875,6 +5897,8 @@ show_process_config_help() {
     echo "  PreSigningVerification.RelayerAPIURL and/or ScannerAPIURLs resolve to IPv4 (see configs.yaml)."
     echo "  ManagementAPIsPort is not opened in UFW by default; set UFW_OPEN_MANAGEMENT_PORT=1 if peers/operators need inbound HTTP to the management API."
     echo "  Loopback Mongo: after baseline rules, installs /etc/ufw/after.rules DROP for non-root → 127.0.0.1:Mongo (disable: APPLY_LOOPBACK_MONGO_OWNER_FW=0)."
+    echo "  Peer egress VPN (wg-egress): opens UFW UDP WireGuardEgress.ListenPort (default 51830) and TCP+UDP ShadowsocksEgress.ListenPort (default 8390)."
+    echo "  Also prints provider-panel reminders — cloud SG must allow the same ports (UDP 51830 direct; TCP+UDP 8390 when Shadowsocks egress is used)."
     echo "  If UFW is inactive, you are prompted (via /dev/tty) to run sudo ufw enable, or enable manually."
     echo "  Use --no-firewall to skip (not recommended for production / financial nodes)."
     echo ""
@@ -6001,6 +6025,50 @@ else:
 
 print(f"{mgt}|{pub}|{bh_fw}|{sr}")
 PYFWPORTS
+}
+
+# WireGuard admin + peer egress (wg-egress) ports from configs.yaml. Defaults match mpc-auth managementapi_vpn*.go.
+# Prints: wg_admin_udp|ss_admin_tcp|wg_egress_udp|ss_egress_tcp
+_firewall_read_vpn_ports_from_configs_yaml() {
+    local config_file="$1"
+    FW_VPN_PORTS_CFG="$config_file" python3 << 'PYFWVPNPORTS'
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.exit(2)
+
+path = os.environ.get("FW_VPN_PORTS_CFG", "")
+if not path:
+    sys.exit(1)
+
+y = YAML()
+with open(path) as f:
+    d = y.load(f)
+if not isinstance(d, dict):
+    d = {}
+
+def _scalar_int(v, default):
+    if v is None:
+        return default
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+def _section_port(section_key, field, default):
+    sec = d.get(section_key)
+    if isinstance(sec, dict):
+        return _scalar_int(sec.get(field), default)
+    return default
+
+wg_admin = _section_port("WireGuard", "ListenPort", 51820)
+ss_admin = _section_port("Shadowsocks", "ListenPort", 8388)
+wg_egress = _section_port("WireGuardEgress", "ListenPort", 51830)
+ss_egress = _section_port("ShadowsocksEgress", "ListenPort", 8390)
+print(f"{wg_admin}|{ss_admin}|{wg_egress}|{ss_egress}")
+PYFWVPNPORTS
 }
 
 # Enable UFW before config processing / firewall rules (--no-firewall skips entirely).
@@ -6334,6 +6402,31 @@ apply_process_config_firewall() {
         fi
     }
 
+    apply_one_ufw_udp() {
+        local port="$1"
+        local note="$2"
+        if [ -z "$port" ] || [ "$port" = "0" ]; then
+            print_warning "Skipping UFW rule for invalid UDP port (${port:-empty}) ($note)"
+            return 0
+        fi
+        if sudo ufw status 2>/dev/null | grep -qE "^[[:space:]]*${port}/udp"; then
+            print_info "UFW rule already present for ${port}/udp ($note)"
+            return 0
+        fi
+        if sudo ufw allow "${port}/udp" comment "$note" 2>/dev/null; then
+            print_success "UFW: allowed ${port}/udp ($note)"
+        else
+            print_warning "Could not add UFW rule for ${port}/udp (need sudo?)"
+        fi
+    }
+
+    apply_shadowsocks_ufw() {
+        local port="$1"
+        local note="$2"
+        apply_one_ufw "$port" "$note"
+        apply_one_ufw_udp "$port" "$note UDP"
+    }
+
     # With IPV6=yes in /etc/default/ufw (Ubuntu default), each "ufw allow <port>/tcp" adds IPv4 + IPv6 rules.
     print_info "UFW baseline uses dual-stack when IPv6 is enabled (see /etc/default/ufw). Add v6-only rules manually if needed."
 
@@ -6388,6 +6481,24 @@ apply_process_config_firewall() {
     if [ "$is_relay" = "true" ]; then
         apply_one_ufw 8883 "mpc-auth MQTT TLS broker"
     fi
+
+    local wg_admin_port ss_admin_port wg_egress_port ss_egress_port _vpn_pl
+    wg_admin_port=51820
+    ss_admin_port=8388
+    wg_egress_port=51830
+    ss_egress_port=8390
+    if _vpn_pl=$(_firewall_read_vpn_ports_from_configs_yaml "$config_file" 2>/dev/null) && [ -n "$_vpn_pl" ]; then
+        IFS='|' read -r wg_admin_port ss_admin_port wg_egress_port ss_egress_port <<< "$_vpn_pl"
+    else
+        print_warning "Could not read WireGuard/Shadowsocks ports via ruamel.yaml — using VPN defaults (51820/8388 admin, 51830/8390 egress)"
+    fi
+    print_info "VPN ports from configs.yaml: admin WG UDP=${wg_admin_port}, admin SS TCP+UDP=${ss_admin_port}, egress WG UDP=${wg_egress_port}, egress SS TCP+UDP=${ss_egress_port}"
+    print_info "Admin VPN (wg0): UFW for UDP ${wg_admin_port} and Shadowsocks ${ss_admin_port} is also applied when POST /vpn/setEnabled runs host automation."
+    apply_one_ufw_udp "$wg_egress_port" "Continuum peer egress WireGuard wg-egress"
+    apply_shadowsocks_ufw "$ss_egress_port" "Continuum peer egress Shadowsocks"
+    print_warning "Provider / cloud firewall (Contabo, Hetzner, AWS SG, etc.): allow inbound UDP ${wg_egress_port} for direct wg-egress."
+    print_warning "Provider firewall: when using Shadowsocks egress, also allow inbound TCP+UDP ${ss_egress_port} (host blocks public UDP ${wg_egress_port} while obfuscation is active)."
+    print_info "See systemd/README.md (WireGuard VPN — host firewall) and API_IMPLEMENTATION.md (peer egress VPN)."
 
     _apply_loopback_mongodb_owner_firewall_via_ufw_after_rules "$skip_firewall"
 
