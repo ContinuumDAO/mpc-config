@@ -510,6 +510,86 @@ if empty:
 PYSCANNERMERGE
 }
 
+# Count non-empty ScannerAPIURLs entries (yq when installed; else ruamel.yaml — provision requires python3+ruamel).
+_configs_yaml_scanner_api_urls_nonempty_count() {
+    local config_file="$1"
+    if [ ! -f "$config_file" ]; then
+        echo 0
+        return 0
+    fi
+    if command -v yq &>/dev/null; then
+        yq eval '(.ScannerAPIURLs // []) | map(select(. != null and . != "" and . != "null")) | length' "$config_file" 2>/dev/null || echo 0
+        return 0
+    fi
+    require_ruamel_yaml || {
+        echo 0
+        return 0
+    }
+    SCANNER_CNT_CFG="$config_file" python3 << 'PYSCANNERCNT'
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    print(0)
+    sys.exit(0)
+path = os.environ.get("SCANNER_CNT_CFG", "")
+if not path:
+    print(0)
+    sys.exit(0)
+yaml = YAML()
+with open(path) as f:
+    data = yaml.load(f)
+if not isinstance(data, dict):
+    print(0)
+    sys.exit(0)
+raw = data.get("ScannerAPIURLs")
+if not isinstance(raw, list):
+    print(0)
+    sys.exit(0)
+n = sum(1 for x in raw if x is not None and str(x).strip() and str(x).strip().lower() != "null")
+print(n)
+PYSCANNERCNT
+}
+
+# Print non-empty ScannerAPIURLs entries, one per line (for UFW source collection).
+_configs_yaml_scanner_api_urls_lines() {
+    local config_file="$1"
+    if [ ! -f "$config_file" ]; then
+        return 0
+    fi
+    if command -v yq &>/dev/null; then
+        yq eval '.ScannerAPIURLs[]?' "$config_file" 2>/dev/null || true
+        return 0
+    fi
+    require_ruamel_yaml || return 0
+    SCANNER_LINES_CFG="$config_file" python3 << 'PYSCANNERLINES'
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+except ImportError:
+    sys.exit(0)
+path = os.environ.get("SCANNER_LINES_CFG", "")
+if not path:
+    sys.exit(0)
+yaml = YAML()
+with open(path) as f:
+    data = yaml.load(f)
+if not isinstance(data, dict):
+    sys.exit(0)
+raw = data.get("ScannerAPIURLs")
+if not isinstance(raw, list):
+    sys.exit(0)
+for x in raw:
+    if x is None:
+        continue
+    s = str(x).strip()
+    if s and s.lower() != "null":
+        print(s)
+PYSCANNERLINES
+}
+
 # Set EnableMcpChat and EnableAgentHooks to true when missing (preserves comments; does not override explicit false).
 configs_yaml_merge_agent_chat_and_hooks_enabled() {
     local config_file="$1"
@@ -700,9 +780,7 @@ prompt_scanner_api_urls_if_empty() {
     fi
 
     local cnt=0
-    if command -v yq &>/dev/null; then
-        cnt=$(yq eval '(.ScannerAPIURLs // []) | map(select(. != null and . != "" and . != "null")) | length' "$config_file" 2>/dev/null || echo 0)
-    fi
+    cnt=$(_configs_yaml_scanner_api_urls_nonempty_count "$config_file")
     if [ "${cnt:-0}" -gt 0 ]; then
         return 0
     fi
@@ -6026,8 +6104,10 @@ _firewall_collect_scanner_relayer_sources() {
     tmpf=$(mktemp) || return 1
     local ru line src _yaml_had_scanner
     _yaml_had_scanner=false
-    ru=$(yq eval '.PreSigningVerification.RelayerAPIURL // ""' "$config_file" 2>/dev/null || echo "")
-    if [[ -n "${ru//[[:space:]]/}" ]]; then
+    ru=$(_extract_relayer_api_url_from_config "$config_file")
+    ru="${ru//$'\r'/}"
+    ru="${ru//$'\n'/}"
+    if [[ -n "${ru//[[:space:]]/}" && "$ru" != "null" ]]; then
         src=$(_firewall_entry_to_ufw_source "$ru")
         [[ -n "$src" ]] && echo "$src" >>"$tmpf"
     fi
@@ -6037,7 +6117,7 @@ _firewall_collect_scanner_relayer_sources() {
         _yaml_had_scanner=true
         src=$(_firewall_entry_to_ufw_source "$line")
         [[ -n "$src" ]] && echo "$src" >>"$tmpf"
-    done < <(yq eval '.ScannerAPIURLs[]?' "$config_file" 2>/dev/null || true)
+    done < <(_configs_yaml_scanner_api_urls_lines "$config_file")
     if [[ "$_yaml_had_scanner" != "true" ]]; then
         for line in "${DEFAULT_SCANNER_API_URLS[@]}"; do
             [[ -z "${line//[[:space:]]/}" ]] && continue
