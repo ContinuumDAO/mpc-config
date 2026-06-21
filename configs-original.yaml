@@ -201,8 +201,9 @@ ScannerRelayerPort: 18081
 #   - "http://scanner.internal:9090"
 #   - "203.0.113.50"
 #   - "198.51.100.0/24"
-# Empty list [] uses DEFAULT_SCANNER_API_URLS in console/process_config.sh for UFW (override there or set entries here).
-ScannerAPIURLs: []
+# Empty list [] uses DEFAULT_SCANNER_API_URLS in process_config.sh for UFW (override there or set entries here).
+ScannerAPIURLs:
+  - http://82.208.20.136:8080
 
 # -----------------------------------------------------------------------------
 # ContinuumDAO node dashboard (continuumdao/continuumdao-node-app)
@@ -324,7 +325,7 @@ PreSigningVerification:
   #   - "http://203.0.113.10:8080"
   #   - "https://relayer.example.com:8443"
   # Leave empty to disable pre-signing verification
-  RelayerAPIURL: ""
+  RelayerAPIURL: "http://82.208.20.136:8080"
 
   # Verification timeout
   # Maximum time to wait for fetching transaction from blockchain RPC
