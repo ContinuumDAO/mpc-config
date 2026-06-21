@@ -156,8 +156,8 @@ systemctl enable mpc-auth-agent-llm-config.path
 systemctl restart mpc-auth-agent-llm-config.path || systemctl start mpc-auth-agent-llm-config.path
 
 if ! ensure_vpn_host_packages; then
-	echo "WARNING: VPN host packages (wireguard, socat) not installed — POST /vpn/setEnabled will fail until they are." >&2
-	echo "  On Debian/Ubuntu: sudo apt install -y wireguard socat" >&2
+	echo "WARNING: VPN host packages (wireguard, socat, iproute2) not installed — POST /vpn/setEnabled will fail until they are." >&2
+	echo "  On Debian/Ubuntu: sudo apt install -y wireguard socat iproute2" >&2
 fi
 
 if ! ensure_shadowsocks_host_packages; then

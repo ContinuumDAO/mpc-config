@@ -272,7 +272,9 @@ packages_already_installed() {
         && command -v python3 >/dev/null 2>&1 \
         && python3 -c "import ruamel.yaml, cryptography" 2>/dev/null \
         && command -v wg-quick >/dev/null 2>&1 \
-        && command -v socat >/dev/null 2>&1
+        && command -v socat >/dev/null 2>&1 \
+        && command -v tc >/dev/null 2>&1 \
+        && command -v ip >/dev/null 2>&1
 }
 
 maybe_auto_skip_packages() {
@@ -470,6 +472,7 @@ if [ "$SKIP_PACKAGES" = false ]; then
         python3-cryptography \
         wireguard \
         socat \
+        iproute2 \
         jq
     install_progress_topic_set packages 85
     if [ "$DRY_RUN" = false ]; then
@@ -494,7 +497,7 @@ if [ ! -f "$_ensure_vpn_lib" ]; then
 fi
 . "$_ensure_vpn_lib"
 export CONTINUUM_INSTALL_DRY_RUN="$DRY_RUN"
-ensure_vpn_host_packages || warn "wireguard/socat missing — VPN enable will fail until: sudo apt install -y wireguard socat"
+ensure_vpn_host_packages || warn "wireguard/socat/iproute2 missing — VPN enable will fail until: sudo apt install -y wireguard socat iproute2"
 log "WireGuard host packages ready. If admin VPN handshakes fail later, allow inbound UDP 51820 in the VPS provider firewall (UFW rules are applied automatically on enable)."
 
 _ensure_ss_lib="${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/ensure-shadowsocks-host-packages.sh"

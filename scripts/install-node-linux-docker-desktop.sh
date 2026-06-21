@@ -186,7 +186,9 @@ packages_already_installed() {
         && command -v python3 >/dev/null 2>&1 \
         && python3 -c "import ruamel.yaml, cryptography" 2>/dev/null \
         && command -v wg-quick >/dev/null 2>&1 \
-        && command -v socat >/dev/null 2>&1
+        && command -v socat >/dev/null 2>&1 \
+        && command -v tc >/dev/null 2>&1 \
+        && command -v ip >/dev/null 2>&1
 }
 
 maybe_auto_skip_packages() {
@@ -200,17 +202,20 @@ maybe_auto_skip_packages() {
 }
 
 ensure_vpn_host_packages() {
-    if command -v wg-quick >/dev/null 2>&1 && command -v socat >/dev/null 2>&1; then
+    if command -v wg-quick >/dev/null 2>&1 \
+        && command -v socat >/dev/null 2>&1 \
+        && command -v tc >/dev/null 2>&1 \
+        && command -v ip >/dev/null 2>&1; then
         return 0
     fi
     if [ "$DRY_RUN" = true ]; then
-        printf '[dry-run] apt-get install -y wireguard socat\n'
+        printf '[dry-run] apt-get install -y wireguard socat iproute2\n'
         return 0
     fi
-    log "Installing wireguard and socat (VPN host automation)"
+    log "Installing wireguard, socat, and iproute2 (VPN host automation + egress rate limits)"
     wait_for_apt_lock
-    apt-get -o "DPkg::Lock::Timeout=${APT_LOCK_WAIT_SECS:-300}" install -y wireguard socat \
-        || warn "wireguard/socat install failed — VPN enable from the node app will fail until packages are installed"
+    apt-get -o "DPkg::Lock::Timeout=${APT_LOCK_WAIT_SECS:-300}" install -y wireguard socat iproute2 \
+        || warn "wireguard/socat/iproute2 install failed — VPN enable from the node app will fail until packages are installed"
 }
 
 preflight_docker() {
@@ -383,6 +388,7 @@ if [ "$SKIP_PACKAGES" = false ]; then
         python3-cryptography \
         wireguard \
         socat \
+        iproute2 \
         jq
     install_progress_spinner_stop
     install_progress_topic_done packages

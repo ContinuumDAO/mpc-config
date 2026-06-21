@@ -269,28 +269,35 @@ try_apt_python_venv_packages() {
 }
 
 try_apt_vpn_packages() {
-    command -v wg-quick >/dev/null 2>&1 && command -v socat >/dev/null 2>&1 && return 0
+    command -v wg-quick >/dev/null 2>&1 \
+        && command -v socat >/dev/null 2>&1 \
+        && command -v tc >/dev/null 2>&1 \
+        && command -v ip >/dev/null 2>&1 \
+        && return 0
     command -v apt-get >/dev/null 2>&1 || return 1
     command -v sudo >/dev/null 2>&1 || return 1
     sudo -n true 2>/dev/null || return 1
-    log "Trying passwordless apt install of wireguard-tools and socat (VPN host automation)"
+    log "Trying passwordless apt install of wireguard-tools, socat, and iproute2 (VPN host automation + egress rate limits)"
     sudo -n apt-get update -qq || return 1
-    sudo -n apt-get install -y wireguard-tools socat || return 1
+    sudo -n apt-get install -y wireguard-tools socat iproute2 || return 1
 }
 
 ensure_vpn_host_tools() {
-    if command -v wg-quick >/dev/null 2>&1 && command -v socat >/dev/null 2>&1; then
+    if command -v wg-quick >/dev/null 2>&1 \
+        && command -v socat >/dev/null 2>&1 \
+        && command -v tc >/dev/null 2>&1 \
+        && command -v ip >/dev/null 2>&1; then
         return 0
     fi
     if [ "$DRY_RUN" = true ]; then
-        printf '[dry-run] sudo apt install -y wireguard-tools socat\n'
+        printf '[dry-run] sudo apt install -y wireguard-tools socat iproute2\n'
         return 0
     fi
     if try_apt_vpn_packages; then
-        log "WireGuard host tools ready (wg-quick, socat)"
+        log "WireGuard host tools ready (wg-quick, socat, tc, ip)"
         return 0
     fi
-    warn "wireguard-tools and/or socat missing — VPN enable from the node app will fail until you run: sudo apt install -y wireguard-tools socat"
+    warn "wireguard-tools, socat, and/or iproute2 missing — VPN enable from the node app will fail until you run: sudo apt install -y wireguard-tools socat iproute2"
 }
 
 ensure_shadowsocks_host_tools() {
