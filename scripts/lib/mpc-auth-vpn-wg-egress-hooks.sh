@@ -12,7 +12,7 @@ mpc_auth_vpn_egress_apply_tc_limits() {
 	if ! command -v tc >/dev/null 2>&1; then
 		echo "mpc-auth-vpn-wg-egress-hooks: tc not installed — skipping rate limits" >&2
 		return 0
-	}
+	fi
 	if ! command -v python3 >/dev/null 2>&1; then
 		echo "mpc-auth-vpn-wg-egress-hooks: python3 required for tc limits" >&2
 		return 0
