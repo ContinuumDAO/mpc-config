@@ -98,6 +98,8 @@ On VPS hosts with **UFW active** and **Docker**, `ufw allow 51820/udp` alone is 
 
 **Multi-node groups:** **`GET /vpn/status`** **`endpointHost`** and downloaded client configs use **this node's** public IP (KeyList index + egress IP match in **`nodeAddresses`**), not the relay's first entry. Optional override: **`WireGuard.EndpointHost`** in **`configs.yaml`** (mpc-auth).
 
+**Peer egress (`wg-egress`):** **`GET /vpn/egress/status`** on **PublicDiscoveryPort** (**18080**) — read-only, no secrets. **Client config issuance** uses the **MQTT relay** (existing **8883** broker path): consumer **`POST /vpn/egress/requestClientConfig`** on **:8080** (localhost) → **`VpnEgressIssueRequest`** → egress → **`VpnEgressIssueReply`**. **`POST /vpn/egress/issueClientConfig`** remains on management **:8080** (loopback / signed debug only). **`WireGuardEgress.EndpointHost`** in **`configs.yaml`** (auto-set by **`process_config.sh`**) supplies the WireGuard **`Endpoint`** in issued client configs.
+
 **Operator flow (no SSH after install):** MPA **VPN Panel** → **`POST /vpn/setEnabled`** → host applies **`wg0`** + mgmt proxy → download client **`.conf`** → **`wg-quick up`** on the workstation. Verify with **`curl http://10.8.0.1:8080/health`** over the tunnel (ping is optional).
 
 **Do not** edit **`PostUp`** manually at the bottom of **`wg0.conf`**. Re-enable VPN from the panel (or run **`mpc-auth-vpn-enable.sh`**) after **`git pull`** so hooks are regenerated.

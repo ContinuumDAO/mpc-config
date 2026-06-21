@@ -538,13 +538,13 @@ Separate from admin **`wg0`**: optional **full-exit** routing through a configur
 | GET | `/vpn/egress/status` | Read (also on PublicDiscoveryPort) | Local egress state, `countryCode`, `sharingEnabled`, rate limits |
 | GET | `/vpn/egress/availableExits` | Read | Configured peers offering active egress |
 | POST | `/vpn/egress/setSharing` | Management sig | Enable/disable offering egress; `obfuscation`, `defaultRateLimitMbps` |
-| POST | `/vpn/egress/requestClientConfig` | Management sig | On consumer node: `{ targetAddress }` → fetches config from peer |
-| POST | `/vpn/egress/issueClientConfig` | Open on egress node | `{ consumerNodeKey }` — issues per-consumer keys (configured-list check) |
+| POST | `/vpn/egress/requestClientConfig` | Management sig | On consumer node: `{ targetAddress }` → signed MQTT request to egress, returns config |
+| POST | `/vpn/egress/issueClientConfig` | Node-key sig (management :8080 loopback) | `{ consumerNodeKey, issuedAt, clientSig }` — issues keys on egress. Remote peers use **MQTT** (`VpnEgressIssueRequest` / `VpnEgressIssueReply`), not PublicDiscoveryPort or ScannerRelayerPort. |
 | POST | `/vpn/egress/revokePeer` | Management sig | Remove consumer peer key |
 
 Host automation: **`pending-vpn-egress.json`** → **`mpc-auth-vpn-egress-pending.path`** → **`wg-quick@wg-egress`** with NAT + optional **`tc`** per peer (**`peer-rate-limits.json`**). Env: **`MPC_AUTH_VPN_EGRESS_PENDING_FILE`**, **`MPC_AUTH_VPN_EGRESS_STATE_FILE`**.
 
-**`process_config.sh`** (host firewall step): adds UFW allow for egress WireGuard UDP (**`WireGuardEgress.ListenPort`**, default **51830**) and Shadowsocks egress TCP+UDP (**`ShadowsocksEgress.ListenPort`**, default **8390**), and prints provider-panel reminders to open the same ports at the cloud firewall.
+**`process_config.sh`** (host firewall step): adds UFW allow for egress WireGuard UDP (**`WireGuardEgress.ListenPort`**, default **51830**) and Shadowsocks egress TCP+UDP (**`ShadowsocksEgress.ListenPort`**, default **8390**), and prints provider-panel reminders to open the same ports at the cloud firewall. After matching this host to **`nodeAddresses`**, it also sets **`WireGuardEgress.EndpointHost`** when missing so **`GET /vpn/egress/status`** and issued client configs expose a stable public endpoint without blocking on **`getPublicIP()`**.
 
 Default ports: WireGuard **`51830`**, Shadowsocks egress **`8390`** (separate from admin VPN).
 

@@ -617,6 +617,80 @@ PYAGENTLLMMERGE
     echo "$_out" | tail -n 1
 }
 
+# Set WireGuardEgress.EndpointHost to this node's public IP from nodeAddresses when missing (preserves comments).
+configs_yaml_merge_wireguard_egress_endpoint_host() {
+    local config_file="$1"
+    local endpoint_host="$2"
+    local _out
+    if [ -z "$config_file" ] || [ -z "$endpoint_host" ]; then
+        return 0
+    fi
+    require_ruamel_yaml || return 1
+    if ! _out=$(WG_EGRESS_MERGE_CFG="$config_file" WG_EGRESS_MERGE_HOST="$endpoint_host" python3 << 'PYWGEGRESSMERGE' 2>&1
+import os
+import sys
+try:
+    from ruamel.yaml import YAML
+    from ruamel.yaml.comments import CommentedMap
+except ImportError:
+    sys.stderr.write("configs.yaml: install ruamel.yaml\n")
+    sys.exit(1)
+
+path_cfg = os.environ["WG_EGRESS_MERGE_CFG"]
+endpoint = os.environ.get("WG_EGRESS_MERGE_HOST", "").strip()
+if not path_cfg or not endpoint:
+    sys.exit(0)
+
+yaml = YAML()
+yaml.preserve_quotes = True
+yaml.width = 4096
+yaml.indent(mapping=2, sequence=4, offset=2)
+
+with open(path_cfg, "r") as f:
+    data = yaml.load(f)
+if not isinstance(data, dict):
+    sys.stderr.write("invalid yaml root\n")
+    sys.exit(1)
+
+wg = data.get("WireGuardEgress")
+if wg is None:
+    wg = CommentedMap()
+    data["WireGuardEgress"] = wg
+elif not isinstance(wg, dict):
+    wg = CommentedMap()
+    data["WireGuardEgress"] = wg
+
+existing = str(wg.get("EndpointHost", "")).strip()
+if existing == endpoint:
+    print("present", flush=True)
+    sys.exit(0)
+if existing and existing != endpoint:
+    print(f"conflict:{existing}", flush=True)
+    sys.exit(0)
+
+wg["EndpointHost"] = endpoint
+with open(path_cfg, "w") as f:
+    yaml.dump(data, f)
+print(f"merged:{endpoint}", flush=True)
+PYWGEGRESSMERGE
+); then
+        echo "$_out" >&2
+        return 1
+    fi
+    _last_line=$(echo "$_out" | tail -n 1)
+    case "$_last_line" in
+        merged:*)
+            print_success "configs.yaml: WireGuardEgress.EndpointHost set to ${_last_line#merged:} (this node's nodeAddresses IP)"
+            ;;
+        present)
+            print_info "configs.yaml: WireGuardEgress.EndpointHost already matches this node (${endpoint_host})"
+            ;;
+        conflict:*)
+            print_warning "configs.yaml: WireGuardEgress.EndpointHost is ${_last_line#conflict:} (not overwritten; expected ${endpoint_host} for this host)"
+            ;;
+    esac
+}
+
 # When ScannerAPIURLs is empty: interactive prompt (Enter = defaults), else merge defaults with a clear message.
 # Uses /dev/tty like RelayerAPIURL so prompts work when stdin is not a TTY.
 prompt_scanner_api_urls_if_empty() {
@@ -7189,6 +7263,14 @@ main() {
     fi
     if first_node_address_is_relay_placeholder "$CONFIG_FILE"; then
         print_info "First nodeAddresses entry uses ${NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4} as relay placeholder — MQTT relay steps stay disabled until first is the real relay IP (this machine is a peer elsewhere in the list)."
+    fi
+
+    local _this_node_ip=""
+    _this_node_ip=$(get_browser_https_node_ip "$CONFIG_FILE") || true
+    if [ -n "$_this_node_ip" ]; then
+        configs_yaml_merge_wireguard_egress_endpoint_host "$CONFIG_FILE" "$_this_node_ip" || true
+    else
+        print_warning "Could not match this host to nodeAddresses — skipping WireGuardEgress.EndpointHost auto-set (set manually for peer egress client configs)"
     fi
 
     prompt_browser_loopback_read_http
