@@ -37,7 +37,8 @@ mpc_auth_vpn_apply_ufw_rules() {
 }
 
 # mpc_auth_vpn_insert_wg0_hooks WG0_CONF POST_UP POST_DOWN
-# Removes stray PostUp/PostDown lines and inserts hooks immediately before [Peer].
+# Removes stray PostUp/PostDown lines and inserts hooks immediately before [Peer],
+# or after [Interface] keys when the config has no peers yet (wg-egress at enable time).
 mpc_auth_vpn_insert_wg0_hooks() {
 	local wg0_conf="$1"
 	local post_up="$2"
@@ -66,24 +67,52 @@ def is_hook(line: str) -> bool:
     s = line.strip()
     return s.startswith("PostUp") or s.startswith("PostDown")
 
+def hook_lines():
+    out = []
+    for cmd in post_up_cmds:
+        out.append(f"PostUp = {cmd}\n")
+    for cmd in post_down_cmds:
+        out.append(f"PostDown = {cmd}\n")
+    return out
+
+cleaned = [ln for ln in lines if not is_hook(ln)]
+hooks = hook_lines()
+
 out = []
 inserted = False
-for line in lines:
-    if is_hook(line):
-        continue
+for line in cleaned:
     if not inserted and line.strip() == "[Peer]":
-        for cmd in post_up_cmds:
-            out.append(f"PostUp = {cmd}\n")
-        for cmd in post_down_cmds:
-            out.append(f"PostDown = {cmd}\n")
-        if post_up_cmds or post_down_cmds:
+        out.extend(hooks)
+        if hooks:
             out.append("\n")
         inserted = True
     out.append(line)
 
 if not inserted:
-    sys.stderr.write(f"{path}: missing [Peer] section\n")
-    sys.exit(1)
+    if not hooks:
+        out = cleaned
+    else:
+        out = []
+        i = 0
+        while i < len(cleaned):
+            line = cleaned[i]
+            out.append(line)
+            if line.strip() == "[Interface]":
+                i += 1
+                while i < len(cleaned):
+                    nxt = cleaned[i]
+                    if nxt.strip().startswith("["):
+                        break
+                    out.append(nxt)
+                    i += 1
+                out.extend(hooks)
+                out.append("\n")
+                inserted = True
+                continue
+            i += 1
+        if not inserted:
+            sys.stderr.write(f"{path}: missing [Interface] section\n")
+            sys.exit(1)
 
 with open(path, "w", encoding="utf-8") as f:
     f.writelines(out)

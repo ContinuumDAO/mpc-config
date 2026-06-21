@@ -59,7 +59,11 @@ run_script() {
 		mv -f "$PROCESSING" "${DONE_DIR}/failed-$(_stamp).missing-script.json" || true
 		exit 1
 	fi
-	"$script"
+	if ! "$script"; then
+		echo "mpc-auth-apply-pending-vpn-egress: ${script} failed (exit $?)" >&2
+		mv -f "$PROCESSING" "${DONE_DIR}/failed-$(_stamp).apply.json" || true
+		exit 1
+	fi
 }
 
 case "$MPC_AUTH_VPN_EGRESS_ACTION" in
