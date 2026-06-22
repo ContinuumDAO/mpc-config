@@ -3,10 +3,28 @@
 
 set -euo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_lib() {
+	local name="$1"
+	if [[ -f "${HERE}/${name}" ]]; then
+		# shellcheck source=/dev/null
+		. "${HERE}/${name}"
+	elif [[ -f "${HERE}/../scripts/lib/${name}" ]]; then
+		# shellcheck source=/dev/null
+		. "${HERE}/../scripts/lib/${name}"
+	fi
+}
+
+_lib mpc-auth-vpn-obfuscation-hooks.sh
+_lib mpc-auth-vpn-wg-obfuscator-egress-hooks.sh
+_lib mpc-auth-vpn-udp2raw-egress-hooks.sh
+
 STATE_FILE="${MPC_AUTH_VPN_EGRESS_STATE_FILE:-/var/lib/mpc-auth-docker/vpn-egress-state.json}"
 
-systemctl stop mpc-auth-shadowsocks-egress.service 2>/dev/null || true
-systemctl disable mpc-auth-shadowsocks-egress.service 2>/dev/null || true
+if declare -F mpc_auth_vpn_stop_obfuscation_egress_systemd >/dev/null 2>&1; then
+	mpc_auth_vpn_stop_obfuscation_egress_systemd
+fi
+
 systemctl stop mpc-auth-wireguard-wg-egress.service 2>/dev/null || true
 systemctl disable mpc-auth-wireguard-wg-egress.service 2>/dev/null || true
 

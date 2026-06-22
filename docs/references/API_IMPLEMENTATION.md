@@ -562,7 +562,9 @@ Separate from admin **`wg0`**: optional **full-exit** routing through a configur
 
 Host automation: **`pending-vpn-egress.json`** → **`mpc-auth-vpn-egress-pending.path`** → **`wg-quick@wg-egress`** with NAT + optional **`tc`** per peer (**`peer-rate-limits.json`**). Env: **`MPC_AUTH_VPN_EGRESS_PENDING_FILE`**, **`MPC_AUTH_VPN_EGRESS_STATE_FILE`**.
 
-**`process_config.sh`** (host firewall step): adds UFW allow for egress WireGuard UDP (**`WireGuardEgress.ListenPort`**, default **51830**) and Shadowsocks egress TCP+UDP (**`ShadowsocksEgress.ListenPort`**, default **8390**), and prints provider-panel reminders to open the same ports at the cloud firewall. After matching this host to **`nodeAddresses`**, it also sets **`WireGuardEgress.EndpointHost`** when missing so **`GET /vpn/egress/status`** and issued client configs expose a stable public endpoint without blocking on **`getPublicIP()`**.
+**`process_config.sh`** (host firewall step): adds UFW allow for egress WireGuard UDP (**`WireGuardEgress.ListenPort`**, default **51830**), Shadowsocks egress TCP+UDP (**`ShadowsocksEgress.ListenPort`**, default **8390**), wg-obfuscator egress UDP (**`WgObfuscatorEgress.ListenPort`**, default **51832**), and udp2raw egress TCP (**`Udp2rawEgress.ListenPort`**, default **8443**), with provider-panel reminders for the same ports. After matching this host to **`nodeAddresses`**, it also sets **`WireGuardEgress.EndpointHost`** when missing so **`GET /vpn/egress/status`** and issued client configs expose a stable public endpoint without blocking on **`getPublicIP()`**.
+
+Egress obfuscation options: **`none`**, **`shadowsocks`**, **`wg_obfuscator`**, **`udp2raw`** (LWO is admin VPN only). Client bundles include transport artifacts matching the provider's sharing setting (`cont-egss.json`, `cont-wgo.conf`, or `cont-u2r.sh`).
 
 Default ports: WireGuard **`51830`**, Shadowsocks egress **`8390`** (separate from admin VPN).
 

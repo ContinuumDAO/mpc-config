@@ -2,11 +2,12 @@
 # WireGuard wg-egress hooks: full-tunnel NAT for peer egress (no management API proxy).
 # Source mpc-auth-vpn-wg0-hooks.sh first (mpc_auth_vpn_ufw_active).
 
-# mpc_auth_vpn_egress_ufw_listen_port_live PORT — true when ufw-user-input ACCEPTs UDP PORT.
+# mpc_auth_vpn_egress_ufw_listen_port_live PORT [tcp|udp]
 mpc_auth_vpn_egress_ufw_listen_port_live() {
 	local port="${1:?port required}"
+	local proto="${2:-udp}"
 	command -v iptables >/dev/null 2>&1 || return 1
-	iptables -L ufw-user-input -n 2>/dev/null | grep -qE "ACCEPT[[:space:]].*udp dpt:${port}([[:space:]]|$)"
+	iptables -L ufw-user-input -n 2>/dev/null | grep -qE "ACCEPT[[:space:]].*${proto} dpt:${port}([[:space:]]|$)"
 }
 
 # mpc_auth_vpn_ufw_chains_present — INPUT still jumps through UFW chains (even if ufw disabled).
@@ -44,6 +45,14 @@ mpc_auth_vpn_egress_ensure_ufw_listen_port() {
 		ufw allow "${transport_port}/udp" comment 'Continuum egress Shadowsocks' || true
 		verify_port="$transport_port"
 		;;
+	wg_obfuscator | lwo)
+		ufw allow "${transport_port}/udp" comment "Continuum egress ${obfuscation} obfuscation" || true
+		verify_port="$transport_port"
+		;;
+	udp2raw)
+		ufw allow "${transport_port}/tcp" comment 'Continuum egress udp2raw obfuscation' || true
+		verify_port="$transport_port"
+		;;
 	*)
 		ufw allow "${listen_port}/udp" comment 'Continuum wg-egress' || true
 		;;
@@ -51,19 +60,31 @@ mpc_auth_vpn_egress_ensure_ufw_listen_port() {
 	ufw allow in on wg-egress comment 'Continuum wg-egress' || true
 	ufw reload || true
 
-	if mpc_auth_vpn_egress_ufw_listen_port_live "$verify_port"; then
-		echo "mpc-auth-vpn-wg-egress-hooks: UFW accept for UDP ${verify_port} is live in ufw-user-input" >&2
+	local verify_proto="udp"
+	case "$obfuscation" in
+	udp2raw) verify_proto="tcp" ;;
+	esac
+
+	if mpc_auth_vpn_egress_ufw_listen_port_live "$verify_port" "$verify_proto"; then
+		echo "mpc-auth-vpn-wg-egress-hooks: UFW accept for port ${verify_port} is live in ufw-user-input" >&2
 		return 0
 	fi
 
-	echo "mpc-auth-vpn-wg-egress-hooks: UFW rule for UDP ${verify_port} missing from ufw-user-input — inserting iptables ACCEPT" >&2
-	iptables -I ufw-user-input -p udp --dport "$verify_port" -j ACCEPT || true
+	echo "mpc-auth-vpn-wg-egress-hooks: UFW rule for port ${verify_port} missing from ufw-user-input — inserting iptables ACCEPT" >&2
+	case "$obfuscation" in
+	udp2raw)
+		iptables -I ufw-user-input -p tcp --dport "$verify_port" -j ACCEPT || true
+		;;
+	*)
+		iptables -I ufw-user-input -p udp --dport "$verify_port" -j ACCEPT || true
+		;;
+	esac
 
-	if mpc_auth_vpn_egress_ufw_listen_port_live "$verify_port"; then
+	if mpc_auth_vpn_egress_ufw_listen_port_live "$verify_port" "$verify_proto"; then
 		return 0
 	fi
 
-	echo "mpc-auth-vpn-wg-egress-hooks: failed to activate UFW accept for UDP ${verify_port} (peer egress handshakes will fail)" >&2
+	echo "mpc-auth-vpn-wg-egress-hooks: failed to activate UFW accept for ${verify_proto} ${verify_port} (peer egress handshakes will fail)" >&2
 	return 1
 }
 
@@ -140,7 +161,7 @@ mpc_auth_vpn_egress_prepare_wg_conf() {
 	post_down_parts+=("iptables -t nat -D POSTROUTING -s ${vpn_cidr} -o ${default_if} -j MASQUERADE || true")
 
 	case "$obfuscation" in
-	shadowsocks)
+	shadowsocks | wg_obfuscator | lwo | udp2raw)
 		post_up_parts+=("iptables -I INPUT -p udp --dport ${listen_port} ! -i lo -j DROP")
 		post_down_parts+=("iptables -D INPUT -p udp --dport ${listen_port} ! -i lo -j DROP || true")
 		;;
@@ -148,7 +169,7 @@ mpc_auth_vpn_egress_prepare_wg_conf() {
 
 	if mpc_auth_vpn_ufw_active; then
 		case "$obfuscation" in
-		shadowsocks)
+		shadowsocks | wg_obfuscator | lwo | udp2raw)
 			post_up_parts+=("iptables -I INPUT -i wg-egress -j ACCEPT")
 			post_down_parts+=("iptables -D INPUT -i wg-egress -j ACCEPT || true")
 			;;

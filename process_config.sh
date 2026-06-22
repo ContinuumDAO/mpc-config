@@ -6049,8 +6049,8 @@ show_process_config_help() {
     echo "  PreSigningVerification.RelayerAPIURL and/or ScannerAPIURLs resolve to IPv4 (see configs.yaml)."
     echo "  ManagementAPIsPort is not opened in UFW by default; set UFW_OPEN_MANAGEMENT_PORT=1 if peers/operators need inbound HTTP to the management API."
     echo "  Loopback Mongo: after baseline rules, installs /etc/ufw/after.rules DROP for non-root → 127.0.0.1:Mongo (disable: APPLY_LOOPBACK_MONGO_OWNER_FW=0)."
-    echo "  Peer egress VPN (wg-egress): opens UFW UDP WireGuardEgress.ListenPort (default 51830) and TCP+UDP ShadowsocksEgress.ListenPort (default 8390)."
-    echo "  Also prints provider-panel reminders — cloud SG must allow the same ports (UDP 51830 direct; TCP+UDP 8390 when Shadowsocks egress is used)."
+    echo "  Peer egress VPN (wg-egress): opens UFW UDP WireGuardEgress.ListenPort (default 51830), TCP+UDP ShadowsocksEgress (8390), UDP WgObfuscatorEgress (51832), TCP Udp2rawEgress (8443)."
+    echo "  Also prints provider-panel reminders — cloud SG must allow the same transport ports when obfuscation is used."
     echo "  If UFW is inactive, you are prompted (via /dev/tty) to run sudo ufw enable, or enable manually."
     echo "  Use --no-firewall to skip (not recommended for production / financial nodes)."
     echo ""
@@ -6182,7 +6182,7 @@ PYFWPORTS
 }
 
 # WireGuard admin + peer egress (wg-egress) ports from configs.yaml. Defaults match mpc-auth managementapi_vpn*.go.
-# Prints: wg_admin_udp|ss_admin_tcp|wg_egress_udp|ss_egress_tcp
+# Prints: wg_admin_udp|ss_admin_tcp|wg_egress_udp|ss_egress_tcp|wo_egress_udp|u2_egress_tcp
 _firewall_read_vpn_ports_from_configs_yaml() {
     local config_file="$1"
     FW_VPN_PORTS_CFG="$config_file" python3 << 'PYFWVPNPORTS'
@@ -6221,7 +6221,9 @@ wg_admin = _section_port("WireGuard", "ListenPort", 51820)
 ss_admin = _section_port("Shadowsocks", "ListenPort", 8388)
 wg_egress = _section_port("WireGuardEgress", "ListenPort", 51830)
 ss_egress = _section_port("ShadowsocksEgress", "ListenPort", 8390)
-print(f"{wg_admin}|{ss_admin}|{wg_egress}|{ss_egress}")
+wo_egress = _section_port("WgObfuscatorEgress", "ListenPort", 51832)
+u2_egress = _section_port("Udp2rawEgress", "ListenPort", 8443)
+print(f"{wg_admin}|{ss_admin}|{wg_egress}|{ss_egress}|{wo_egress}|{u2_egress}")
 PYFWVPNPORTS
 }
 
@@ -6641,22 +6643,28 @@ apply_process_config_firewall() {
         apply_one_ufw 8883 "mpc-auth MQTT TLS broker"
     fi
 
-    local wg_admin_port ss_admin_port wg_egress_port ss_egress_port _vpn_pl
+    local wg_admin_port ss_admin_port wg_egress_port ss_egress_port wo_egress_port u2_egress_port _vpn_pl
     wg_admin_port=51820
     ss_admin_port=8388
     wg_egress_port=51830
     ss_egress_port=8390
+    wo_egress_port=51832
+    u2_egress_port=8443
     if _vpn_pl=$(_firewall_read_vpn_ports_from_configs_yaml "$config_file" 2>/dev/null) && [ -n "$_vpn_pl" ]; then
-        IFS='|' read -r wg_admin_port ss_admin_port wg_egress_port ss_egress_port <<< "$_vpn_pl"
+        IFS='|' read -r wg_admin_port ss_admin_port wg_egress_port ss_egress_port wo_egress_port u2_egress_port <<< "$_vpn_pl"
     else
-        print_warning "Could not read WireGuard/Shadowsocks ports via ruamel.yaml — using VPN defaults (51820/8388 admin, 51830/8390 egress)"
+        print_warning "Could not read WireGuard/Shadowsocks ports via ruamel.yaml — using VPN defaults (51820/8388 admin, 51830/8390/51832/8443 egress)"
     fi
-    print_info "VPN ports from configs.yaml: admin WG UDP=${wg_admin_port}, admin SS TCP+UDP=${ss_admin_port}, egress WG UDP=${wg_egress_port}, egress SS TCP+UDP=${ss_egress_port}"
+    print_info "VPN ports from configs.yaml: admin WG UDP=${wg_admin_port}, admin SS TCP+UDP=${ss_admin_port}, egress WG UDP=${wg_egress_port}, egress SS TCP+UDP=${ss_egress_port}, egress WO UDP=${wo_egress_port}, egress U2 TCP=${u2_egress_port}"
     print_info "Admin VPN (wg0): UFW for UDP ${wg_admin_port} and Shadowsocks ${ss_admin_port} is also applied when POST /vpn/setEnabled runs host automation."
     apply_one_ufw_udp "$wg_egress_port" "Continuum peer egress WireGuard wg-egress"
     apply_shadowsocks_ufw "$ss_egress_port" "Continuum peer egress Shadowsocks"
+    apply_one_ufw_udp "$wo_egress_port" "Continuum peer egress wg-obfuscator"
+    apply_one_ufw "$u2_egress_port" "Continuum peer egress udp2raw"
     print_warning "Provider / cloud firewall (Contabo, Hetzner, AWS SG, etc.): allow inbound UDP ${wg_egress_port} for direct wg-egress."
-    print_warning "Provider firewall: when using Shadowsocks egress, also allow inbound TCP+UDP ${ss_egress_port} (host blocks public UDP ${wg_egress_port} while obfuscation is active)."
+    print_warning "Provider firewall: when using Shadowsocks egress, also allow inbound TCP+UDP ${ss_egress_port}."
+    print_warning "Provider firewall: when using wg-obfuscator egress, also allow inbound UDP ${wo_egress_port}."
+    print_warning "Provider firewall: when using udp2raw egress, also allow inbound TCP ${u2_egress_port}."
     print_info "See systemd/README.md (WireGuard VPN — host firewall) and API_IMPLEMENTATION.md (peer egress VPN)."
 
     _apply_loopback_mongodb_owner_firewall_via_ufw_after_rules "$skip_firewall"

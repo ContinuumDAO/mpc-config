@@ -98,3 +98,49 @@ mpc_auth_vpn_stop_obfuscation_systemd() {
 	udp2raw) mpc_auth_vpn_stop_udp2raw_systemd ;;
 	esac
 }
+
+# mpc_auth_vpn_start_obfuscation_egress_systemd OBFUSCATION — peer egress (wg-egress) transports.
+mpc_auth_vpn_start_obfuscation_egress_systemd() {
+	local obfuscation
+	obfuscation="$(mpc_auth_vpn_normalize_obfuscation "${1:-}")"
+	case "$obfuscation" in
+	shadowsocks)
+		if ! command -v systemctl >/dev/null 2>&1; then
+			return 1
+		fi
+		systemctl daemon-reload
+		systemctl enable mpc-auth-shadowsocks-egress.service
+		systemctl restart mpc-auth-shadowsocks-egress.service
+		;;
+	wg_obfuscator)
+		mpc_auth_vpn_start_wg_obfuscator_egress_systemd
+		;;
+	udp2raw)
+		mpc_auth_vpn_start_udp2raw_egress_systemd
+		;;
+	*)
+		return 0
+		;;
+	esac
+}
+
+# mpc_auth_vpn_stop_obfuscation_egress_systemd [OBFUSCATION]
+mpc_auth_vpn_stop_obfuscation_egress_systemd() {
+	local obfuscation="${1:-}"
+	if [[ -z "$obfuscation" ]]; then
+		systemctl stop mpc-auth-shadowsocks-egress.service 2>/dev/null || true
+		systemctl disable mpc-auth-shadowsocks-egress.service 2>/dev/null || true
+		mpc_auth_vpn_stop_wg_obfuscator_egress_systemd
+		mpc_auth_vpn_stop_udp2raw_egress_systemd
+		return 0
+	fi
+	obfuscation="$(mpc_auth_vpn_normalize_obfuscation "$obfuscation")"
+	case "$obfuscation" in
+	shadowsocks)
+		systemctl stop mpc-auth-shadowsocks-egress.service 2>/dev/null || true
+		systemctl disable mpc-auth-shadowsocks-egress.service 2>/dev/null || true
+		;;
+	wg_obfuscator) mpc_auth_vpn_stop_wg_obfuscator_egress_systemd ;;
+	udp2raw) mpc_auth_vpn_stop_udp2raw_egress_systemd ;;
+	esac
+}

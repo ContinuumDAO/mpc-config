@@ -1,0 +1,15 @@
+[Unit]
+Description=udp2raw server for wg-egress transport obfuscation (Continuum MPC)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-udp2raw-egress-run.sh
+Restart=on-failure
+RestartSec=5
+StandardInput=null
+
+[Install]
+WantedBy=multi-user.target

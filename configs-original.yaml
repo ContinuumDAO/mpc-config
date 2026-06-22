@@ -169,6 +169,18 @@ ManagementAPIsPort: 8080
 #   LocalTunnelPort: 51831
 #   ClientMtu: 1280
 #
+# wg-obfuscator for peer egress (optional):
+# WgObfuscatorEgress:
+#   ListenPort: 51832
+#   LocalTunnelPort: 51831
+#   ClientMtu: 1280
+#
+# udp2raw for peer egress (optional fake-TCP):
+# Udp2rawEgress:
+#   ListenPort: 8443
+#   LocalTunnelPort: 51831
+#   ClientMtu: 1280
+#
 # Note: Compose defaults to continuumdao/mpc-auth:latest — GET /version returns Data.version as the application semver (e.g. v1.1)
 # baked into that image at build time, not the Docker tag string.
 #

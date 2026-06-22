@@ -1,0 +1,15 @@
+[Unit]
+Description=wg-obfuscator server for wg-egress transport obfuscation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/bin/env wg-obfuscator --config /var/lib/mpc-auth-docker/wg-obfuscator-egress/server.conf
+Restart=on-failure
+RestartSec=3
+StandardInput=null
+
+[Install]
+WantedBy=multi-user.target

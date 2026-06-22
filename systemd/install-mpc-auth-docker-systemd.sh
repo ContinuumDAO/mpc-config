@@ -74,7 +74,10 @@ install -m 0755 \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-udp2raw-hooks.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-obfuscation-hooks.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-wg-egress-hooks.sh" \
+	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-wg-obfuscator-egress-hooks.sh" \
+	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-udp2raw-egress-hooks.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-udp2raw-run.sh" \
+	"${REPO_ROOT}/scripts/lib/mpc-auth-udp2raw-egress-run.sh" \
 	"$LIBEXEC/"
 
 if [[ "$INSTALL_ENV" == true ]]; then
@@ -113,6 +116,8 @@ install -m 0644 \
 	"$HERE/mpc-auth-vpn-egress-pending.service" \
 	"$HERE/mpc-auth-wireguard-wg-egress.service" \
 	"$HERE/mpc-auth-shadowsocks-egress.service" \
+	"$HERE/mpc-auth-wg-obfuscator-egress.service" \
+	"$HERE/mpc-auth-udp2raw-egress.service" \
 	"$HERE/mpc-auth-agent-llm-config.path" \
 	"$HERE/mpc-auth-agent-llm-config.service" \
 	"$UNIT_DIR/"
@@ -203,7 +208,7 @@ echo "  $LIBEXEC/mpc-auth-apply-pending-vpn-egress.sh + mpc-auth-vpn-egress-{ena
 echo "  $UNIT_DIR/mpc-auth-vpn-pending.{path,service} (bind-mount /var/lib/mpc-auth-docker in compose)"
 echo "  $UNIT_DIR/mpc-auth-vpn-egress-pending.{path,service} (peer egress VPN)"
 echo "  $UNIT_DIR/mpc-auth-wireguard-wg0.service + mpc-auth-vpn-mgmt-proxy.service + mpc-auth-shadowsocks.service + mpc-auth-wg-obfuscator.service + mpc-auth-udp2raw.service + mpc-auth-lwo.service"
-echo "  $UNIT_DIR/mpc-auth-wireguard-wg-egress.service + mpc-auth-shadowsocks-egress.service"
+echo "  $UNIT_DIR/mpc-auth-wireguard-wg-egress.service + mpc-auth-shadowsocks-egress.service + mpc-auth-wg-obfuscator-egress.service + mpc-auth-udp2raw-egress.service"
 echo "  ${HERE}/write-vpn-host-obfuscation-capabilities.sh (refresh vpn-host-obfuscation.json after obfuscation binary install)"
 echo
 echo "Run: sudo systemctl start mpc-auth-docker-restart.service"
