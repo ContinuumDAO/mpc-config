@@ -762,6 +762,7 @@ The docker-compose files include:
 **Lockdown (this repo’s default)**
 
 - Management is **loopback-only** on the host via **`127.0.0.1:8080:8080`**. Remote **peer** **`getNodeKey`** probes use **18080** (then **8080** if needed), plus **18081** for scanner/relayer as designed — not raw **8080** on the public internet for management.
+- **Peer egress discovery** (`GET /vpn/egress/availableExits`) uses the **MQTT relay** (same broker path as **`VpnEgressIssueRequest`**), not HTTP to peer **8080** or PublicDiscoveryPort.
 
 **Production Setup:**
 - The **first node** in each group runs mosquitto (via Docker using docker-compose, or directly on the host)
