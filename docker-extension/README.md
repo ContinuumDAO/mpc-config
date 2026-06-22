@@ -237,6 +237,7 @@ On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the e
 
 | Symptom | Check |
 |---------|--------|
+| macOS `declare: -g: invalid option` / exit 2 after clone | macOS `/bin/bash` is 3.2 — install needs bash 4+ for progress UI: `brew install bash`, then retry. Install should still proceed without brew bash once the extension/repo include the bash 3.2 fallback (update extension + pull latest `main`). |
 | macOS Install fails (passwordless sudo) | Run `sudo -k && sudo -n true` in Terminal (not just `sudo -n` after a recent login). Put NOPASSWD in `/etc/sudoers.d/` so it overrides the default `%admin` rule. Visudo line must match the user shown in the install log (`Docker Desktop host exec user:`). Reinstall the extension after updating — host binaries ship inside the image. |
 | macOS watcher not running | `bash ~/mpc-config/macos-desktop/install-launchagent.sh --repo-dir ~/mpc-config` |
 | Linux `sudo` password prompt / install hangs | Configure passwordless sudo for your user, or run orchestrator manually in a terminal |

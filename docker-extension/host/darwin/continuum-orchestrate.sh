@@ -172,9 +172,13 @@ case "$PROFILE" in
     macos)
         INSTALL_SH="$REPO_DIR/scripts/install-node-macos-docker-desktop.sh"
         [ -x "$INSTALL_SH" ] || [ -f "$INSTALL_SH" ] || die "missing $INSTALL_SH after clone"
-        log "Running install-node-macos-docker-desktop.sh as $(whoami) (macOS Docker Desktop profile)"
+        CONTINUUM_BASH="$(bash "$REPO_DIR/scripts/lib/resolve-bash.sh" 2>/dev/null || command -v bash)"
+        if ! "$CONTINUUM_BASH" -c '(( BASH_VERSINFO[0] >= 4 ))' 2>/dev/null; then
+            warn "bash 4+ not found (macOS /bin/bash is 3.2) — install progress UI disabled; run: brew install bash"
+        fi
+        log "Running install-node-macos-docker-desktop.sh as $(whoami) (macOS Docker Desktop profile, bash: ${CONTINUUM_BASH})"
         exec env CONTINUUM_INSTALL_PROGRESS="${CONTINUUM_INSTALL_PROGRESS:-}" \
-            bash "$INSTALL_SH" --repo-dir "$REPO_DIR" "${INSTALL_ARGS[@]}"
+            "$CONTINUUM_BASH" "$INSTALL_SH" --repo-dir "$REPO_DIR" "${INSTALL_ARGS[@]}"
         ;;
     *)
         die "unsupported profile: $PROFILE"

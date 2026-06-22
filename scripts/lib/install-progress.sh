@@ -16,6 +16,44 @@ if [ -n "$INSTALL_PROGRESS_LIB_LOADED" ]; then
 fi
 INSTALL_PROGRESS_LIB_LOADED=1
 
+# macOS and some minimal images ship bash 3.2 (no declare -g / associative arrays).
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+    CONTINUUM_INSTALL_PROGRESS=off
+    export CONTINUUM_INSTALL_PROGRESS
+    INSTALL_PROGRESS_PULL_WEIGHT="${INSTALL_PROGRESS_PULL_WEIGHT:-20}"
+    INSTALL_PROGRESS_START_STACK_WEIGHT="${INSTALL_PROGRESS_START_STACK_WEIGHT:-12}"
+
+    install_progress_ui_active() { return 1; }
+    install_progress_init() { :; }
+    install_progress_finish() { :; }
+    install_progress_topic_begin() { :; }
+    install_progress_topic_set() { :; }
+    install_progress_topic_done() { :; }
+    install_progress_topic_skip() { :; }
+    install_progress_topic_fail() { :; }
+    install_progress_redraw() { :; }
+    install_progress_tick() { :; }
+    install_progress_spinner_start() { :; }
+    install_progress_spinner_stop() { :; }
+    install_progress_emit_sync() { :; }
+    install_progress_emit_sync_force() { :; }
+    install_progress_flush_stdout() { :; }
+    install_progress_register_pc_topics() { :; }
+    install_progress_register_compose_pull_topics() { :; }
+    install_progress_register_pull_topic() {
+        local image="$1"
+        printf 'pull:%s' "${image//[^a-zA-Z0-9._-]/_}"
+    }
+    install_progress_run() {
+        shift
+        "$@"
+    }
+    install_progress_mark_done_if() { :; }
+    install_progress_topic_if_registered() { :; }
+
+    return 0 2>/dev/null || exit 0
+fi
+
 # --- internal state ---
 _INSTALL_PROGRESS_MODE=""
 _INSTALL_PROGRESS_PROFILE=""

@@ -31,7 +31,8 @@ bash /tmp/continuum-desktop-orchestrate.sh --profile macos --node-mgt-key "0x…
 ## Prerequisites
 
 - Docker Desktop with **docker compose v2**
-- **Homebrew** (recommended): `brew install python@3 yq wireguard-tools socat`
+- **Homebrew** (recommended): `brew install python@3 yq wireguard-tools socat bash`
+  - macOS ships **bash 3.2** (`/bin/bash`); the install progress UI needs **bash 4+** (Homebrew `bash` is used automatically when present).
 - **Passwordless sudo** for extension-driven install (creates `/var/lib/mpc-auth-docker`). On macOS the default `%admin` rule requires a password — add a NOPASSWD line in `/etc/sudoers.d/` (loaded after the main sudoers file):
 
   ```bash
