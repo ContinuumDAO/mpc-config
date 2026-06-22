@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 EnvironmentFile=-/etc/default/mpc-auth-docker
-ExecStart=/usr/bin/ssserver -c /var/lib/mpc-auth-docker/shadowsocks-egress/ssserver.json
+ExecStart=/usr/bin/env ssserver -c /var/lib/mpc-auth-docker/shadowsocks-egress/ssserver.json
 Restart=on-failure
 RestartSec=3
 StandardInput=null

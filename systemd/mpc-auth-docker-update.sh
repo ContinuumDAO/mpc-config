@@ -238,6 +238,42 @@ mpc_auth_git_pull_compose_repo() {
 	fi
 }
 
+# systemd units run /usr/local/libexec/mpc-auth/*.sh — not the repo checkout. After git pull,
+# re-install with --no-env so libexec + unit files match while preserving /etc/default/mpc-auth-docker.
+mpc_auth_sync_libexec_from_compose_repo() {
+	case "${MPC_AUTH_SKIP_SYSTEMD_SYNC:-${PROCESS_CONFIG_SKIP_SYSTEMD:-0}}" in
+	1 | true | TRUE | yes | YES) return 0 ;;
+	esac
+
+	if [[ ! -d /etc/systemd/system ]]; then
+		return 0
+	fi
+	if [[ ! -f /etc/systemd/system/mpc-auth-docker-restart.service ]] \
+		&& [[ ! -f /etc/systemd/system/mpc-auth-docker-pending-update.service ]] \
+		&& [[ ! -f /etc/systemd/system/mpc-auth-docker-pending-reboot.service ]] \
+		&& [[ ! -f /etc/systemd/system/mpc-auth-vpn-pending.path ]]; then
+		return 0
+	fi
+
+	local workdir ins_script
+	workdir="$(mpc_auth_compose_workdir_resolve)"
+	if [[ -z "$workdir" ]]; then
+		return 0
+	fi
+	ins_script="${workdir}/systemd/install-mpc-auth-docker-systemd.sh"
+	if [[ ! -f "$ins_script" ]]; then
+		echo "warning: mpc-auth systemd sync skipped — missing $(printf %q "$ins_script") (not an mpc-config checkout?)." >&2
+		return 0
+	fi
+
+	echo "mpc-config: refreshing /usr/local/libexec/mpc-auth/ from $(printf %q "$ins_script") (--no-env preserves /etc/default/mpc-auth-docker)"
+	if bash "$ins_script" --no-env; then
+		echo "mpc-config: host libexec scripts and systemd units updated from repo."
+	else
+		echo "warning: install-mpc-auth-docker-systemd.sh --no-env failed. Run manually: sudo bash $(printf %q "$ins_script") --no-env" >&2
+	fi
+}
+
 mpc_auth_run_restart_or_recreate() {
 	local workdir svc explicit
 	svc="$(mpc_auth_trim "${MPC_AUTH_COMPOSE_SERVICE:-app}")"
@@ -306,6 +342,7 @@ mpc_auth_run_restart_or_recreate() {
 if [[ "$RESTART_ONLY" == "1" ]]; then
 	echo "MPC_AUTH_PENDING_RESTART_ONLY=1 — mpc-config git pull (if configured), then restart/recreate without Docker image pull/rmi (tag=$TAG)."
 	mpc_auth_git_pull_compose_repo
+	mpc_auth_sync_libexec_from_compose_repo
 	mpc_auth_sync_compose_role_if_needed || true
 	if [[ "${MPC_AUTH_COMPOSE_NEEDS_FULL_STACK:-0}" == "1" ]]; then
 		echo "mpc-auth-docker-update: relay/client compose role requires full stack (mosquitto + app)."
@@ -323,6 +360,7 @@ if [[ -z "$(mpc_auth_trim "${MPC_AUTH_POST_UPDATE_CMD:-}")" ]]; then
 fi
 
 mpc_auth_git_pull_compose_repo
+mpc_auth_sync_libexec_from_compose_repo
 mpc_auth_sync_compose_role_if_needed || true
 
 OLD_IMAGE=""
