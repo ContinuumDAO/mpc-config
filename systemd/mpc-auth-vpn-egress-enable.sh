@@ -62,6 +62,11 @@ install -m 0600 "${WG_SRC_DIR}/wg-egress.conf" "${WG_HOST_DIR}/wg-egress.conf"
 
 mpc_auth_vpn_egress_prepare_wg_conf "${WG_HOST_DIR}/wg-egress.conf" "$VPN_CIDR" "$LISTEN_PORT" "$OBFUSCATION" "$TRANSPORT_PORT"
 
+if ! mpc_auth_vpn_egress_ensure_ufw_listen_port "$LISTEN_PORT" "$OBFUSCATION" "$TRANSPORT_PORT"; then
+	echo "mpc-auth-vpn-egress-enable: UFW/firewall check failed for peer egress UDP (see above)" >&2
+	exit 1
+fi
+
 systemctl daemon-reload
 systemctl enable mpc-auth-wireguard-wg-egress.service
 systemctl restart mpc-auth-wireguard-wg-egress.service
