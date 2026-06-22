@@ -17,11 +17,28 @@ The Distributed Auth Management API provides a RESTful interface for managing MP
 
 <a id="public-discovery-http"></a>
 ### Public discovery HTTP
-If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /getPreferredSigner`**, **`GET /getPreferredKeyGen`**, **`GET /health`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`$MANAGEMENT_PORT`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
+If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API, **no scanner/relayer routes**, **no VPN egress routes**): **`GET /version`**, **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /getPreferredSigner`**, **`GET /getPreferredKeyGen`**, **`GET /health`**, **`GET /getNodeKey`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`$MANAGEMENT_PORT`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
+
+**Not on PublicDiscoveryPort:** scanner governance GETs (`GET /getKeyGenResultById`, `GET /listNewGroupRequests`, new-group result GETs, etc.), relayer signing/admin POSTs, and **peer egress VPN** routes (`GET /vpn/egress/status`, `GET /vpn/egress/consumerAccess`, etc.) — those use **`ManagementAPIsPort`** (see [Scanner/relayer HTTP](#scanner-relayer-http) and [Peer egress VPN](#peer-egress-vpn-wg-egress)).
 
 **`GET /getNodeMgtKey`** returns the configured **`NodeMgtKey`** (Ethereum management address from `configs.yaml` / env) as a JSON string in **`data`**. No authentication on this listener; use it with **`GET /getNodeMgtKeyNonce`** for Ethereum wallet management signing (`personal_sign`).
 
 **`GET /getPublicMgtKey`** returns the same Ed25519 public keys as the allow-list for management auth (config **`PublicMgtKey`** plus keys from **`POST /addManagementKey`**), as a JSON array of 64-hex strings (no labels). Issuers and apps can learn the public keys without reading `configs.yaml` or static Railway env maps.
+
+<a id="scanner-relayer-http"></a>
+### Scanner/relayer HTTP
+**`ScannerRelayerPort`** (env `ScannerRelayerPort`, default **18081** in sample configs) is a **dedicated** HTTP listener for **c3caller-scanner** and **c3caller-relayer**. **Required** for scanner/relayer use: set a port **distinct** from **`PublicDiscoveryPort`** and **`ManagementAPIsPort`** so mpc-auth can bind a separate listener.
+
+When split, this port carries:
+
+- **Scanner governance GETs:** `GET /getKeyGenResultById`, `GET /getNewGroupRequestById`, `GET /listNewGroupRequests`, `GET /getNewGroupResultById`, `GET /getGroupResultById`
+- **Relayer signing/admin:** `POST /signRequest`, sign polling GETs, `POST /updateRelayer`, `POST /admin/registerRelayer`, relayer admin GETs, `GET /getPresigningStatus`
+
+The full management API (including the same routes for local admin) remains on **`ManagementAPIsPort`**. **`PublicDiscoveryPort`** never serves scanner/relayer routes (legacy bundling on discovery was removed).
+
+**MySQL `mpc_config.port`:** c3caller-scanner / relayer clients must target **`ScannerRelayerPort`** (typically **18081**). Rows still using **18080** should be updated, e.g. `UPDATE mpc_config SET port=18081 WHERE port=18080;`
+
+**Firewall:** `process_config.sh` adds **scoped** UFW allow rules on **`ScannerRelayerPort`** from **`ScannerAPIURLs`** and the host parsed from **`PreSigningVerification.RelayerAPIURL`** (see `configs.yaml`).
 
 ### Response Format
 
@@ -259,6 +276,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getInactiveNodes`](#get-getinactivenodes) - Get inactive nodes
 
 ### Group Management
+Scanner governance GETs below are on **`ManagementAPIsPort`** and, when **`ScannerRelayerPort`** is split, on that dedicated port — **not** on **`PublicDiscoveryPort`** (see [Scanner/relayer HTTP](#scanner-relayer-http)).
 - [`POST /newGroupRequest`](#post-newgrouprequest) - Create new group request (requires mgt key)
 - [`GET /listNewGroupRequests`](#get-listnewgrouprequests) - List new group requests
 - [`GET /getNewGroupRequestById`](#get-getnewgrouprequestbyid) - Get new group request by ID
@@ -535,8 +553,8 @@ Separate from admin **`wg0`**: optional **full-exit** routing through a configur
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/vpn/egress/status` | Read (also on PublicDiscoveryPort) | Local egress state, `countryCode`, `sharingEnabled`, rate limits |
-| GET | `/vpn/egress/availableExits` | Read | Configured peers offering active egress |
+| GET | `/vpn/egress/status` | Read (**ManagementAPIsPort** only; peers probe this for `availableExits`) | Local egress state, `countryCode`, `sharingEnabled`, rate limits |
+| GET | `/vpn/egress/availableExits` | Read | Configured peers offering active egress (probes each peer **`GET /vpn/egress/status`** on **ManagementAPIsPort**) |
 | POST | `/vpn/egress/setSharing` | Management sig | Enable/disable offering egress; `obfuscation`, `defaultRateLimitMbps` |
 | POST | `/vpn/egress/requestClientConfig` | Management sig | On consumer node: `{ targetAddress }` → signed MQTT request to egress, returns config |
 | POST | `/vpn/egress/issueClientConfig` | Node-key sig (management :8080 loopback) | `{ consumerNodeKey, issuedAt, clientSig }` — issues keys on egress. Remote peers use **MQTT** (`VpnEgressIssueRequest` / `VpnEgressIssueReply`), not PublicDiscoveryPort or ScannerRelayerPort. |
@@ -4263,6 +4281,8 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/getTaprootPrivateKey" \
 #### `GET /getKeyGenResultById`
 
 Returns the **keygen result** for one **`requestid`** (same id as the keygen request): public key, derived addresses, **`keylist`**, and lifecycle fields such as **`status`** (including **`ejected`** after key export). There is **no** `filter` query parameter—only **`id`**. To **list** all ejected keygens, use [`GET /listKeyGenRequests`](#get-listkeygenrequests) with **`filter=ejected`**; each item’s effective **`status`** matches this endpoint’s semantics for that request.
+
+**Where served:** **`ManagementAPIsPort`** (continuumdao-node-app, local admin). **c3caller-scanner / relayer** clients use **`ScannerRelayerPort`** when split (see [Scanner/relayer HTTP](#scanner-relayer-http)). **Not** on **`PublicDiscoveryPort`**.
 
 A result is returned (Code 0) when either **(a)** this node completed the TSS and still has a local share (**`savedata`** present), **or (b)** the key was **ejected** on this node (**`keygenresultstatus`** **`ejected`**) so **`savedata`** / **`cggmp24aux`** were cleared but public metadata and tombstone state remain. In the usual case, **(a)** also requires at least the **MPC quorum** (*t* parties for CGGMP24 and FROST) to have sent KEYGENRESULTCONFIRMSUCCESS within 7 days. If fewer parties completed by then, the keygen is useless for signing (cannot produce a signature); the result is then deleted and the keygen request is marked failed. If this node did not complete (e.g. worker timed out) and the key is not **ejected**, it returns Code 1 "not ready". If one node returns "not ready" and another had completed, the client may need to call `getKeyGenResultById` on another node—but if fewer than the quorum completed overall, no node will keep the result (all will delete it after the 7-day timeout).
 

@@ -182,15 +182,13 @@ ManagementAPIsPort: 8080
 #   - "https://my-admin-ui.example.com"
 
 # Public discovery HTTP (minimal: GET /getNodeMgtKey, /getPublicMgtKey, /health).
-# When ScannerRelayerPort > 0 (and distinct), governance + relayer routes move to that port; this port stays minimal only.
-# When ScannerRelayerPort is 0 (legacy), this port also serves scanner governance GETs (getKeyGenResultById, new-group routes).
+# Scanner/relayer governance and signing routes are never mounted here; set ScannerRelayerPort below.
 # Full management API stays on ManagementAPIsPort. Use 0 to disable a separate discovery listener.
 # Default 18080 — keep in sync with continuumdao-node-app NODE_DISCOVERY_PORT.
 PublicDiscoveryPort: 18080
 
 # Scanner + relayer dedicated HTTP: governance GETs + relayer POST/GET (signRequest, updateRelayer, admin relayer, sign polling).
-# Default 18081 matches c3caller-scanner / c3caller-relayer mpc_config.port. PublicDiscoveryPort 18080 stays minimal (getNodeMgtKey, etc.).
-# Set to 0 for legacy (bundle scanner GETs on PublicDiscoveryPort only; relayer uses ManagementAPIsPort :8080).
+# Required for c3caller-scanner / c3caller-relayer (default 18081, distinct from PublicDiscoveryPort).
 # Existing MySQL mpc_config rows may still have port=18080 — run: UPDATE mpc_config SET port=18081 WHERE port=18080;
 ScannerRelayerPort: 18081
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Write vpn-host-obfuscation.json for mpc-auth GET /vpn/status.
-# Shadowsocks and wg-obfuscator are always offered on systemd VPS hosts (latest mpc-auth);
-# this file records optional protocols (LWO, udp2raw) detected on the host at install time.
+# Records which obfuscation binaries are on the host (audit/debug). mpc-auth offers all four
+# protocols on systemd VPS hosts; host enable scripts validate binaries at apply time.
 
 write_vpn_host_obfuscation_capabilities() {
 	local out_dir="${1:-/var/lib/mpc-auth-docker}"
@@ -14,7 +14,7 @@ write_vpn_host_obfuscation_capabilities() {
 	if command -v wg-obfuscator >/dev/null 2>&1; then
 		protocols+=("wg_obfuscator")
 	fi
-	if command -v continuum-lwo-server >/dev/null 2>&1 && command -v continuum-lwo-client >/dev/null 2>&1; then
+	if command -v continuum-lwo-server >/dev/null 2>&1; then
 		protocols+=("lwo")
 	fi
 	if command -v udp2raw >/dev/null 2>&1; then

@@ -467,7 +467,7 @@ If you're using Docker with the **generated** `docker-compose.yml` (from `proces
    This starts:
    - **mongodb**: Local MongoDB instance (port 27017)
    - **mosquitto**: MQTT broker (ports 8883:8883 for TLS, 9999:1883 for unencrypted, 9001:9001 for websockets) - **ONLY ON RELAY NODE**
-   - **app**: The mpc-auth node (**127.0.0.1:8080** management, **18080**/**18081**/**8443** per the compose templates / generated file)
+   - **app**: The mpc-auth node (**127.0.0.1:8080** management, **18080** discovery, **18081** scanner/relayer, **8443** Browser HTTPS per compose / `configs.yaml`)
    
    **Verify mosquitto is running:**
    ```bash
@@ -733,8 +733,8 @@ The docker-compose files include:
 - **mosquitto**: MQTT broker (automatically configured from `mosquitto/config/mosquitto.conf` - port 8883 for TLS by default)
 - **app**: The mpc-auth node — default Docker image **`continuumdao/mpc-auth:latest`** (**`MPC_AUTH_COMPOSE_APP_IMAGE`** overrides). **`GET /version`** (management or discovery port) returns the **application semver** (e.g. **`v1.1`**) embedded in the binary for that image — not the literal string **`latest`**.
   - **`127.0.0.1:8080:8080`** — management API (**localhost on the host** only; use **SSH tunnel** for remote `curl` / Swagger)
-  - **`18080`** — public discovery (`PublicDiscoveryPort`): **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /health`**, **`GET /getNodeKey`**, **`GET /getConfiguredNodeKeys`** (no JWT on this port)
-  - **`18081`** — scanner/relayer HTTP when **`ScannerRelayerPort`** is set in `configs.yaml` (e.g. **`POST /signRequest`**)
+  - **`18080`** — public discovery (`PublicDiscoveryPort`): minimal unauthenticated GETs only (`/getNodeMgtKey`, `/getPublicMgtKey`, `/getAllowedEd25519MgtKeys`, `/getPreferredSigner`, `/getPreferredKeyGen`, `/health`, `/getNodeKey`, `/version`) — **not** scanner governance, relayer signing, or VPN egress
+  - **`18081`** — scanner/relayer HTTP (`ScannerRelayerPort`, required for c3caller-scanner / c3caller-relayer): governance GETs + relayer POSTs (e.g. **`POST /signRequest`**); must be distinct from **18080**
   - **`8443`** — Browser HTTPS (DAO app; JWT on GET per `BrowserHTTPS` in `configs.yaml`)
   - **`./configs.yaml:/app/configs.yaml`** — mounted **writable** so management **`POST /configUpdateImplement`** can merge peer/config updates onto disk (read-only mounts block merges).
   - **`console/apply_planned_configs_ruamel.py`** — bind-mounted over **`/app/console/apply_planned_configs_ruamel.py`** in the container. This mpc-config copy uses rename-or-copy when installing merged YAML so Docker bind mounts do not raise **`EBUSY`** on **`configs.yaml.tmp` → `configs.yaml`**.
@@ -746,7 +746,7 @@ The docker-compose files include:
 **Defaults in this repo**
 
 - **`docker-compose*.yml` publish management as `127.0.0.1:8080:8080`** — the full management API is **not** reachable on the host’s public IP; use **`ssh -L 8080:127.0.0.1:8080 user@node`** (or similar) for remote admin.
-- **`process_config.sh` does not add a UFW “allow” rule for the management port** unless you set **`UFW_OPEN_MANAGEMENT_PORT=1`**. Other ports (SSH, Browser HTTPS, PublicDiscovery, ScannerRelayer when configured, MQTT on relay) are still added as before.
+- **`process_config.sh` does not add a UFW “allow” rule for the management port** unless you set **`UFW_OPEN_MANAGEMENT_PORT=1`**. Other ports (SSH, Browser HTTPS, PublicDiscovery, ScannerRelayer when **`ScannerRelayerPort`** is set and distinct, MQTT on relay) are still added as before.
 
 **Peer key probes (`GET /getConfiguredNodeKeys`)**
 

@@ -6044,7 +6044,7 @@ show_process_config_help() {
     echo "Host firewall:"
     echo "  By default this script runs a host firewall step (ufw when available), which requires sudo for ufw status/rules."
     echo "  Rules: allow SSH (22),"
-    echo "  Browser HTTPS (8443), PublicDiscoveryPort (18080), ScannerRelayerPort (18081 if set),"
+    echo "  Browser HTTPS (8443), PublicDiscoveryPort (18080, minimal discovery only), ScannerRelayerPort (18081 — required for scanner/relayer, distinct from 18080),"
     echo "  ManagementAPIsPort (8080), relay MQTT (8883). ScannerRelayerPort uses *scoped* UFW rules when"
     echo "  PreSigningVerification.RelayerAPIURL and/or ScannerAPIURLs resolve to IPv4 (see configs.yaml)."
     echo "  ManagementAPIsPort is not opened in UFW by default; set UFW_OPEN_MANAGEMENT_PORT=1 if peers/operators need inbound HTTP to the management API."
@@ -6517,6 +6517,11 @@ apply_process_config_firewall() {
     fi
 
     print_info "Ports from configs.yaml: ManagementAPIsPort=$mgt_port, PublicDiscoveryPort=$pub_port, BrowserHTTPS (firewall allow port)=$bh_port, ScannerRelayerPort=${sr_port:-0}"
+    if [ -z "$sr_port" ] || [ "$sr_port" = "null" ] || [ "$sr_port" = "0" ]; then
+        print_warning "ScannerRelayerPort is not set — c3caller-scanner and c3caller-relayer require a dedicated port (typically 18081, distinct from PublicDiscoveryPort $pub_port). PublicDiscoveryPort no longer serves scanner governance GETs."
+    elif [ "$sr_port" = "$pub_port" ]; then
+        print_warning "ScannerRelayerPort equals PublicDiscoveryPort ($sr_port) — set distinct ports (e.g. PublicDiscoveryPort 18080, ScannerRelayerPort 18081) so scanner/relayer can bind separately."
+    fi
     print_info "BrowserLoopbackReadHTTP (SSH tunnel) binds 127.0.0.1 in the container — no WAN UFW rule for that port; access is via ssh -L to localhost."
     print_info "Narrow inbound to scanner/DAO/relayer CIDRs in production; see docs/internal/PROCESS_CONFIG_FIREWALL.md"
     if [ "$is_relay" = "true" ]; then
