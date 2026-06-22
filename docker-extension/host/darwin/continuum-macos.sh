@@ -18,6 +18,11 @@ if [[ "${1:-}" == "curl" && -f "$ORCHESTRATE" ]]; then
   exit 0
 fi
 
+if [[ "${1:-}" == "check-passwordless-sudo" ]]; then
+  # Extension preflight: login shell + absolute paths (host.cli.exec PATH differs from Terminal).
+  exec /bin/bash -lc '/usr/bin/sudo -n /usr/bin/true'
+fi
+
 args=("$@")
 if [[ -f "$ORCHESTRATE" ]]; then
   for i in "${!args[@]}"; do

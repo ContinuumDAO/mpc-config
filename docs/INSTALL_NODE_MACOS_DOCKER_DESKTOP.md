@@ -32,11 +32,12 @@ bash /tmp/continuum-desktop-orchestrate.sh --profile macos --node-mgt-key "0x…
 
 - Docker Desktop with **docker compose v2**
 - **Homebrew** (recommended): `brew install python@3 yq wireguard-tools socat`
-- **Passwordless sudo** for extension-driven install (creates `/var/lib/mpc-auth-docker`):
+- **Passwordless sudo** for extension-driven install (creates `/var/lib/mpc-auth-docker`). On macOS the default `%admin` rule requires a password — add a NOPASSWD line in `/etc/sudoers.d/` (loaded after the main sudoers file):
 
   ```bash
-  sudo visudo
+  sudo visudo -f /etc/sudoers.d/$(whoami)
   # Add: youruser ALL=(ALL) NOPASSWD: ALL
+  sudo -k
   sudo -n true && echo OK
   ```
 

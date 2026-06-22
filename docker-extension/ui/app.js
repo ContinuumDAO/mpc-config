@@ -488,12 +488,23 @@ async function execHostSimple(cli, cmd, args) {
   }
 }
 
+function execExitCode(result) {
+  const code = result?.code
+  if (code === undefined || code === null) return null
+  const numeric = Number(code)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
 function execSucceeded(result, { expectSubstring } = {}) {
   if (!result) return false
   const out = combinedExecOutput(result)
-  const code = result.code
+  const code = execExitCode(result)
   if (expectSubstring && out.includes(expectSubstring)) {
-    return code === undefined || code === 0 || code === null
+    return code === null || code === 0
+  }
+  // Some Docker Desktop builds omit code on success; treat as OK when stderr is empty.
+  if (code === null) {
+    return !/sorry|password is required|a password is required/i.test(out)
   }
   return code === 0
 }
@@ -565,9 +576,9 @@ function formatMacPasswordlessSudoInstructions(macUser) {
     `Host automation (/var/lib/mpc-auth-docker) and VPN (wg-quick) need sudo -n.\n\n` +
     `Configure passwordless sudo in Terminal:\n\n` +
     `  sudo visudo\n\n` +
-    `Add this line (replace ${macUser} if your username differs):\n\n` +
+    `Add a NOPASSWD line for the user shown above. On macOS the default %admin rule requires a password — put your line in /etc/sudoers.d/ (loaded after the main file) or after %admin in visudo:\n\n` +
     `  ${macUser} ALL=(ALL) NOPASSWD: ALL\n\n` +
-    `Verify (clears any cached sudo ticket first):\n\n` +
+    `Verify (clears any cached sudo ticket first — Terminal "OK" with a recent sudo password is not enough):\n\n` +
     `  sudo -k\n` +
     `  sudo -n true && echo OK\n\n` +
     `The visudo line must match the macOS user Docker Desktop runs as (shown in the install log).\n\n` +
@@ -593,8 +604,8 @@ async function verifyMacPasswordlessSudo(cli, logOutput) {
 
   appendLog(logOutput, `Docker Desktop host exec user: ${macUser}\n`)
 
-  // Use absolute paths — host.cli.exec often has no/minimal PATH (unlike Terminal).
-  const sudoProbe = await execHostSimple(cli, MACOS_HOST_WRAPPER, ['/usr/bin/sudo', '-n', 'true'])
+  // Host wrapper runs check-passwordless-sudo in a login shell with absolute paths (unlike bare host exec PATH).
+  const sudoProbe = await execHostSimple(cli, MACOS_HOST_WRAPPER, ['check-passwordless-sudo'])
 
   if (!sudoProbe.ok) {
     appendLog(
@@ -606,8 +617,11 @@ async function verifyMacPasswordlessSudo(cli, logOutput) {
   }
 
   const sudoOut = combinedExecOutput(sudoProbe.result)
-  const sudoCode = sudoProbe.result?.code
-  appendLog(logOutput, `[exit ${sudoCode ?? 'unknown'}] user=${macUser}${sudoOut ? ` ${sudoOut}` : ''}\n`)
+  const sudoCode = execExitCode(sudoProbe.result)
+  appendLog(
+    logOutput,
+    `[exit ${sudoCode ?? sudoProbe.result?.code ?? 'unknown'}] user=${macUser}${sudoOut ? ` ${sudoOut}` : ''}\n`,
+  )
 
   if (execSucceeded(sudoProbe.result)) {
     appendLog(logOutput, `Passwordless sudo OK for macOS user "${macUser}".\n\n`)
@@ -616,7 +630,7 @@ async function verifyMacPasswordlessSudo(cli, logOutput) {
 
   appendLog(
     logOutput,
-    'sudo -n failed in Docker Desktop host exec (Terminal may still work via a cached sudo ticket or a different user).\n',
+    'sudo -n failed in Docker Desktop host exec (Terminal may still work via a cached sudo ticket, sudoers rule order, or a different user).\n',
   )
   appendLog(logOutput, `\n${formatMacPasswordlessSudoInstructions(macUser)}\n`)
   return false

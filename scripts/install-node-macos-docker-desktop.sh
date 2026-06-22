@@ -103,9 +103,9 @@ macOS user: ${mac_user}
 The Docker extension runs the installer as your user and cannot type your sudo password.
 Host automation (/var/lib/mpc-auth-docker) and VPN (wg-quick) need sudo -n.
 
-Configure passwordless sudo:
+Configure passwordless sudo (macOS default %admin rule requires a password — put NOPASSWD in /etc/sudoers.d/ or after %admin):
 
-  sudo visudo
+  sudo visudo -f /etc/sudoers.d/${mac_user}
 
 Add this line (replace ${mac_user} if your username differs):
 
@@ -135,9 +135,15 @@ preflight_passwordless_sudo() {
         die "sudo not found on macOS"
     fi
 
-    if sudo -n true 2>/dev/null; then
+    if /usr/bin/sudo -n /usr/bin/true 2>/dev/null; then
         log "Passwordless sudo OK for macOS user ${mac_user}"
         return 0
+    fi
+
+    local sudo_err=""
+    sudo_err="$(/usr/bin/sudo -n /usr/bin/true 2>&1 >/dev/null || true)"
+    if [ -n "$sudo_err" ]; then
+        warn "sudo -n failed: ${sudo_err}"
     fi
 
     die "$(passwordless_sudo_instruction_message "$mac_user")"
