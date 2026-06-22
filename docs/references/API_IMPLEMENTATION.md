@@ -554,7 +554,7 @@ Separate from admin **`wg0`**: optional **full-exit** routing through a configur
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/vpn/egress/status` | Read (**ManagementAPIsPort**, **localhost only**) | Local egress state, `countryCode`, `sharingEnabled`, rate limits |
-| GET | `/vpn/egress/availableExits` | Read | Configured peers offering active egress via **MQTT** (`VpnEgressStatusRequest` / `VpnEgressStatusReply` on group relay; uses **`KeyList`** pubkeys — not HTTP to peer **8080** or PublicDiscoveryPort) |
+| GET | `/vpn/egress/availableExits` | Read | Configured peers offering active egress via **MQTT** (`VpnEgressStatusRequest` / `VpnEgressStatusReply`; peer pubkeys from **MQTT relay subscription topics** + **`nodeAddresses`**, or configs.yaml **`keyList`** when set — not HTTP to peer **8080**, PublicDiscoveryPort, or groupId DB lookups) |
 | GET | `/vpn/egress/myAccessStatuses` | Read | This node's egress access on each peer exit via **MQTT** (`VpnEgressConsumerAccessRequest` / `VpnEgressConsumerAccessReply`) |
 | POST | `/vpn/egress/setSharing` | Management sig | Enable/disable offering egress; `obfuscation`, `defaultRateLimitMbps` |
 | POST | `/vpn/egress/requestClientConfig` | Management sig | On consumer node: `{ targetAddress }` → signed MQTT request to egress, returns config |
