@@ -139,7 +139,7 @@ def patch_wireguard_client_for_obfuscation(
         out = patched
     header = (
         "# WireGuard client config — obfuscated via Shadowsocks tunnel.\n"
-        "# 1) Run: sslocal -c continuum-sslocal.json\n"
+        "# 1) Run: sslocal -c cont-ss.json\n"
         f"# 2) Then: wg-quick up this file (Endpoint uses 127.0.0.1:{local_tunnel_port})\n"
     )
     return header + "\n".join(out) + "\n"
@@ -149,7 +149,7 @@ def setup_instructions(*, local_port: int = DEFAULT_LOCAL_TUNNEL_PORT) -> str:
     return (
         "Shadowsocks obfuscation setup:\n"
         "1. Install shadowsocks-rust (sslocal) on your client machine.\n"
-        "2. Save sslocal JSON and run: sslocal -c continuum-sslocal.json\n"
+        "2. Save sslocal JSON and run: sslocal -c cont-ss.json\n"
         f"3. Activate WireGuard (Endpoint 127.0.0.1:{local_port}).\n"
         "4. Keep sslocal running while the VPN is active.\n"
     )
@@ -198,8 +198,8 @@ def cmd_client(args: argparse.Namespace) -> int:
             local_tunnel_port=args.local_port,
             mtu=args.mtu,
         )
-        bundle["filename"] = "continuum-wg0-obfuscated.conf"
-    bundle["shadowsocksLocalFilename"] = "continuum-sslocal.json"
+        bundle["filename"] = "cont-full.conf"
+    bundle["shadowsocksLocalFilename"] = "cont-ss.json"
     sys.stdout.write(json.dumps(bundle, indent=2) + "\n")
     return 0
 
