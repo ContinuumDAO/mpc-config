@@ -905,12 +905,12 @@ is_letsencrypt_configured() {
     fi
     
     # Check if certfile points to Let's Encrypt directory (not commented out)
-    if grep -E '^\s*certfile\s+/etc/letsencrypt' "$conf_file" 2>/dev/null | grep -qvE '^\s*#'; then
+    if grep -E '^[[:space:]]*certfile[[:space:]]+/etc/letsencrypt' "$conf_file" 2>/dev/null | grep -qvE '^[[:space:]]*#'; then
         return 0
     fi
     
     # Check if keyfile points to Let's Encrypt directory (not commented out)
-    if grep -E '^\s*keyfile\s+/etc/letsencrypt' "$conf_file" 2>/dev/null | grep -qvE '^\s*#'; then
+    if grep -E '^[[:space:]]*keyfile[[:space:]]+/etc/letsencrypt' "$conf_file" 2>/dev/null | grep -qvE '^[[:space:]]*#'; then
         return 0
     fi
     
@@ -926,7 +926,7 @@ is_self_signed_configured() {
     fi
     
     # Check if certfile points to self-signed cert directory (not commented out)
-    if grep -E '^\s*certfile\s+.*/certs/.*\.(crt|pem)' "$conf_file" 2>/dev/null | grep -qvE '^\s*#' | grep -qE '/certs/'; then
+    if grep -E '^[[:space:]]*certfile[[:space:]]+.*/certs/.*\.(crt|pem)' "$conf_file" 2>/dev/null | grep -qvE '^[[:space:]]*#' | grep -qE '/certs/'; then
         return 0
     fi
     
@@ -944,10 +944,10 @@ get_letsencrypt_paths() {
     fi
     
     # Extract certfile path
-    certfile=$(grep -E '^\s*certfile\s+' "$conf_file" 2>/dev/null | head -1 | sed -E 's/^\s*certfile\s+//' | sed 's/#.*$//' | xargs)
+    certfile=$(grep -E '^[[:space:]]*certfile[[:space:]]+' "$conf_file" 2>/dev/null | head -1 | sed -E 's/^[[:space:]]*certfile[[:space:]]+//' | sed 's/#.*$//' | xargs)
     
     # Extract keyfile path
-    keyfile=$(grep -E '^\s*keyfile\s+' "$conf_file" 2>/dev/null | head -1 | sed -E 's/^\s*keyfile\s+//' | sed 's/#.*$//' | xargs)
+    keyfile=$(grep -E '^[[:space:]]*keyfile[[:space:]]+' "$conf_file" 2>/dev/null | head -1 | sed -E 's/^[[:space:]]*keyfile[[:space:]]+//' | sed 's/#.*$//' | xargs)
     
     if [ -n "$certfile" ] && [ -n "$keyfile" ]; then
         echo "$certfile|$keyfile"
@@ -1412,13 +1412,23 @@ validate_presign_config() {
     local cache_size=""
     local min_threshold=""
     
-    # Use simple grep/sed parsing as primary method (most reliable, no dependencies)
-    # This works for simple YAML structures like these top-level fields
-    initiate_presigning=$(grep -E '^\s*InitiatePreSigning\s*:' "$config_file" 2>/dev/null | sed -E 's/^\s*InitiatePreSigning\s*:\s*(true|false).*/\1/' | head -1)
-    cache_size=$(grep -E '^\s*PreSigningCacheSize\s*:' "$config_file" 2>/dev/null | sed -E 's/^\s*PreSigningCacheSize\s*:\s*([0-9]+).*/\1/' | head -1)
-    min_threshold=$(grep -E '^\s*PreSigningMinThreshold\s*:' "$config_file" 2>/dev/null | sed -E 's/^\s*PreSigningMinThreshold\s*:\s*([0-9]+).*/\1/' | head -1)
-    
-    # If grep/sed didn't find values, try yq if available
+    # Use grep/sed parsing (portable: macOS BSD grep/sed do not support \s — use [[:space:]]).
+    initiate_presigning=$(grep -E '^[[:space:]]*InitiatePreSigning[[:space:]]*:' "$config_file" 2>/dev/null | sed -E 's/^[[:space:]]*InitiatePreSigning[[:space:]]*:[[:space:]]*(true|false).*/\1/' | head -1)
+    cache_size=$(grep -E '^[[:space:]]*PreSigningCacheSize[[:space:]]*:' "$config_file" 2>/dev/null | sed -E 's/^[[:space:]]*PreSigningCacheSize[[:space:]]*:[[:space:]]*([0-9]+).*/\1/' | head -1)
+    min_threshold=$(grep -E '^[[:space:]]*PreSigningMinThreshold[[:space:]]*:' "$config_file" 2>/dev/null | sed -E 's/^[[:space:]]*PreSigningMinThreshold[[:space:]]*:[[:space:]]*([0-9]+).*/\1/' | head -1)
+
+    # sed leaves the full line when the pattern does not match — treat as unset and fall back.
+    if [ -n "$initiate_presigning" ] && [ "$initiate_presigning" != "true" ] && [ "$initiate_presigning" != "false" ]; then
+        initiate_presigning=""
+    fi
+    if [ -n "$cache_size" ] && ! echo "$cache_size" | grep -qE '^[0-9]+$'; then
+        cache_size=""
+    fi
+    if [ -n "$min_threshold" ] && ! echo "$min_threshold" | grep -qE '^[0-9]+$'; then
+        min_threshold=""
+    fi
+
+    # If grep/sed did not parse values, try yq if available
     if [ -z "$initiate_presigning" ] && [ -z "$cache_size" ] && [ -z "$min_threshold" ]; then
         if command -v yq &> /dev/null; then
             initiate_presigning=$(yq eval '.InitiatePreSigning' "$config_file" 2>/dev/null)
@@ -1536,7 +1546,7 @@ validate_relayer_api_connection() {
     local ps_indent=""
     while IFS= read -r line; do
         # Check if we're entering PreSigningVerification section
-        if echo "$line" | grep -qE '^\s*PreSigningVerification\s*:'; then
+        if echo "$line" | grep -qE '^[[:space:]]*PreSigningVerification[[:space:]]*:'; then
             in_ps_verif=true
             has_ps_verif=true
             ps_indent=$(echo "$line" | sed 's/[^ ].*//')
@@ -1546,15 +1556,15 @@ validate_relayer_api_connection() {
         # Check if we're leaving PreSigningVerification section (top-level key with same or less indent)
         if [ "$in_ps_verif" = true ]; then
             local current_indent=$(echo "$line" | sed 's/[^ ].*//')
-            if [ -n "$current_indent" ] && [ "${#current_indent}" -le "${#ps_indent}" ] && echo "$line" | grep -qE '^\s*[A-Za-z_]+:'; then
+            if [ -n "$current_indent" ] && [ "${#current_indent}" -le "${#ps_indent}" ] && echo "$line" | grep -qE '^[[:space:]]*[A-Za-z_]+:'; then
                 in_ps_verif=false
             fi
         fi
         
         # Extract RelayerAPIURL value (handle quoted and unquoted strings)
-        if [ "$in_ps_verif" = true ] && [ -z "$api_url" ] && echo "$line" | grep -qE '^\s+RelayerAPIURL\s*:'; then
+        if [ "$in_ps_verif" = true ] && [ -z "$api_url" ] && echo "$line" | grep -qE '^[[:space:]]+RelayerAPIURL[[:space:]]*:'; then
             # Try to extract URL - handle both quoted and unquoted
-            api_url=$(echo "$line" | sed -E 's/^\s*RelayerAPIURL\s*:\s*["'\'']?([^"'\''#]+)["'\'']?.*/\1/' | sed 's/[[:space:]]*$//' | head -1)
+            api_url=$(echo "$line" | sed -E 's/^[[:space:]]*RelayerAPIURL[[:space:]]*:[[:space:]]*["'\'']?([^"'\''#]+)["'\'']?.*/\1/' | sed 's/[[:space:]]*$//' | head -1)
             # Remove empty strings
             if [ "$api_url" = '""' ] || [ "$api_url" = "''" ] || [ -z "$api_url" ]; then
                 api_url=""
@@ -1816,7 +1826,7 @@ _extract_relayer_api_url_from_config() {
     fi
     local in_ps_verif=false ps_indent=""
     while IFS= read -r line; do
-        if echo "$line" | grep -qE '^\s*PreSigningVerification\s*:'; then
+        if echo "$line" | grep -qE '^[[:space:]]*PreSigningVerification[[:space:]]*:'; then
             in_ps_verif=true
             ps_indent=$(echo "$line" | sed 's/[^ ].*//')
             continue
@@ -1824,12 +1834,12 @@ _extract_relayer_api_url_from_config() {
         if [ "$in_ps_verif" = true ]; then
             local current_indent
             current_indent=$(echo "$line" | sed 's/[^ ].*//')
-            if [ -n "$current_indent" ] && [ "${#current_indent}" -le "${#ps_indent}" ] && echo "$line" | grep -qE '^\s*[A-Za-z_]+:'; then
+            if [ -n "$current_indent" ] && [ "${#current_indent}" -le "${#ps_indent}" ] && echo "$line" | grep -qE '^[[:space:]]*[A-Za-z_]+:'; then
                 in_ps_verif=false
             fi
         fi
-        if [ "$in_ps_verif" = true ] && [ -z "$api_url" ] && echo "$line" | grep -qE '^\s+RelayerAPIURL\s*:'; then
-            api_url=$(echo "$line" | sed -E 's/^\s*RelayerAPIURL\s*:\s*["'\'']?([^"'\''#]+)["'\'']?.*/\1/' | sed 's/[[:space:]]*$//' | head -1)
+        if [ "$in_ps_verif" = true ] && [ -z "$api_url" ] && echo "$line" | grep -qE '^[[:space:]]+RelayerAPIURL[[:space:]]*:'; then
+            api_url=$(echo "$line" | sed -E 's/^[[:space:]]*RelayerAPIURL[[:space:]]*:[[:space:]]*["'\'']?([^"'\''#]+)["'\'']?.*/\1/' | sed 's/[[:space:]]*$//' | head -1)
             if [ "$api_url" = '""' ] || [ "$api_url" = "''" ]; then
                 api_url=""
             fi
@@ -2192,7 +2202,7 @@ except Exception:
     
     while IFS= read -r line; do
         # Check if we're entering nodeAddresses section
-        if echo "$line" | grep -qE '^\s*nodeAddresses:'; then
+        if echo "$line" | grep -qE '^[[:space:]]*nodeAddresses:'; then
             in_node_addresses=true
             indent_level=$(echo "$line" | sed 's/[^ ].*//')
             continue
@@ -2201,7 +2211,7 @@ except Exception:
         # Check if we're leaving nodeAddresses section (less indented line)
         if [ "$in_node_addresses" = true ]; then
             current_indent=$(echo "$line" | sed 's/[^ ].*//')
-            if [ -n "$current_indent" ] && [ "${#current_indent}" -le "${#indent_level}" ] && ! echo "$line" | grep -qE '^\s*[a-zA-Z_]+:'; then
+            if [ -n "$current_indent" ] && [ "${#current_indent}" -le "${#indent_level}" ] && ! echo "$line" | grep -qE '^[[:space:]]*[a-zA-Z_]+:'; then
                 in_node_addresses=false
             fi
         fi
@@ -3312,12 +3322,12 @@ except Exception:
     local found_first=false
     
     while IFS= read -r line; do
-        if echo "$line" | grep -qE '^\s*MPCGroups:'; then
+        if echo "$line" | grep -qE '^[[:space:]]*MPCGroups:'; then
             in_first_group=true
             continue
         fi
         
-        if [ "$in_first_group" = true ] && echo "$line" | grep -qE '^\s*nodeAddresses:'; then
+        if [ "$in_first_group" = true ] && echo "$line" | grep -qE '^[[:space:]]*nodeAddresses:'; then
             in_node_addresses=true
             continue
         fi
@@ -3331,7 +3341,7 @@ except Exception:
         fi
         
         # Stop at next top-level key or next group
-        if [ "$in_first_group" = true ] && echo "$line" | grep -qE '^\s*- ' && [ "$in_node_addresses" = true ]; then
+        if [ "$in_first_group" = true ] && echo "$line" | grep -qE '^[[:space:]]*- ' && [ "$in_node_addresses" = true ]; then
             break
         fi
     done < "$config_file"
@@ -3524,7 +3534,7 @@ except Exception:
 " 2>/dev/null)
     else
         # Fallback: simple grep
-        cafile=$(grep -E '^\s*CAFile:' "$config_file" 2>/dev/null | head -1 | sed -E 's/^\s*CAFile:\s*["'\'']?([^"'\'']*)["'\'']?.*/\1/' | xargs)
+        cafile=$(grep -E '^[[:space:]]*CAFile:' "$config_file" 2>/dev/null | head -1 | sed -E 's/^[[:space:]]*CAFile:[[:space:]]*["'\'']?([^"'\'']*)["'\'']?.*/\1/' | xargs)
     fi
     
     # Check if CAFile is set
@@ -4129,7 +4139,7 @@ configure_mqtt_broker() {
     # Detect existing mqttBroker before relay/client branches (relay always overwrites WAN IP from DAO app).
     local existing_broker=""
     local mqtt_broker_exists=false
-    if grep -qE '^\s*mqttBroker\s*:' "$config_file"; then
+    if grep -qE '^[[:space:]]*mqttBroker[[:space:]]*:' "$config_file"; then
         mqtt_broker_exists=true
         existing_broker=$(awk '
             /^[[:space:]]*mqttBroker[[:space:]]*:/ {
@@ -4267,15 +4277,15 @@ EOF
         # Fallback: Use sed for simple update/add (may not preserve all formatting but preserves comments)
         if [ "$mqtt_broker_exists" = false ]; then
         # Add mqttBroker after nodeAddresses block
-        if grep -qE '^\s*nodeAddresses\s*:' "$config_file"; then
+        if grep -qE '^[[:space:]]*nodeAddresses[[:space:]]*:' "$config_file"; then
             # Find where nodeAddresses block ends and add there
             # This is a simple approach - finds the line after nodeAddresses that has less indentation
             awk -v broker="$broker_addr" '
-            /^\s*nodeAddresses\s*:/ {
+            /^[[:space:]]*nodeAddresses[[:space:]]*:/ {
                 print
                 nodeaddr_indent = match($0, /^[[:space:]]*/)
                 while ((getline > 0)) {
-                    if (!/^\s*#/ && NF > 0) {
+                    if (!/^[[:space:]]*#/ && NF > 0) {
                         current_indent = match($0, /^[[:space:]]*/)
                         if (length(substr($0, 1, current_indent)) <= nodeaddr_indent) {
                             # End of nodeAddresses, add mqttBroker
@@ -4312,7 +4322,7 @@ EOF
         fi
         elif [ "$mqtt_broker_exists" = true ] && { [ -z "$existing_broker" ] || [ "$is_relay_node" = "true" ]; }; then
             # Empty mqttBroker, or relay forcing WAN → mosquitto — update line via awk (no sed so ssl:// in URL cannot break anything)
-            local mqtt_line=$(grep -E '^\s*mqttBroker\s*:' "$config_file" | head -1)
+            local mqtt_line=$(grep -E '^[[:space:]]*mqttBroker[[:space:]]*:' "$config_file" | head -1)
             local comment_part=$(echo "$mqtt_line" | awk 'match($0, /#.*$/) { print substr($0, RSTART, RLENGTH) }')
             if awk -v broker="$broker_addr" -v comment="${comment_part:-}" '
                 /^[[:space:]]*mqttBroker[[:space:]]*:/ {
@@ -7586,7 +7596,7 @@ main() {
         
         if [ -n "$MOSQUITTO_CONF" ] && ! is_letsencrypt_configured "$MOSQUITTO_CONF"; then
             # Extract expected CA path from mosquitto.conf
-            expected_ca_path=$(grep -E '^\s*cafile\s+' "$MOSQUITTO_CONF" 2>/dev/null | head -1 | sed -E 's/^\s*cafile\s+//' | sed 's/#.*$//' | xargs)
+            expected_ca_path=$(grep -E '^[[:space:]]*cafile[[:space:]]+' "$MOSQUITTO_CONF" 2>/dev/null | head -1 | sed -E 's/^[[:space:]]*cafile[[:space:]]+//' | sed 's/#.*$//' | xargs)
         fi
         
         # If no expected path from mosquitto.conf, use default
