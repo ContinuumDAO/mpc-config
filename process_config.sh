@@ -1526,6 +1526,36 @@ PYEOF
     print_success "Presign configuration validation passed"
 }
 
+# Extract host, port, and protocol from http(s) URL or host:port (macOS-safe; no BRE \? or cut on ://).
+parse_http_url_host_port() {
+    local url="$1"
+    local host="" port="" proto="http"
+    local remainder="${url%/}"
+
+    case "$remainder" in
+        https://*)
+            proto="https"
+            port="443"
+            remainder="${remainder#https://}"
+            ;;
+        http://*)
+            proto="http"
+            port="80"
+            remainder="${remainder#http://}"
+            ;;
+    esac
+
+    remainder="${remainder%%/*}"
+    if [[ "$remainder" == *:* ]]; then
+        host="${remainder%%:*}"
+        port="${remainder##*:}"
+    else
+        host="$remainder"
+    fi
+
+    printf '%s|%s|%s' "$host" "$port" "$proto"
+}
+
 # Validate Relayer API connection when PreSigningVerification is configured
 validate_relayer_api_connection() {
     local config_file="$1"
@@ -1604,58 +1634,36 @@ validate_relayer_api_connection() {
     
     # Remove trailing slash if present
     api_url=$(echo "$api_url" | sed 's|/$||')
-    
-    # Extract host and port from URL for connectivity check
-    local api_host=""
-    local api_port=""
-    local api_protocol=""
-    
-    # Parse URL to extract host and port
-    if echo "$api_url" | grep -qE '^https?://'; then
-        # Extract protocol
-        if echo "$api_url" | grep -qE '^https://'; then
-            api_protocol="https"
-            api_port="443"
-        else
-            api_protocol="http"
-            api_port="80"
-        fi
-        
-        # Remove protocol prefix
-        local url_without_protocol=$(echo "$api_url" | sed 's|^https\?://||')
-        
-        # Extract host and port
-        if echo "$url_without_protocol" | grep -q ':'; then
-            api_host=$(echo "$url_without_protocol" | cut -d':' -f1)
-            api_port=$(echo "$url_without_protocol" | cut -d':' -f2 | cut -d'/' -f1)
-        else
-            api_host=$(echo "$url_without_protocol" | cut -d'/' -f1)
-        fi
-    else
-        # Assume http if no protocol specified
-        api_protocol="http"
-        api_port="80"
-        if echo "$api_url" | grep -q ':'; then
-            api_host=$(echo "$api_url" | cut -d':' -f1)
-            api_port=$(echo "$api_url" | cut -d':' -f2 | cut -d'/' -f1)
-        else
-            api_host=$(echo "$api_url" | cut -d'/' -f1)
-        fi
+
+    # Parse URL to extract host and port (bash case/parameter expansion — portable on macOS)
+    local parsed api_host="" api_port="" api_protocol=""
+    parsed="$(parse_http_url_host_port "$api_url")"
+    api_host="${parsed%%|*}"
+    parsed="${parsed#*|}"
+    api_port="${parsed%%|*}"
+    api_protocol="${parsed##*|}"
+
+    if [ -z "$api_host" ] || [ "$api_host" = "http" ] || [ "$api_host" = "https" ]; then
+        print_error "Could not parse RelayerAPIURL: '$api_url' (expected http(s)://host[:port])"
+        exit 1
     fi
     
     # Pre-flight connectivity check: Test if we can reach the API host and port
-    print_info "Performing connectivity check to $api_host:$api_port..."
+    print_info "Performing connectivity check to ${api_host}:${api_port}..."
     
     local connectivity_check_passed=false
     local connectivity_error=""
     
-    # Try using nc (netcat) if available (most reliable)
+    # Try using nc (netcat) if available (most reliable). macOS has no GNU timeout — use nc -w.
     if command -v nc &> /dev/null; then
-        local nc_output
-        nc_output=$(timeout 5 nc -zv -w 3 "$api_host" "$api_port" 2>&1)
-        local nc_exit=$?
+        local nc_output nc_exit=0
+        if command -v timeout &> /dev/null; then
+            nc_output=$(timeout 5 nc -zv -w 3 "$api_host" "$api_port" 2>&1) || nc_exit=$?
+        else
+            nc_output=$(nc -zv -w 3 "$api_host" "$api_port" 2>&1) || nc_exit=$?
+        fi
         
-        if [ $nc_exit -eq 0 ]; then
+        if [ "$nc_exit" -eq 0 ]; then
             connectivity_check_passed=true
             print_success "Network connectivity check passed: Port $api_port is reachable on $api_host"
         else
@@ -1684,13 +1692,17 @@ validate_relayer_api_connection() {
                 echo "  - Host is down"
             fi
         fi
-    # Try using bash's /dev/tcp (works on most Linux systems)
-    elif timeout 5 bash -c "echo > /dev/tcp/$api_host/$api_port" 2>/dev/null; then
+    # Try using bash's /dev/tcp (Linux bash; macOS bash often lacks it)
+    elif command -v timeout &> /dev/null && timeout 5 bash -c "echo > /dev/tcp/$api_host/$api_port" 2>/dev/null; then
         connectivity_check_passed=true
         print_success "Network connectivity check passed: Port $api_port is reachable on $api_host"
     else
         local bash_error=$?
-        print_warning "Network connectivity check failed using /dev/tcp method"
+        if ! command -v timeout &> /dev/null; then
+            print_info "Skipping /dev/tcp connectivity probe (timeout not available on this host)"
+        else
+            print_warning "Network connectivity check failed using /dev/tcp method"
+        fi
         if [ $bash_error -eq 124 ]; then
             connectivity_error="Connection timed out"
         elif [ $bash_error -eq 1 ]; then
