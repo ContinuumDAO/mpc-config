@@ -4356,7 +4356,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getGlobalNonceByKeyGenId?id=KeyGen202601110
 
 <a id="get-getfeestatusbykeygenid"></a>
 #### `GET /getFeeStatusByKeyGenId`
-Returns MPA wallet **fee status** for a secp256k1 keyGen: remaining signature credits, deposit balance, daily fee accrual, and required minimum top-up. Monetary fields are **decimal wei strings** (integer token smallest units — no floating point).
+Returns MPA wallet **fee status** for a secp256k1 keyGen: remaining signature credits, node pool balance, monthly subscription fee, and required minimum top-up for the current billing month. Monetary fields are **decimal wei strings** (integer token smallest units — no floating point).
 
 **Query Parameters:**
 - `id` (required): KeyGen result id (requestId)
@@ -4371,10 +4371,9 @@ Returns MPA wallet **fee status** for a secp256k1 keyGen: remaining signature cr
     "remainingnonces": 15,
     "freetransactionsleft": 2,
     "remainingdepositwei": "5000000",
-    "requireminimumtopupwei": "31000000",
-    "accrueddailywei": "26000000",
-    "currentfeeperdaywei": "1000000",
-    "currentfeepernoncewei": "100000",
+    "requireminimumtopupwei": "10000000",
+    "currentmonthlyfeewei": "10000000",
+    "currentoveragefeepernoncewei": "1000000",
     "feetokensymbol": "USDC",
     "feetokendecimals": 6,
     "registered": true,
@@ -4383,12 +4382,31 @@ Returns MPA wallet **fee status** for a secp256k1 keyGen: remaining signature cr
 }
 ```
 
+| Field | Meaning |
+|-------|---------|
+| `remainingnonces` | Signature credits for the current funded month (free tier + overage from node pool) |
+| `freetransactionsleft` | Free signatures remaining this month before overage |
+| `remainingdepositwei` | Shared node credit pool balance (wei) |
+| `requireminimumtopupwei` | Shortfall to fund the current month (`getRequiredMinimumTopUp` on-chain) |
+| `currentmonthlyfeewei` | Frozen monthly fee for this keyGen at registration |
+| `currentoveragefeepernoncewei` | Frozen overage fee per signature for this keyGen |
+
 For non-secp256k1 key types, numeric fields are zero and `registered` is false.
 
 **Example:**
 ```bash
 curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getFeeStatusByKeyGenId?id=KeyGen20260111003720999cf104d0f"
 ```
+
+#### VPN billing — host binding (MultiSignAgentWallet)
+
+VPN register/deposit/sync contract calls must **not** pass raw host IP addresses on-chain. Compute a host binding off-chain and persist it locally:
+
+```
+hostBinding = keccak256(abi.encodePacked(nodeKey, hostIpAddress))
+```
+
+Pass `bytes32 hostBinding` to `registerVpn`, `depositVpn`, `syncVpnBilling`, `getVpnSubscriptionStatus`, and `isVpnRegistered`. See **multi-sign-wallet** `README.md` and `integrations/continuumdao-node-app/vpnHostBinding.ts` for viem/Go helpers.
 
 <a id="get-getkeygengroupid"></a>
 #### `GET /getKeyGenGroupId` **NEW**

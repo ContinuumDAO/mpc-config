@@ -1832,7 +1832,7 @@
         },
         "/getFeeStatusByKeyGenId": {
             "get": {
-                "description": "Get MPA wallet fee status by keyGen request id (remaining nonces, deposit wei, required minimum top-up, daily accrual) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getFeeStatusByKeyGenId).",
+                "description": "Get MPA wallet fee status by keyGen request id (remaining nonces, deposit wei, required minimum top-up, monthly subscription fee) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getFeeStatusByKeyGenId).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1842,7 +1842,7 @@
                 "tags": [
                     "Key Generation"
                 ],
-                "summary": "Get MPA wallet fee status by keyGen request id (remaining nonces, deposit wei, required minimum top-up, daily accrual)",
+                "summary": "Get MPA wallet fee status by keyGen request id (remaining nonces, deposit wei, required minimum top-up, monthly subscription fee)",
                 "responses": {
                     "200": {
                         "description": "OK",
