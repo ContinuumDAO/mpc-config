@@ -139,6 +139,24 @@
       "initialLoad": false
     },
     {
+      "id": "technical-indicators",
+      "displayName": "Technical indicators",
+      "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "-p",
+        "@continuumdao/continuum-node-sdk",
+        "continuum-ta-mcp"
+      ],
+      "runtime": {
+        "requireCommands": ["npx"]
+      },
+      "initialLoad": false,
+      "aiReady": false
+    },
+    {
       "id": "binance",
       "displayName": "Binance (public market data)",
       "transport": "stdio",
