@@ -139,20 +139,19 @@
       "initialLoad": false
     },
     {
+      "id": "vpn",
+      "displayName": "VPN (admin + egress)",
+      "transport": "http",
+      "url": "http://continuum-mcp:8446/mcp/vpn",
+      "initialLoad": false,
+      "aiReady": false
+    },
+    {
       "id": "technical-indicators",
       "displayName": "Technical indicators",
       "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
-      "transport": "stdio",
-      "command": "npx",
-      "args": [
-        "-y",
-        "-p",
-        "@continuumdao/continuum-node-sdk",
-        "continuum-ta-mcp"
-      ],
-      "runtime": {
-        "requireCommands": ["npx"]
-      },
+      "transport": "http",
+      "url": "http://continuum-mcp:8446/mcp/ta",
       "initialLoad": false,
       "aiReady": false
     },
