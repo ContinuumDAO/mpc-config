@@ -8,12 +8,12 @@
     {
       "name": "chart-periods",
       "filename": "chart-periods.md",
-      "initialLoad": false
+      "initialLoad": true
     },
     {
       "name": "chart-defaults",
       "filename": "chart-defaults.md",
-      "initialLoad": false
+      "initialLoad": true
     },
     {
       "name": "execution-policy",
