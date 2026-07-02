@@ -1,50 +1,52 @@
 # Chart defaults (indicators & MCP)
 
-Generic spot charts: **CoinGecko** → **`prepare_chart`**. Tool reference: **`chart_docs`** and **`prepare_chart`**.
+Charts are built in the SDK via **`prepare_chart_from_rows`** (simple OHLCV feed) or **`prepare_chart`** (multi-series / custom overlays). Reference: **`chart_docs`**.
 
-## Workflow
+## Workflow (any data source)
 
-1. **`agent_load_mcp_server`** — `{ "serverId": "coingecko" }` if `coingecko__*` tools are missing.
-2. **`coingecko__execute`** — fetch bars (`async function run(client) { ... }` — see **`chart-periods`**).
-3. **`continuum__prepare_chart`** — **same turn**, pass the **`result`** array from step 2 (see below).
+1. **Fetch OHLCV** with the operator’s preferred tool (CoinGecko, Hyperliquid, GMX, Binance, etc.).
+2. **`continuum__prepare_chart_from_rows`** — pass the bar array **or** the full fetch JSON as **`toolResult`**.
 
-For generic “chart BTC/ETH”, use CoinGecko — not **`ctm_*_fetch_ohlcv`** / DeFi tools (unless the operator names that protocol).
+Do **not** call either chart tool with `{}`.
 
-## `prepare_chart` — required (never `{}`)
+### Preferred: `prepare_chart_from_rows`
 
-The UI does **not** link execute → chart automatically. You **must** include bar data **in the tool call**.
-
-**Preferred shorthand** — copy the **`result`** array from **`coingecko__execute`**:
+After any successful OHLCV fetch:
 
 ```json
 {
   "title": "ETH/USD 4H — last 90d",
   "label": "ETH/USD",
-  "bars": [
+  "rows": [
     { "time": 1777262400, "open": 2393.67, "high": 2394.99, "low": 2321.74, "close": 2321.74, "volume": 53251163525 }
   ],
   "options": { "maxPoints": 400 }
 }
 ```
 
-Also accepted: **`result`** or **`candles`** instead of **`bars`**; or full **`series`** form (see **`chart-periods`**).
+Or pass the entire prior MCP result (any vendor):
 
-| Call | Result |
-|------|--------|
-| `prepare_chart({})` | **Fails** — no data |
-| Fetch only, no chart call | **No chart in UI** |
-| `prepare_chart({ title, bars: <result array> })` | **Correct** |
+```json
+{
+  "title": "ETH/USD 4H",
+  "toolResult": { "result": [ "... same bar objects ..." ] }
+}
+```
 
-## Built-in defaults (candlestick, no `overlays`)
+### Advanced: `prepare_chart`
+
+Use for multiple series, custom overlays, or non-OHLCV series. Shorthand: **`bars`**, **`result`**, **`candles`**, or **`toolResult`**.
+
+## Built-in defaults (candlestick, no custom `overlays`)
 
 | Element | Default |
 |---------|---------|
 | Main overlay | **EMA(50)** |
 | Oscillator | **RSI(14)** |
-| Volume | Histogram when `volume` on candle rows |
+| Volume | Separate pane below price when `volume` on rows |
 
 Set **`options.skipDefaultOverlays`: true** for candles (+ volume) only. Pass non-empty **`overlays`** to replace defaults entirely.
 
 ## Customization
 
-Edit examples below for this operator (EMA period, MACD, etc.) when they do not specify otherwise.
+Edit examples below for this operator (EMA period, MACD, preferred data source, etc.) when they do not specify otherwise.

@@ -1,6 +1,6 @@
 # Chart periods & data sizing
 
-Spot charts: **CoinGecko** → **`prepare_chart`**. Pair with **`chart-defaults`**. Reference: **`chart_docs`**, **`prepare_chart`**.
+Pair with **`chart-defaults`**. Reference: **`chart_docs`**, **`prepare_chart_from_rows`**.
 
 ## Quick defaults (no range specified)
 
@@ -10,78 +10,41 @@ Spot charts: **CoinGecko** → **`prepare_chart`**. Pair with **`chart-defaults`
 | 4h | 90 days | 400 |
 | 1d | 9 months | 270 |
 
-Trim newest-first when over ~400 bars (`slice(-400)`). Put window in **`title`** (e.g. `ETH/USD 4H — last 90d`).
+Trim newest-first when over ~400 bars. Put window in **`title`** (e.g. `ETH/USD 4H — last 90d`).
 
-## CoinGecko fetch + chart (generic spot)
+## Fetch + chart (vendor-agnostic)
 
-1. Load **`coingecko`** if needed.
-2. **`coingecko__execute`** with **`async function run(client) { ... }`**.
-3. **`prepare_chart`** with **`bars`** (or **`result`**) = the execute **`result`** array — **never `{}`**.
+1. Fetch OHLCV with the operator’s chosen source (see examples below).
+2. **`prepare_chart_from_rows`** with **`rows`** = bar array, or **`toolResult`** = full fetch JSON.
 
-### ETH 4h example (~90d)
+Never `{}`. One fetch, one chart call with data.
 
-**Execute** — use **`chart.total_volumes`** (plural), aggregate hourly → 4h, **`return bars`**:
+### Example: CoinGecko spot (when that source is used)
 
-```javascript
-async function run(client) {
-  const id = 'ethereum';
-  const chart = await client.coins.marketChart.get(id, { days: '90', vs_currency: 'usd' });
-  const prices = chart.prices;
-  const volumes = chart.total_volumes;
-  const volByMs = new Map(volumes.map(([ms, v]) => [ms, v]));
-  const hourly = [];
-  for (let i = 0; i < prices.length; i++) {
-    const [ms, close] = prices[i];
-    const prevClose = i > 0 ? prices[i - 1][1] : close;
-    hourly.push({
-      time: Math.floor(ms / 1000),
-      open: prevClose,
-      high: Math.max(prevClose, close),
-      low: Math.min(prevClose, close),
-      close,
-      volume: volByMs.get(ms) ?? 0,
-    });
-  }
-  const FOUR_H = 4 * 3600;
-  const buckets = new Map();
-  for (const bar of hourly) {
-    const bucket = Math.floor(bar.time / FOUR_H) * FOUR_H;
-    const b = buckets.get(bucket);
-    if (!b) buckets.set(bucket, { ...bar, time: bucket });
-    else {
-      b.high = Math.max(b.high, bar.high);
-      b.low = Math.min(b.low, bar.low);
-      b.close = bar.close;
-      b.volume += bar.volume;
-    }
-  }
-  let bars = [...buckets.values()].sort((a, b) => a.time - b.time);
-  if (bars.length > 400) bars = bars.slice(-400);
-  return bars;
-}
-```
-
-**Chart** — pass the returned array as **`bars`** (same objects as **`result`**, inlined in the tool call):
+Load **`coingecko`** if needed, then **`coingecko__execute`**. Use **`chart.total_volumes`** (plural). Aggregate to the target interval in your execute script, **`return bars`**, then:
 
 ```json
 {
   "title": "ETH/USD 4H — last 90d",
-  "label": "ETH/USD",
-  "bars": [
-    { "time": 1777262400, "open": 2393.67, "high": 2394.99, "low": 2321.74, "close": 2321.74, "volume": 53251163525 }
-  ],
-  "options": { "maxPoints": 400 }
+  "toolResult": { "result": [ "... bars from execute ..." ] }
 }
 ```
 
-Do **not** call **`prepare_chart({})`** after a successful fetch. One execute, one chart call with data.
+See **`chart-defaults`** for a worked 4h aggregation script (CoinGecko-only example).
 
-## DeFi / perp OHLCV
+### Example: DeFi / perp (`ctm_*_fetch_ohlcv`)
 
-Use **`ctm_*_fetch_ohlcv`** only when the operator asks for that protocol (Hyperliquid perp, GMX, etc.) — not for generic “chart ETH”.
+When the operator names Hyperliquid, GMX, etc.:
+
+```json
+{
+  "title": "ETH-PERP 4H",
+  "toolResult": { "result": [ "... fetch_ohlcv rows ..." ] }
+}
+```
 
 ## Checklist
 
-- [ ] CoinGecko fetch returned a **`result`** array (not `{ totalBars, first, last }` only)
-- [ ] **`prepare_chart`** includes **`bars`** or **`series`** — not empty
+- [ ] Fetch returned OHLCV rows (array), not summary-only `{ totalBars, first, last }`
+- [ ] **`prepare_chart_from_rows`** includes **`rows`** or **`toolResult`**
 - [ ] Title reflects asset + interval + window
