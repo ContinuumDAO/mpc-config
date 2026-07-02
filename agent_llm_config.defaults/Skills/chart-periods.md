@@ -6,9 +6,11 @@ Load this skill when the operator asks for a **chart, graph, or plot** and you n
 
 For **generic** requests (“chart BTC”, “4h ETH candlesticks”, “plot SOL”) **without** naming a perp DEX or on-chain venue:
 
-1. **`agent_load_mcp_server`** with `{ "serverId": "coingecko" }` when **`coingecko__execute`** (or similar) is **not** already in the tool list. Use catalog id **`coingecko`** (public HTTP MCP — no API key).
+**Mandatory order:** load **`coingecko`** → **`coingecko__execute`** → **`prepare_chart`**. **Never** start with **`ctm_hyperliquid_fetch_ohlcv`** or **`load_defi_protocol`**.
+
+1. **`agent_load_mcp_server`** with `{ "serverId": "coingecko" }` when **`coingecko__execute`** (or similar) is **not** already in the tool list. Use catalog id **`coingecko`** (public HTTP MCP — no API key). **Call this before any OHLCV fetch.**
 2. Fetch OHLC via **`coingecko__execute`** (see **CoinGecko** below). Resolve coin id (e.g. `bitcoin`, `ethereum`) when the operator says “BTC” / “ETH”.
-3. **Do not** call **`load_defi_protocol`**, **Hyperliquid**, **GMX**, or other DeFi OHLCV tools unless the operator explicitly asks for perp positions, vault context, or that protocol’s market.
+3. **Forbidden for generic spot:** **`ctm_hyperliquid_fetch_ohlcv`**, **`load_defi_protocol`**, GMX, and other **`ctm_*_fetch_ohlcv`** tools — unless the operator explicitly asks for that protocol’s market (perp, vault, wallet on that venue).
 
 Use DeFi/protocol OHLCV only when the operator’s goal is tied to that venue (e.g. “chart my Hyperliquid BTC perp”, “GMX ETH candles for this wallet”).
 
