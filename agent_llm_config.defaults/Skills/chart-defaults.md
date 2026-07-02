@@ -1,52 +1,58 @@
 # Chart defaults (indicators & MCP)
 
-Charts are built in the SDK via **`prepare_chart_from_rows`** (simple OHLCV feed) or **`prepare_chart`** (multi-series / custom overlays). Reference: **`chart_docs`**.
+Charts: SDK **`prepare_chart_from_rows`** (single OHLCV feed) or **`prepare_chart`** (advanced). Reference: **`chart_docs`**.
 
-## Workflow (any data source)
+## Source selection (generic “chart ETH/BTC”)
 
-1. **Fetch OHLCV** with the operator’s preferred tool (CoinGecko, Hyperliquid, GMX, Binance, etc.).
-2. **`continuum__prepare_chart_from_rows`** — pass the bar array **or** the full fetch JSON as **`toolResult`**.
+| Operator request | Data source | Avoid |
+|------------------|-------------|--------|
+| “Chart ETH 4h”, “BTC chart”, spot price (no venue named) | **Spot** — load **`coingecko`**, fetch via **`coingecko__execute`** (see **`chart-periods`**) | **`load_defi_protocol`**, **`ctm_hyperliquid_fetch_ohlcv`**, other **`ctm_*_fetch_ohlcv`** |
+| Names **Hyperliquid**, **perp**, **GMX**, a DEX, or on-chain venue | That protocol’s **`fetch_ohlcv`** (after **`load_defi_protocol`** if needed) | CoinGecko spot |
 
-Do **not** call either chart tool with `{}`.
+Hyperliquid OHLCV is **perpetual** market data, not generic spot USD index. Do not use it for undifferentiated “chart ETH”.
 
-### Preferred: `prepare_chart_from_rows`
+## Workflow
 
-After any successful OHLCV fetch:
+1. **Fetch OHLCV** (source from table above).
+2. **Same turn** — **`continuum__prepare_chart_from_rows`** with **`rows`** or **`toolResult`**. Do not start another LLM turn with 400+ bars only in chat history.
+
+Never `{}`.
+
+### `prepare_chart_from_rows`
 
 ```json
 {
   "title": "ETH/USD 4H — last 90d",
   "label": "ETH/USD",
-  "rows": [
-    { "time": 1777262400, "open": 2393.67, "high": 2394.99, "low": 2321.74, "close": 2321.74, "volume": 53251163525 }
-  ],
-  "options": { "maxPoints": 400 }
+  "toolResult": { "result": [ "... bars from fetch ..." ] }
 }
 ```
 
-Or pass the entire prior MCP result (any vendor):
+Hyperliquid / DeFi fetch shape is also accepted:
 
 ```json
 {
-  "title": "ETH/USD 4H",
-  "toolResult": { "result": [ "... same bar objects ..." ] }
+  "title": "ETH-PERP 4H",
+  "toolResult": { "ohlcv": { "candles": [ "... from ctm_*_fetch_ohlcv ..." ] } }
 }
 ```
 
+Or pass **`rows`** directly. Default **`maxPoints`: 400** (newest bars kept).
+
 ### Advanced: `prepare_chart`
 
-Use for multiple series, custom overlays, or non-OHLCV series. Shorthand: **`bars`**, **`result`**, **`candles`**, or **`toolResult`**.
+Multi-series or custom **`overlays`**. Shorthand: **`bars`**, **`toolResult`**, **`candles`**.
 
-## Built-in defaults (candlestick, no custom `overlays`)
+## Built-in defaults (no custom `overlays`)
 
 | Element | Default |
 |---------|---------|
 | Main overlay | **EMA(50)** |
 | Oscillator | **RSI(14)** |
-| Volume | Separate pane below price when `volume` on rows |
+| Volume | Separate pane below price |
 
-Set **`options.skipDefaultOverlays`: true** for candles (+ volume) only. Pass non-empty **`overlays`** to replace defaults entirely.
+**`options.skipDefaultOverlays`: true** — candles + volume only.
 
 ## Customization
 
-Edit examples below for this operator (EMA period, MACD, preferred data source, etc.) when they do not specify otherwise.
+Operator overrides (preferred spot source, EMA period, etc.) go here when set on this node.
