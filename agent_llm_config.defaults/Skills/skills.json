@@ -4,6 +4,26 @@
       "name": "orchestration_planning",
       "filename": "orchestration_planning.md",
       "initialLoad": false
+    },
+    {
+      "name": "chart-periods",
+      "filename": "chart-periods.md",
+      "initialLoad": false
+    },
+    {
+      "name": "chart-defaults",
+      "filename": "chart-defaults.md",
+      "initialLoad": false
+    },
+    {
+      "name": "execution-policy",
+      "filename": "execution-policy.md",
+      "initialLoad": false
+    },
+    {
+      "name": "scheduled-automation",
+      "filename": "scheduled-automation.md",
+      "initialLoad": false
     }
   ]
 }

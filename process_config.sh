@@ -166,6 +166,48 @@ _seed_agent_skills_catalog() {
             print_success "agent_llm_config: installed Skills/skills.json"
         fi
     fi
+    if [ -f "${src_dir}/skills.json" ] && [ -f "${dest_dir}/skills.json" ] && command -v python3 &>/dev/null; then
+        _merge_out=$(SKILLS_MERGE_SRC="${src_dir}/skills.json" SKILLS_MERGE_DEST="${dest_dir}/skills.json" python3 <<'PYSKILLSMERGE'
+import json
+import os
+from pathlib import Path
+
+src = Path(os.environ["SKILLS_MERGE_SRC"])
+dest = Path(os.environ["SKILLS_MERGE_DEST"])
+
+def load(path):
+    with path.open(encoding="utf-8") as f:
+        doc = json.load(f)
+    skills = doc.get("skills") or []
+    if not isinstance(skills, list):
+        skills = []
+    return skills
+
+def norm(name):
+    return str(name or "").strip().lower()
+
+dest_skills = load(dest)
+src_skills = load(src)
+existing = {norm(s.get("name")) for s in dest_skills if norm(s.get("name"))}
+added = []
+for entry in src_skills:
+    name = norm(entry.get("name"))
+    if not name or name in existing:
+        continue
+    dest_skills.append(entry)
+    existing.add(name)
+    added.append(str(entry.get("name") or name))
+
+if added:
+    dest.write_text(json.dumps({"skills": dest_skills}, indent=2) + "\n", encoding="utf-8")
+    print("merged:" + ",".join(added))
+PYSKILLSMERGE
+)
+        if [ -n "$_merge_out" ]; then
+            _merged_names="${_merge_out#merged:}"
+            print_success "agent_llm_config: merged Skills catalog entries (${_merged_names})"
+        fi
+    fi
     local skill_file base
     for skill_file in "${src_dir}"/*.md "${src_dir}"/*.txt; do
         [ -f "$skill_file" ] || continue
