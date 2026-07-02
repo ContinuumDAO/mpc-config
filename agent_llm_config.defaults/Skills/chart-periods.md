@@ -2,6 +2,16 @@
 
 Load this skill when the operator asks for a **chart, graph, or plot** and you need to pick a time range or bar count. Also load **`chart-defaults`** for indicator defaults and MCP load workflow. Canonical tool reference: continuum MCP resource **`chart_docs`** (`chart.md`) and **`prepare_chart`**.
 
+## Default OHLCV source (spot / generic charts)
+
+For **generic** requests (“chart BTC”, “4h ETH candlesticks”, “plot SOL”) **without** naming a perp DEX or on-chain venue:
+
+1. **`agent_load_mcp_server`** with `{ "serverId": "coingecko" }` when **`coingecko__execute`** (or similar) is **not** already in the tool list. Use catalog id **`coingecko`** (public HTTP MCP — no API key).
+2. Fetch OHLC via **`coingecko__execute`** (see **CoinGecko** below). Resolve coin id (e.g. `bitcoin`, `ethereum`) when the operator says “BTC” / “ETH”.
+3. **Do not** call **`load_defi_protocol`**, **Hyperliquid**, **GMX**, or other DeFi OHLCV tools unless the operator explicitly asks for perp positions, vault context, or that protocol’s market.
+
+Use DeFi/protocol OHLCV only when the operator’s goal is tied to that venue (e.g. “chart my Hyperliquid BTC perp”, “GMX ETH candles for this wallet”).
+
 ## Goals
 
 1. **Sensible defaults** when the operator does not say how far back to look.
@@ -47,17 +57,20 @@ Use the same times for volume histogram series. Call **`prepare_chart`** with `"
 
 ## Source-specific notes
 
-### CoinGecko (`coingecko__execute`)
+### CoinGecko (`coingecko__execute`) — **default**
 
-- **`coins.ohlc.getRange`**: returns **hourly or daily** candles depending on range length — not native 4h/15m.
-- For **4h**: fetch hourly (keep request window minimal — e.g. 90 days, not 365), aggregate every 4 hours (open = first, close = last, high/low = extremes), then **`tailBars(..., 400)`**.
+- Catalog MCP id: **`coingecko`** (public). Load with **`agent_load_mcp_server`** if tools are missing.
+- **`coins.ohlc.getRange`** (or equivalent in `execute`): returns **hourly or daily** candles depending on range length — not native 4h/15m.
+- **BTC 4h example:** resolve `bitcoin`, fetch ~90 days hourly, aggregate to 4h bars (open = first, close = last, high/low = extremes), **`tailBars(..., 400)`**, then **`prepare_chart`**.
 - For **1d**: prefer daily endpoint when range > 90 days; trim tail if needed.
 - Do **not** pass raw hourly arrays of 720+ points straight to **`prepare_chart`** when a coarser interval was requested.
 
-### Hyperliquid / GMX / protocol OHLCV
+### Hyperliquid / GMX / protocol OHLCV — **only when operator asks**
 
+- Use when the chart is **about that protocol** (perp book, vault, wallet on that venue).
 - Use the protocol’s native candle interval when available (1h, 4h, 1d).
 - Request only the bar count you need (+ small buffer for indicator warmup), not “max history” by default.
+- Requires **`load_defi_protocol`** first — avoid for generic spot charts.
 
 ### Indicators
 
@@ -75,9 +88,11 @@ Use the same times for volume histogram series. Call **`prepare_chart`** with `"
 ## Checklist before `prepare_chart`
 
 - [ ] **`agent_load_skill`** **`chart-defaults`** (and **`chart-periods`** if range unclear)
+- [ ] **CoinGecko** loaded for generic spot charts (not DeFi OHLCV unless operator asked)
 - [ ] Interval matches what the operator asked for (or sensible default above)
 - [ ] Title includes asset + interval + window
 - [ ] Series sorted ascending; **`tailBars`** applied if > ~400 points
 - [ ] Volume on candle rows or histogram series when source provides it
+- [ ] **`prepare_chart` `series`** is a **JSON array** of series objects — never a stringified JSON blob
 - [ ] `"options": { "maxPoints": 400 }` for chat
 - [ ] Omit **`overlays`** for default EMA(50)+RSI(14), or pass explicit **`overlays`** / **`skipDefaultOverlays`** per **`chart-defaults`**

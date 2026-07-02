@@ -5,9 +5,31 @@ Load this skill when the operator asks for a **chart, graph, or plot**. Pair wit
 ## Agent workflow
 
 1. **`agent_load_skill`** — load **`chart-periods`** if you need lookback / bar-budget rules.
-2. **`agent_load_mcp_server`** — if **`technical-indicators__list_technical_indicators`** is **not** already in the tool list, call with `{ "serverId": "technical-indicators" }`. Use for custom indicator math outside **`prepare_chart`**; default EMA/RSI on charts do **not** require this server.
-3. Fetch OHLCV (include **volume** in candle rows or as a histogram series when the source provides it).
-4. Call **`prepare_chart`** with candlestick **`series`** only — defaults apply automatically (see below).
+2. **`agent_load_mcp_server`** — for **generic spot charts**, load **`coingecko`** when `coingecko__*` tools are not in the session. **Do not** load Hyperliquid/GMX/DeFi for a plain “chart BTC” request.
+3. **`agent_load_mcp_server`** — load **`technical-indicators`** only if **`technical-indicators__list_technical_indicators`** is missing **and** you need standalone indicator math outside **`prepare_chart`** (default EMA/RSI on charts do **not** require it).
+4. Fetch OHLCV from **CoinGecko** (default) or another source only if the operator specified it (include **volume** on candle rows when available).
+5. Call **`prepare_chart`** with candlestick **`series`** as a **native array** — defaults apply automatically (see below).
+
+### `prepare_chart` arguments (required shape)
+
+```json
+{
+  "title": "BTC/USD 4H — last 90d",
+  "options": { "maxPoints": 400 },
+  "series": [
+    {
+      "id": "btc",
+      "type": "candlestick",
+      "label": "BTC/USD",
+      "data": [
+        { "time": 1717200000, "open": 67000, "high": 67500, "low": 66800, "close": 67200, "volume": 1234 }
+      ]
+    }
+  ]
+}
+```
+
+**Wrong:** `"series": "[{\"id\":\"btc\",...}]"` (string) — validation fails. **Right:** `series` is a JSON **array** object in the tool call.
 
 ## Built-in defaults (`prepare_chart`, candlestick, no `overlays`)
 
