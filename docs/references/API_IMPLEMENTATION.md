@@ -2875,7 +2875,7 @@ The mpc-auth image ships **uv**, **Node**, **Foundry**, and **Heimdall** as plat
 **Agent chat tools (runtime):**
 
 - `agent_add_mcp_server` — proposes a new user MCP server; the chat UI shows an approval dialog and the operator must **management-sign** `POST /addMcpServer` before the agent continues (elicitation `kind`: `add_mcp_server`).
-- `agent_load_mcp_server` / `agent_unload_mcp_server` — argument `serverId`; load or unload servers for the current conversation.
+- `agent_load_mcp_server` / `agent_unload_mcp_server` — argument `serverId`; load or unload servers for the **current conversation** (persisted in the conversation file as `loadedMcpServerIds`). Applies to interactive chat, cron jobs (per job `conversationId`), and hooks using the same turn engine. After a successful load/unload in a turn, the LLM tool list is refreshed so prefixed tools are callable in the same response. **`initialLoad`** still means “connect automatically at the start of every new conversation”; dynamic load is scoped to the conversation where it was requested.
 - `agent_load_skill` — argument `name`; inject a skill file into session context when not loaded at startup.
 - MCP tools from loaded servers are exposed to the LLM as `{serverId}__{toolName}`.
 

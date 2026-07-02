@@ -561,7 +561,7 @@ sequenceDiagram
    Replies do **not** need `@agent`. Do **not** use `mpc-orchestrate-task` or post dispatch/progress-only messages. Use MCP **`send_key_gen_message`** once; do not poll `listMessages`.
 
 4. **Reply hooks** — same-node replies **without** `mpc-task-result` do **not** re-trigger orchestrator hooks (avoids progress/dispatch echo loops). **`prompts.externalReply`** runs for **peer** replies. **`prompts.subAgentReply`** is optional per-task ack (skipped when synthesis runs). **`prompts.orchestratorOnReply`** runs **once** when all tasks are terminal (`synthesis.onPartial` controls whether `failed` counts).
-5. **Synthesis** — automated hook in `[Orchestrator]` with MCP `continuum` (including `send_key_gen_message` to post a **KeyGen reply** for the group). Optional **`synthesis.at`** + **`cronPrompt`** schedules a **follow-up** turn (e.g. offer multiSign drafts via `ctm_*` tools); requires both fields non-empty. Cron uses **`initialLoad`** MCP servers only — not per-task allowlists.
+5. **Synthesis** — automated hook in `[Orchestrator]` with MCP `continuum` (including `send_key_gen_message` to post a **KeyGen reply** for the group). Optional **`synthesis.at`** + **`cronPrompt`** schedules a **follow-up** turn (e.g. offer multiSign drafts via `ctm_*` tools); requires both fields non-empty. Scheduled cron runs **start** with **`initialLoad`** MCP servers only (not per-task allowlists). A cron prompt may also call **`agent_load_mcp_server`** to attach other configured servers for that job’s **`conversationId`**; those loads persist across subsequent runs of the same cron job. Sub-agent orchestration tasks still use explicit per-task **`mcpServers`** allowlists instead of conversation dynamic load.
 
 ### Manual Execute (without Plan UI)
 
