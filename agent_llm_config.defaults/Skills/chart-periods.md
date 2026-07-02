@@ -22,16 +22,32 @@ Never `{}`.
 
 ### Spot example (CoinGecko)
 
-Load **`coingecko`**, **`coingecko__execute`** (aggregate to interval in script — see below), then:
+Load **`coingecko`**, then **`coingecko__execute`**. Preferred API:
+
+```javascript
+async function run(client) {
+  const ohlcs = await client.coins.ohlc.get('ethereum', {
+    days: '90',
+    vs_currency: 'usd',
+    interval: 'hourly',
+  });
+  // ohlcs is [ [timestampMs, open, high, low, close], ... ] — aggregate to 4h if needed
+  return ohlcs;
+}
+```
+
+Spot market chart (prices + volumes, no native OHLC): `await client.coins.marketChart.get('ethereum', { days: '90', vs_currency: 'usd' })` — build candles from `prices` / `total_volumes` (see **`chart-periods`**).
+
+Then **`prepare_chart_from_rows`** with **`toolResult`** (object or stringified JSON is OK):
 
 ```json
 {
   "title": "ETH/USD 4H — last 90d",
-  "toolResult": { "result": [ "... bars ..." ] }
+  "toolResult": { "result": [ "... bars or tuples ..." ] }
 }
 ```
 
-**Execute script notes:** `chart.total_volumes` (plural); bucket hourly → 4h; `return bars`; trim to ~400.
+Bar shapes accepted: `{ time, open, high, low, close }`, `{ t, o, h, l, c, v }`, or `[timestampMs, o, h, l, c]`.
 
 ### Perp / DeFi example (Hyperliquid — only when operator names it)
 
