@@ -60,10 +60,84 @@ Use the same times for volume histogram series. Call **`prepare_chart`** with `"
 ### CoinGecko (`coingecko__execute`) — **default**
 
 - Catalog MCP id: **`coingecko`** (public). Load with **`agent_load_mcp_server`** if tools are missing.
-- **`coins.ohlc.getRange`** (or equivalent in `execute`): returns **hourly or daily** candles depending on range length — not native 4h/15m.
-- **BTC 4h example:** resolve `bitcoin`, fetch ~90 days hourly, aggregate to 4h bars (open = first, close = last, high/low = extremes), **`tailBars(..., 400)`**, then **`prepare_chart`**.
-- For **1d**: prefer daily endpoint when range > 90 days; trim tail if needed.
-- Do **not** pass raw hourly arrays of 720+ points straight to **`prepare_chart`** when a coarser interval was requested.
+- **`coingecko__execute`** requires a top-level **`async function run(client) { ... }`** — wrap all code in that template (see **Worked example: BTC 4h** below).
+- **`coingecko__search_docs`** — optional; use when unsure of method names. Then **`execute`** with the `run` wrapper.
+- **Do not** use **`client.coins.ohlc.get(..., { days: '90' })`** for 4h — CoinGecko returns **sparse daily/4-day** bars for long ranges. For **~90d at 4h**, use **`marketChart.get`** hourly and aggregate (example below). For **~30d native 4h**, use **`coins.ohlc.get(..., { days: '30' })`** (CoinGecko returns 4h bars for 2–30 days).
+- After **`execute`** returns bars, you **must** call **`continuum__prepare_chart`** in the **same turn** with a full payload — **never** `{}` and **never** skip **`series`**.
+
+#### Worked example: BTC 4h (~90d, with volume)
+
+**Step 1 — fetch** (`coingecko__execute`):
+
+```javascript
+async function run(client) {
+  const id = 'bitcoin';
+  const chart = await client.coins.marketChart.get(id, {
+    days: '90',
+    vs_currency: 'usd',
+  });
+  const prices = chart.prices;       // [[ms, close], ...] hourly
+  const volumes = chart.total_volumes; // [[ms, vol], ...]
+  const volByMs = new Map(volumes.map(([ms, v]) => [ms, v]));
+
+  // Hourly pseudo-OHLC from close series (open = previous close)
+  const hourly = [];
+  for (let i = 0; i < prices.length; i++) {
+    const [ms, close] = prices[i];
+    const prevClose = i > 0 ? prices[i - 1][1] : close;
+    hourly.push({
+      time: Math.floor(ms / 1000),
+      open: prevClose,
+      high: Math.max(prevClose, close),
+      low: Math.min(prevClose, close),
+      close,
+      volume: volByMs.get(ms) ?? 0,
+    });
+  }
+
+  // Aggregate hourly → 4h
+  const FOUR_H = 4 * 3600;
+  const buckets = new Map();
+  for (const bar of hourly) {
+    const bucket = Math.floor(bar.time / FOUR_H) * FOUR_H;
+    const b = buckets.get(bucket);
+    if (!b) {
+      buckets.set(bucket, { ...bar, time: bucket });
+    } else {
+      b.high = Math.max(b.high, bar.high);
+      b.low = Math.min(b.low, bar.low);
+      b.close = bar.close;
+      b.volume += bar.volume;
+    }
+  }
+  let bars = [...buckets.values()].sort((a, b) => a.time - b.time);
+  if (bars.length > 400) bars = bars.slice(-400);
+  return bars;
+}
+```
+
+**Step 2 — chart** (`continuum__prepare_chart`) — use the **`result`** array from step 1 as **`series[0].data`**:
+
+```json
+{
+  "title": "BTC/USD 4H — last 90d",
+  "options": { "maxPoints": 400 },
+  "series": [
+    {
+      "id": "btc",
+      "type": "candlestick",
+      "label": "BTC/USD",
+      "data": [
+        { "time": 1777262400, "open": 79096, "high": 79096, "low": 77728, "close": 77728, "volume": 117403486572 }
+      ]
+    }
+  ]
+}
+```
+
+- **`time`**: Unix **seconds** (convert from CoinGecko ms with `Math.floor(ms / 1000)`).
+- **`data`**: at least **15+ bars** for RSI, **50+** for default EMA(50) — fetch enough history before trim.
+- **Wrong:** calling **`prepare_chart`** with **`{}`** or before fetch completes. **Right:** one fetch, then one **`prepare_chart`** with populated **`series`**.
 
 ### Hyperliquid / GMX / protocol OHLCV — **only when operator asks**
 
@@ -89,6 +163,8 @@ Use the same times for volume histogram series. Call **`prepare_chart`** with `"
 
 - [ ] **`agent_load_skill`** **`chart-defaults`** (and **`chart-periods`** if range unclear)
 - [ ] **CoinGecko** loaded for generic spot charts (not DeFi OHLCV unless operator asked)
+- [ ] **`coingecko__execute`** completed and **`result`** parsed into candle objects
+- [ ] **`prepare_chart` called with non-empty `series`** — never `{}`
 - [ ] Interval matches what the operator asked for (or sensible default above)
 - [ ] Title includes asset + interval + window
 - [ ] Series sorted ascending; **`tailBars`** applied if > ~400 points

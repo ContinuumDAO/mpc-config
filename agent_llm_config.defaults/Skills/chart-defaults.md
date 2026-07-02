@@ -7,8 +7,17 @@ Load this skill when the operator asks for a **chart, graph, or plot**. Pair wit
 1. **`agent_load_skill`** — load **`chart-periods`** if you need lookback / bar-budget rules.
 2. **`agent_load_mcp_server`** — for **generic spot charts**, load **`coingecko`** when `coingecko__*` tools are not in the session. **Do not** load Hyperliquid/GMX/DeFi for a plain “chart BTC” request.
 3. **`agent_load_mcp_server`** — load **`technical-indicators`** only if **`technical-indicators__list_technical_indicators`** is missing **and** you need standalone indicator math outside **`prepare_chart`** (default EMA/RSI on charts do **not** require it).
-4. Fetch OHLCV from **CoinGecko** (default) or another source only if the operator specified it (include **volume** on candle rows when available).
-5. Call **`prepare_chart`** with candlestick **`series`** as a **native array** — defaults apply automatically (see below).
+4. Fetch OHLCV from **CoinGecko** (default) — **`coingecko__execute`** with **`async function run(client) { ... }`** (see **`chart-periods`** worked example). Parse the returned **`result`** into `{ time, open, high, low, close, volume? }` rows (`time` in **seconds**).
+5. **Immediately** call **`continuum__prepare_chart`** with **`series`** populated from that data — **same agent turn**, after fetch succeeds.
+
+### Critical: never empty `prepare_chart`
+
+| Call | Result |
+|------|--------|
+| `prepare_chart({})` | **Fails** — `series` required |
+| `prepare_chart` before fetch finishes | **Fails** — no data |
+| Fetch only, no `prepare_chart` | **No chart in UI** — user sees nothing |
+| Fetch → `prepare_chart` with full **`series`** array | **Correct** |
 
 ### `prepare_chart` arguments (required shape)
 
