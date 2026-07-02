@@ -49,7 +49,9 @@ Multi-series or custom **`overlays`**. Shorthand: **`bars`**, **`toolResult`**, 
 |---------|---------|
 | Main overlay | **EMA(50)** |
 | Oscillator | **RSI(14)** |
-| Volume | Separate pane below price |
+| Volume | Separate pane below price when each row has **`volume`** |
+
+Spot **`coins.ohlc.get`** has **no volume** — use **`coins.marketChart.get`** + **`total_volumes`** (see **`chart-periods`**) or the volume pane is omitted.
 
 **`options.skipDefaultOverlays`: true** — candles + volume only.
 
