@@ -62,20 +62,25 @@ async function run(client) {
   }
   let bars = [...buckets.values()].sort((a, b) => a.time - b.time);
   if (bars.length > 400) bars = bars.slice(-400);
-  return bars;
+  return {
+    title: 'ETH/USD 4H — last 90d',
+    label: 'ETH/USD',
+    result: bars,
+  };
 }
 ```
 
-Then:
+**`title` is required** on `prepare_chart_from_rows` — it must describe **what you fetched** (asset, interval, window), not copy the user chat. Either pass it on the chart call or return it from execute (SDK reads `title` / `label` from fetch JSON).
 
 ```json
 {
   "title": "ETH/USD 4H — last 90d",
+  "label": "ETH/USD",
   "rows": [ "... bars with volume field ..." ]
 }
 ```
 
-Or pass the raw **`marketChart`** response as **`toolResult`** (SDK builds OHLCV + volume automatically; optional **`options.bucketSec`: 14400** for 4h):
+Or pass fetch output as **`toolResult`** when execute returned `{ title, label, result }`:
 
 ```json
 {
@@ -91,18 +96,39 @@ Prefer **`rows`** (array) over a stringified **`toolResult`** — avoids JSON tr
 
 `client.coins.ohlc.get(...)` — acceptable only if the operator explicitly does not want volume.
 
-### Perp / DeFi (Hyperliquid — when operator names it)
+### Perp / DeFi (Hyperliquid or GMX — when operator names the venue)
+
+**Hyperliquid** — fetch returns `{ ohlcv: { coin, interval, candles }, resolvedCoin }`:
+
+1. `ctm_hyperliquid_fetch_ohlcv` (after `load_defi_protocol({ protocolId: "hyperliquid" })`).
+2. **`continuum__prepare_chart_from_rows`** — same turn; pass **full fetch JSON** as **`toolResult`**.
 
 ```json
 {
-  "title": "ETH-PERP 4H — 90d",
-  "toolResult": { "ohlcv": { "candles": [ "... fetch_ohlcv ..." ] } }
+  "title": "ETH-PERP 1H — last 3d",
+  "toolResult": { "ohlcv": { "coin": "ETH", "interval": "1h", "candles": [ "... from fetch ..." ] }, "resolvedCoin": "ETH" }
 }
 ```
 
+**GMX** — fetch returns `{ symbol, timeframe, candles }` (no volume on rows):
+
+1. `ctm_gmx_fetch_ohlcv` (after `load_defi_protocol({ protocolId: "gmx" })`); set **`limit`** for enough bars.
+2. **`continuum__prepare_chart_from_rows`** — same turn; pass **full fetch JSON** as **`toolResult`**.
+
+```json
+{
+  "title": "ETH/USD 1H — last 7d",
+  "toolResult": { "symbol": "ETH/USD [WETH-USDC]", "timeframe": "1h", "candles": [ "... from fetch ..." ] }
+}
+```
+
+See **`get_defi_protocol_skill`** for fetch params. **`load_defi_protocol`** also returns **`chartWorkflow`**. Never skip step 2 when the user asked to chart.
+
 ## Checklist
 
+- [ ] **`title`** on chart call matches fetched asset/interval/window (or returned from execute)
 - [ ] Spot default charts: rows include **`volume`** (use `marketChart`, not `ohlc.get` alone)
 - [ ] **`prepare_chart_from_rows`** in the **same turn** as fetch
 - [ ] **`rows`** or complete **`toolResult`** — not `{}` or truncated JSON
 - [ ] Title: asset + interval + window
+- [ ] Chart tool succeeded — MCP result shows `[Chart prepared: … · continuum/chart/v1]`; if missing, **do not claim the chart rendered**

@@ -16,7 +16,7 @@ Hyperliquid OHLCV is **perpetual** market data, not generic spot USD index. Do n
 1. **Fetch OHLCV** (source from table above).
 2. **Same turn** — **`continuum__prepare_chart_from_rows`** with **`rows`** or **`toolResult`**. Do not start another LLM turn with 400+ bars only in chat history.
 
-Never `{}`.
+Never `{}`. **Do not describe the chart in markdown** — the UI only renders when the chart tool returns `continuum/chart/v1` (visible under **MCP result**, not the assistant bubble). Prose like “chart prepared” without a successful chart tool call means **nothing was rendered**.
 
 ### `prepare_chart_from_rows`
 
@@ -33,7 +33,16 @@ Hyperliquid / DeFi fetch shape is also accepted:
 ```json
 {
   "title": "ETH-PERP 4H",
-  "toolResult": { "ohlcv": { "candles": [ "... from ctm_*_fetch_ohlcv ..." ] } }
+  "toolResult": { "ohlcv": { "candles": [ "... from ctm_hyperliquid_fetch_ohlcv ..." ] } }
+}
+```
+
+GMX returns a flat shape (not nested under `ohlcv`):
+
+```json
+{
+  "title": "ETH/USD 1H",
+  "toolResult": { "symbol": "ETH/USD [WETH-USDC]", "timeframe": "1h", "candles": [ "... from ctm_gmx_fetch_ohlcv ..." ] }
 }
 ```
 
