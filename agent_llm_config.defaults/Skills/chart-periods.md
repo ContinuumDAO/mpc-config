@@ -4,112 +4,47 @@ Pair with **`chart-defaults`**. Reference: **`chart_docs`**, **`prepare_chart_fr
 
 ## Quick defaults (no range specified)
 
-| Interval | Window | ~Bars |
-|----------|--------|-------|
-| 1h | 45 days | 400 |
-| 4h | 90 days | 400 |
-| 1d | 9 months | 270 |
+| Interval | Window | ~Bars | Spot CoinGecko (public) |
+|----------|--------|-------|-------------------------|
+| 1h | 45 days | 400 | **Pro only** (`interval: hourly`) or use **4H** on public |
+| 4h | 90 days | 400 | **Default for public** (auto for 3–30d windows) |
+| 1d | 9 months | 270 | Long windows (31d+ auto → coarser) |
 
 Trim newest-first when over ~400 bars. Put window in **`title`**.
+
+**Operator asks “1 hour” on spot CoinGecko:** if only **`coingecko`** (public) is loaded → fetch **4H** data (auto granularity), title **`4H`**, and **tell the operator** hourly spot needs **CoinGecko Pro** or a DeFi venue (Hyperliquid/GMX). Do not pretend the chart is 1H.
 
 ## Fetch + chart
 
 1. Pick source per **`chart-defaults`** source table.
-2. Fetch OHLCV **with volume** when the default chart layout is used (volume pane below price).
+2. Fetch OHLC bars. **CoinGecko spot:** **`coins.ohlc.get`** only — real candles, **no volume** (volume pane omitted). **DeFi / Hyperliquid / GMX:** native **`fetch_ohlcv`** when available (volume when rows include it).
 3. **Immediately** call **`prepare_chart_from_rows`** — same agent turn.
 
-Never `{}`.
+Never `{}`. **Do not use `coins.marketChart.get`** for spot charts — it synthesizes fake candles from price points and poor volume.
 
-### Spot with volume (CoinGecko — preferred for “chart ETH 4h”)
+### Spot OHLC (CoinGecko — chart and analysis)
 
-**Do not use `coins.ohlc.get` alone** — it returns OHLC tuples **without volume**. Use **`coins.marketChart.get`** and build candles from **`prices`** + **`total_volumes`**:
+Always **`coins.ohlc.get`**. One call; map tuples to `{ time, open, high, low, close }` — **omit `volume`**. Do **not** merge with `marketChart`.
 
-```javascript
-async function run(client) {
-  const id = 'ethereum';
-  const chart = await client.coins.marketChart.get(id, {
-    days: '90',
-    vs_currency: 'usd',
-  });
-  const prices = chart.prices || [];
-  const volumes = chart.total_volumes || [];
-  const volByMs = new Map(volumes.map(([ms, v]) => [ms, v]));
-  const hourly = [];
-  for (let i = 0; i < prices.length; i++) {
-    const [ms, close] = prices[i];
-    const prevClose = i > 0 ? prices[i - 1][1] : close;
-    hourly.push({
-      time: Math.floor(ms / 1000),
-      open: prevClose,
-      high: Math.max(prevClose, close),
-      low: Math.min(prevClose, close),
-      close,
-      volume: volByMs.get(ms) ?? 0,
-    });
-  }
-  const FOUR_H = 4 * 3600;
-  const buckets = new Map();
-  for (const bar of hourly) {
-    const bucket = Math.floor(bar.time / FOUR_H) * FOUR_H;
-    const b = buckets.get(bucket);
-    if (!b) buckets.set(bucket, { ...bar, time: bucket });
-    else {
-      b.high = Math.max(b.high, bar.high);
-      b.low = Math.min(b.low, bar.low);
-      b.close = bar.close;
-      b.volume += bar.volume;
-    }
-  }
-  let bars = [...buckets.values()].sort((a, b) => a.time - b.time);
-  if (bars.length > 400) bars = bars.slice(-400);
-  return {
-    title: 'ETH/USD 4H — last 90d',
-    label: 'ETH/USD',
-    result: bars,
-  };
-}
-```
+#### Public API (`coingecko` — default)
 
-**`title` is required** on `prepare_chart_from_rows` — it must describe **what you fetched** (asset, interval, window), not copy the user chat. Either pass it on the chart call or return it from execute (SDK reads `title` / `label` from fetch JSON).
+No `interval` parameter. Auto-granularity (approximate): 1–2d → 30m; **3–30d → 4H**; 31d+ → 4d.
 
-```json
-{
-  "title": "ETH/USD 4H — last 90d",
-  "label": "ETH/USD",
-  "rows": [ "... bars with volume field ..." ]
-}
-```
-
-Or pass fetch output as **`toolResult`** when execute returned `{ title, label, result }`:
-
-```json
-{
-  "title": "ETH/USD 4H — last 90d",
-  "toolResult": { "result": { "prices": "...", "total_volumes": "..." } },
-  "options": { "bucketSec": 14400 }
-}
-```
-
-Prefer **`rows`** (array) over a stringified **`toolResult`** — avoids JSON truncation errors.
-
-### Spot analysis only (CoinGecko — `analyze_*`, no chart)
-
-Use **`coins.ohlc.get`** — real OHLC candles; **no volume** (analysis tools do not need it). **Do not** merge `ohlc.get` + `marketChart` in one script.
-
-CoinGecko auto-granularity (approximate): 1–2d → 30m; 3–30d → **4H**; 31d+ → 4d. Set **`title`** to match (e.g. 7d → `ETH/USD 4H — last 7d`, not “1H”).
+When the operator asks for **1H** / **1 hour** but only public CoinGecko is available → **still fetch with default auto granularity (4H for 7d)**. Use title **`ETH/USD 4H — last 7d`**. In reply, note that **true hourly spot OHLC** needs **`coingecko-pro`** (paid) or **Hyperliquid/GMX** for venue candles — do not label the chart “1H”.
 
 ```javascript
 async function run(client) {
   const id = 'ethereum';
   const days = 7;
   const ohlc = await client.coins.ohlc.get(id, { vs_currency: 'usd', days: String(days) });
-  const bars = (ohlc || []).map(([ms, open, high, low, close]) => ({
+  let bars = (ohlc || []).map(([ms, open, high, low, close]) => ({
     time: Math.floor(ms / 1000),
     open,
     high,
     low,
     close,
   }));
+  if (bars.length > 400) bars = bars.slice(-400);
   return {
     title: 'ETH/USD 4H — last 7d',
     label: 'ETH/USD',
@@ -118,11 +53,54 @@ async function run(client) {
 }
 ```
 
-Pass the execute return as **`toolResult`** to **`analyze_*`** (same turn). For chart + volume, use **`marketChart`** above instead.
+#### CoinGecko Pro (`coingecko-pro` — optional)
 
-### Spot OHLC only (chart without volume pane)
+When **`COINGECKO_API_KEY`** is set on the node, prefer **`agent_load_mcp_server({ serverId: "coingecko-pro" })`** over public **`coingecko`**.
 
-`client.coins.ohlc.get(...)` — when the operator explicitly does not want a volume pane on the chart.
+Paid plans may pass **`interval: 'hourly'`** on **`coins.ohlc.get`** for **`days`** in **`1` / `7` / `14` / `30` / `90`** only. Then an **1H** title is honest (e.g. `ETH/USD 1H — last 7d`). Still **no volume** on OHLC.
+
+```javascript
+async function run(client) {
+  const id = 'ethereum';
+  const days = 7;
+  const ohlc = await client.coins.ohlc.get(id, {
+    vs_currency: 'usd',
+    days: String(days),
+    interval: 'hourly',
+  });
+  let bars = (ohlc || []).map(([ms, open, high, low, close]) => ({
+    time: Math.floor(ms / 1000),
+    open,
+    high,
+    low,
+    close,
+  }));
+  if (bars.length > 400) bars = bars.slice(-400);
+  return {
+    title: 'ETH/USD 1H — last 7d',
+    label: 'ETH/USD',
+    result: bars,
+  };
+}
+```
+
+For **90d+** spot on Pro, use **`interval: 'daily'`** or auto — not hourly.
+
+**`title` is required** on `prepare_chart_from_rows` — describe **what you fetched** (asset, interval, window), not copy the user chat verbatim if granularity differs.
+
+```json
+{
+  "title": "ETH/USD 4H — last 90d",
+  "label": "ETH/USD",
+  "rows": [ "... OHLC bars, no volume field ..." ]
+}
+```
+
+Or pass execute output as **`toolResult`** when it returned `{ title, label, result }`.
+
+Prefer **`rows`** (array) over a stringified **`toolResult`** — avoids JSON truncation errors.
+
+For **`analyze_*`**, use the same fetch and pass **`toolResult`** — same turn, no chart call unless the operator also asked to plot.
 
 ### Perp / DeFi (Hyperliquid or GMX — when operator names the venue)
 
@@ -155,8 +133,9 @@ See **`get_defi_protocol_skill`** for fetch params. **`load_defi_protocol`** als
 ## Checklist
 
 - [ ] **`title`** on chart call matches fetched asset/interval/window (or returned from execute)
-- [ ] Spot **charts**: rows include **`volume`** (use `marketChart`, not `ohlc.get` alone)
-- [ ] Spot **analysis**: use `ohlc.get` (real OHLC; honest interval in title)
+- [ ] Spot **CoinGecko**: **`ohlc.get`** only — real OHLC, no volume, no `marketChart`
+- [ ] Spot **public** + operator said “1H”: chart **4H** data, title says **4H**, explain Pro/DeFi for hourly
+- [ ] Spot **Pro** loaded: may use **`interval: 'hourly'`** for 1–90d; title may say **1H**
 - [ ] **`prepare_chart_from_rows`** in the **same turn** as fetch
 - [ ] **`rows`** or complete **`toolResult`** — not `{}` or truncated JSON
 - [ ] Title: asset + interval + window

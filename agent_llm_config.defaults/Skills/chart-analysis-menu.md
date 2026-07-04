@@ -23,14 +23,20 @@ Reference: MCP resource **`chart_analysis_docs`**.
 
 ## Spot data source (default when DeFi not loaded)
 
-Per **`chart-defaults`**: generic spot (no venue named) → load **`coingecko`**. Do **not** load Hyperliquid/GMX unless the operator names that venue or perp.
+Per **`chart-defaults`**: generic spot (no venue named) → load **`coingecko`**, or **`coingecko-pro`** when the node has **`COINGECKO_API_KEY`**. Do **not** load Hyperliquid/GMX unless the operator names that venue or perp.
 
 | Goal | CoinGecko fetch | Notes |
 |------|-----------------|-------|
-| **Analysis only** (`analyze_*`) | **`coins.ohlc.get`** | Real OHLC; one call; volume not needed |
-| **Chart / plot** (volume pane) | **`coins.marketChart.get`** | See **`chart-periods`** — synthetic candles + volume |
+| **Chart / plot** or **analysis** (`analyze_*`) | **`coins.ohlc.get`** | Real OHLC; one call; **no volume** |
 
-**Honest `title`:** reflect CoinGecko auto-granularity, not the user’s interval word if they differ (e.g. 7d on `ohlc.get` → ~**4H** bars, not “1H”). See **`chart-periods`** spot analysis example.
+**Do not use `coins.marketChart.get`** — synthetic candles and unreliable volume.
+
+**Interval honesty (spot):**
+
+- **Public `coingecko`:** 3–30d windows → **~4H** auto. If the operator asked for **1H** → fetch **4H anyway**, title **`4H`**, and **explain** that hourly spot needs **Pro** or **Hyperliquid/GMX**.
+- **`coingecko-pro`:** may pass **`interval: 'hourly'`** on `ohlc.get` for 1 / 7 / 14 / 30 / 90 days — then **1H** title is OK.
+
+See **`chart-periods`** for execute examples.
 
 If **`hyperliquid`** / **`gmx`** is already loaded and the operator names the venue or a specific interval → use that protocol’s **`fetch_ohlcv`** instead of CoinGecko.
 
