@@ -2,6 +2,8 @@
 
 Charts: SDK **`prepare_chart_from_rows`** (single OHLCV feed) or **`prepare_chart`** (advanced). Reference: **`chart_docs`**.
 
+**Analysis without a chart:** use skill **`chart-analysis-menu`** and MCP **`chart_analysis_docs`** — call **`analyze_*`** tools, not **`prepare_chart*`**.
+
 ## Source selection (generic “chart ETH/BTC”)
 
 | Operator request | Data source | Avoid |
@@ -61,6 +63,8 @@ Multi-series or custom **`overlays`**. Shorthand: **`bars`**, **`toolResult`**, 
 | Volume | Separate pane below price when each row has **`volume`** |
 
 Spot **`coins.ohlc.get`** has **no volume** — use **`coins.marketChart.get`** + **`total_volumes`** (see **`chart-periods`**) or the volume pane is omitted.
+
+**EMA(50) needs ≥50 bars** in the fetch (after any trim). Shorter lookback still charts candles + RSI(14) but **no EMA line** — extend lookback per **`chart-periods`** (e.g. Hyperliquid **`lookbackDays` ≥ 14** for 4h, **`limit` ≥ 200** on GMX).
 
 **`options.skipDefaultOverlays`: true** — candles + volume only.
 

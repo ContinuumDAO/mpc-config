@@ -16,6 +16,31 @@
       "initialLoad": true
     },
     {
+      "name": "chart-analysis-menu",
+      "filename": "chart-analysis-menu.md",
+      "initialLoad": true
+    },
+    {
+      "name": "chart-analysis-trend",
+      "filename": "chart-analysis-trend.md",
+      "initialLoad": false
+    },
+    {
+      "name": "chart-analysis-levels",
+      "filename": "chart-analysis-levels.md",
+      "initialLoad": false
+    },
+    {
+      "name": "chart-analysis-momentum",
+      "filename": "chart-analysis-momentum.md",
+      "initialLoad": false
+    },
+    {
+      "name": "orchestration-chart-analysis",
+      "filename": "orchestration-chart-analysis.md",
+      "initialLoad": false
+    },
+    {
       "name": "execution-policy",
       "filename": "execution-policy.md",
       "initialLoad": false

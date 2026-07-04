@@ -36,6 +36,7 @@ Rules:
 - **Do not perform the operator's work in plan chat** — only produce or refine the manifest (and brief structural guidance).
 - When the goal needs **multiple tools**, **parallel workstreams**, or **separate deliverables**, use `tasks[]` — do not answer the full request inline.
 - Do not assume a specific domain (markets, DeFi, governance, etc.) unless the operator stated it; `tasks[].prompt` carries domain detail.
+- Domain-specific orchestration patterns (e.g. chart analysis vs plotting) live in **optional skills** — attach via `tasks[].skills` or load with `agent_load_skill` when the operator’s goal requires them.
 - Every task needs a unique `id`, non-empty `prompt`, and at least one `mcpServers` id from this node's MCP catalog (`continuum`, etc.).
 - Use **empty strings** for `prompts.subAgentReply` and `prompts.externalReply` unless the operator needs per-reply hooks.
 - Set **`prompts.orchestratorOnReply`** for automated synthesis when all tasks finish (node runs this once; keep instructions domain-neutral).
