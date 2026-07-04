@@ -28,5 +28,6 @@ Load with **`agent_load_skill`** when the operator picks a type or for richer na
 - `chart-analysis-trend`
 - `chart-analysis-levels`
 - `chart-analysis-momentum`
+- `chart-analysis-range`
 
 For orchestration plan drafts involving charts, load **`orchestration-chart-analysis`** (optional, on demand).

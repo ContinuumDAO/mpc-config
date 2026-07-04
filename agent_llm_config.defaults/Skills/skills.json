@@ -36,6 +36,11 @@
       "initialLoad": false
     },
     {
+      "name": "chart-analysis-range",
+      "filename": "chart-analysis-range.md",
+      "initialLoad": false
+    },
+    {
       "name": "orchestration-chart-analysis",
       "filename": "orchestration-chart-analysis.md",
       "initialLoad": false
