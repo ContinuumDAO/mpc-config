@@ -8,7 +8,7 @@ Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent
 
 | File | Runtime path | Purpose |
 |------|--------------|---------|
-| **`MCP_default_servers.json`** | Same name (legacy seed) | Built-in **continuum** definition used only when seeding the node database on first run. |
+| **`MCP_default_servers.json`** | Same name (legacy seed) | Default **active** servers seeded into the node DB on first run: **continuum** (`initialLoad: true`), **coinmarketcap-public** (`initialLoad: false`). Not in the repository catalog. |
 | **`MCP_servers.json`** | Not copied to active storage | **Repository catalog** of optional MCP servers. Use **Add from repository** in the UI or `POST /addMcpServerFromCatalog` to activate on this node. See **MCP catalog secrets** below. |
 | **`Skills/`** | Same path | Agent skills: **`skills.json`** manifest plus **`.md`** / **`.txt`** bodies. |
 | **`cron/jobs.json`** | Same path | Agent cron job manifest. When **`EnableAgentCron`** is true (default), seeds bundled **`auto-sign-and-broadcast`** (every 5 minutes). When cron is disabled, seeds empty **`{"jobs":[]}`**. |

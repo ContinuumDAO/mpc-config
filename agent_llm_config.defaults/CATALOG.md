@@ -11,7 +11,14 @@ Do **not** duplicate catalogs in continuum-node-sdk, runtime `agent_llm_config/`
 3. Operators activate on a node: **Add from repository** in the UI or **`POST /addMcpServerFromCatalog`** (`GET /listMcpServers` → `availableCatalog` until active).
 4. Document in **`docs/references/API_IMPLEMENTATION.md`** (STDIO/HTTP catalog section) when the server is non-trivial.
 
-Builtin **continuum** stays in **`MCP_default_servers.json`** (DB seed only), not in `MCP_servers.json`.
+Builtin default **active** servers stay in **`MCP_default_servers.json`** (DB seed only), **not** in `MCP_servers.json`:
+
+| id | initialLoad | Notes |
+|----|-------------|--------|
+| **continuum** | `true` | Node MCP; always connected at chat startup |
+| **coinmarketcap-public** | `false` | Builtin on continuum-mcp `/mcp/cmc-public`; active on the node after seed, load per chat via **`agent_load_mcp_server`** when needed (e.g. OHLCV) |
+
+Optional servers (CoinGecko, full **coinmarketcap**, DeFi, etc.) belong in **`MCP_servers.json`** only — operators activate via catalog.
 
 ## Add a new webhook template
 

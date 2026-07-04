@@ -21,25 +21,30 @@ Reference: MCP resource **`chart_analysis_docs`**.
 
 **Never** auto-run trend line drawing or replot a chart for vague “interpret” / “analyze” prompts.
 
-## Spot data source (default when DeFi not loaded)
+## Spot data source (when DeFi not named)
 
-Per **`chart-ohlcv-sources`**: generic spot (no venue named) → **`agent_load_mcp_server({ serverId: "coinmarketcap-public" })`**, then CMC fetch (`get_crypto_ohlcv_historical` when Pro key on continuum-mcp, else **`get_kline_candles`** DEX proxy). **CoinGecko** only if CMC fails (load **`coingecko`** / **`coingecko-pro`** then). Do **not** load Hyperliquid/GMX unless the operator names that venue or perp.
+Per **`chart-ohlcv-sources`**:
 
-| Goal | Default fetch | Fallback |
-|------|---------------|----------|
-| **Chart / plot** or **analysis** (`analyze_*`) | CMC OHLCV (CEX or DEX klines) | **`coins.ohlc.get`** (CoinGecko) |
+1. Use **`coingecko`** / **`coingecko-pro`** if **loaded** in this chat.
+2. If **no other OHLCV source is loaded**, load **`coinmarketcap-public`** and fetch (keyless **`get_kline_candles`** works without API key).
+
+Do **not** treat missing **`COINMARKETCAP_API_KEY`** on catalog **`coinmarketcap`** as blocking **`coinmarketcap-public`**.
+
+| Goal | When CoinGecko loaded | When nothing else loaded |
+|------|----------------------|---------------------------|
+| **Chart / plot** or **`analyze_*`** | **`coins.ohlc.get`** | **`coinmarketcap-public`** klines (or Pro OHLCV if key on continuum-mcp) |
 
 **Do not use `coins.marketChart.get`** — synthetic candles and unreliable volume.
 
 **Interval honesty (spot):**
 
-- **CMC Pro hourly** or **DEX `1h`**: **1H** title is OK.
-- **CoinGecko public fallback:** 3–30d → **~4H** auto; if operator asked **1H** → title **`4H`**, explain CMC/Pro/DeFi.
-- **`coingecko-pro` fallback:** may use **`interval: 'hourly'`** for 1–90d.
+- **CoinGecko public:** 3–30d → **~4H** auto; if operator asked **1H** → title **`4H`**, explain Pro/DeFi/CMC hourly options.
+- **`coingecko-pro`:** may use **`interval: 'hourly'`** for 1–90d.
+- **CMC klines / Pro OHLCV:** title matches fetched interval.
 
-See **`chart-periods`** for fetch examples.
+See **`chart-periods`**.
 
-If **`hyperliquid`** / **`gmx`** is already loaded and the operator names the venue or a specific interval → use that protocol’s **`fetch_ohlcv`** instead of CMC/CoinGecko.
+If **`hyperliquid`** / **`gmx`** is loaded and the operator names the venue → use that protocol’s **`fetch_ohlcv`**.
 
 ## Optional per-type skills
 

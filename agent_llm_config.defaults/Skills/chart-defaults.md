@@ -4,20 +4,21 @@ Charts: SDK **`prepare_chart_from_rows`** (single OHLCV feed) or **`prepare_char
 
 **Analysis without a chart:** use skill **`chart-analysis-menu`** and MCP **`chart_analysis_docs`** — call **`analyze_*`** tools, not **`prepare_chart*`**.
 
-**OHLCV source priority:** skill **`chart-ohlcv-sources`** (CoinMarketCap before CoinGecko for generic spot).
+**OHLCV sources:** skill **`chart-ohlcv-sources`** — use loaded providers; **`coinmarketcap-public`** only when no other OHLCV source is loaded in the session.
 
 ## Source selection (generic “chart ETH/BTC”)
 
 | Operator request | Data source | Avoid |
 |------------------|-------------|--------|
-| “Chart ETH 4h”, “BTC chart”, spot price (no venue named) | **CoinMarketCap** — **`coinmarketcap-public`** (`get_crypto_ohlcv_historical` with Pro key, or **`get_kline_candles`** DEX proxy); then **`coingecko-pro`** / **`coingecko`** only if CMC fails | **`load_defi_protocol`**, **`ctm_hyperliquid_fetch_ohlcv`**, other **`ctm_*_fetch_ohlcv`** |
-| Names **Hyperliquid**, **perp**, **GMX**, a **DEX** / **Uniswap** pool, or on-chain venue | That venue’s **`fetch_ohlcv`**, or **`coinmarketcap-public__get_kline_candles`** for pool address | CMC CEX aggregate / CoinGecko for pool candles |
+| “Chart ETH 4h”, “BTC chart”, spot (no venue/provider named) | **`coingecko`** / **`coingecko-pro`** if **loaded** in session; else **`coinmarketcap-public`** (load via **`agent_load_mcp_server`**) | Hyperliquid/GMX/`ctm_*_fetch_ohlcv` unless venue named |
+| Names **CoinMarketCap** / **CMC** | **`coinmarketcap-public`** (or catalog **`coinmarketcap`** if full MCP) | Requiring catalog API key for keyless **`coinmarketcap-public`** tools |
+| Names **Hyperliquid**, **perp**, **GMX**, DEX pool, on-chain venue | That protocol’s **`fetch_ohlcv`** | Unrelated spot aggregators |
 
 Hyperliquid OHLCV is **perpetual** market data, not generic spot USD index. Do not use it for undifferentiated “chart ETH”.
 
 ## Workflow
 
-1. **Load** **`coinmarketcap-public`** via **`agent_load_mcp_server`** when using CMC (not `initialLoad`). Then **fetch OHLCV** per **`chart-ohlcv-sources`**. CMC CEX/DEX paths include **volume** when present.
+1. **Fetch OHLC** per **`chart-ohlcv-sources`**: loaded CoinGecko if available; else load **`coinmarketcap-public`**. CoinGecko → **`coins.ohlc.get`** only (**`chart-periods`**).
 2. **Same turn** — **`continuum__prepare_chart_from_rows`** with **`rows`** or **`toolResult`**. Do not start another LLM turn with 400+ bars only in chat history.
 
 Never `{}`. **Do not describe the chart in markdown** — the UI only renders when the chart tool returns `continuum/chart/v1` (visible under **MCP result**, not the assistant bubble). Prose like “chart prepared” without a successful chart tool call means **nothing was rendered**.
@@ -29,20 +30,6 @@ Never `{}`. **Do not describe the chart in markdown** — the UI only renders wh
   "title": "ETH/USD 4H — last 90d",
   "label": "ETH/USD",
   "toolResult": { "result": [ "... bars from fetch ..." ] }
-}
-```
-
-CoinMarketCap DEX klines:
-
-```json
-{
-  "title": "ETH/USDC Uniswap v3 — 4H",
-  "toolResult": {
-    "platform": "ethereum",
-    "address": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
-    "interval": "4h",
-    "candles": [ "... from get_kline_candles ..." ]
-  }
 }
 ```
 
@@ -76,11 +63,11 @@ Multi-series or custom **`overlays`**. Shorthand: **`bars`**, **`toolResult`**, 
 |---------|---------|
 | Main overlay | **EMA(50)** |
 | Oscillator | **RSI(14)** |
-| Volume | Separate pane below price when rows include **`volume`** (CMC, DeFi/Hyperliquid). **CoinGecko fallback:** no volume — pane omitted |
+| Volume | Separate pane below price when rows include **`volume`** (DeFi/Hyperliquid, or third-party feeds that include it). **CoinGecko spot:** no volume — pane omitted |
 
-**CoinGecko** is **fallback only** — use **`coins.ohlc.get`** only (see **`chart-periods`**); no `marketChart`.
+CoinGecko spot charts use **`coins.ohlc.get`** only — real OHLC candles, no `marketChart` (see **`chart-periods`**).
 
-**“1 hour” on spot:** prefer CMC **`get_crypto_ohlcv_historical`** with `timePeriod: "hourly"` when Pro key is on continuum-mcp. DEX proxy: **`get_kline_candles`** with `interval: "1h"`. CoinGecko public: **4H** auto — title **4H**, explain limits.
+**“1 hour” on public CoinGecko:** use **4H** candles (auto granularity), title **4H**, and tell the operator hourly spot needs Pro or a DeFi venue. **Pro** (`coingecko-pro`): may use **`interval: 'hourly'`** for 1–90 day windows.
 
 **EMA(50) needs ≥50 bars** in the fetch (after any trim). Shorter lookback still charts candles + RSI(14) but **no EMA line** — extend lookback per **`chart-periods`**.
 
