@@ -48,10 +48,14 @@ async function run(client) {
   return {
     title: 'ETH/USD 4H — last 7d',
     label: 'ETH/USD',
+    coinId: id,
+    bucketSec: 4 * 3600,
     result: bars,
   };
 }
 ```
+
+Include **`coinId`** (and **`bucketSec`** matching the chart interval) on every CoinGecko execute return so the chart can **live-update** (~4s spot price ticks). Without `coinId`, the chart is static.
 
 #### CoinGecko Pro (`coingecko-pro` — optional)
 
@@ -79,6 +83,8 @@ async function run(client) {
   return {
     title: 'ETH/USD 1H — last 7d',
     label: 'ETH/USD',
+    coinId: id,
+    bucketSec: 3600,
     result: bars,
   };
 }
@@ -133,7 +139,7 @@ See **`get_defi_protocol_skill`** for fetch params. **`load_defi_protocol`** als
 ## Checklist
 
 - [ ] **`title`** on chart call matches fetched asset/interval/window (or returned from execute)
-- [ ] Spot **CoinGecko**: **`ohlc.get`** only — real OHLC, no volume, no `marketChart`
+- [ ] Spot **CoinGecko**: **`ohlc.get`** only — real OHLC, no volume, no `marketChart`; return includes **`coinId`** (+ **`bucketSec`**) for live ticks
 - [ ] Spot **public** + operator said “1H”: chart **4H** data, title says **4H**, explain Pro/DeFi for hourly
 - [ ] Spot **Pro** loaded: may use **`interval: 'hourly'`** for 1–90d; title may say **1H**
 - [ ] **`prepare_chart_from_rows`** in the **same turn** as fetch
