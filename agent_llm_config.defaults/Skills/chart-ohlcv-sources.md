@@ -18,14 +18,14 @@ Use **`list_mcp_servers`** → **`activeServers`** before loading. Match **`serv
 
 | `serverId` | On node | API key | Use for OHLCV charts |
 |------------|---------|---------|---------------------|
-| **`coinmarketcap-public`** | Default active (builtin continuum-mcp) | **Not** for keyless tools | **Yes** — `get_kline_candles`, etc. |
+| **`coinmarketcap-public`** | Active on node (seed / add from catalog) | **Not** for keyless tools | **Yes** — `get_kline_candles`, etc. |
 | **`coinmarketcap`** | Catalog (user-activated) | **`COINMARKETCAP_API_KEY`** required | Only if key configured; not a substitute for **`coinmarketcap-public`** |
 
 When the operator says **“load CoinMarketCap”** or **“use CMC”** → load **`coinmarketcap-public`**, **not** **`coinmarketcap`**, unless they explicitly need catalog full MCP **and** the key is configured.
 
 If **`agent_load_mcp_server({ serverId: "coinmarketcap" })`** returns *set environment variable COINMARKETCAP_API_KEY* → **load failed**. Do **not** tell the operator CMC is loaded. Load **`coinmarketcap-public`** instead, or use **`coingecko`** if already loaded.
 
-If **`coinmarketcap-public`** is **missing** from **`activeServers`** → use **`coingecko`** / **`coingecko-pro`** when loaded; tell the operator the node may need the default **`coinmarketcap-public`** server seeded (see **`MCP_default_servers.json`**).
+If **`coinmarketcap-public`** is **missing** from **`activeServers`** → use **`coingecko`** / **`coingecko-pro`** when loaded; tell the operator to **Add from repository** once or check **`MCP_default_servers.json`** seed on new nodes.
 
 ## Rule 1 — Named venue or provider wins
 
@@ -51,7 +51,7 @@ Use the **first loaded OHLCV-capable MCP server** in this chat, in order:
 { "serverId": "coinmarketcap-public" }
 ```
 
-This server is **default active** on the node (not repository catalog). **`initialLoad: false`**.
+Catalog MCP server on continuum-mcp **`/mcp/cmc-public`**, usually already in **`activeServers`**; **`initialLoad: false`**. Load per chat via skills / **`agent_load_mcp_server`**. Tools are **`coinmarketcap-public__*`**, not **`continuum__*`**.
 
 - **Keyless** (no API key): **`get_kline_candles`** (DEX pool OHLCV + volume), quotes, global metrics, Fear & Greed, etc.
 - **Optional Pro** on continuum-mcp: **`get_crypto_ohlcv_historical`** (CEX aggregate candles + volume)

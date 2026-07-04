@@ -104,6 +104,14 @@
       "initialLoad": false
     },
     {
+      "id": "coinmarketcap-public",
+      "displayName": "CoinMarketCap (public)",
+      "setupUrl": "https://pro.coinmarketcap.com/api/documentation/pro-api-reference/keyless-public-api",
+      "transport": "http",
+      "url": "http://continuum-mcp:8446/mcp/cmc-public",
+      "initialLoad": false
+    },
+    {
       "id": "coinmarketcap",
       "displayName": "CoinMarketCap",
       "setupUrl": "https://coinmarketcap.com/api/documentation/ai-agent-hub/mcp",
