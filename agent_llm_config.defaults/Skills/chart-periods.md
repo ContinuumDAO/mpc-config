@@ -92,9 +92,37 @@ Or pass fetch output as **`toolResult`** when execute returned `{ title, label, 
 
 Prefer **`rows`** (array) over a stringified **`toolResult`** — avoids JSON truncation errors.
 
-### Spot OHLC only (no volume pane)
+### Spot analysis only (CoinGecko — `analyze_*`, no chart)
 
-`client.coins.ohlc.get(...)` — acceptable only if the operator explicitly does not want volume.
+Use **`coins.ohlc.get`** — real OHLC candles; **no volume** (analysis tools do not need it). **Do not** merge `ohlc.get` + `marketChart` in one script.
+
+CoinGecko auto-granularity (approximate): 1–2d → 30m; 3–30d → **4H**; 31d+ → 4d. Set **`title`** to match (e.g. 7d → `ETH/USD 4H — last 7d`, not “1H”).
+
+```javascript
+async function run(client) {
+  const id = 'ethereum';
+  const days = 7;
+  const ohlc = await client.coins.ohlc.get(id, { vs_currency: 'usd', days: String(days) });
+  const bars = (ohlc || []).map(([ms, open, high, low, close]) => ({
+    time: Math.floor(ms / 1000),
+    open,
+    high,
+    low,
+    close,
+  }));
+  return {
+    title: 'ETH/USD 4H — last 7d',
+    label: 'ETH/USD',
+    result: bars,
+  };
+}
+```
+
+Pass the execute return as **`toolResult`** to **`analyze_*`** (same turn). For chart + volume, use **`marketChart`** above instead.
+
+### Spot OHLC only (chart without volume pane)
+
+`client.coins.ohlc.get(...)` — when the operator explicitly does not want a volume pane on the chart.
 
 ### Perp / DeFi (Hyperliquid or GMX — when operator names the venue)
 
@@ -127,7 +155,8 @@ See **`get_defi_protocol_skill`** for fetch params. **`load_defi_protocol`** als
 ## Checklist
 
 - [ ] **`title`** on chart call matches fetched asset/interval/window (or returned from execute)
-- [ ] Spot default charts: rows include **`volume`** (use `marketChart`, not `ohlc.get` alone)
+- [ ] Spot **charts**: rows include **`volume`** (use `marketChart`, not `ohlc.get` alone)
+- [ ] Spot **analysis**: use `ohlc.get` (real OHLC; honest interval in title)
 - [ ] **`prepare_chart_from_rows`** in the **same turn** as fetch
 - [ ] **`rows`** or complete **`toolResult`** — not `{}` or truncated JSON
 - [ ] Title: asset + interval + window

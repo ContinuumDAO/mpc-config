@@ -2,7 +2,7 @@
 
 Use after OHLCV fetch. Tool: **`continuum__analyze_trend_structure`**.
 
-Input: `{ "title": "<from fetch>", "toolResult": { ... } }`.
+Input: `{ "title": "<from fetch>", "toolResult": { ... } }` — optional **`label`** from fetch metadata is accepted (ignored by the tool).
 
 ## Output fields
 
