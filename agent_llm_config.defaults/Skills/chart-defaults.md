@@ -11,15 +11,19 @@ Charts: SDK **`prepare_chart_from_rows`** (single OHLCV feed) or **`prepare_char
 | Operator request | Data source | Avoid |
 |------------------|-------------|--------|
 | “Chart ETH 4h”, “BTC chart”, spot (no venue/provider named) | **`coingecko`** / **`coingecko-pro`** if **loaded** in session; else **`coinmarketcap-public`** (load via **`agent_load_mcp_server`**) | Hyperliquid/GMX/`ctm_*_fetch_ohlcv` unless venue named |
-| Names **CoinMarketCap** / **CMC** | **`coinmarketcap-public`** (or catalog **`coinmarketcap`** if full MCP) | Requiring catalog API key for keyless **`coinmarketcap-public`** tools |
+| Names **CoinMarketCap** / **CMC** | **`coinmarketcap-public`** (`serverId` exact) — **not** catalog **`coinmarketcap`** unless API key configured | Claiming CMC loaded when load returned key error |
 | Names **Hyperliquid**, **perp**, **GMX**, DEX pool, on-chain venue | That protocol’s **`fetch_ohlcv`** | Unrelated spot aggregators |
 
 Hyperliquid OHLCV is **perpetual** market data, not generic spot USD index. Do not use it for undifferentiated “chart ETH”.
 
-## Workflow
+## Workflow (strict order)
 
-1. **Fetch OHLC** per **`chart-ohlcv-sources`**: loaded CoinGecko if available; else load **`coinmarketcap-public`**. CoinGecko → **`coins.ohlc.get`** only (**`chart-periods`**).
-2. **Same turn** — **`continuum__prepare_chart_from_rows`** with **`rows`** or **`toolResult`**. Do not start another LLM turn with 400+ bars only in chat history.
+1. **`list_mcp_servers`** — pick correct **`serverId`** (see **`chart-ohlcv-sources`**: **`coinmarketcap-public`** ≠ **`coinmarketcap`**).
+2. **`agent_load_mcp_server`** if the fetch server is not in session.
+3. **Fetch OHLCV** — e.g. **`coingecko__execute`** or **`coinmarketcap-public__get_kline_candles`**. Must succeed before charting.
+4. **`continuum__prepare_chart_from_rows`** with **`toolResult`** (full fetch JSON) or **`rows`**.
+
+**Never skip step 3.** Calling **`prepare_chart_from_rows`** with only **`title`** / **`label`** always fails validation.
 
 Never `{}`. **Do not describe the chart in markdown** — the UI only renders when the chart tool returns `continuum/chart/v1` (visible under **MCP result**, not the assistant bubble). Prose like “chart prepared” without a successful chart tool call means **nothing was rendered**.
 

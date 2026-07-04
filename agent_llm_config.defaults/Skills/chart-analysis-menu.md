@@ -25,10 +25,10 @@ Reference: MCP resource **`chart_analysis_docs`**.
 
 Per **`chart-ohlcv-sources`**:
 
-1. Use **`coingecko`** / **`coingecko-pro`** if **loaded** in this chat.
-2. If **no other OHLCV source is loaded**, load **`coinmarketcap-public`** and fetch (keyless **`get_kline_candles`** works without API key).
+1. Use **`coingecko`** / **`coingecko-pro`** if **loaded** in this chat → **`coingecko__execute`** then **`prepare_chart_from_rows`** with **`toolResult`**.
+2. If **no other OHLCV source loaded**, load **`coinmarketcap-public`** (id exact) — **not** catalog **`coinmarketcap`** without API key.
 
-Do **not** treat missing **`COINMARKETCAP_API_KEY`** on catalog **`coinmarketcap`** as blocking **`coinmarketcap-public`**.
+If load of **`coinmarketcap`** fails on missing key → load **`coinmarketcap-public`** or use **`coingecko`**; do not claim CMC is loaded.
 
 | Goal | When CoinGecko loaded | When nothing else loaded |
 |------|----------------------|---------------------------|

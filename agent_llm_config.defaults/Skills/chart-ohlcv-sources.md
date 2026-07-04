@@ -12,7 +12,20 @@ Most third-party servers have **`initialLoad: false`**. Call **`continuum__agent
 { "serverId": "<id>" }
 ```
 
-Use **`list_mcp_servers`** → **`activeServers`** to see what exists on the node; session tool list shows what is **loaded** now.
+Use **`list_mcp_servers`** → **`activeServers`** before loading. Match **`serverId`** exactly (see below).
+
+## Critical: two different CoinMarketCap server ids
+
+| `serverId` | On node | API key | Use for OHLCV charts |
+|------------|---------|---------|---------------------|
+| **`coinmarketcap-public`** | Default active (builtin continuum-mcp) | **Not** for keyless tools | **Yes** — `get_kline_candles`, etc. |
+| **`coinmarketcap`** | Catalog (user-activated) | **`COINMARKETCAP_API_KEY`** required | Only if key configured; not a substitute for **`coinmarketcap-public`** |
+
+When the operator says **“load CoinMarketCap”** or **“use CMC”** → load **`coinmarketcap-public`**, **not** **`coinmarketcap`**, unless they explicitly need catalog full MCP **and** the key is configured.
+
+If **`agent_load_mcp_server({ serverId: "coinmarketcap" })`** returns *set environment variable COINMARKETCAP_API_KEY* → **load failed**. Do **not** tell the operator CMC is loaded. Load **`coinmarketcap-public`** instead, or use **`coingecko`** if already loaded.
+
+If **`coinmarketcap-public`** is **missing** from **`activeServers`** → use **`coingecko`** / **`coingecko-pro`** when loaded; tell the operator the node may need the default **`coinmarketcap-public`** server seeded (see **`MCP_default_servers.json`**).
 
 ## Rule 1 — Named venue or provider wins
 
@@ -20,7 +33,7 @@ Use **`list_mcp_servers`** → **`activeServers`** to see what exists on the nod
 |---------------|--------|
 | Hyperliquid, perp, HL | **`hyperliquid`** → `ctm_hyperliquid_fetch_ohlcv` |
 | GMX | **`gmx`** → `ctm_gmx_fetch_ohlcv` |
-| CoinMarketCap / CMC | **`coinmarketcap-public`** (or catalog **`coinmarketcap`** if they mean full MCP) |
+| CoinMarketCap / CMC | **`coinmarketcap-public`** only (unless catalog **`coinmarketcap`** + key already working) |
 | CoinGecko | **`coingecko`** / **`coingecko-pro`** |
 | DEX pool, Uniswap, on-chain venue | That protocol’s **`fetch_ohlcv`** or operator-chosen kline tool |
 
@@ -48,12 +61,26 @@ Prefer keyless **`get_kline_candles`** when Pro key is unset. See **`coinmarketc
 
 | When | Fetch |
 |------|-------|
-| **`coingecko`** / **`coingecko-pro`** loaded | **`coins.ohlc.get`** — see **`chart-periods`** |
+| **`coingecko`** / **`coingecko-pro`** loaded | **`coingecko__execute`** → **`coins.ohlc.get`** — see **`chart-periods`** |
 | Nothing else loaded | **`coinmarketcap-public__get_kline_candles`** (or **`get_crypto_ohlcv_historical`** if Pro key on continuum-mcp) |
 
 If fetch fails (429, empty), try the next applicable source only then.
 
-## Rule 3 — Same turn as chart / analysis
+## Rule 3 — Fetch before chart (mandatory)
+
+**Never** call **`prepare_chart_from_rows`** with only **`title`** / **`label`**. You must **fetch OHLCV first** in the **same turn**, then pass the fetch output:
+
+```json
+{
+  "title": "ETH/USD 4H — last 7d",
+  "label": "ETH/USD",
+  "toolResult": { "... full output from coingecko__execute or coinmarketcap-public__get_kline_candles ..." }
+}
+```
+
+Order: **(1) load MCP server if needed → (2) fetch tool → (3) prepare_chart_from_rows**. Skipping step 2 causes validation error *Provide non-empty rows or toolResult*.
+
+## Rule 4 — Same turn as analysis
 
 After fetch, **same turn**: **`continuum__prepare_chart_from_rows`** and/or **`analyze_*`**. Never `{}`.
 

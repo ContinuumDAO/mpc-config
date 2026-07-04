@@ -16,18 +16,38 @@ Trim newest-first when over ~400 bars. Put window in **`title`**.
 
 ## Fetch + chart
 
-1. Pick source per **`chart-ohlcv-sources`**: loaded CoinGecko if available; else **`coinmarketcap-public`**.
-2. **Load** the MCP server via **`agent_load_mcp_server`** if not in session (`initialLoad: false`).
-3. Fetch OHLC bars (CoinGecko → **`coins.ohlc.get`**; CMC → see below).
-4. **Immediately** call **`prepare_chart_from_rows`** — same agent turn.
+1. Pick source per **`chart-ohlcv-sources`**: loaded **`coingecko`** if available; else load **`coinmarketcap-public`** (not catalog **`coinmarketcap`**).
+2. **Load** via **`agent_load_mcp_server`** if not in session.
+3. **Fetch** OHLC bars (required — see below).
+4. **`prepare_chart_from_rows`** with **`toolResult`** from step 3 — **same turn**.
 
-Never `{}`. **Do not use `coins.marketChart.get`** for spot charts.
+Never skip step 3. Never `{}`. **Do not use `coins.marketChart.get`** for spot charts.
 
 ### Spot OHLC — CoinGecko (when loaded in session)
 
-Always **`coins.ohlc.get`**. One call; map tuples to `{ time, open, high, low, close }` — **omit `volume`**. Do **not** merge with `marketChart`.
+Tool: **`coingecko__execute`**. Pass TypeScript with **`async function run(client) { ... }`**. Return **`{ title, label, coinId, bucketSec, result: bars }`**.
 
-#### Public API (`coingecko`)
+Example MCP call for **7d ETH** (public API → **4H** bars even if operator said 1H):
+
+```json
+{
+  "code": "async function run(client) {\n  const id = 'ethereum';\n  const days = 7;\n  const ohlc = await client.coins.ohlc.get(id, { vs_currency: 'usd', days: String(days) });\n  let bars = (ohlc || []).map(([ms, open, high, low, close]) => ({\n    time: Math.floor(ms / 1000), open, high, low, close,\n  }));\n  if (bars.length > 400) bars = bars.slice(-400);\n  return {\n    title: 'ETH/USD 4H — last 7d',\n    label: 'ETH/USD',\n    coinId: id,\n    bucketSec: 4 * 3600,\n    result: bars,\n  };\n}"
+}
+```
+
+Then **`prepare_chart_from_rows`**:
+
+```json
+{
+  "title": "ETH/USD 4H — last 7d",
+  "label": "ETH/USD",
+  "toolResult": { "... entire coingecko__execute result object ..." }
+}
+```
+
+Always **`coins.ohlc.get`** inside execute — one call; map tuples to `{ time, open, high, low, close }` — **omit `volume`**. Do **not** merge with `marketChart`.
+
+#### Public API (`coingecko`) — interval notes
 
 No `interval` parameter. Auto-granularity (approximate): 1–2d → 30m; **3–30d → 4H**; 31d+ → 4d.
 
