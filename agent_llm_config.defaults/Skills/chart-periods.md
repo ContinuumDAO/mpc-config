@@ -1,36 +1,78 @@
 # Chart periods & data sizing
 
-Pair with **`chart-defaults`**. Reference: **`chart_docs`**, **`prepare_chart_from_rows`**.
+Pair with **`chart-defaults`**, **`chart-ohlcv-sources`**. Reference: **`chart_docs`**, **`prepare_chart_from_rows`**.
 
 ## Quick defaults (no range specified)
 
-| Interval | Window | ~Bars | Spot CoinGecko (public) |
-|----------|--------|-------|-------------------------|
-| 1h | 45 days | 400 | **Pro only** (`interval: hourly`) or use **4H** on public |
-| 4h | 90 days | 400 | **Default for public** (auto for 3–30d windows) |
-| 1d | 9 months | 270 | Long windows (31d+ auto → coarser) |
+| Interval | Window | ~Bars | Generic spot (CMC first) |
+|----------|--------|-------|---------------------------|
+| 1h | 45 days | 400 | CMC Pro **`get_crypto_ohlcv_historical`** (`timePeriod: hourly`) or DEX **`get_kline_candles`** `1h` |
+| 4h | 90 days | 400 | CMC Pro hourly + trim, DEX **`4h`**, or CoinGecko fallback (public auto **4H**) |
+| 1d | 9 months | 270 | CMC **`timePeriod: daily`** or DEX **`1d`** |
 
 Trim newest-first when over ~400 bars. Put window in **`title`**.
 
-**Operator asks “1 hour” on spot CoinGecko:** if only **`coingecko`** (public) is loaded → fetch **4H** data (auto granularity), title **`4H`**, and **tell the operator** hourly spot needs **CoinGecko Pro** or a DeFi venue (Hyperliquid/GMX). Do not pretend the chart is 1H.
+**Operator asks “1 hour” on generic spot:** try CMC hourly first. If only CoinGecko is available → **4H** auto, title **`4H`**, explain CMC/Pro/DeFi for true hourly.
 
 ## Fetch + chart
 
-1. Pick source per **`chart-defaults`** source table.
-2. Fetch OHLC bars. **CoinGecko spot:** **`coins.ohlc.get`** only — real candles, **no volume** (volume pane omitted). **DeFi / Hyperliquid / GMX:** native **`fetch_ohlcv`** when available (volume when rows include it).
+1. Pick source per **`chart-ohlcv-sources`** (CoinMarketCap before CoinGecko). **Load** **`coinmarketcap-public`** (or CoinGecko fallback servers) via **`agent_load_mcp_server`** before fetch.
+2. Fetch OHLC bars. **CMC:** volume when present. **CoinGecko fallback:** **`coins.ohlc.get`** only — no volume.
 3. **Immediately** call **`prepare_chart_from_rows`** — same agent turn.
 
-Never `{}`. **Do not use `coins.marketChart.get`** for spot charts — it synthesizes fake candles from price points and poor volume.
+Never `{}`. **Do not use `coins.marketChart.get`** for spot charts.
 
-### Spot OHLC (CoinGecko — chart and analysis)
+### Spot OHLC — CoinMarketCap (default)
 
-Always **`coins.ohlc.get`**. One call; map tuples to `{ time, open, high, low, close }` — **omit `volume`**. Do **not** merge with `marketChart`.
+See **`chart-ohlcv-sources`**. Preferred path for chart and **`analyze_*`**.
 
-#### Public API (`coingecko` — default)
+#### CEX aggregate — `coinmarketcap-public__get_crypto_ohlcv_historical`
 
-No `interval` parameter. Auto-granularity (approximate): 1–2d → 30m; **3–30d → 4H**; 31d+ → 4d.
+Requires **`COINMARKETCAP_API_KEY`** on **continuum-mcp**. Returns CMC **`quotes[]`** in **`result`** — chart-ready after SDK normalization; includes **volume**.
 
-When the operator asks for **1H** / **1 hour** but only public CoinGecko is available → **still fetch with default auto granularity (4H for 7d)**. Use title **`ETH/USD 4H — last 7d`**. In reply, note that **true hourly spot OHLC** needs **`coingecko-pro`** (paid) or **Hyperliquid/GMX** for venue candles — do not label the chart “1H”.
+```json
+{
+  "id": "1027",
+  "convert": "USD",
+  "timePeriod": "hourly",
+  "count": 400,
+  "interval": "hourly"
+}
+```
+
+```javascript
+// Example execute return shape (agent or script)
+return {
+  title: 'ETH/USD 1H — last 45d',
+  label: 'ETH/USD',
+  id: '1027',
+  timePeriod: 'hourly',
+  result: quotes, // from tool response
+};
+```
+
+#### DEX pool proxy — `get_kline_candles` (keyless)
+
+When Pro OHLCV is unavailable:
+
+```json
+{
+  "platform": "ethereum",
+  "address": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+  "interval": "4h",
+  "limit": 400
+}
+```
+
+Title: **`ETH/USDC Uniswap v3 — 4H — last 90d`** (not “CEX index”).
+
+### Spot OHLC — CoinGecko (fallback only)
+
+Use only when CMC paths fail. Always **`coins.ohlc.get`**. One call; map tuples to `{ time, open, high, low, close }` — **omit `volume`**.
+
+#### Public API (`coingecko`)
+
+No `interval` parameter. Auto-granularity: 1–2d → 30m; **3–30d → 4H**; 31d+ → 4d.
 
 ```javascript
 async function run(client) {
@@ -46,7 +88,7 @@ async function run(client) {
   }));
   if (bars.length > 400) bars = bars.slice(-400);
   return {
-    title: 'ETH/USD 4H — last 7d',
+    title: 'ETH/USD 4H — last 7d (CoinGecko fallback)',
     label: 'ETH/USD',
     coinId: id,
     bucketSec: 4 * 3600,
@@ -55,56 +97,27 @@ async function run(client) {
 }
 ```
 
-Include **`coinId`** (and **`bucketSec`** matching the chart interval) on every CoinGecko execute return so the chart can **live-update** (~4s spot price ticks). Without `coinId`, the chart is static.
+Include **`coinId`** + **`bucketSec`** on CoinGecko returns for live spot ticks.
 
-#### CoinGecko Pro (`coingecko-pro` — optional)
+#### CoinGecko Pro (`coingecko-pro`)
 
-When **`COINGECKO_API_KEY`** is set on the node, prefer **`agent_load_mcp_server({ serverId: "coingecko-pro" })`** over public **`coingecko`**.
+When **`COINGECKO_API_KEY`** is set and CMC failed: **`agent_load_mcp_server({ serverId: "coingecko-pro" })`**.
 
-Paid plans may pass **`interval: 'hourly'`** on **`coins.ohlc.get`** for **`days`** in **`1` / `7` / `14` / `30` / `90`** only. Then an **1H** title is honest (e.g. `ETH/USD 1H — last 7d`). Still **no volume** on OHLC.
+May pass **`interval: 'hourly'`** on **`coins.ohlc.get`** for **`days`** in **`1` / `7` / `14` / `30` / `90`**. Still **no volume**.
 
-```javascript
-async function run(client) {
-  const id = 'ethereum';
-  const days = 7;
-  const ohlc = await client.coins.ohlc.get(id, {
-    vs_currency: 'usd',
-    days: String(days),
-    interval: 'hourly',
-  });
-  let bars = (ohlc || []).map(([ms, open, high, low, close]) => ({
-    time: Math.floor(ms / 1000),
-    open,
-    high,
-    low,
-    close,
-  }));
-  if (bars.length > 400) bars = bars.slice(-400);
-  return {
-    title: 'ETH/USD 1H — last 7d',
-    label: 'ETH/USD',
-    coinId: id,
-    bucketSec: 3600,
-    result: bars,
-  };
-}
-```
-
-For **90d+** spot on Pro, use **`interval: 'daily'`** or auto — not hourly.
-
-**`title` is required** on `prepare_chart_from_rows` — describe **what you fetched** (asset, interval, window), not copy the user chat verbatim if granularity differs.
+**`title` is required** on `prepare_chart_from_rows` — describe **what you fetched** (asset, interval, window, source if fallback).
 
 ```json
 {
   "title": "ETH/USD 4H — last 90d",
   "label": "ETH/USD",
-  "rows": [ "... OHLC bars, no volume field ..." ]
+  "rows": [ "... OHLC bars ..." ]
 }
 ```
 
 Or pass execute output as **`toolResult`** when it returned `{ title, label, result }`.
 
-Prefer **`rows`** (array) over a stringified **`toolResult`** — avoids JSON truncation errors.
+Prefer **`rows`** (array) over a stringified **`toolResult`**.
 
 For **`analyze_*`**, use the same fetch and pass **`toolResult`** — same turn, no chart call unless the operator also asked to plot.
 
@@ -138,11 +151,10 @@ See **`get_defi_protocol_skill`** for fetch params. **`load_defi_protocol`** als
 
 ## Checklist
 
-- [ ] **`title`** on chart call matches fetched asset/interval/window (or returned from execute)
-- [ ] Spot **CoinGecko**: **`ohlc.get`** only — real OHLC, no volume, no `marketChart`; return includes **`coinId`** (+ **`bucketSec`**) for live ticks
-- [ ] Spot **public** + operator said “1H”: chart **4H** data, title says **4H**, explain Pro/DeFi for hourly
-- [ ] Spot **Pro** loaded: may use **`interval: 'hourly'`** for 1–90d; title may say **1H**
+- [ ] **`coinmarketcap-public`** loaded via **`agent_load_mcp_server`** before CMC fetch (not initialLoad)
+- [ ] Source picked per **`chart-ohlcv-sources`** (CMC before CoinGecko for generic spot)
+- [ ] **`title`** matches asset, interval, window, and source (DEX proxy vs CEX vs fallback)
 - [ ] **`prepare_chart_from_rows`** in the **same turn** as fetch
 - [ ] **`rows`** or complete **`toolResult`** — not `{}` or truncated JSON
-- [ ] Title: asset + interval + window
-- [ ] Chart tool succeeded — MCP result shows `[Chart prepared: … · continuum/chart/v1]`; if missing, **do not claim the chart rendered**
+- [ ] CoinGecko fallback only: **`ohlc.get`**, **`coinId`** + **`bucketSec`** for live ticks
+- [ ] Chart tool succeeded — MCP result shows `[Chart prepared: … · continuum/chart/v1]`

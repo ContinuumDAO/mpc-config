@@ -23,22 +23,23 @@ Reference: MCP resource **`chart_analysis_docs`**.
 
 ## Spot data source (default when DeFi not loaded)
 
-Per **`chart-defaults`**: generic spot (no venue named) → load **`coingecko`**, or **`coingecko-pro`** when the node has **`COINGECKO_API_KEY`**. Do **not** load Hyperliquid/GMX unless the operator names that venue or perp.
+Per **`chart-ohlcv-sources`**: generic spot (no venue named) → **`agent_load_mcp_server({ serverId: "coinmarketcap-public" })`**, then CMC fetch (`get_crypto_ohlcv_historical` when Pro key on continuum-mcp, else **`get_kline_candles`** DEX proxy). **CoinGecko** only if CMC fails (load **`coingecko`** / **`coingecko-pro`** then). Do **not** load Hyperliquid/GMX unless the operator names that venue or perp.
 
-| Goal | CoinGecko fetch | Notes |
-|------|-----------------|-------|
-| **Chart / plot** or **analysis** (`analyze_*`) | **`coins.ohlc.get`** | Real OHLC; one call; **no volume** |
+| Goal | Default fetch | Fallback |
+|------|---------------|----------|
+| **Chart / plot** or **analysis** (`analyze_*`) | CMC OHLCV (CEX or DEX klines) | **`coins.ohlc.get`** (CoinGecko) |
 
 **Do not use `coins.marketChart.get`** — synthetic candles and unreliable volume.
 
 **Interval honesty (spot):**
 
-- **Public `coingecko`:** 3–30d windows → **~4H** auto. If the operator asked for **1H** → fetch **4H anyway**, title **`4H`**, and **explain** that hourly spot needs **Pro** or **Hyperliquid/GMX**.
-- **`coingecko-pro`:** may pass **`interval: 'hourly'`** on `ohlc.get` for 1 / 7 / 14 / 30 / 90 days — then **1H** title is OK.
+- **CMC Pro hourly** or **DEX `1h`**: **1H** title is OK.
+- **CoinGecko public fallback:** 3–30d → **~4H** auto; if operator asked **1H** → title **`4H`**, explain CMC/Pro/DeFi.
+- **`coingecko-pro` fallback:** may use **`interval: 'hourly'`** for 1–90d.
 
-See **`chart-periods`** for execute examples.
+See **`chart-periods`** for fetch examples.
 
-If **`hyperliquid`** / **`gmx`** is already loaded and the operator names the venue or a specific interval → use that protocol’s **`fetch_ohlcv`** instead of CoinGecko.
+If **`hyperliquid`** / **`gmx`** is already loaded and the operator names the venue or a specific interval → use that protocol’s **`fetch_ohlcv`** instead of CMC/CoinGecko.
 
 ## Optional per-type skills
 

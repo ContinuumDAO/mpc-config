@@ -15,7 +15,7 @@ All **symbol, venue, candle interval, and lookback** come from the operator’s 
 - Return **`mpc-task-result v1`** with analysis JSON in the body.
 - **Must not** call `prepare_chart*` or attach `continuum/chart/v1`.
 
-Suggested skills on task: `chart-analysis-<type>`, `chart-periods`.
+Suggested skills on task: `chart-analysis-<type>`, `chart-periods`, `chart-ohlcv-sources`.
 
 ### Plot-only sub-agent
 
@@ -23,7 +23,7 @@ Suggested skills on task: `chart-analysis-<type>`, `chart-periods`.
 - **`prepare_chart_from_rows`** → optional **`apply_chart_drawings`** if visuals requested or prior analysis is in the KeyGen thread.
 - Attach chart via **`post_key_gen_chart_attachment`**; reference in task result.
 
-Suggested skills on task: `chart-defaults`, `chart-periods`.
+Suggested skills on task: `chart-defaults`, `chart-periods`, `chart-ohlcv-sources`.
 
 ### Optional handoff
 

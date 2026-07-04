@@ -104,6 +104,16 @@
       "initialLoad": false
     },
     {
+      "id": "coinmarketcap",
+      "displayName": "CoinMarketCap",
+      "setupUrl": "https://coinmarketcap.com/api/documentation/ai-agent-hub/mcp",
+      "transport": "http",
+      "url": "https://mcp.coinmarketcap.com/mcp",
+      "apiKeyEnvVar": "COINMARKETCAP_API_KEY",
+      "apiKeyHeader": "X-CMC-MCP-API-KEY",
+      "initialLoad": false
+    },
+    {
       "id": "altfins",
       "displayName": "altFINS (crypto analytics)",
       "transport": "http",

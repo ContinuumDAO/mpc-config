@@ -6,6 +6,11 @@
       "initialLoad": false
     },
     {
+      "name": "chart-ohlcv-sources",
+      "filename": "chart-ohlcv-sources.md",
+      "initialLoad": true
+    },
+    {
       "name": "chart-periods",
       "filename": "chart-periods.md",
       "initialLoad": true
