@@ -46,6 +46,11 @@
       "initialLoad": false
     },
     {
+      "name": "chart-analysis-time-series",
+      "filename": "chart-analysis-time-series.md",
+      "initialLoad": false
+    },
+    {
       "name": "orchestration-chart-analysis",
       "filename": "orchestration-chart-analysis.md",
       "initialLoad": false

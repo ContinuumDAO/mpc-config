@@ -13,11 +13,20 @@ Reference: MCP resource **`chart_analysis_docs`**.
 ## Vague analysis workflow
 
 1. Call **`continuum__list_chart_analysis_options`**.
-2. Present a numbered list from `analyses[]` (label + description).
+2. Present a numbered list from `analyses[]` (label + description). Group mentally by **`dataKind`**: `ohlcv` vs `time_series`.
 3. Ask the operator to pick a number or id.
-4. After selection: fetch OHLCV per operator request (symbol, source, interval, lookback — use **`chart-periods`** for lookback heuristics).
-5. Call **one** `analyze_*` with `toolResult` from the fetch.
+4. After selection: fetch data per operator request (OHLCV or line metric — use **`chart-periods`** for lookback heuristics on candles).
+5. Call **one** matching `analyze_*` with `toolResult` from the fetch.
 6. Summarize from the tool JSON in the reply.
+
+### OHLCV vs time-series routing
+
+| Fetch result | Analysis tools |
+|--------------|----------------|
+| Candles / OHLCV | `analyze_trend_structure`, `analyze_key_levels`, `analyze_momentum`, `analyze_range_volatility` |
+| Line-only `{ time, value }` metrics | `analyze_time_series_trend`, `analyze_time_series_momentum`, `analyze_time_series_stats` |
+
+Load skill **`chart-analysis-time-series`** when interpreting TVL, fees, or custom metrics.
 
 **Never** auto-run trend line drawing or replot a chart for vague “interpret” / “analyze” prompts.
 
@@ -54,5 +63,6 @@ Load with **`agent_load_skill`** when the operator picks a type or for richer na
 - `chart-analysis-levels`
 - `chart-analysis-momentum`
 - `chart-analysis-range`
+- `chart-analysis-time-series` (line-only metrics)
 
 For orchestration plan drafts involving charts, load **`orchestration-chart-analysis`** (optional, on demand).

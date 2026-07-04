@@ -10,12 +10,12 @@ All **symbol, venue, candle interval, and lookback** come from the operator’s 
 
 ### Analysis-only sub-agent
 
-- Fetch OHLCV per task prompt parameters.
-- Run chosen **`analyze_*`** tool(s).
+- Fetch OHLCV or line time-series per task prompt parameters.
+- Run chosen **`analyze_*`** or **`analyze_time_series_*`** tool(s).
 - Return **`mpc-task-result v1`** with analysis JSON in the body.
 - **Must not** call `prepare_chart*` or attach `continuum/chart/v1`.
 
-Suggested skills on task: `chart-analysis-<type>`, `chart-periods`, `chart-ohlcv-sources`.
+Suggested skills on task: `chart-analysis-<type>`, `chart-analysis-time-series` (metrics), `chart-periods`, `chart-ohlcv-sources`.
 
 ### Plot-only sub-agent
 
