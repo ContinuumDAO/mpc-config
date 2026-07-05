@@ -31,7 +31,7 @@ When empty: **`classification`** and **`pattern`** are **`null`** — say no cre
 Only if the operator asks to **draw** or **show on chart**:
 
 1. **`calculate_chart_pattern_drawings`** with the **same OHLCV `toolResult`** as the original chart.
-2. **`apply_chart_pattern_drawings`** — **do not** call `prepare_chart_from_rows` again.
+2. **`apply_chart_pattern_drawings`** — **do not** call `prepare_chart_from_rows` again. Merge onto the existing chart:
 
 ```json
 {
@@ -39,11 +39,11 @@ Only if the operator asks to **draw** or **show on chart**:
   "toolResult": { "... same hyperliquid fetch_ohlcv JSON as original chart ..." },
   "prepareReplay": { "... from prepare_chart_from_rows output ..." },
   "live": { "... from prepare_chart_from_rows output when present ..." },
-  "drawings": { "... entire drawings object from calculate_chart_pattern_drawings ..." }
+  "drawings": { "... entire `drawings` object from calculate_chart_pattern_drawings ..." }
 }
 ```
 
-Pass the **`drawings` object verbatim** — do **not** rebuild `horizontalLevels` from `pattern.levels`.
+Pass the **`drawings` object verbatim** (including nested **`patternOverlay`** with `type: "chart_pattern"`). Do **not** hand-copy only `patternOverlay.lines` — if you must simplify, still pass **`patternName`** and full line geometry. Do **not** rebuild `horizontalLevels` from `pattern.levels`.
 
 Or pass **`analysis: { "pattern": { ... } }`** from **`analyze_chart_patterns`** (object, not string) — geometry is rebuilt server-side.
 
