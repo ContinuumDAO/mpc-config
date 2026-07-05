@@ -21,7 +21,7 @@ Hyperliquid OHLCV is **perpetual** market data, not generic spot USD index. Do n
 1. **`list_mcp_servers`** — pick correct **`serverId`** (see **`chart-ohlcv-sources`**: **`coinmarketcap-public`** ≠ **`coinmarketcap`**).
 2. **`agent_load_mcp_server`** if the fetch server is not in session.
 3. **Fetch OHLCV** — e.g. **`coingecko__execute`** or **`coinmarketcap-public__get_kline_candles`**. Must succeed before charting.
-4. **`continuum__prepare_chart_from_rows`** with the **full, unmodified fetch JSON** as **`toolResult`** (keep Hyperliquid **`timestampMs`** on each candle — **never rewrite `time`**).
+4. **`continuum__prepare_chart_from_rows`** with the **full, unmodified fetch JSON** as **`toolResult`** (keep Hyperliquid **`timestampMs`** on each candle — **never rewrite `time`**). When both **`toolResult`** and **`rows`** are present, the server uses **`toolResult`**.
 
 **Never skip step 3.** Never pass a hand-edited subset of candles. Calling **`prepare_chart_from_rows`** with only **`title`** / **`label`** always fails validation.
 
