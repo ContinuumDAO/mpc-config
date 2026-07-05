@@ -75,7 +75,7 @@ Fetch OHLCV first. Then branch on operator intent:
 | **Analyze / interpret** (no chart requested) | **`analyze_*`** with full fetch as **`toolResult`**. **Do not** call **`prepare_chart_from_rows`**. |
 | **Chart / plot / draw** | **`prepare_chart_from_rows`** with full fetch as **`toolResult`**. |
 
-**Never** call **`prepare_chart_from_rows`** with only **`title`** / **`label`**.
+**Never** call **`prepare_chart_from_rows`** with only **`title`** / **`label`**. **Never** rewrite candle timestamps — pass fetch JSON verbatim (Hyperliquid uses **`timestampMs`**; do not add or replace with a generic **`time`** field).
 
 Plot example:
 
