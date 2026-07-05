@@ -6,6 +6,8 @@ Reference: **`chart_analysis_docs`** (pattern ids, smoothing, trendline breakout
 
 Input: `{ "title": "<from fetch>", "toolResult": { ... } }` — optional **`patterns[]`**, **`focusWindow`**, **`minConfidence`** (default 0.45), **`smoothHeadShoulders`** (default **true**), **`smoothWindow`** (`3`|`5`), **`retestTolerancePct`** (default **0.10**), **`retestAtrPeriod`** (default **14**), **`retestAtrMultiplier`** (default **1.0**).
 
+You may also pass **`label`** (ignored by the tool). Prefer full fetch **`toolResult`** over hand-copied **`rows`**. If using **`rows`**, pass a candle **array** (stringified JSON arrays are accepted).
+
 Requires **25–40** bars depending on pattern (cup & handle ~40; trendline patterns ~20). OHLC only — volume not required.
 
 ## Output fields
