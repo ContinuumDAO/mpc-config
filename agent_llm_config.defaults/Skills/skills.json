@@ -46,6 +46,16 @@
       "initialLoad": false
     },
     {
+      "name": "chart-analysis-patterns",
+      "filename": "chart-analysis-patterns.md",
+      "initialLoad": false
+    },
+    {
+      "name": "chart-analysis-classic-patterns",
+      "filename": "chart-analysis-classic-patterns.md",
+      "initialLoad": false
+    },
+    {
       "name": "chart-analysis-time-series",
       "filename": "chart-analysis-time-series.md",
       "initialLoad": false

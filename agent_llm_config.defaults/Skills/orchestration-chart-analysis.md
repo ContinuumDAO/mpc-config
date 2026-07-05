@@ -15,7 +15,7 @@ All **symbol, venue, candle interval, and lookback** come from the operator’s 
 - Return **`mpc-task-result v1`** with analysis JSON in the body.
 - **Must not** call `prepare_chart*` or attach `continuum/chart/v1`.
 
-Suggested skills on task: `chart-analysis-<type>`, `chart-analysis-time-series` (metrics), `chart-periods`, `chart-ohlcv-sources`.
+Suggested skills on task: `chart-analysis-<type>`, `chart-analysis-patterns`, `chart-analysis-classic-patterns`, `chart-analysis-time-series` (metrics), `chart-periods`, `chart-ohlcv-sources`.
 
 ### Plot-only sub-agent
 

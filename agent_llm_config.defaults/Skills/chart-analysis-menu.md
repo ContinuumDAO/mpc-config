@@ -23,7 +23,7 @@ Reference: MCP resource **`chart_analysis_docs`**.
 
 | Fetch result | Analysis tools |
 |--------------|----------------|
-| Candles / OHLCV | `analyze_trend_structure`, `analyze_key_levels`, `analyze_momentum`, `analyze_range_volatility` |
+| Candles / OHLCV | `analyze_trend_structure`, `analyze_key_levels`, `analyze_momentum`, `analyze_range_volatility`, `analyze_candlestick_patterns`, `analyze_chart_patterns` |
 | Line-only `{ time, value }` metrics | `analyze_time_series_trend`, `analyze_time_series_momentum`, `analyze_time_series_stats` |
 
 Load skill **`chart-analysis-time-series`** when interpreting TVL, fees, or custom metrics.
@@ -63,6 +63,8 @@ Load with **`agent_load_skill`** when the operator picks a type or for richer na
 - `chart-analysis-levels`
 - `chart-analysis-momentum`
 - `chart-analysis-range`
+- `chart-analysis-patterns` (1–3 bar candlestick recognition)
+- `chart-analysis-classic-patterns` (multi-bar H&S, doubles, triangles, cup & handle, trendline breakout/retest)
 - `chart-analysis-time-series` (line-only metrics)
 
 For orchestration plan drafts involving charts, load **`orchestration-chart-analysis`** (optional, on demand).
