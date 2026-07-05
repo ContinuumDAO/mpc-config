@@ -10,7 +10,7 @@ Input: `{ "title": "<from fetch>", "toolResult": { ... } }` — optional **`labe
 - **`analysis.structure`**: `higher_highs` | `lower_lows` | `range` | `mixed`.
 - **`analysis.swingHigh` / `swingLow`**: recent swing pivot prices and times.
 - **`analysis.phases`**: early / mid / recent segment direction.
-- **`analysis.trendLines`**: scored support/resistance line summaries (not chart geometry).
+- **`analysis.trendLines`**: scored support/resistance line summaries (**not drawable** — no `pointA`/`pointB`).
 
 ## Narrative template
 
@@ -21,4 +21,21 @@ Input: `{ "title": "<from fetch>", "toolResult": { ... } }` — optional **`labe
 
 ## Plotting (separate step)
 
-Only if the operator asks to **draw** or **show on chart**: `calculate_trend_lines` → `apply_chart_drawings`. Do not call prepare tools for analysis-only requests.
+Only if the operator asks to **draw** or **show on chart**:
+
+1. **`calculate_trend_lines`** with the **same OHLCV `toolResult`** as the original chart.
+2. **`apply_chart_drawings`** — **do not** call `prepare_chart_from_rows` again.
+
+```json
+{
+  "title": "BTC-PERP 1H — last 7d",
+  "toolResult": { "... same hyperliquid fetch_ohlcv JSON as original chart ..." },
+  "prepareReplay": { "... from prepare_chart_from_rows output ..." },
+  "live": { "... from prepare_chart_from_rows output when present ..." },
+  "trendLines": [ "... entire trendLines array from calculate_trend_lines ..." ]
+}
+```
+
+**Do not** pass `analyze_trend_structure` JSON as `toolResult` — it has no candles. **Do not** re-fetch OHLCV or use `fetch_market_snapshot` unless the operator changed symbol/interval/lookback.
+
+Prose-only replies are wrong when the operator asked to draw on the chart — the MCP tool must return `continuum/chart/v1`.

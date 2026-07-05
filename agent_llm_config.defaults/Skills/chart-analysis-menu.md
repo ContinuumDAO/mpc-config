@@ -6,6 +6,7 @@ Reference: MCP resource **`chart_analysis_docs`**.
 
 | Operator intent | Use | Do not use |
 |-----------------|-----|------------|
+| Load/fetch OHLCV **and analyze** (no “chart” / “plot”) | Fetch → **`analyze_*`** with `toolResult` | `prepare_chart*` |
 | Interpret, analyze, outlook, “what does it mean” (no specific type) | **`list_chart_analysis_options`** → numbered **text menu** → one **`analyze_*`** | `prepare_chart*`, `apply_chart_drawings`, `calculate_*` |
 | Named analysis (“momentum analysis”, “trend structure”) | Matching **`analyze_*`** after OHLCV fetch | Chart prepare unless they also asked to plot |
 | Chart, plot, draw on chart, show trend lines | **`chart-defaults`** plotting workflow | `analyze_*` unless they also asked for analysis prose |
@@ -34,14 +35,15 @@ Load skill **`chart-analysis-time-series`** when interpreting TVL, fees, or cust
 
 Per **`chart-ohlcv-sources`**:
 
-1. Use **`coingecko`** / **`coingecko-pro`** if **loaded** in this chat → **`coingecko__execute`** then **`prepare_chart_from_rows`** with **`toolResult`**.
+1. Use **`coingecko`** / **`coingecko-pro`** if **loaded** in this chat → **`coingecko__execute`** (`coins.ohlc.get`).
 2. If **no other OHLCV source loaded**, load **`coinmarketcap-public`** (id exact) — **not** catalog **`coinmarketcap`** without API key.
-
-If load of **`coinmarketcap`** fails on missing key → load **`coinmarketcap-public`** or use **`coingecko`**; do not claim CMC is loaded.
 
 | Goal | When CoinGecko loaded | When nothing else loaded |
 |------|----------------------|---------------------------|
-| **Chart / plot** or **`analyze_*`** | **`coins.ohlc.get`** | **`coinmarketcap-public`** klines (or Pro OHLCV if key on continuum-mcp) |
+| **`analyze_*` only** | fetch → **`analyze_*`** with `toolResult` | **`coinmarketcap-public`** klines → **`analyze_*`** |
+| **Chart / plot** | fetch → **`prepare_chart_from_rows`** | fetch → **`prepare_chart_from_rows`** |
+
+If load of **`coinmarketcap`** fails on missing key → load **`coinmarketcap-public`** or use **`coingecko`**; do not claim CMC is loaded.
 
 **Do not use `coins.marketChart.get`** — synthetic candles and unreliable volume.
 

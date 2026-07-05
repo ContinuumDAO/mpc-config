@@ -66,23 +66,46 @@ Prefer keyless **`get_kline_candles`** when Pro key is unset. See **`coinmarketc
 
 If fetch fails (429, empty), try the next applicable source only then.
 
-## Rule 3 — Fetch before chart (mandatory)
+## Rule 3 — Fetch before analyze or chart (mandatory)
 
-**Never** call **`prepare_chart_from_rows`** with only **`title`** / **`label`**. You must **fetch OHLCV first** in the **same turn**, then pass the fetch output:
+Fetch OHLCV first. Then branch on operator intent:
+
+| Intent | After fetch |
+|--------|-------------|
+| **Analyze / interpret** (no chart requested) | **`analyze_*`** with full fetch as **`toolResult`**. **Do not** call **`prepare_chart_from_rows`**. |
+| **Chart / plot / draw** | **`prepare_chart_from_rows`** with full fetch as **`toolResult`**. |
+
+**Never** call **`prepare_chart_from_rows`** with only **`title`** / **`label`**.
+
+Plot example:
 
 ```json
 {
   "title": "ETH/USD 4H — last 7d",
   "label": "ETH/USD",
-  "toolResult": { "... full output from coingecko__execute or coinmarketcap-public__get_kline_candles ..." }
+  "toolResult": { "... full output from fetch ..." }
 }
 ```
 
-Order: **(1) load MCP server if needed → (2) fetch tool → (3) prepare_chart_from_rows**. Skipping step 2 causes validation error *Provide non-empty rows or toolResult*.
+Analysis example:
 
-## Rule 4 — Same turn as analysis
+```json
+{
+  "title": "ETH/USD 4H — last 7d",
+  "toolResult": { "... same full fetch output ..." }
+}
+```
 
-After fetch, **same turn**: **`continuum__prepare_chart_from_rows`** and/or **`analyze_*`**. Never `{}`.
+→ pass to **`continuum__analyze_momentum`** (or other **`analyze_*`**), not **`prepare_chart_from_rows`**.
+
+Order: **(1) load MCP server if needed → (2) fetch → (3a) analyze_* OR (3b) prepare_chart_from_rows** — never both unless the operator asked for analysis **and** a chart.
+
+## Rule 4 — Orchestration task split
+
+- **Analysis sub-agent:** step 3a only; **`mpc-task-result`** body = analysis JSON; **no** chart attachment.
+- **Plot sub-agent:** step 3b (optional drawings); attach chart via **`post_key_gen_chart_attachment`**.
+
+Keeps KeyGen context lean — analysis prose in one task, chart JSON in another.
 
 ## Live chart ticks
 

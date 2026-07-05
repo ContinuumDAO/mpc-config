@@ -1,8 +1,8 @@
-# Chart defaults (indicators & MCP)
+# Chart defaults (plotting only)
+
+**This skill is for charting/plotting — not analysis-only workflows.** For interpret/analyze without a chart, use **`chart-analysis-menu`** and **`analyze_*`** tools instead of **`prepare_chart*`**.
 
 Charts: SDK **`prepare_chart_from_rows`** (single OHLCV feed) or **`prepare_chart`** (advanced). Reference: **`chart_docs`**.
-
-**Analysis without a chart:** use skill **`chart-analysis-menu`** and MCP **`chart_analysis_docs`** — call **`analyze_*`** tools, not **`prepare_chart*`**.
 
 **OHLCV sources:** skill **`chart-ohlcv-sources`** — use loaded providers; **`coinmarketcap-public`** only when no other OHLCV source is loaded in the session.
 

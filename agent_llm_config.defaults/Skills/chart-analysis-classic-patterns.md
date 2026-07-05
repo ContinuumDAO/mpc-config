@@ -30,24 +30,23 @@ When empty: **`classification`** and **`pattern`** are **`null`** — say no cre
 
 Only if the operator asks to **draw** or **show on chart**:
 
-1. **`analyze_chart_patterns`** (analysis JSON) — optional if you will recalculate geometry.
-2. **`calculate_chart_pattern_drawings`** with same OHLCV input (+ optional `patternId`).
-3. **`apply_chart_pattern_drawings`** with:
-   - **`toolResult`** or **`rows`** (same OHLCV),
-   - **`prepareReplay`** from the prior **`prepare_chart_from_rows`** output,
-   - **`drawings`**: pass the **`drawings` object from step 2 verbatim** — do **not** rebuild `horizontalLevels` from `pattern.levels` (neckline kinds fail validation unless normalized).
-
-Minimal apply payload:
+1. **`calculate_chart_pattern_drawings`** with the **same OHLCV `toolResult`** as the original chart.
+2. **`apply_chart_pattern_drawings`** — **do not** call `prepare_chart_from_rows` again.
 
 ```json
 {
   "title": "ETH-PERP 1H — last 7d",
-  "toolResult": { "... same OHLCV fetch ..." },
-  "prepareReplay": { "... from prepare_chart_from_rows ..." },
+  "toolResult": { "... same hyperliquid fetch_ohlcv JSON as original chart ..." },
+  "prepareReplay": { "... from prepare_chart_from_rows output ..." },
+  "live": { "... from prepare_chart_from_rows output when present ..." },
   "drawings": { "... entire drawings object from calculate_chart_pattern_drawings ..." }
 }
 ```
 
-Or skip step 2 and pass **`analysis`** from **`analyze_chart_patterns`** (`{ "pattern": { ... } }`) — geometry is rebuilt server-side.
+Pass the **`drawings` object verbatim** — do **not** rebuild `horizontalLevels` from `pattern.levels`.
 
-Do not stringify **`analysis`** as JSON unless the tool rejects the object form.
+Or pass **`analysis: { "pattern": { ... } }`** from **`analyze_chart_patterns`** (object, not string) — geometry is rebuilt server-side.
+
+**Do not** re-fetch OHLCV, use `fetch_market_snapshot`, or pass analysis JSON as `toolResult`.
+
+Prose-only replies are wrong when the operator asked to draw on the chart — the MCP tool must return `continuum/chart/v1`.
