@@ -30,8 +30,24 @@ When empty: **`classification`** and **`pattern`** are **`null`** — say no cre
 
 Only if the operator asks to **draw** or **show on chart**:
 
-1. **`analyze_chart_patterns`** (analysis JSON).
-2. **`calculate_chart_pattern_drawings`** with same OHLCV input + optional `patternHit` from analysis.
-3. **`apply_chart_pattern_drawings`** with **`prepareReplay`** from prior **`prepare_chart_from_rows`**.
+1. **`analyze_chart_patterns`** (analysis JSON) — optional if you will recalculate geometry.
+2. **`calculate_chart_pattern_drawings`** with same OHLCV input (+ optional `patternId`).
+3. **`apply_chart_pattern_drawings`** with:
+   - **`toolResult`** or **`rows`** (same OHLCV),
+   - **`prepareReplay`** from the prior **`prepare_chart_from_rows`** output,
+   - **`drawings`**: pass the **`drawings` object from step 2 verbatim** — do **not** rebuild `horizontalLevels` from `pattern.levels` (neckline kinds fail validation unless normalized).
 
-Do not skip analysis and jump to drawings unless replotting after a prior analysis on the thread.
+Minimal apply payload:
+
+```json
+{
+  "title": "ETH-PERP 1H — last 7d",
+  "toolResult": { "... same OHLCV fetch ..." },
+  "prepareReplay": { "... from prepare_chart_from_rows ..." },
+  "drawings": { "... entire drawings object from calculate_chart_pattern_drawings ..." }
+}
+```
+
+Or skip step 2 and pass **`analysis`** from **`analyze_chart_patterns`** (`{ "pattern": { ... } }`) — geometry is rebuilt server-side.
+
+Do not stringify **`analysis`** as JSON unless the tool rejects the object form.
