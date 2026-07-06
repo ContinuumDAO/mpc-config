@@ -10,21 +10,45 @@ Continuum does **not** endorse third-party data providers. Pick sources from **o
 
 If no OHLCV source is loaded and no fetch has run in this chat:
 
-1. **Stop** — do not chart, analyze, or load catalog servers on your own.
+1. **Stop** — do not chart, analyze, or load providers on your own.
 2. **Ask the operator** which source to use (CoinGecko, CoinMarketCap public, Hyperliquid, GMX, another catalog MCP, etc.).
-3. After they choose → **`agent_load_mcp_server`** → fetch OHLCV → pass full fetch JSON as **`toolResult`**.
+3. After they choose → **enable that source** (see below) → **fetch OHLCV** → pass full fetch object once, then **`{ title, ohlcvDigest }`** from **`meta.sessionBind`** on follow-ups.
 
 Chart/analysis tools return a clear error when called without data; treat that as “ask the operator first”.
 
-## Load MCP servers before fetch (after operator choice)
+## Two kinds of OHLCV sources (do not confuse them)
 
-Most third-party servers have **`initialLoad: false`**. Call **`continuum__agent_load_mcp_server`** same turn, **before** fetch, only after the operator picks the provider:
+| Kind | Examples | How to enable in this chat | Fetch tool |
+|------|----------|----------------------------|------------|
+| **DeFi protocol** (already on **continuum** MCP) | Hyperliquid, GMX, Aave, Uniswap, … | **`continuum__load_defi_protocol`** `{ "protocolId": "hyperliquid" }` — **not** **`agent_load_mcp_server`** | `ctm_<protocol>_fetch_ohlcv` |
+| **Optional catalog MCP server** | `coinmarketcap-public`, `coingecko`, `technical-indicators`, … | **`continuum__agent_load_mcp_server`** `{ "serverId": "…" }` after operator choice | `coinmarketcap-public__*`, `coingecko__*`, … |
+
+**Hyperliquid is a DeFi protocol, not an MCP `serverId`.**  
+`agent_load_mcp_server({ "serverId": "hyperliquid" })` fails with *not configured* — that is expected. Use **`load_defi_protocol({ "protocolId": "hyperliquid" })`** instead, then **`ctm_hyperliquid_fetch_ohlcv`**.
+
+Read-only DeFi (markets, OHLCV, charts, analysis) does **not** require RPC URL, wallet, or node catalog setup — only **`load_defi_protocol`**. Wallet/KeyGen is for **multisign execution** (orders, deposits), not for fetch/chart.
+
+## Load catalog MCP servers before fetch (catalog sources only)
+
+For **CoinGecko, CoinMarketCap public**, etc. — not for Hyperliquid/GMX.
+
+Most catalog servers have **`initialLoad: false`**. Call **`continuum__agent_load_mcp_server`** same turn, **before** fetch, only after the operator picks a **catalog** provider:
 
 ```json
-{ "serverId": "<id>" }
+{ "serverId": "coinmarketcap-public" }
 ```
 
 Use **`list_mcp_servers`** → **`activeServers`** before loading. Match **`serverId`** exactly (see below).
+
+## Load DeFi protocols before fetch (DeFi sources only)
+
+When the operator names **Hyperliquid**, **GMX**, or another DeFi venue:
+
+1. **`continuum__list_defi_protocols`** (optional) — confirm `protocolId`.
+2. **`continuum__load_defi_protocol`** `{ "protocolId": "hyperliquid" }` (idempotent).
+3. **`ctm_hyperliquid_fetch_ohlcv`** (or the protocol’s `fetch_ohlcv` tool) — same turn or next.
+
+**Do not** call **`agent_load_mcp_server`** for DeFi protocol ids.
 
 ## Critical: two different CoinMarketCap server ids
 
@@ -41,13 +65,13 @@ If a chosen server is **missing** from **`activeServers`** → tell the operator
 
 ## Rule 1 — Named venue or provider wins
 
-| Operator says | Source |
-|---------------|--------|
-| Hyperliquid, perp, HL | **`hyperliquid`** → `ctm_hyperliquid_fetch_ohlcv` |
-| GMX | **`gmx`** → `ctm_gmx_fetch_ohlcv` |
-| CoinMarketCap / CMC | **`coinmarketcap-public`** only (unless catalog **`coinmarketcap`** + key already working) |
-| CoinGecko | **`coingecko`** / **`coingecko-pro`** |
-| DEX pool, Uniswap, on-chain venue | That protocol’s **`fetch_ohlcv`** or operator-chosen kline tool |
+| Operator says | Enable | Fetch |
+|---------------|--------|-------|
+| Hyperliquid, perp, HL | **`load_defi_protocol({ "protocolId": "hyperliquid" })`** | **`ctm_hyperliquid_fetch_ohlcv`** |
+| GMX | **`load_defi_protocol({ "protocolId": "gmx" })`** | **`ctm_gmx_fetch_ohlcv`** |
+| CoinMarketCap / CMC | **`agent_load_mcp_server({ "serverId": "coinmarketcap-public" })`** | **`coinmarketcap-public__get_kline_candles`** (etc.) |
+| CoinGecko | **`agent_load_mcp_server({ "serverId": "coingecko" })`** or **`coingecko-pro`** | **`coingecko__execute`** |
+| Other DeFi (Aave, Uniswap, …) | **`load_defi_protocol({ "protocolId": "<id>" })`** | That protocol’s **`ctm_*`** tools (see **`get_defi_protocol_skill`**) |
 
 ## Rule 2 — Generic spot (no venue or provider named)
 
@@ -103,7 +127,9 @@ Analysis example:
 
 → pass to **`continuum__analyze_momentum`** (or other **`analyze_*`**), not **`prepare_chart_from_rows`**.
 
-Order: **(1) operator chooses source → load MCP server if needed → (2) fetch → (3a) analyze_* OR (3b) prepare_chart_from_rows** — never both unless the operator asked for analysis **and** a chart.
+Order: **(1) operator chooses source → `load_defi_protocol` OR `agent_load_mcp_server` as appropriate → (2) fetch → (3a) analyze_* OR (3b) prepare_chart_from_rows** — never both unless the operator asked for analysis **and** a chart.
+
+Follow-ups on the **same** dataset: **`{ title, ohlcvDigest }`** from **`meta.sessionBind`** — do not re-paste fetch JSON. After the operator changes symbol, interval, or lookback → new fetch (replaces session bind automatically).
 
 ## Rule 4 — Orchestration task split
 

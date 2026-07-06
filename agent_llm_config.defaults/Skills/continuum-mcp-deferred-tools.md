@@ -25,13 +25,27 @@ Chart tools are **not** pinned at session start. When the operator asks for char
 
 Load skill **`chart-defaults`** (via **`agent_load_skill`**) after activating the chart bundle for OHLCV source guidance. **Never auto-load** market-data MCP servers — if no OHLCV source is loaded, ask the operator to choose one (skill **`chart-ohlcv-sources`**).
 
-## CoinMarketCap / optional catalog servers (not core)
+## DeFi protocols (Hyperliquid, GMX, Aave, … — on continuum MCP)
 
-**`coinmarketcap-public`** and similar catalog MCP servers are **optional** — not part of continuum core bundles. Load via **`agent_load_mcp_server`** only when the **operator chooses** that provider — not as a silent fallback for generic chart requests.
+DeFi tools are **already registered** on the **continuum** MCP server. They are **not** separate optional MCP servers in **`list_mcp_servers`**.
 
-## DeFi
+| Operator says | Wrong | Right |
+|---------------|-------|-------|
+| “Load Hyperliquid”, “use HL”, “Hyperliquid OHLCV” | **`agent_load_mcp_server({ "serverId": "hyperliquid" })`** → *not configured* | **`load_defi_protocol({ "protocolId": "hyperliquid" })`** → **`ctm_hyperliquid_*`** |
+| “Load the DeFi protocol hyperliquid” | Ask for RPC/wallet before fetch/chart | **`load_defi_protocol`** only; wallet only for multisign **orders** |
 
-Use **`load_defi_protocol`** (alias for activating `defi:<protocolId>`) before protocol `ctm_*` tools. **`unload_defi_protocol`** when finished.
+Workflow:
+
+1. **`list_defi_protocols`** (optional) or **`search_continuum_tools`** `q: "hyperliquid"`.
+2. **`load_defi_protocol`** `{ "protocolId": "hyperliquid" }` — idempotent; activates **`defi:hyperliquid`** tool group when deferred loading is on.
+3. Call **`ctm_hyperliquid_fetch_ohlcv`**, **`ctm_hyperliquid_fetch_markets`**, etc.
+4. **`unload_defi_protocol`** when finished with that protocol (optional).
+
+For OHLCV charts after fetch, see skill **`chart-ohlcv-sources`** and **`chart-periods`**.
+
+## Optional catalog MCP servers (CoinMarketCap, CoinGecko, …)
+
+**`coinmarketcap-public`** and similar catalog MCP servers are **optional** — not part of continuum core bundles. Load via **`agent_load_mcp_server`** only when the **operator chooses** that provider — not as a silent fallback for generic chart requests. **Never** use **`agent_load_mcp_server`** for DeFi **`protocolId`** values.
 
 ## Pinned at init (typical)
 

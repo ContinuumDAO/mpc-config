@@ -12,16 +12,18 @@ Charts: SDK **`prepare_chart_from_rows`** (single OHLCV feed) or **`prepare_char
 |------------------|-------------|--------|
 | “Chart ETH 4h”, “BTC chart”, spot (no venue/provider named) | **`coingecko`** / **`coingecko-pro`** if **loaded** in session; **else ask operator** (CoinGecko, CMC public, etc.) — do not auto-load | Hyperliquid/GMX/`ctm_*_fetch_ohlcv` unless venue named; silent **`agent_load_mcp_server`** |
 | Names **CoinMarketCap** / **CMC** | **`coinmarketcap-public`** (`serverId` exact) — **not** catalog **`coinmarketcap`** unless API key configured | Claiming CMC loaded when load returned key error |
-| Names **Hyperliquid**, **perp**, **GMX**, DEX pool, on-chain venue | That protocol’s **`fetch_ohlcv`** | Unrelated spot aggregators |
+| Names **Hyperliquid**, **perp**, **GMX**, DEX pool, on-chain venue | **`load_defi_protocol`** then that protocol’s **`fetch_ohlcv`** — **not** **`agent_load_mcp_server`** | Treating DeFi **`protocolId`** as an MCP **`serverId`** |
 
 Hyperliquid OHLCV is **perpetual** market data, not generic spot USD index. Do not use it for undifferentiated “chart ETH”.
 
 ## Workflow (strict order)
 
-1. **`list_mcp_servers`** — pick correct **`serverId`** (see **`chart-ohlcv-sources`**: **`coinmarketcap-public`** ≠ **`coinmarketcap`**).
-2. If no OHLCV source loaded → **ask the operator** which provider to use; then **`agent_load_mcp_server`** for their choice only.
-3. **Fetch OHLCV** — e.g. **`coingecko__execute`** or **`coinmarketcap-public__get_kline_candles`**. Must succeed before charting.
-4. **`continuum__prepare_chart_from_rows`** with the **full, unmodified fetch JSON** as **`toolResult`** (keep Hyperliquid **`timestampMs`** on each candle — **never rewrite `time`**). When both **`toolResult`** and **`rows`** are present, the server uses **`toolResult`**.
+1. **Pick source type** (see **`chart-ohlcv-sources`**):
+   - **DeFi venue** (Hyperliquid, GMX, …) → **`continuum__load_defi_protocol`** `{ "protocolId": "…" }`
+   - **Catalog MCP** (CoinGecko, CMC public, …) → **`list_mcp_servers`** → **`continuum__agent_load_mcp_server`** for operator’s choice only
+2. If no source enabled yet → **ask the operator** which provider to use; then step 1 for their choice.
+3. **Fetch OHLCV** — e.g. **`ctm_hyperliquid_fetch_ohlcv`**, **`coingecko__execute`**, or **`coinmarketcap-public__get_kline_candles`**. Must succeed before charting.
+4. **`continuum__prepare_chart_from_rows`** — first call: full fetch **object** as **`toolResult`**; follow-ups: **`{ title, ohlcvDigest }`** from **`meta.sessionBind`** (keep Hyperliquid **`timestampMs`** — never rewrite **`time`**).
 
 **Never skip step 3.** Never pass a hand-edited subset of candles. Calling **`prepare_chart_from_rows`** with only **`title`** / **`label`** always fails validation.
 

@@ -36,7 +36,7 @@ There is **no** chart-builder bar-count limit for normal fetch windows. If `prep
 ## Fetch + chart
 
 1. Pick source per **`chart-ohlcv-sources`**: use loaded **`coingecko`** if available; **if none loaded, ask the operator** — do not auto-load **`coinmarketcap-public`** or **`coingecko`**.
-2. **`agent_load_mcp_server`** only after the operator chooses a provider.
+2. Enable source: **`load_defi_protocol`** for Hyperliquid/GMX/DeFi, or **`agent_load_mcp_server`** for catalog MCP — only after the operator chooses.
 3. **Fetch** OHLC bars (required — see below).
 4. **`prepare_chart_from_rows`** with **`toolResult`** from step 3 — **same turn**.
 
@@ -156,8 +156,8 @@ See **`get_defi_protocol_skill`** for fetch params. Never skip chart prepare whe
 
 ## Checklist
 
-- [ ] Source per **`chart-ohlcv-sources`**: loaded provider only, or operator chose one — never auto-load
-- [ ] MCP server **loaded** in session before fetch when `initialLoad` is false
+- [ ] Source per **`chart-ohlcv-sources`**: operator chose one — never auto-load
+- [ ] **DeFi:** **`load_defi_protocol`** before **`ctm_*_fetch_ohlcv`** | **Catalog:** **`agent_load_mcp_server`** before fetch when `initialLoad` is false
 - [ ] **`title`** matches fetched asset, interval, and window (e.g. `last 7d` when `lookbackDays: 7`)
 - [ ] **Hyperliquid / GMX:** full fetch **`toolResult`** — never hand-trimmed candles or “last 24h” substitute for a 7d request
 - [ ] Spot **CoinGecko**: **`ohlc.get`** only; **`coinId`** + **`bucketSec`** for live ticks

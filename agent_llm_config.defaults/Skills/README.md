@@ -6,6 +6,8 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 |------|---------|
 | **`skills.json`** | Manifest: `name`, `filename`, `initialLoad` per skill |
 | **`orchestration_planning.md`** | Plan-mode orchestration manifest drafting (`conversationPurpose: "plan"`) |
+| **`continuum-mcp-deferred-tools.md`** | Tool bundle discovery; **`load_defi_protocol`** vs **`agent_load_mcp_server`** |
+| **`chart-ohlcv-sources.md`** | OHLCV provider choice: DeFi protocols vs catalog MCP servers |
 | **`chart-periods.md`** | Default lookback by bar interval, newest-first trim, and source-specific fetch notes for **`prepare_chart`** |
 | **`chart-defaults.md`** | Default EMA(50) / RSI(14) / volume behavior, **`technical-indicators`** MCP load, operator override examples |
 | **`execution-policy.md`** | MultiSign / on-chain execution policy: gas, one `requestId` per round, confirmation before broadcast |

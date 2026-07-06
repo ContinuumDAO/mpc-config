@@ -66,6 +66,11 @@
       "initialLoad": false
     },
     {
+      "name": "continuum-mcp-deferred-tools",
+      "filename": "continuum-mcp-deferred-tools.md",
+      "initialLoad": true
+    },
+    {
       "name": "execution-policy",
       "filename": "execution-policy.md",
       "initialLoad": false

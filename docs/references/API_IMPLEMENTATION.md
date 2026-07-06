@@ -240,6 +240,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getSkill`](#get-getskill) - Get one skill file by `name`
 - [`POST /addSkill`](#post-addskill) - Add or update a skill file (**management signature**)
 - [`POST /removeSkill`](#post-removeskill) - Remove a skill by name (**management signature**)
+- [`POST /resetSkillsFromDefaults`](#post-resetskillsfromdefaults) - Overwrite bundled default skill files from **`agent_llm_config.defaults/Skills/`** (**management signature**; custom skills preserved)
 - [`GET /listCronJobs`](#get-listcronjobs) - List agent cron job summaries (`agent_llm_config/cron/jobs.json`; **read JWT** on Browser HTTPS / loopback)
 - [`GET /getCronJob`](#get-getcronjob) - Get one cron job including message (**read JWT** when JWT applies)
 - [`GET /listCronJobRuns`](#get-listcronjobruns) - Recent run history for a job (**read JWT**)
@@ -2955,6 +2956,17 @@ Each skill: **`initialLoad`** — when true, content is injected as a **system**
 **Auth:** Management signature.
 
 **Body:** `{ "name", "nonce", "clientSig", "nodeKey" }`.
+
+<a id="post-resetskillsfromdefaults"></a>
+#### `POST /resetSkillsFromDefaults`
+
+**Auth:** Management signature.
+
+**Body:** `{ "nonce", "clientSig", "nodeKey" }` — no other fields. Use the same [management signatures (`nonce`, `clientSig`, `nodeKey`)](#management-signatures-nodekey) flow as **`POST /removeSkill`**: canonical JSON to sign is `{"nonce":N,"clientSig":"","nodeKey":"<128-hex>"}` with **`clientSig` cleared** before signing (Ed25519 128 hex, or EIP-191 **`signedMessage`** + **`clientSig`** from **`NodeMgtKey`**).
+
+**Behavior:** Copies each bundled default skill file from **`agent_llm_config.defaults/Skills/`** over the matching runtime file under **`agent_llm_config/Skills/`**, and updates matching **`skills.json`** manifest entries (`initialLoad`, `filename`, etc.). Skills you added that are **not** in the defaults catalog are **unchanged** (files and manifest entries preserved).
+
+**Response data:** `{ "skillCount": <int> }` — count of default skills refreshed.
 
 ### Agent cron jobs (local filesystem + in-process scheduler)
 

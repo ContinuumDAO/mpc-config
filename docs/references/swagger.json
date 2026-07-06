@@ -1853,6 +1853,38 @@
                 }
             }
         },
+        "/getVpnFeeStatus": {
+            "get": {
+                "description": "Get MPA VPN subscription fee status for this node host (credit pool wei, monthly fee, required top-up; hostIp query or node egress IP) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getVpnFeeStatus).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Key Generation"
+                ],
+                "summary": "Get MPA VPN subscription fee status for this node host (credit pool wei, monthly fee, required top-up; hostIp query or node egress IP)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "hostIp",
+                        "in": "query",
+                        "required": false,
+                        "description": "Host IP for VPN hostBinding (defaults to node egress IP when omitted)"
+                    }
+                ]
+            }
+        },
         "/getKeyGenGroupId": {
             "get": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getKeyGenGroupId).",
@@ -3754,6 +3786,39 @@
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/node.RemoveSkillPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/resetSkillsFromDefaults": {
+            "post": {
+                "description": "Overwrite bundled default agent skills from agent_llm_config.defaults/Skills/ (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /resetSkillsFromDefaults).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Overwrite bundled default agent skills from agent_llm_config.defaults/Skills/ (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.ResetSkillsFromDefaultsPost"
                         }
                     }
                 ]
@@ -7095,6 +7160,18 @@
                             "description": "Include in orchestration plan-mode mpc-orchestrate server allowlist (ignored for builtin continuum)"
                         }
                     }
+                }
+            ]
+        },
+        "node.ResetSkillsFromDefaultsPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "description": "POST /resetSkillsFromDefaults. Canonical JSON to sign: {\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}. Overwrites bundled default skill files from agent_llm_config.defaults/Skills/ into runtime agent_llm_config/Skills/ and updates matching skills.json entries. Custom skills not in the defaults catalog are preserved."
                 }
             ]
         }
