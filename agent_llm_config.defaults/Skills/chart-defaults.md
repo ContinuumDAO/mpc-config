@@ -37,12 +37,12 @@ Never `{}`. **Do not describe the chart in markdown** — the UI only renders wh
 }
 ```
 
-Hyperliquid / DeFi fetch shape is also accepted:
+Hyperliquid / DeFi fetch shape (pass **full** fetch JSON — example 7d @ 1h):
 
 ```json
 {
-  "title": "ETH-PERP 4H",
-  "toolResult": { "ohlcv": { "candles": [ "... from ctm_hyperliquid_fetch_ohlcv ..." ] } }
+  "title": "ETH-PERP 1H — last 7d",
+  "toolResult": { "ohlcv": { "coin": "ETH", "interval": "1h", "lookbackDays": 7, "candles": [ "... from ctm_hyperliquid_fetch_ohlcv ..." ] } }
 }
 ```
 
@@ -55,7 +55,9 @@ GMX returns a flat shape (not nested under `ohlcv`):
 }
 ```
 
-Or pass **`rows`** directly. Default **`maxPoints`: 400** (newest bars kept).
+Or pass **`rows`** only when you also have fetch **`toolResult`** (preferred). **`options.maxPoints`** (default **400**) caps **on-screen** points only — it does **not** require pre-trimming vendor fetch candles. Never slice Hyperliquid/GMX `toolResult` to “last 24h” when the operator asked for 7d.
+
+If `prepare_chart_from_rows` fails, read **`reason`** from the tool response and fix the payload — do not switch interval (e.g. 4H) or invent “payload too large” errors.
 
 ### Advanced: `prepare_chart`
 
@@ -73,7 +75,7 @@ CoinGecko spot charts use **`coins.ohlc.get`** only — real OHLC candles, no `m
 
 **“1 hour” on public CoinGecko:** use **4H** candles (auto granularity), title **4H**, and tell the operator hourly spot needs Pro or a DeFi venue. **Pro** (`coingecko-pro`): may use **`interval: 'hourly'`** for 1–90 day windows.
 
-**EMA(50) needs ≥50 bars** in the fetch (after any trim). Shorter lookback still charts candles + RSI(14) but **no EMA line** — extend lookback per **`chart-periods`**.
+**EMA(50) needs ≥50 bars** in the loaded series. For 7d @ 1h (~169 bars) EMA applies. Shorter lookback (e.g. 24h) still charts candles + RSI(14) but **no EMA line** — extend lookback per **`chart-periods`** when the operator wanted a longer window.
 
 **`options.skipDefaultOverlays`: true** — candles + volume only.
 

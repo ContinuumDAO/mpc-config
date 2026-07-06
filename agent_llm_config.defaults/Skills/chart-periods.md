@@ -6,11 +6,29 @@ Pair with **`chart-defaults`**, **`chart-ohlcv-sources`**. Reference: **`chart_d
 
 | Interval | Window | ~Bars | Spot CoinGecko (public) |
 |----------|--------|-------|-------------------------|
-| 1h | 45 days | 400 | **Pro only** (`interval: hourly`) or use **4H** on public |
-| 4h | 90 days | 400 | **Default for public** (auto for 3–30d windows) |
-| 1d | 9 months | 270 | Long windows (31d+ auto → coarser) |
+| 1h | 7 – 30 days | 168 – 720 | **Pro only** (`interval: hourly`) or use **4H** on public |
+| 4h | 30 – 90 days | 180 – 540 | **Default for public** (auto for 3–30d windows) |
+| 1d | 6 – 12 months | 180 – 365 | Long windows (31d+ auto → coarser) |
 
-Trim newest-first when over ~400 bars. Put window in **`title`**.
+Put window in **`title`** (interval + lookback, e.g. `ETH-PERP 1H — last 7d`).
+
+### Bar sizing — two different rules
+
+| Path | Trim candles? |
+|------|----------------|
+| **`prepare_chart_from_rows`** + vendor **`toolResult`** (Hyperliquid, GMX, CMC, CoinGecko execute return) | **Never.** Pass the **full, unmodified** fetch JSON. Chart downsamples for **display** via `maxPoints` (default 400) — that is not deleting history. |
+| **`coingecko__execute`** building `result: bars` inside your script | May `slice(-400)` **only inside execute** when the API returns far more bars than needed — then pass the **whole execute object** as `toolResult`. Do **not** slice again before `prepare_chart_from_rows`. |
+| **`prepare_chart`** with hand-built `series[].data` | May cap at ~400 bars (newest-first) — see **`chart_docs`**. |
+
+**Common requests (vendor fetch — pass full `toolResult`):**
+
+| Operator request | ~Bars | Action |
+|------------------|-------|--------|
+| ETH-PERP **1H — last 7d** (Hyperliquid) | ~168–169 | Title `ETH-PERP 1H — last 7d`; **do not** shorten to 24h or switch to 4H |
+| **15m — last 24h** | ~96 | Full `toolResult` |
+| **4H — last 30d** | ~180 | Full `toolResult` |
+
+There is **no** server-side metadata limit that blocks ~169 hourly bars. If `prepare_chart_from_rows` fails, quote the tool **`reason`** exactly — do not invent “validation error with large payload metadata”. Do **not** substitute a shorter window or coarser interval when the operator gave a specific range.
 
 **Operator asks “1 hour” on spot CoinGecko:** if only **`coingecko`** (public) is loaded → fetch **4H** data (auto granularity), title **`4H`**, and **tell the operator** hourly spot needs **CoinGecko Pro** or a DeFi venue. Do not pretend the chart is 1H.
 
@@ -105,15 +123,17 @@ Title e.g. **`ETH/USDC Uniswap v3 — 4H — last 90d`**.
 
 ### Perp / DeFi (Hyperliquid or GMX — when operator names the venue)
 
-**Hyperliquid** — fetch returns `{ ohlcv: { coin, interval, candles }, resolvedCoin }`:
+**Never slice or shorten `candles` from the fetch** before `prepare_chart_from_rows`. Honor the operator’s interval and lookback exactly (e.g. 7d @ 1h ≈ 168–169 bars — chart as-is).
 
-1. `ctm_hyperliquid_fetch_ohlcv` (after `load_defi_protocol({ protocolId: "hyperliquid" })`).
+**Hyperliquid** — fetch returns `{ ohlcv: { coin, interval, candles, lookbackDays?, startTimeMs?, endTimeMs? }, resolvedCoin }`:
+
+1. `ctm_hyperliquid_fetch_ohlcv` (after `load_defi_protocol({ protocolId: "hyperliquid" })`) with the requested interval and lookback (e.g. `interval: "1h"`, `lookbackDays: 7`).
 2. **`continuum__prepare_chart_from_rows`** — same turn; pass **full fetch JSON** as **`toolResult`**.
 
 ```json
 {
-  "title": "ETH-PERP 1H — last 3d",
-  "toolResult": { "ohlcv": { "coin": "ETH", "interval": "1h", "candles": [ "... from fetch ..." ] }, "resolvedCoin": "ETH" }
+  "title": "ETH-PERP 1H — last 7d",
+  "toolResult": { "ohlcv": { "coin": "ETH", "interval": "1h", "lookbackDays": 7, "candles": [ "... all candles from fetch ..." ] }, "resolvedCoin": "ETH" }
 }
 ```
 
@@ -135,7 +155,8 @@ See **`get_defi_protocol_skill`** for fetch params. Never skip chart prepare whe
 
 - [ ] Source per **`chart-ohlcv-sources`**: loaded CoinGecko, else **`coinmarketcap-public`**
 - [ ] MCP server **loaded** in session before fetch when `initialLoad` is false
-- [ ] **`title`** on chart call matches fetched asset/interval/window
+- [ ] **`title`** matches fetched asset, interval, and window (e.g. `last 7d` when `lookbackDays: 7`)
+- [ ] **Hyperliquid / GMX:** full fetch **`toolResult`** — never hand-trimmed candles or “last 24h” substitute for a 7d request
 - [ ] Spot **CoinGecko**: **`ohlc.get`** only; **`coinId`** + **`bucketSec`** for live ticks
 - [ ] **`prepare_chart_from_rows`** in the **same turn** as fetch
 - [ ] Chart tool succeeded — MCP result shows `[Chart prepared: … · continuum/chart/v1]`
