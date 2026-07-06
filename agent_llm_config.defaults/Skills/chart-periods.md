@@ -25,10 +25,11 @@ Put window in **`title`** (interval + lookback, e.g. `ETH-PERP 1H — last 7d`).
 | Operator request | ~Bars | Action |
 |------------------|-------|--------|
 | ETH-PERP **1H — last 7d** (Hyperliquid) | ~168–169 | Title `ETH-PERP 1H — last 7d`; **do not** shorten to 24h or switch to 4H |
+| ETH-PERP **1H — last 30d** (Hyperliquid) | ~721 | Title `ETH-PERP 1H — last 30d`; **do not** switch to 1D |
 | **15m — last 24h** | ~96 | Full `toolResult` |
-| **4H — last 30d** | ~180 | Full `toolResult` |
+| **4H — last 30d** | ~181 | Full `toolResult` |
 
-There is **no** server-side metadata limit that blocks ~169 hourly bars. If `prepare_chart_from_rows` fails, quote the tool **`reason`** exactly — do not invent “validation error with large payload metadata”. Do **not** substitute a shorter window or coarser interval when the operator gave a specific range.
+There is **no** chart-builder bar-count limit for normal fetch windows. If `prepare_chart_from_rows` fails, quote the tool **`reason`** exactly — do not invent “payload too large” or substitute a coarser interval than the operator requested.
 
 **Operator asks “1 hour” on spot CoinGecko:** if only **`coingecko`** (public) is loaded → fetch **4H** data (auto granularity), title **`4H`**, and **tell the operator** hourly spot needs **CoinGecko Pro** or a DeFi venue. Do not pretend the chart is 1H.
 
@@ -132,10 +133,12 @@ Title e.g. **`ETH/USDC Uniswap v3 — 4H — last 90d`**.
 
 ```json
 {
-  "title": "ETH-PERP 1H — last 7d",
-  "toolResult": { "ohlcv": { "coin": "ETH", "interval": "1h", "lookbackDays": 7, "candles": [ "... all candles from fetch ..." ] }, "resolvedCoin": "ETH" }
+  "title": "ETH-PERP 1H — last 30d",
+  "toolResult": { "ohlcv": { "coin": "ETH", "interval": "1h", "lookbackDays": 30, "candles": [ "... all ~721 candles from fetch ..." ] }, "resolvedCoin": "ETH" }
 }
 ```
+
+**Never** re-fetch at a coarser interval because the loaded bar count “won’t fit” — the chart tool loads the full window and downsamples display only (`meta.loadStatus.barCount` vs `displayBarCount`, `meta.windowExpectation`).
 
 **GMX** — fetch returns `{ symbol, timeframe, candles }` (no volume on rows):
 

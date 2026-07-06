@@ -37,7 +37,14 @@ Never `{}`. **Do not describe the chart in markdown** — the UI only renders wh
 }
 ```
 
-Hyperliquid / DeFi fetch shape (pass **full** fetch JSON — example 7d @ 1h):
+Hyperliquid / DeFi fetch shape (pass **full** fetch JSON — examples):
+
+```json
+{
+  "title": "ETH-PERP 1H — last 30d",
+  "toolResult": { "ohlcv": { "coin": "ETH", "interval": "1h", "lookbackDays": 30, "candles": [ "... from ctm_hyperliquid_fetch_ohlcv ..." ] } }
+}
+```
 
 ```json
 {
@@ -55,7 +62,7 @@ GMX returns a flat shape (not nested under `ohlcv`):
 }
 ```
 
-Or pass **`rows`** only when you also have fetch **`toolResult`** (preferred). **`options.maxPoints`** (default **400**) caps **on-screen** points only — it does **not** require pre-trimming vendor fetch candles. Never slice Hyperliquid/GMX `toolResult` to “last 24h” when the operator asked for 7d.
+Or pass **`rows`** only when you also have fetch **`toolResult`** (preferred). **`options.maxPoints`** (default **400**) caps **on-screen** candle points only — the full fetch window stays in **`meta.loadStatus.barCount`** (see **`meta.windowExpectation`** for interval × lookback). Never slice vendor `toolResult` or re-fetch at a coarser interval because the loaded bar count seems large.
 
 If `prepare_chart_from_rows` fails, read **`reason`** from the tool response and fix the payload — do not switch interval (e.g. 4H) or invent “payload too large” errors.
 
