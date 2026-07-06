@@ -35,8 +35,8 @@ There is **no** chart-builder bar-count limit for normal fetch windows. If `prep
 
 ## Fetch + chart
 
-1. Pick source per **`chart-ohlcv-sources`**: loaded **`coingecko`** if available; else load **`coinmarketcap-public`** (not catalog **`coinmarketcap`**).
-2. **Load** via **`agent_load_mcp_server`** if not in session.
+1. Pick source per **`chart-ohlcv-sources`**: use loaded **`coingecko`** if available; **if none loaded, ask the operator** — do not auto-load **`coinmarketcap-public`** or **`coingecko`**.
+2. **`agent_load_mcp_server`** only after the operator chooses a provider.
 3. **Fetch** OHLC bars (required — see below).
 4. **`prepare_chart_from_rows`** with **`toolResult`** from step 3 — **same turn**.
 
@@ -109,7 +109,7 @@ For **`analyze_*`**, use the same fetch and pass **`toolResult`** — same turn,
 
 ### Spot OHLC — CoinMarketCap (`coinmarketcap-public`)
 
-**When no other OHLCV source is loaded** in this chat (or operator names CMC). Load **`coinmarketcap-public`**. Keyless **`get_kline_candles`** needs no API key; **`get_crypto_ohlcv_historical`** needs **`COINMARKETCAP_API_KEY`** on continuum-mcp. **`coinmarketcap-public`** ≠ catalog **`coinmarketcap`**. See MCP **`coinmarketcap_public_docs`**.
+**When the operator chooses CMC** (or names CoinMarketCap). Load **`coinmarketcap-public`** only after that choice. Keyless **`get_kline_candles`** needs no API key; **`get_crypto_ohlcv_historical`** needs **`COINMARKETCAP_API_KEY`** on continuum-mcp. **`coinmarketcap-public`** ≠ catalog **`coinmarketcap`**. See MCP **`coinmarketcap_public_docs`**.
 
 ```json
 {
@@ -156,7 +156,7 @@ See **`get_defi_protocol_skill`** for fetch params. Never skip chart prepare whe
 
 ## Checklist
 
-- [ ] Source per **`chart-ohlcv-sources`**: loaded CoinGecko, else **`coinmarketcap-public`**
+- [ ] Source per **`chart-ohlcv-sources`**: loaded provider only, or operator chose one — never auto-load
 - [ ] MCP server **loaded** in session before fetch when `initialLoad` is false
 - [ ] **`title`** matches fetched asset, interval, and window (e.g. `last 7d` when `lookbackDays: 7`)
 - [ ] **Hyperliquid / GMX:** full fetch **`toolResult`** — never hand-trimmed candles or “last 24h” substitute for a 7d request

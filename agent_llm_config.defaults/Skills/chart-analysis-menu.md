@@ -33,17 +33,17 @@ Load skill **`chart-analysis-time-series`** when interpreting TVL, fees, or cust
 
 ## Spot data source (when DeFi not named)
 
-Per **`chart-ohlcv-sources`**:
+Per **`chart-ohlcv-sources`** — **never auto-load** market-data MCP servers.
 
 1. Use **`coingecko`** / **`coingecko-pro`** if **loaded** in this chat → **`coingecko__execute`** (`coins.ohlc.get`).
-2. If **no other OHLCV source loaded**, load **`coinmarketcap-public`** (id exact) — **not** catalog **`coinmarketcap`** without API key.
+2. If **no OHLCV source loaded** → **ask the operator** which provider to use (CoinGecko, **`coinmarketcap-public`**, etc.); load only after they choose.
 
 | Goal | When CoinGecko loaded | When nothing else loaded |
 |------|----------------------|---------------------------|
-| **`analyze_*` only** | fetch → **`analyze_*`** with `toolResult` | **`coinmarketcap-public`** klines → **`analyze_*`** |
-| **Chart / plot** | fetch → **`prepare_chart_from_rows`** | fetch → **`prepare_chart_from_rows`** |
+| **`analyze_*` only** | fetch → **`analyze_*`** with `toolResult` | Ask operator → load chosen source → fetch → **`analyze_*`** |
+| **Chart / plot** | fetch → **`prepare_chart_from_rows`** | Ask operator → load → fetch → **`prepare_chart_from_rows`** |
 
-If load of **`coinmarketcap`** fails on missing key → load **`coinmarketcap-public`** or use **`coingecko`**; do not claim CMC is loaded.
+If load of **`coinmarketcap`** fails on missing key → offer **`coinmarketcap-public`** or **`coingecko`**; let the operator pick — do not claim CMC is loaded.
 
 **Do not use `coins.marketChart.get`** — synthetic candles and unreliable volume.
 

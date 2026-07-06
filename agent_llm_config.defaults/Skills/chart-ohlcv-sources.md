@@ -4,9 +4,21 @@ Pair with **`chart-defaults`**, **`chart-periods`**, **`chart-analysis-menu`**. 
 
 Continuum does **not** endorse third-party data providers. Pick sources from **operator intent** and **what is loaded in this chat** — not brand preference.
 
-## Load MCP servers before fetch
+## Never auto-load data sources
 
-Most third-party servers have **`initialLoad: false`**. Call **`continuum__agent_load_mcp_server`** same turn, before fetch:
+**Do not** call **`agent_load_mcp_server`** for CoinMarketCap, CoinGecko, or any other market-data MCP unless the **operator explicitly chooses** that provider (by name, or by picking from options you offer).
+
+If no OHLCV source is loaded and no fetch has run in this chat:
+
+1. **Stop** — do not chart, analyze, or load catalog servers on your own.
+2. **Ask the operator** which source to use (CoinGecko, CoinMarketCap public, Hyperliquid, GMX, another catalog MCP, etc.).
+3. After they choose → **`agent_load_mcp_server`** → fetch OHLCV → pass full fetch JSON as **`toolResult`**.
+
+Chart/analysis tools return a clear error when called without data; treat that as “ask the operator first”.
+
+## Load MCP servers before fetch (after operator choice)
+
+Most third-party servers have **`initialLoad: false`**. Call **`continuum__agent_load_mcp_server`** same turn, **before** fetch, only after the operator picks the provider:
 
 ```json
 { "serverId": "<id>" }
@@ -23,9 +35,9 @@ Use **`list_mcp_servers`** → **`activeServers`** before loading. Match **`serv
 
 When the operator says **“load CoinMarketCap”** or **“use CMC”** → load **`coinmarketcap-public`**, **not** **`coinmarketcap`**, unless they explicitly need catalog full MCP **and** the key is configured.
 
-If **`agent_load_mcp_server({ serverId: "coinmarketcap" })`** returns *set environment variable COINMARKETCAP_API_KEY* → **load failed**. Do **not** tell the operator CMC is loaded. Load **`coinmarketcap-public`** instead, or use **`coingecko`** if already loaded.
+If **`agent_load_mcp_server({ serverId: "coinmarketcap" })`** returns *set environment variable COINMARKETCAP_API_KEY* → **load failed**. Do **not** tell the operator CMC is loaded. Offer **`coinmarketcap-public`** or **`coingecko`** as alternatives and let them choose.
 
-If **`coinmarketcap-public`** is **missing** from **`activeServers`** → use **`coingecko`** / **`coingecko-pro`** when loaded; tell the operator to **Add from repository** once or check **`MCP_default_servers.json`** seed on new nodes.
+If a chosen server is **missing** from **`activeServers`** → tell the operator to **Add from repository** once or check **`MCP_default_servers.json`** seed on new nodes.
 
 ## Rule 1 — Named venue or provider wins
 
@@ -45,26 +57,19 @@ Use the **first loaded OHLCV-capable MCP server** in this chat, in order:
 2. **`coingecko`** (if loaded)
 3. Any other **loaded** server that exposes spot OHLCV (future catalog sources)
 
-**If no other OHLCV source is loaded in this session** → load and use **`coinmarketcap-public`**:
+**If no OHLCV source is loaded in this session** → **ask the operator** which provider to use. Offer concise options (e.g. CoinGecko, CoinMarketCap public, Hyperliquid). **Do not** silently load **`coinmarketcap-public`** or **`coingecko`**.
 
-```json
-{ "serverId": "coinmarketcap-public" }
-```
+After the operator chooses and you load the server:
 
-Catalog MCP server on continuum-mcp **`/mcp/cmc-public`**, usually already in **`activeServers`**; **`initialLoad: false`**. Load per chat via skills / **`agent_load_mcp_server`**. Tools are **`coinmarketcap-public__*`**, not **`continuum__*`**.
-
-- **Keyless** (no API key): **`get_kline_candles`** (DEX pool OHLCV + volume), quotes, global metrics, Fear & Greed, etc.
-- **Optional Pro** on continuum-mcp: **`get_crypto_ohlcv_historical`** (CEX aggregate candles + volume)
-- **`coinmarketcap-public`** ≠ catalog **`coinmarketcap`**. Missing **`COINMARKETCAP_API_KEY`** on catalog **`coinmarketcap`** does **not** block keyless **`coinmarketcap-public`**. Do not ask for a key or switch to CoinGecko for that reason alone.
-
-Prefer keyless **`get_kline_candles`** when Pro key is unset. See **`coinmarketcap_public_docs`** after load.
+- **`coinmarketcap-public`**: keyless **`get_kline_candles`**, optional Pro **`get_crypto_ohlcv_historical`** when **`COINMARKETCAP_API_KEY`** is in Variables
+- **`coingecko`** / **`coingecko-pro`**: **`coingecko__execute`** → **`coins.ohlc.get`** or market chart — see **`chart-periods`**
 
 | When | Fetch |
 |------|-------|
-| **`coingecko`** / **`coingecko-pro`** loaded | **`coingecko__execute`** → **`coins.ohlc.get`** — see **`chart-periods`** |
-| Nothing else loaded | **`coinmarketcap-public__get_kline_candles`** (or **`get_crypto_ohlcv_historical`** if Pro key on continuum-mcp) |
+| **`coingecko`** / **`coingecko-pro`** loaded (operator chose) | **`coingecko__execute`** — see **`chart-periods`** |
+| Operator chose CMC | **`coinmarketcap-public__get_kline_candles`** (or **`get_crypto_ohlcv_historical`** if Pro key on continuum-mcp) |
 
-If fetch fails (429, empty), try the next applicable source only then.
+If fetch fails (429, empty, stale), report to the operator and offer **other sources** — do not auto-switch without their choice.
 
 ## Rule 3 — Fetch before analyze or chart (mandatory)
 
@@ -98,7 +103,7 @@ Analysis example:
 
 → pass to **`continuum__analyze_momentum`** (or other **`analyze_*`**), not **`prepare_chart_from_rows`**.
 
-Order: **(1) load MCP server if needed → (2) fetch → (3a) analyze_* OR (3b) prepare_chart_from_rows** — never both unless the operator asked for analysis **and** a chart.
+Order: **(1) operator chooses source → load MCP server if needed → (2) fetch → (3a) analyze_* OR (3b) prepare_chart_from_rows** — never both unless the operator asked for analysis **and** a chart.
 
 ## Rule 4 — Orchestration task split
 
@@ -117,4 +122,4 @@ Keeps KeyGen context lean — analysis prose in one task, chart JSON in another.
 
 ## Adding future sources
 
-Add a row to Rule 2’s loaded-server list (before the **`coinmarketcap-public`** fallback). Document tool, bar shape, volume, keys in this file and **`chart-periods`**.
+Add a row to Rule 2’s loaded-server list. Document tool, bar shape, volume, keys in this file and **`chart-periods`**.

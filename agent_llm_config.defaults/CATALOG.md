@@ -16,7 +16,7 @@ Builtin default **active** servers in **`MCP_default_servers.json`** (DB seed on
 | id | initialLoad | Notes |
 |----|-------------|--------|
 | **continuum** | `true` | Node MCP; always connected at chat startup |
-| **coinmarketcap-public** | `false` | Also in **`MCP_servers.json`**; load per chat via **`agent_load_mcp_server`** when chart/analysis skills need OHLCV |
+| **coinmarketcap-public** | `false` | Also in **`MCP_servers.json`**; load per chat via **`agent_load_mcp_server`** only when the operator chooses CoinMarketCap (not auto-loaded for charts) |
 
 Other optional servers belong in **`MCP_servers.json`** only — operators activate via catalog unless also added to **`MCP_default_servers.json`** for new-node seed.
 

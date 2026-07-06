@@ -4,13 +4,13 @@
 
 Charts: SDK **`prepare_chart_from_rows`** (single OHLCV feed) or **`prepare_chart`** (advanced). Reference: **`chart_docs`**.
 
-**OHLCV sources:** skill **`chart-ohlcv-sources`** — use loaded providers; **`coinmarketcap-public`** only when no other OHLCV source is loaded in the session.
+**OHLCV sources:** skill **`chart-ohlcv-sources`** — **never auto-load** catalog servers; ask the operator to choose a provider when none is loaded in the session.
 
 ## Source selection (generic “chart ETH/BTC”)
 
 | Operator request | Data source | Avoid |
 |------------------|-------------|--------|
-| “Chart ETH 4h”, “BTC chart”, spot (no venue/provider named) | **`coingecko`** / **`coingecko-pro`** if **loaded** in session; else **`coinmarketcap-public`** (load via **`agent_load_mcp_server`**) | Hyperliquid/GMX/`ctm_*_fetch_ohlcv` unless venue named |
+| “Chart ETH 4h”, “BTC chart”, spot (no venue/provider named) | **`coingecko`** / **`coingecko-pro`** if **loaded** in session; **else ask operator** (CoinGecko, CMC public, etc.) — do not auto-load | Hyperliquid/GMX/`ctm_*_fetch_ohlcv` unless venue named; silent **`agent_load_mcp_server`** |
 | Names **CoinMarketCap** / **CMC** | **`coinmarketcap-public`** (`serverId` exact) — **not** catalog **`coinmarketcap`** unless API key configured | Claiming CMC loaded when load returned key error |
 | Names **Hyperliquid**, **perp**, **GMX**, DEX pool, on-chain venue | That protocol’s **`fetch_ohlcv`** | Unrelated spot aggregators |
 
@@ -19,7 +19,7 @@ Hyperliquid OHLCV is **perpetual** market data, not generic spot USD index. Do n
 ## Workflow (strict order)
 
 1. **`list_mcp_servers`** — pick correct **`serverId`** (see **`chart-ohlcv-sources`**: **`coinmarketcap-public`** ≠ **`coinmarketcap`**).
-2. **`agent_load_mcp_server`** if the fetch server is not in session.
+2. If no OHLCV source loaded → **ask the operator** which provider to use; then **`agent_load_mcp_server`** for their choice only.
 3. **Fetch OHLCV** — e.g. **`coingecko__execute`** or **`coinmarketcap-public__get_kline_candles`**. Must succeed before charting.
 4. **`continuum__prepare_chart_from_rows`** with the **full, unmodified fetch JSON** as **`toolResult`** (keep Hyperliquid **`timestampMs`** on each candle — **never rewrite `time`**). When both **`toolResult`** and **`rows`** are present, the server uses **`toolResult`**.
 
