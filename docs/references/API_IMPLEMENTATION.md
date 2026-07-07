@@ -259,6 +259,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /activateWebhook`](#post-activatewebhook) - Enable webhook (**management signature**)
 - [`POST /deactivateWebhook`](#post-deactivatewebhook) - Disable webhook (**management signature**)
 - [`POST /runWebhook`](#post-runwebhook) - Manual test trigger (**management signature**)
+- [`POST /resetWebhooksFromDefaults`](#post-resetwebhooksfromdefaults) - Overwrite bundled default webhooks from **`agent_llm_config.defaults/hooks/webhooks.json`** (**management signature**; custom webhooks preserved)
 - [`POST /agent/plan/start`](#post-agentplanstart) - Start a plan thread with optional prior-orchestration rollup injected (**read JWT**)
 - [`POST /agent/orchestration/continue`](#post-agentorchestrationcontinue) - Open the [Orchestrator] thread for interactive post-synthesis follow-up (**read JWT**)
 - [`POST /agent/plan/execute`](#post-agentplanexecute) - Post latest `mpc-orchestrate v1` manifest from a plan thread to KeyGen (**read JWT**)
@@ -3219,6 +3220,19 @@ Same body as activate; sets **`enabled: false`**.
 **Body:** `{ "id"?, "name"?, "nonce", "clientSig", "nodeKey" }`.
 
 **Response data:** `{ "status": "started" }` — enqueues a test payload asynchronously.
+
+<a id="post-resetwebhooksfromdefaults"></a>
+#### `POST /resetWebhooksFromDefaults`
+
+**Auth:** Management signature.
+
+**Body:** `{ "nonce", "clientSig", "nodeKey" }` — no other fields. Use the same [management signatures (`nonce`, `clientSig`, `nodeKey`)](#management-signatures-nodekey) flow as **`POST /resetSkillsFromDefaults`**: canonical JSON to sign is `{"nonce":N,"clientSig":"","nodeKey":"<128-hex>"}` with **`clientSig` cleared** before signing (Ed25519 128 hex, or EIP-191 **`signedMessage`** + **`clientSig`** from **`NodeMgtKey`**).
+
+**Behavior:** For each entry in **`agent_llm_config.defaults/hooks/webhooks.json`**, updates or creates the matching active webhook in **`LocalAgentWebhooks`** (`type`, `prompt`, `enabled`). Existing default webhooks keep their **`id`**, **`conversationId`**, **`secretEnvVar`**, run history, and Variables secrets. Custom webhooks you added that are **not** in the defaults catalog are **unchanged**. Default webhooks you removed are **re-added** (new secret variable created).
+
+**Response data:** `{ "webhookCount": <int> }` — count of default webhooks refreshed.
+
+**Side effect:** Operator should **restart mpc-auth** so the hook listener reloads active jobs (same as other webhook CRUD that changes prompts/types).
 
 #### Inbound HTTP (hook listener, not management port)
 

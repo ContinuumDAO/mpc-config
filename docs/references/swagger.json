@@ -4423,6 +4423,39 @@
                 ]
             }
         },
+        "/resetWebhooksFromDefaults": {
+            "post": {
+                "description": "Overwrite bundled default agent webhooks from agent_llm_config.defaults/hooks/ (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /resetWebhooksFromDefaults).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Overwrite bundled default agent webhooks from agent_llm_config.defaults/hooks/ (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.ResetWebhooksFromDefaultsPost"
+                        }
+                    }
+                ]
+            }
+        },
         "/agent/plan/start": {
             "post": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /agent/plan/start).",
@@ -7217,6 +7250,18 @@
                 {
                     "type": "object",
                     "description": "POST /resetCronJobsFromDefaults. Canonical JSON to sign: {\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}. Overwrites bundled default cron jobs from agent_llm_config.defaults/cron/jobs.json into runtime agent_llm_config/cron/jobs.json. Preserves id and conversationId for existing default jobs. Custom cron jobs not in the defaults catalog are preserved."
+                }
+            ]
+        },
+        "node.ResetWebhooksFromDefaultsPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "description": "POST /resetWebhooksFromDefaults. Canonical JSON to sign: {\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}. Overwrites bundled default webhooks from agent_llm_config.defaults/hooks/webhooks.json into LocalAgentWebhooks. Preserves id, conversationId, and secretEnvVar for existing default webhooks. Custom webhooks not in the defaults catalog are preserved."
                 }
             ]
         }
