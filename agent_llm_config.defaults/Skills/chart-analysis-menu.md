@@ -66,7 +66,7 @@ Load with **`agent_load_skill`** when the operator picks a type or for richer na
 - `chart-analysis-momentum`
 - `chart-analysis-range`
 - `chart-analysis-patterns` (1–3 bar candlestick recognition)
-- `chart-analysis-classic-patterns` (multi-bar H&S, doubles, triangles, cup & handle, trendline breakout/retest)
+- `chart-analysis-classic-patterns` (multi-bar H&S, doubles, triangles, cup & handle, trendline breakout/retest — **ask which menu # to draw** unless operator picked one)
 - `chart-analysis-time-series` (line-only metrics)
 
 For orchestration plan drafts involving charts, load **`orchestration-chart-analysis`** (optional, on demand).
