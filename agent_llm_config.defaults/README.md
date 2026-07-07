@@ -11,12 +11,19 @@ Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent
 | **`MCP_default_servers.json`** | Same name (legacy seed) | Default **active** servers seeded on first DB migration: **continuum** (`initialLoad: true`), **coinmarketcap-public** (`initialLoad: false`). |
 | **`MCP_servers.json`** | Not copied to active storage | **Repository catalog** of optional MCP servers. Use **Add from repository** in the UI or `POST /addMcpServerFromCatalog` to activate on this node. See **MCP catalog secrets** below. |
 | **`Skills/`** | Same path | Agent skills: **`skills.json`** manifest plus **`.md`** / **`.txt`** bodies. |
-| **`cron/jobs.json`** | Same path | Agent cron job manifest. When **`EnableAgentCron`** is true (default), seeds bundled **`auto-sign-and-broadcast`** (every 5 minutes). When cron is disabled, seeds empty **`{"jobs":[]}`**. |
+| **`cron/jobs.json`** | Not copied to runtime | **Repository catalog** of cron job templates. Use **Available from repository** in the UI or `POST /addCronJobFromCatalog`. Active jobs live in **`agent_llm_config/cron/jobs.json`**. |
 | **`hooks/message_hook.json`**, **`hooks/message_hook_*.md`** | Same path | KeyGen `@agent` message hooks (copied once if missing). |
 | **`hooks/webhooks.json`** | Not copied to runtime | **Repository catalog** of inbound webhook templates. Use **Available from repository** in the UI or `POST /addWebhookFromCatalog`. Active jobs live in MongoDB **`LocalAgentWebhooks`**. |
 | **`hooks/runs/`** | Same path | Append-only inbound webhook run logs (`{webhookId}.jsonl`). |
 
 See **`runtime-README.md`** (copied to **`agent_llm_config/README.md`** on the node when missing) and **`docs/references/API_IMPLEMENTATION.md`** for API details.
+
+### Cron catalog (`cron/jobs.json`)
+
+See **[`CATALOG.md`](CATALOG.md)** — add templates only in **`cron/jobs.json`** here (not in runtime `agent_llm_config/cron/jobs.json`).
+
+- Templates define **name**, **schedule**, **message**, and default **enabled** only.
+- **`process_config.sh`** seeds an empty runtime **`{"jobs":[]}`** manifest once; operators activate catalog rows via **Add from repository** or **`POST /addCronJobFromCatalog`**.
 
 ### Webhook catalog (`hooks/webhooks.json`)
 

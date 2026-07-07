@@ -1,4 +1,4 @@
-# Repository catalogs (MCP servers and webhooks)
+# Repository catalogs (MCP servers, webhooks, and cron jobs)
 
 **Authoritative templates live only in this directory** (`agent_llm_config.defaults/`), bind-mounted on the node as `/app/agent_llm_config.defaults`. After `git pull` on mpc-config, operators see new entries via the API without redeploying mpc-auth.
 
@@ -26,4 +26,10 @@ Other optional servers belong in **`MCP_servers.json`** only — operators activ
 2. Operators activate: **Available from repository** or **`POST /addWebhookFromCatalog`** (`GET /listWebhooks` → `availableCatalog`).
 3. See **`docs/AGENT_HOOKS.md`** for provider setup notes in the template `prompt` when helpful.
 
-Active webhooks and MCP servers live in MongoDB on the node after activation, not in copied JSON under `agent_llm_config/`.
+Active webhooks and MCP servers live in MongoDB on the node after activation, not in copied JSON under `agent_llm_config/`. Active cron jobs live in runtime **`agent_llm_config/cron/jobs.json`** after activation.
+
+## Add a new cron job template
+
+1. Edit **`cron/jobs.json`** — add one object to the `"jobs"` array (`name`, `schedule`, `message`, default `enabled`: false).
+2. Operators activate: **Available from repository** in the UI or **`POST /addCronJobFromCatalog`** (`GET /listCronJobs` → `availableCatalog`).
+3. Document non-obvious schedule or orchestration behavior in **`docs/references/API_IMPLEMENTATION.md`** (Agent cron jobs section) when helpful.

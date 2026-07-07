@@ -222,27 +222,20 @@ PYSKILLSMERGE
 }
 
 # Seed agent cron manifest (cron/jobs.json) and runs/ directory beside configs.yaml (once if missing).
-# When EnableAgentCron is true (default), copies bundled default jobs from mpc-config; otherwise seeds empty jobs.
-_agent_cron_enabled_for_config() {
-    local config_file="$1"
-    case "${MPC_AUTH_ENABLE_AGENT_CRON:-}" in
-        0|false|FALSE|no|NO|off|OFF) return 1 ;;
-    esac
-    if [ -z "$config_file" ] || [ ! -f "$config_file" ]; then
+#
+# CRON CATALOG: edit agent_llm_config.defaults/cron/jobs.json in this repo only (never copy to runtime).
+# GET /listCronJobs → availableCatalog; POST /addCronJobFromCatalog activates. See agent_llm_config.defaults/CATALOG.md.
+_seed_agent_cron_catalog() {
+    local cfg_parent="$1"
+    local dest_dir="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/cron"
+    local dest="${dest_dir}/jobs.json"
+    mkdir -p "${dest_dir}/runs" 2>/dev/null || true
+    if [ -f "$dest" ]; then
         return 0
     fi
-    if command -v yq &>/dev/null; then
-        local enabled
-        enabled=$(yq eval '.EnableAgentCron // true' "$config_file" 2>/dev/null || echo true)
-        case "$(printf '%s' "$enabled" | tr '[:upper:]' '[:lower:]')" in
-            false|0|no|off) return 1 ;;
-        esac
-        return 0
+    if printf '%s\n' '{"jobs":[]}' >"$dest" 2>/dev/null; then
+        print_success "agent_llm_config: created empty ${DEFAULT_AGENT_CRON_JOBS_REL}"
     fi
-    if grep -E '^[[:space:]]*EnableAgentCron:[[:space:]]*false([[:space:]]|$|#)' "$config_file" >/dev/null 2>&1; then
-        return 1
-    fi
-    return 0
 }
 
 # Copy agent hooks (message_hook.json, message_hook_*.md) from agent_llm_config.defaults/ once per file.
@@ -271,27 +264,6 @@ _seed_agent_hooks_catalog() {
             print_success "agent_llm_config: installed ${DEFAULT_AGENT_HOOKS_REL}/${base}"
         fi
     done
-}
-
-_seed_agent_cron_catalog() {
-    local cfg_parent="$1"
-    local config_file="${2:-}"
-    local dest_dir="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/cron"
-    local dest="${dest_dir}/jobs.json"
-    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/${DEFAULT_AGENT_CRON_JOBS_REL}"
-    mkdir -p "${dest_dir}/runs" 2>/dev/null || true
-    if [ -f "$dest" ]; then
-        return 0
-    fi
-    if _agent_cron_enabled_for_config "$config_file" && [ -f "$src" ]; then
-        if cp "$src" "$dest" 2>/dev/null; then
-            print_success "agent_llm_config: installed ${DEFAULT_AGENT_CRON_JOBS_REL} (default cron jobs)"
-            return 0
-        fi
-    fi
-    if printf '%s\n' '{"jobs":[]}' >"$dest" 2>/dev/null; then
-        print_success "agent_llm_config: created empty ${DEFAULT_AGENT_CRON_JOBS_REL}"
-    fi
 }
 
 # Functions
@@ -5369,7 +5341,7 @@ _process_config_ensure_vpn_compose_env() {
     apply_docker_compose_vpn_env "$cf" || true
 }
 
-# Bind-mount agent_llm_config.defaults so GET /listMcpServers and GET /listWebhooks see catalog updates after git pull.
+# Bind-mount agent_llm_config.defaults so GET /listMcpServers, GET /listWebhooks, and GET /listCronJobs see catalog updates after git pull.
 apply_docker_compose_agent_llm_config_defaults_volume() {
     local file="$1"
     local enable="${2:-1}"
@@ -5439,7 +5411,7 @@ for line in lines:
     if inserted:
         continue
     if pat_runtime.match(line):
-        out.append("      # Repository catalog (MCP_servers.json, hooks/webhooks.json); host git pull updates this tree.\n")
+        out.append("      # Repository catalog (MCP_servers.json, hooks/webhooks.json, cron/jobs.json); host git pull updates this tree.\n")
         out.append(line_active)
         inserted = True
 
@@ -5454,7 +5426,7 @@ PYCOMPOSEAGENTDEFAULTS
     )
     case "$_action" in
         insert)
-            print_success "docker-compose.yml: bind-mount ${host_dir} → ${container_dir} (catalog for MCP/webhooks)"
+            print_success "docker-compose.yml: bind-mount ${host_dir} → ${container_dir} (catalog for MCP/webhooks/cron)"
             ;;
         already)
             print_info "docker-compose.yml: agent_llm_config.defaults bind-mount already present"
@@ -7373,7 +7345,7 @@ main() {
         _seed_agent_llm_runtime_readme "${_cfg_parent}" || true
         _seed_agent_skills_catalog "${_cfg_parent}" || true
         _seed_agent_hooks_catalog "${_cfg_parent}" || true
-        _seed_agent_cron_catalog "${_cfg_parent}" "$CONFIG_FILE" || true
+        _seed_agent_cron_catalog "${_cfg_parent}" || true
         _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}"
         _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
         case "$_agent_llm_merge_result" in

@@ -2983,7 +2983,7 @@ Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each **a
 
 **Repository catalog:** Edit templates only in **mpc-config** under **`agent_llm_config.defaults/cron/jobs.json`**. Operators activate via **Available from repository** in the UI or **`POST /addCronJobFromCatalog`** (`GET /listCronJobs` → **`availableCatalog`** until active). Custom jobs use **`POST /addCronJob`**.
 
-**Provisioning:** **`process_config.sh`** creates **`agent_llm_config/cron/`** and **`runs/`** beside `configs.yaml`. If **`jobs.json`** is missing, it may seed from defaults once (legacy) or create **`{"jobs":[]}`** when cron is disabled. On first **`GET /listCronJobs`**, mpc-auth **one-time demotes** bundled catalog job names that were auto-copied into runtime back to **`availableCatalog`** (marker **`cron/.catalog_defaults_demoted`**). mpc-auth assigns **`id`**, **`conversationId`**, and **`nextRunAt`** when a job is added or first loaded.
+**Provisioning:** **`process_config.sh`** creates **`agent_llm_config/cron/`** and **`runs/`** beside `configs.yaml`, and seeds an empty **`{"jobs":[]}`** runtime manifest once if missing (catalog templates stay in **`agent_llm_config.defaults/cron/jobs.json`** only). On first **`GET /listCronJobs`** on legacy nodes, mpc-auth **one-time demotes** bundled catalog job names that were auto-copied into runtime back to **`availableCatalog`** (marker **`cron/.catalog_defaults_demoted`**). mpc-auth assigns **`id`**, **`conversationId`**, and **`nextRunAt`** when a job is added or first loaded.
 
 **Schedule kinds:**
 
