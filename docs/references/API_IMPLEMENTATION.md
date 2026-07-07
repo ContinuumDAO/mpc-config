@@ -250,6 +250,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /deactivateCronJob`](#post-deactivatecronjob) - Disable a cron job without deleting it (**management signature**)
 - [`POST /removeCronJob`](#post-removecronjob) - Remove a cron job (**management signature**; optional `deleteConversation`)
 - [`POST /runCronJob`](#post-runcronjob) - Manual trigger (async; **management signature**)
+- [`POST /resetCronJobsFromDefaults`](#post-resetcronjobsfromdefaults) - Overwrite bundled default cron jobs from **`agent_llm_config.defaults/cron/`** (**management signature**; custom jobs preserved)
 - [`GET /listWebhooks`](#get-listwebhooks) - List active inbound webhooks + available catalog (**read JWT** when JWT applies)
 - [`GET /getWebhookById`](#get-getwebhookbyid) - Get one webhook including prompt (**read JWT** when JWT applies)
 - [`POST /addWebhook`](#post-addwebhook) - Create inbound webhook (**management signature**; stores secret in Variables as `WEBHOOK_SECRET_<NAME>`)
@@ -3086,6 +3087,19 @@ Creates **`id`**, **`conversationId`**, and initial **`nextRunAt`**. New jobs de
 **Body:** `{ "id"?, "name"?, "nonce", "clientSig", "nodeKey" }`.
 
 **Response data:** `{ "jobId", "runId", "status": "enqueued" }` — runs asynchronously even when the job is deactivated.
+
+<a id="post-resetcronjobsfromdefaults"></a>
+#### `POST /resetCronJobsFromDefaults`
+
+**Auth:** Management signature.
+
+**Body:** `{ "nonce", "clientSig", "nodeKey" }` — no other fields. Use the same [management signatures (`nonce`, `clientSig`, `nodeKey`)](#management-signatures-nodekey) flow as **`POST /resetSkillsFromDefaults`**: canonical JSON to sign is `{"nonce":N,"clientSig":"","nodeKey":"<128-hex>"}` with **`clientSig` cleared** before signing (Ed25519 128 hex, or EIP-191 **`signedMessage`** + **`clientSig`** from **`NodeMgtKey`**).
+
+**Behavior:** For each job listed in **`agent_llm_config.defaults/cron/jobs.json`**, updates or creates the matching runtime entry in **`agent_llm_config/cron/jobs.json`** (`message`, `schedule`, `enabled`, `deleteAfterRun`). Existing default jobs keep their **`id`**, **`conversationId`**, run metadata, and **`runs/{jobId}.jsonl`** history. Custom cron jobs you added that are **not** in the defaults catalog are **unchanged**. Default jobs you removed are **re-added** with fresh runtime ids.
+
+**Response data:** `{ "jobCount": <int> }` — count of default jobs refreshed.
+
+**Side effect:** Notifies the in-process cron scheduler to reload jobs (same as other cron CRUD routes).
 
 ### Agent hooks (KeyGen messages + inbound webhooks)
 

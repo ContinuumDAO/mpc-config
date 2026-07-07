@@ -4097,6 +4097,39 @@
                 ]
             }
         },
+        "/resetCronJobsFromDefaults": {
+            "post": {
+                "description": "Overwrite bundled default agent cron jobs from agent_llm_config.defaults/cron/ (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /resetCronJobsFromDefaults).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Overwrite bundled default agent cron jobs from agent_llm_config.defaults/cron/ (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.ResetCronJobsFromDefaultsPost"
+                        }
+                    }
+                ]
+            }
+        },
         "/listWebhooks": {
             "get": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listWebhooks).",
@@ -7172,6 +7205,18 @@
                 {
                     "type": "object",
                     "description": "POST /resetSkillsFromDefaults. Canonical JSON to sign: {\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}. Overwrites bundled default skill files from agent_llm_config.defaults/Skills/ into runtime agent_llm_config/Skills/ and updates matching skills.json entries. Custom skills not in the defaults catalog are preserved."
+                }
+            ]
+        },
+        "node.ResetCronJobsFromDefaultsPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "description": "POST /resetCronJobsFromDefaults. Canonical JSON to sign: {\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}. Overwrites bundled default cron jobs from agent_llm_config.defaults/cron/jobs.json into runtime agent_llm_config/cron/jobs.json. Preserves id and conversationId for existing default jobs. Custom cron jobs not in the defaults catalog are preserved."
                 }
             ]
         }

@@ -46,6 +46,15 @@ When a scheduled turn should propose on-chain actions:
 - End with **exactly one `requestId`** when multiple txs belong in one operator round — **`create_compose_multi_sign_request`** or **`create_joined_multi_sign_request`** (see skill **`execution-policy`**).
 - Unless the embedded message already includes operator-confirmed broadcast parameters, **stop at proposal** (create + list status) — do not Get Sig/Execute without explicit embedded authorization.
 
+## Trade analysis cron (optional)
+
+Template: **`agent_llm_config.defaults/cron/trade_analysis_cron.example.md`** (mpc-config seed catalog).
+
+- Each **`analyze_*`** step upserts a typed setup into **`conversation.tradeIdeas[]`** on the **`[Cron]`** thread.
+- Optional fenced **`tradeConsensus`** YAML in the job **`message`** gates multi-analysis agreement (node injects a matrix hint).
+- **`submitTradeFromConsensus: true`** enables the cron-only **`submit_trade_from_consensus`** step — the agent must pass **`tradeIdeaId`** per prose selection rules in the message (YAML does not auto-pick).
+- **Plan / orchestrator** threads use **`build_trade_from_*`** only — never **`submit_trade_from_consensus`**.
+
 ## Anti-patterns
 
 - **`every` + short interval** “auto-sign-and-broadcast” loops without embedded confirmation — forbidden for orchestration follow-up; risky elsewhere.

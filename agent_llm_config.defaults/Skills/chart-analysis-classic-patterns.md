@@ -20,7 +20,9 @@ Read **`analysis.interpretation`** first (agent digest), then **`analysis.patter
 - **`analysis.patterns[]`**: all hits (full geometry in **`structuredContent`** only; slim agent view exposes **`patternMenu`** + **`patternCount`**).
 - **`analysis.patternMenu[]`**: numbered picks — each row includes **`barSpan`** (UTC window) and **`keyLevels`** (labeled price/time anchors). Summarize **both time and price** per pattern; use **`patternNumber`** (1-based) on **`apply_chart_pattern_drawings`**. Ask the operator which row unless they already named one.
 - **`analysis.applyHint`**: reminder to call apply tool, not prose, when drawing.
-- **`analysis.primaryPattern`**: top hit summary with **`barSpan`** + **`keyLevels`** (not always highest confidence).
+- **`analysis.primaryPattern`**: top hit summary with **`barSpan`** + **`keyLevels`** — **most recent** pattern (not always highest confidence)
+- **`analysis.highestConfidencePattern`**: highest-scoring hit summary (tie-break: most recent)
+- **`analysis.selectionHint`**: `Primary=menu #N; highest confidence=menu #M` — default apply uses primary unless operator picks a menu #
 
 When empty: **`classification`** and **`pattern`** are **`null`** — say no credible pattern met threshold; do not invent geometry.
 
@@ -28,12 +30,88 @@ When empty: **`classification`** and **`pattern`** are **`null`** — say no cre
 
 1. Lead with **`summary`** and **`classification`** in plain language.
 2. Summarize from **`interpretation`** (2–4 sentences on implication and completion state).
-3. Present **`analysis.patternMenu`** as a **numbered table** (#, name, classification, confidence). For **each row**, quote from tool JSON:
+3. Present **`analysis.patternMenu`** as a **numbered table** (#, name, classification, confidence). For **each row**, quote from tool JSON (the node's LLM tool-result summary includes UTC windows and key levels when available):
    - **Time window:** `barSpan.fromTimeSec` → `barSpan.toTimeSec` as UTC (convert unix seconds to ISO, e.g. `2026-07-01T12:00:00Z`) plus `barSpan.barCount` bars
-   - **Key levels:** every `keyLevels[]` item as **label @ price** and **time** when `timeSec` is set (e.g. neckline ~1720 at `2026-07-06T08:00:00Z`) — never invent timestamps or prices
+   - **Key levels:** every `keyLevels[]` item as **label @ price** and **time** when `timeSec` is set
+   - **Measured move:** when `measuredMove` is present, quote **targetPrice**, **referencePrice**, **status** (`projected` \| `active`), and **direction** from tool JSON — do not invent targets
 4. Mention completion state and directional read from **`interpretation`** / **`classification`**.
 5. Note standalone chart patterns are historically moderate signals (~55–65%); combine with trend, momentum, and key levels.
 6. **Ask which menu row to draw on the chart** — unless the operator already picked one (e.g. “add pattern 1”, “draw the falling wedge”). Example: *“Which pattern should I overlay? (#1 Falling Wedge, #2 Rounding Bottom, …)”*
+
+## Trade setup / buy–sell levels (when the operator asks)
+
+**Only** when the operator asks for **levels**, **entry/target/stop**, **trade setup**, **where to buy/sell**, or similar — not after every pattern scan by default.
+
+Derive a **conditional setup from one pattern row** (primary, or the menu # the operator picked). Every price must come from tool JSON on **this turn** — chiefly **`patternMenu[]`**, **`meta.ohlcvSummary.lastClose`**, and **`measuredMove`**.
+
+| Role | Source (tool JSON) |
+|------|---------------------|
+| **Bias** | Row **`classification`** + pattern direction (bullish → long-bias framing; bearish → short-bias; neutral → range/breakout both sides) |
+| **Trigger / reference** | **`measuredMove.referencePrice`** when present, else the labeled **neckline / break / rim** row in **`keyLevels[]`** |
+| **Target** | **`measuredMove.targetPrice`** when present — quote **`status`** (`projected` \| `active`) and **`direction`** |
+| **Invalidation (stop)** | Opposite pattern boundary from **`keyLevels[]`** (e.g. support trendline, trough, pattern low, below neckline) — **name the label** you use |
+
+**Rules**
+
+- Compare distance to trigger/target vs **`meta.ohlcvSummary.lastClose`** — do not invent “current price”.
+- If **`measuredMove`** is **absent**, state that a measured target was **not computed** — do not guess a target from pattern name alone.
+- If **`completionState`** is **`forming`**, frame as **conditional** (*if* price breaks above/below reference…) — not as an executed signal.
+- One setup **per pattern row**. If multiple menu rows conflict (e.g. bullish double bottom vs bearish double top), present **separate conditional setups** or ask which pattern to trade — do not merge into one buy and one sell without labeling the source row.
+- Classic patterns are historically **moderate** signals (~55–65%). Offer to cross-check on the **same OHLCV session**: **`analyze_trend_structure`**, **`analyze_key_levels`**, **`analyze_momentum`** — dedicated key-level analysis is often better for ranked horizontal S/R than pattern geometry alone.
+- **Technical framing only** — not financial advice. Do not place orders or size positions.
+
+**Example (double bottom, menu row with measured move)**
+
+> Long-bias conditional setup (Double Bottom, forming): trigger/reference **1834.0** (neckline), invalidation below **1757.8** (trough from keyLevels), measured target **1940.2** (projected, up) — last close **1777.2** from ohlcvSummary.
+
+For **horizontal support/resistance ranking** without pattern geometry, use skill **`chart-analysis-levels`** → **`analyze_key_levels`**.
+
+## Orders / multisign (analyze → trade)
+
+Use when the operator asks to **trade** the pattern, or when the task is combined (e.g. *“Analyse chart patterns and if a clear trade setup from the primary pattern is apparent, generate a multiSignRequest to trade it”*).
+
+### `analysis.lastTradeSetup` (persisted on conversation)
+
+After **`analyze_chart_patterns`**, read **`analysis.lastTradeSetup`** from tool JSON (also in the persisted conversation system hint on later turns):
+
+| Field | Meaning |
+|-------|---------|
+| `status` | `clear` \| `unclear` — only auto-submit multisign when **`clear`** unless the operator overrides with explicit prices |
+| `patternNumber` | 1-based primary menu row this setup derives from |
+| `side` | `long` \| `short` \| `neutral` |
+| `triggerPrice` / `triggerLabel` | Entry / breakout reference |
+| `targetPrice` / `targetStatus` / `targetDirection` | Measured-move target when computed |
+| `invalidationPrice` / `invalidationLabel` | Opposite boundary (stop reference) |
+| `lastClose` | From `meta.ohlcvSummary.lastClose` on the analyze turn |
+| `unclearReason` | Why auto-trade should not proceed |
+
+**Rules**
+
+- Prices must come from **`lastTradeSetup`** or fresh **`analyze_chart_patterns`** — never invent levels.
+- Re-run **`analyze_chart_patterns`** on the same OHLCV session if data is stale (new fetch clears persisted setup).
+- **No separate chat confirmation** before multisign — MPC **`signRequestAgree`** / reject-with-Thoughts is the gate.
+- Apply **operator proximity tweaks** from their message when choosing limit prices (e.g. *“limit buy 0.1% below neckline”* → offset `triggerPrice` for `limitPxHuman` / GMX trigger fields).
+
+### Protocol-specific multisign (DeFi MCP loaded)
+
+Order shape depends on the **loaded DeFi protocol** (`load_defi_protocol`). Typical perp entry mapping from **`lastTradeSetup`**:
+
+| Protocol | Tool | Map from setup |
+|----------|------|----------------|
+| **Hyperliquid** | `ctm_hyperliquid_build_limit_order_multisign` | `isBuy` ← `side==long`; `limitPxHuman` ← trigger (± operator offset); `szHuman` ← from `fetch_open_context`; `coin` ← OHLCV symbol; `chainId` **999** / **998** |
+| **GMX** | `ctm_gmx_build_increase_multisign` | `direction` ← `side`; `triggerPriceUsdHuman` ← trigger; `orderType: limit`; size/collateral from GMX context tools |
+
+**Workflow (same turn when possible)**
+
+1. OHLCV fetch → **`analyze_chart_patterns`**
+2. If **`lastTradeSetup.status === "clear"`** (or operator explicitly asked to trade): **`load_defi_protocol`** when not loaded
+3. Protocol context tools (e.g. **`fetch_open_context`**, **`fetch_market_snapshot`**) for size/market
+4. **`get_multi_sign_gas_options`** if needed → **`build_*_multisign`** with `keyGenId`, `chainId`, `purposeText`
+5. Return `{ requestId }` — operator signs or rejects in MPC UI
+
+If **`status === "unclear"`**, explain **`unclearReason`** and do **not** submit multisign unless the operator supplies explicit levels or asks to re-analyze.
+
+Spot swaps (Uniswap/Curve) are **not** pattern-breakout tools — use perp protocols above for directional pattern trades unless the operator directs otherwise.
 
 ## Drawing on chart (mandatory tool — not prose)
 
