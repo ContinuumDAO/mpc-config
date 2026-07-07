@@ -241,10 +241,11 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /addSkill`](#post-addskill) - Add or update a skill file (**management signature**)
 - [`POST /removeSkill`](#post-removeskill) - Remove a skill by name (**management signature**)
 - [`POST /resetSkillsFromDefaults`](#post-resetskillsfromdefaults) - Overwrite bundled default skill files from **`agent_llm_config.defaults/Skills/`** (**management signature**; custom skills preserved)
-- [`GET /listCronJobs`](#get-listcronjobs) - List agent cron job summaries (`agent_llm_config/cron/jobs.json`; **read JWT** on Browser HTTPS / loopback)
+- [`GET /listCronJobs`](#get-listcronjobs) - List active cron jobs and available repository catalog (`agent_llm_config.defaults/cron/jobs.json`; **read JWT** on Browser HTTPS / loopback)
 - [`GET /getCronJob`](#get-getcronjob) - Get one cron job including message (**read JWT** when JWT applies)
 - [`GET /listCronJobRuns`](#get-listcronjobruns) - Recent run history for a job (**read JWT**)
-- [`POST /addCronJob`](#post-addcronjob) - Create a scheduled agent task (**management signature**)
+- [`POST /addCronJob`](#post-addcronjob) - Create a custom scheduled agent task (**management signature**)
+- [`POST /addCronJobFromCatalog`](#post-addcronjobfromcatalog) - Activate one catalog cron job on this node (**management signature**)
 - [`POST /updateCronJob`](#post-updatecronjob) - Update schedule/message/metadata only (**management signature**)
 - [`POST /activateCronJob`](#post-activatecronjob) - Enable a cron job (**management signature**)
 - [`POST /deactivateCronJob`](#post-deactivatecronjob) - Disable a cron job without deleting it (**management signature**)
@@ -2972,14 +2973,17 @@ Each skill: **`initialLoad`** — when true, content is injected as a **system**
 
 ### Agent cron jobs (local filesystem + in-process scheduler)
 
-Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each job stores its instruction text and schedule in **`agent_llm_config/cron/jobs.json`**. Each job is assigned a fixed **`conversationId`** at creation; every scheduled run appends to that thread (history accumulates). Run logs append to **`agent_llm_config/cron/runs/{jobId}.jsonl`** (~10 MiB size-based rotation per job).
+Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each **active** job stores its instruction text and schedule in **`agent_llm_config/cron/jobs.json`**. Each job is assigned a fixed **`conversationId`** at creation; every scheduled run appends to that thread (history accumulates). Run logs append to **`agent_llm_config/cron/runs/{jobId}.jsonl`** (~10 MiB size-based rotation per job).
 
 | Path | Role |
 |------|------|
-| **`agent_llm_config/cron/jobs.json`** | Job manifest: `id`, `name`, `enabled`, `schedule`, `message`, `conversationId`, run metadata |
+| **`agent_llm_config.defaults/cron/jobs.json`** | Bundled **catalog** of cron job templates (not active until added on this node) |
+| **`agent_llm_config/cron/jobs.json`** | Active job manifest: `id`, `name`, `enabled`, `schedule`, `message`, `conversationId`, run metadata |
 | **`agent_llm_config/cron/runs/{jobId}.jsonl`** | Append-only run history (`runId`, `startedAt`, `finishedAt`, `status`, `error?`, `assistantPreview?`) |
 
-**Provisioning:** **`process_config.sh`** seeds **`cron/jobs.json`** into runtime **`agent_llm_config/cron/`** from **`agent_llm_config.defaults/`** once if missing. When **`EnableAgentCron`** is true (default), copies the bundled default job **`auto-sign-and-broadcast`** (every 5 minutes; sign-ready pipeline). When cron is disabled, seeds **`{"jobs":[]}`**. mpc-auth assigns **`id`**, **`conversationId`**, and **`nextRunAt`** on first load for template jobs that omit runtime fields.
+**Repository catalog:** Edit templates only in **mpc-config** under **`agent_llm_config.defaults/cron/jobs.json`**. Operators activate via **Available from repository** in the UI or **`POST /addCronJobFromCatalog`** (`GET /listCronJobs` → **`availableCatalog`** until active). Custom jobs use **`POST /addCronJob`**.
+
+**Provisioning:** **`process_config.sh`** creates **`agent_llm_config/cron/`** and **`runs/`** beside `configs.yaml`. If **`jobs.json`** is missing, it may seed from defaults once (legacy) or create **`{"jobs":[]}`** when cron is disabled. On first **`GET /listCronJobs`**, mpc-auth **one-time demotes** bundled catalog job names that were auto-copied into runtime back to **`availableCatalog`** (marker **`cron/.catalog_defaults_demoted`**). mpc-auth assigns **`id`**, **`conversationId`**, and **`nextRunAt`** when a job is added or first loaded.
 
 **Schedule kinds:**
 
@@ -3004,7 +3008,7 @@ Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each job
 
 **Auth:** Read JWT on Browser HTTPS / loopback when JWT applies; plain management port has no JWT.
 
-**Response data:** `{ "jobs": [ { "id", "name", "enabled", "schedule", "conversationId", "deleteAfterRun"?, "createdAt", "updatedAt", "lastRunAt"?, "nextRunAt"?, "lastRunStatus"? } ] }` — **message body omitted** from list entries.
+**Response data:** `{ "jobs": [ … ], "activeJobs": [ … ], "availableCatalog": [ { "name", "enabled", "schedule", "message"?, "deleteAfterRun"? } ] }` — **`jobs`** and **`activeJobs`** list the same active summaries (**message body omitted**). **`availableCatalog`**: rows from **`agent_llm_config.defaults/cron/jobs.json`** not yet active on this node by name.
 
 <a id="get-getcronjob"></a>
 #### `GET /getCronJob`
@@ -3048,6 +3052,19 @@ Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each job
 Creates **`id`**, **`conversationId`**, and initial **`nextRunAt`**. New jobs default **`enabled: true`**. **`at`** jobs default **`deleteAfterRun: true`** unless overridden. For orchestration follow-up, set **`conversationId`** or **`orchestrationTopLevelMessageId`** so cron runs append to the **[Orchestrator]** thread (not a new `[Cron]`-only conversation).
 
 **`GET /listCronJobs`** includes **`usesOrchestratorConversation`** and **`orchestrationTopLevelMessageId`** when the job’s `conversationId` matches an orchestration record.
+
+<a id="post-addcronjobfromcatalog"></a>
+#### `POST /addCronJobFromCatalog`
+
+**Auth:** Management signature.
+
+**Body:** `{ "name": "<catalog job name>", "enabled"?: false, "nonce", "clientSig", "nodeKey" }`
+
+Copies one entry from **`agent_llm_config.defaults/cron/jobs.json`** into runtime **`agent_llm_config/cron/jobs.json`**. Creates **`id`**, **`conversationId`**, and **`nextRunAt`**. Default **`enabled`** comes from the catalog row unless overridden.
+
+**Response data:** Full job object (same shape as **`POST /addCronJob`**).
+
+**Errors:** **400** if name not in catalog or already active.
 
 <a id="post-updatecronjob"></a>
 #### `POST /updateCronJob`
@@ -3109,7 +3126,7 @@ When **`EnableAgentHooks`** is true (default), mpc-auth runs automated agent tur
 1. **KeyGen `@agent` messages** — event-driven on local `POST /sendMessage` and MQTT `KEYGENMESSAGE` (no external poll scripts).
 2. **Inbound webhooks** — external systems POST to a dedicated hook listener (default **`127.0.0.1:18090`**, path **`/hooks/inbound/{webhookId}`**).
 
-Bundled templates ship in **mpc-config** under **`agent_llm_config.defaults/hooks/webhooks.json`** (catalog only — not copied to runtime). Active webhook jobs are stored in MongoDB **`LocalAgentWebhooks`**. One-time migration imports legacy **`agent_llm_config/hooks/webhooks.json`** and archives it as **`webhooks.json.migrated`**. Secrets are **not** stored in job documents — webhook signing values live in **Variables** as **`WEBHOOK_SECRET_<NAME>`** (and **`TELEGRAM_BOT_TOKEN`** for Telegram replies).
+Bundled templates ship in **mpc-config** under **`agent_llm_config.defaults/hooks/webhooks.json`** (catalog only — not copied to runtime). Active webhook jobs are stored in MongoDB **`LocalAgentWebhooks`**. One-time migration imports legacy **`agent_llm_config/hooks/webhooks.json`** and archives it as **`webhooks.json.migrated`**. On first **`GET /listWebhooks`**, mpc-auth **one-time demotes** bundled catalog webhook names that were auto-seeded into **`LocalAgentWebhooks`** back to **`availableCatalog`** (preserves **`WEBHOOK_SECRET_*`** in Variables). Secrets are **not** stored in job documents — webhook signing values live in **Variables** as **`WEBHOOK_SECRET_<NAME>`** (and **`TELEGRAM_BOT_TOKEN`** for Telegram replies).
 
 | Path | Role |
 |------|------|

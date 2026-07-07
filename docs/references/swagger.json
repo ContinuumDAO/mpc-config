@@ -3826,7 +3826,7 @@
         },
         "/listCronJobs": {
             "get": {
-                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /listCronJobs).",
+                "description": "List active cron jobs and available repository catalog (agent_llm_config.defaults/cron/jobs.json) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /listCronJobs).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3836,7 +3836,7 @@
                 "tags": [
                     "Management API"
                 ],
-                "summary": "GET listCronJobs",
+                "summary": "List active cron jobs and available repository catalog (agent_llm_config.defaults/cron/jobs.json)",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -3922,6 +3922,39 @@
                         "schema": {
                             "type": "object",
                             "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                        }
+                    }
+                ]
+            }
+        },
+        "/addCronJobFromCatalog": {
+            "post": {
+                "description": "Activate one cron job from agent_llm_config.defaults/cron/jobs.json catalog (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /addCronJobFromCatalog).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Activate one cron job from agent_llm_config.defaults/cron/jobs.json catalog (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.AddCronJobFromCatalogPost"
                         }
                     }
                 ]
@@ -7262,6 +7295,30 @@
                 {
                     "type": "object",
                     "description": "POST /resetWebhooksFromDefaults. Canonical JSON to sign: {\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}. Overwrites bundled default webhooks from agent_llm_config.defaults/hooks/webhooks.json into LocalAgentWebhooks. Preserves id, conversationId, and secretEnvVar for existing default webhooks. Custom webhooks not in the defaults catalog are preserved."
+                }
+            ]
+        },
+        "node.AddCronJobFromCatalogPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "name"
+                    ],
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Catalog job name from agent_llm_config.defaults/cron/jobs.json"
+                        },
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "Override catalog default enabled flag (optional)"
+                        }
+                    }
                 }
             ]
         }
