@@ -38,7 +38,7 @@ When empty: **`classification`** and **`pattern`** are **`null`** — say no cre
    - **Measured move:** when `measuredMove` is present, quote **targetPrice**, **referencePrice**, **status** (`projected` \| `active`), and **direction** from tool JSON — do not invent targets
 4. Mention completion state and directional read from **`interpretation`** / **`classification`**.
 5. Note standalone chart patterns are historically moderate signals (~55–65%); combine with trend, momentum, and key levels.
-6. **Ask which menu row to draw on the chart** — unless the operator already picked one (e.g. “add pattern 1”, “draw the falling wedge”). Example: *“Which pattern should I overlay? (#1 Falling Wedge, #2 Rounding Bottom, …)”*
+6. **Ask which menu row to draw on the chart** — unless the operator already picked one (e.g. “1”, “add pattern 1”, “draw the falling wedge”). When they pick a number, **`apply_chart_pattern_drawings` is mandatory in that turn** — do not confirm in prose first.
 
 ## Trade setup / buy–sell levels (when the operator asks)
 
@@ -130,7 +130,7 @@ When the operator asks to **draw**, **add**, **show**, or **overlay** a pattern 
 
 ### When the operator picks a menu row
 
-Use **`patternNumber`** (matches your table: row **#1** → `patternNumber: 1`):
+Use **`patternNumber`** (matches your table: row **#1** → `patternNumber: 1`). Do **not** invent `patternId` strings (e.g. `head-and-shoulders-top-1`).
 
 ```json
 {
