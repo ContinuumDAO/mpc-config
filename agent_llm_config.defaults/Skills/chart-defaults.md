@@ -29,6 +29,15 @@ Hyperliquid OHLCV is **perpetual** market data, not generic spot USD index. Do n
 
 Never `{}`. **Do not describe the chart in markdown** — the UI only renders when the chart tool returns `continuum/chart/v1` (visible under **MCP result**, not the assistant bubble). Prose like “chart prepared” without a successful chart tool call means **nothing was rendered**.
 
+### After plotting — do not offer prose-only analysis
+
+A successful **`prepare_chart_from_rows`** does **not** authorize interpretive analysis from memory. When the operator asks to **analyze**, **interpret**, or you want to offer follow-up analysis:
+
+1. **Do not** invent phased narratives (“breakout mid-week”, “double top forming”) or numbered analysis menus without tool names.
+2. **Do** call **`list_chart_analysis_options`** and present its catalog, **or** name the specific **`analyze_*`** tool for each option (see **`chart-analysis-menu`**).
+3. **Do** call the matching **`analyze_*`** with the same OHLCV **`toolResult`** / **`ohlcvDigest`** before summarizing patterns, momentum, levels, or trend structure.
+4. Factual one-liners (period high/low, bar count) may quote **`meta.ohlcvSummary`** from the chart tool only — nothing else.
+
 ### `prepare_chart_from_rows`
 
 ```json

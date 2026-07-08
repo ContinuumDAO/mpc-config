@@ -2,6 +2,22 @@
 
 Reference: MCP resource **`chart_analysis_docs`**.
 
+## Hard rule — analysis requires tools
+
+**Never perform or offer chart/OHLCV analysis in prose alone.** Every interpretive claim (trend, momentum, key levels, candlestick patterns, classic patterns, range/volatility, outlook) must come from a matching **`analyze_*`** tool result on **this turn**, or from **`meta.ohlcvSummary`** / **`analysis.*`** fields in that JSON — not from visual guessing or memory.
+
+| Forbidden | Required instead |
+|-----------|------------------|
+| Invented “quick read” of price action after plotting | Quote **`meta.ohlcvSummary`** from the chart tool only, **or** call **`analyze_*`** |
+| Numbered menu of analysis types you made up (“1. Momentum 2. Key levels …”) | **`list_chart_analysis_options`** → numbered menu from **`analyses[]`** (each row names its **`id`** / tool) |
+| Classic pattern names, channels, double tops, etc. without a tool | **`analyze_chart_patterns`** → summarize **`analysis.patternMenu`** |
+| “Want me to layer on RSI / key levels / patterns?” without naming tools | Offer **`list_chart_analysis_options`**, or list options with explicit tool names (e.g. **`analyze_momentum`**, **`analyze_key_levels`**, **`analyze_chart_patterns`**) |
+| Analysis prose after the operator picks an option | Call the matching **`analyze_*`** first, then summarize tool JSON |
+
+**After a chart is already on screen:** reuse the same OHLCV session (`toolResult` or `{ title, ohlcvDigest }` from **`meta.sessionBind`**) and call the appropriate **`analyze_*`** — do **not** skip tools because the candles are visible in the UI.
+
+**Allowed without `analyze_*`:** routing only (ask operator to pick analysis type via **`list_chart_analysis_options`**), quoting **`meta.ohlcvSummary`** high/low/lastClose/barCount from the last chart or fetch tool, and plotting/drawing via **`prepare_chart*`** / **`apply_*`** tools.
+
 ## Analysis vs plotting
 
 | Operator intent | Use | Do not use |

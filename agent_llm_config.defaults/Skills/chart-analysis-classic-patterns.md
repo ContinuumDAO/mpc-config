@@ -2,6 +2,8 @@
 
 Use after OHLCV fetch. Tool: **`continuum__analyze_chart_patterns`**.
 
+**Do not name or interpret classic patterns in prose without calling this tool first.** If the operator asks for classic / multi-bar pattern analysis, run **`analyze_chart_patterns`** and summarize **`analysis.patternMenu`** — never invent patterns from a visible chart alone.
+
 Reference: **`chart_analysis_docs`** (pattern ids, smoothing, trendline breakout options).
 
 Input: `{ "title": "<from fetch>", "toolResult": { ... } }` — optional **`patterns[]`**, **`focusWindow`**, **`minConfidence`** (default 0.45), **`smoothHeadShoulders`** (default **true**), **`smoothWindow`** (`3`|`5`), **`retestTolerancePct`** (default **0.10**), **`retestAtrPeriod`** (default **14**), **`retestAtrMultiplier`** (default **1.0**).
