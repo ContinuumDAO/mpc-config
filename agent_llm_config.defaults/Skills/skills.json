@@ -79,6 +79,11 @@
       "name": "scheduled-automation",
       "filename": "scheduled-automation.md",
       "initialLoad": false
+    },
+    {
+      "name": "trade-defaults",
+      "filename": "trade-defaults.md",
+      "initialLoad": false
     }
   ]
 }
