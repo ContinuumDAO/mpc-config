@@ -1,8 +1,8 @@
 # Trade defaults (build form prefill)
 
-Load this skill when the operator opens the **Trade ideas** panel, selects a numbered trade idea, or before **`build_trade_from_trade_idea`**.
+Load this skill when the operator opens the **Trade ideas** panel, selects a numbered trade idea, or before **`continuum__build_trade_from_trade_idea`**.
 
-The node runs a focused LLM turn that **interprets this prose** against the **one trade idea the operator already selected** (menu `#N` from the UI, or `tradeIdeaNumber` from a cron `tradeBuild` block). The model may call balance / open-context / quote MCP tools, then returns JSON that **prefills the build form**. The operator reviews, edits, and clicks **Submit multisign draft** — unless this skill explicitly enables automatic submission (below).
+The node runs a focused LLM turn that **interprets this prose** against the **one trade idea the operator already selected** (menu `#N` from the UI, or `tradeIdeaNumber` from a cron `tradeBuild` block). The model may call balance / open-context / quote MCP tools (use **`continuum__`-prefixed** names from the chat tools list), then returns JSON that **prefills the build form**. The operator reviews, edits, and clicks **Submit multisign draft** — unless this skill explicitly enables automatic submission (below).
 
 This skill is **not** machine-parsed YAML on the host. Do not put `tradeBuildDefaults` blocks here. Cron jobs may still set deterministic overrides in a fenced **`tradeBuild`** YAML block (see **`scheduled-automation`**).
 
@@ -63,5 +63,5 @@ When the operator message includes `tradeBuild` with a fixed `tradeIdeaNumber`, 
 1. Run **`analyze_*`** → trade ideas upsert.
 2. Operator selects idea **#N** in the UI (or cron sets `tradeIdeaNumber`).
 3. Node loads this skill → LLM prefills the form (SSE `trade_idea_prefill`).
-4. Operator edits and submits, **or** `autoSubmitMultisign` triggers **`build_trade_from_trade_idea`** directly.
+4. Operator edits and submits, **or** `autoSubmitMultisign` triggers **`continuum__build_trade_from_trade_idea`** directly.
 5. Approve in Sign Requests.
