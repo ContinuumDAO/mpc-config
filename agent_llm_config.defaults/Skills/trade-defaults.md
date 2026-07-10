@@ -10,11 +10,15 @@ This skill is **not** machine-parsed YAML on the host. Cron jobs may still set o
 
 ## 1. Scope (all protocols)
 
-- Apply rules to the **selected idea only** — use its `symbol`, `side`, `confidence`, `status`, `entry`, `target`, `invalidation`, and `analysisSetup` (`patternName`, `entryPhase`, `entryOffsetMode`, `setupPurposeCode` for chart patterns).
+- Apply rules to the **selected idea only** — use its `symbol`, `side`, `confidence`, `status`, `entry`, `target`, `invalidation`, and `analysisSetup`:
+  - **chart_pattern:** `patternName`, `entryPhase`, `entryOffsetMode`, `setupPurposeCode`
+  - **trend_structure:** `bias`, `structure`, `primaryTrendKind`, `primaryTrendTouchCount`, `entryOffsetMode` (always **`retest`**), `setupPurposeCode` (**`trend-ret`**)
 - Do **not** pick a different idea or invent a new setup.
 - If this skill is not installed, prefill is skipped.
 
-Chart-pattern ideas store **base** entry and invalidation at pattern boundaries (inside bounce or post-breakout retest). **Target** comes from measured move. Offsets below apply at **build** time on top of those base prices.
+Chart-pattern ideas store **base** entry and invalidation at pattern boundaries (inside bounce or post-breakout retest). **Target** comes from measured move.
+
+**Trend-structure** ideas (`analyze_trend_structure`) store **base entry** at the primary **support** (long bias) or **resistance** (short bias) trend-line retest; **invalidation** at the recent swing low/high; **target** at the opposing swing when available. Offsets below apply at **build** time on top of those base prices.
 
 ---
 
@@ -37,13 +41,15 @@ entryOffsetPct: 1
 invalidationOffsetPct: 1
 ```
 
-`entryProximityPct: 1` affects **idea surfacing** only (inside bounces, key levels, Uniswap) — not prefill JSON. Post-breakout retest limits skip proximity.
+`entryProximityPct: 1` affects **idea surfacing** only (inside bounces, key levels, Uniswap) — not prefill JSON. Post-breakout retest limits and **trend-structure retest** limits skip proximity on perp venues. Uniswap still enforces proximity at **build** time (spot swap, not a resting limit at the trend line).
 
 ---
 
 ## 3. Price offsets (perp limit protocols only)
 
 Read `entryOffsetMode` from `analysisSetup.setup` (`bounce` | `retest`).
+
+**Trend-structure** ideas always use **`retest`** — same offset table as post-breakout pattern retests. Do not treat them as bounce.
 
 ### entryOffsetPct
 
@@ -52,7 +58,7 @@ Read `entryOffsetMode` from `analysisSetup.setup` (`bounce` | `retest`).
 | **retest** (post-breakout) | entry × (1 + pct/100) | entry × (1 − pct/100) |
 | **bounce** (inside pattern) | entry × (1 − pct/100) | entry × (1 + pct/100) |
 
-If `entryOffsetMode` is absent, treat as **bounce**.
+If `entryOffsetMode` is absent, treat as **bounce** — except when `analysisSetup.kind` is **`trend_structure`**, then always use **retest**.
 
 ### invalidationOffsetPct
 
@@ -63,9 +69,11 @@ Informational in Purpose / cron — not an automatic stop order yet.
 | Long | invalidation × (1 − pct/100) |
 | Short | invalidation × (1 + pct/100) |
 
-### Worked example (any perp limit protocol)
+### Worked examples (any perp limit protocol)
 
 Falling wedge **long retest**: base entry **1831** (upper wedge), base invalidation **1700** (lower wedge), both offsets **1%** → effective entry **~1849**, effective `pfE` **1683**.
+
+Bullish **trend-structure long retest**: base entry **2950** (support trend line), base invalidation **2800** (recent swing low), both offsets **1%** → effective entry **~2979.5**, effective `pfE` **2772**. Purpose setup code **`trend-ret`**.
 
 ---
 
@@ -80,7 +88,7 @@ ctm1|{proto}|{L|S}|{setup}|eE={px}|pfE={px}|{symShort}
 | Token | Meaning |
 |-------|---------|
 | `{proto}` | Protocol short code — see protocol table in §5 (`hl`, `gmx`, `uni`, …) |
-| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, …) — never menu `#N` |
+| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, …) — never menu `#N` |
 | `eE` / `pfE` | Effective entry / pattern-failure after offsets |
 | `eB` / `pfB` | Optional base prices when rune budget allows |
 
@@ -134,6 +142,8 @@ Add new protocols: **(1)** one row in this table, **(2)** one subsection below (
 ### uniswap
 
 **Not a perp limit** — no `entryOffsetPct` on entry price for execution (proximity gate still applies to the idea). Set **`sizeUsdHuman`** as approximate swap USD.
+
+**Trend-structure:** prefer **hyperliquid** or **gmx** for resting retest limits. Use Uniswap only when last price is already within **`entryProximityPct`** of the idea entry — otherwise the build will fail.
 
 **Defaults for this desk:**
 
@@ -200,6 +210,17 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 1. Hyperliquid open-context → `szHuman` (desk rule: e.g. fixed size or % of margin — **define your rule here**).
 2. Set fields from **hyperliquid defaults** table above.
 3. `autoSubmitMultisign`: **false**.
+
+### Policy: trend-structure clear idea → perp limit (HL or GMX)
+
+**When:** selected idea is **`trend_structure`**, `setupPurposeCode` **`trend-ret`**, `status: clear`, `side` is **long** or **short**.
+
+**Protocol:** operator UI **`hyperliquid`** or **`gmx`** (§5) — **not Uniswap** unless price is already at the retest entry.
+
+1. Use **retest** offsets from §3 (`entryOffsetPct` / `invalidationOffsetPct` from desk defaults).
+2. **Hyperliquid:** open-context → `szHuman`. **GMX:** open-context → `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman`.
+3. Optional `purposeTextAdditional`: e.g. `trend retest` or `{primaryTrendKind} trend`.
+4. `autoSubmitMultisign`: **false**.
 
 ### Policy: cron auto-submit
 
