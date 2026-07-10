@@ -1,155 +1,230 @@
 # Trade defaults (build form prefill)
 
-Load this skill when the operator opens the **Trade ideas** panel, selects a numbered trade idea, or before **`continuum__build_trade_from_trade_idea`**.
+Load when the operator opens **Trade ideas**, selects a numbered idea, or before **`continuum__build_trade_from_trade_idea`**.
 
-The node runs a focused LLM turn that **interprets this prose** against the **one trade idea the operator already selected** (menu `#N` from the UI, or `tradeIdeaNumber` from a cron `tradeBuild` block). The model may call balance / open-context / quote MCP tools (use **`continuum__`-prefixed** names from the chat tools list), then returns JSON that **prefills the build form**. The operator reviews, edits, and clicks **Submit multisign draft** — unless this skill explicitly enables automatic submission (below).
+The node runs a focused LLM turn that **interprets this skill** for the **one trade idea already selected** (UI menu `#N`, or cron `tradeBuild.tradeIdeaNumber`). The model may call balance / open-context / quote MCP tools, then returns JSON to **prefill the build form**. The operator reviews and submits — unless **`autoSubmitMultisign`** is enabled below.
 
-This skill is **not** machine-parsed YAML on the host. Do not put `tradeBuildDefaults` blocks here. Cron jobs may still set deterministic overrides in a fenced **`tradeBuild`** YAML block (see **`scheduled-automation`**).
+This skill is **not** machine-parsed YAML on the host. Cron jobs may still set overrides in a fenced **`tradeBuild`** YAML block (see **`scheduled-automation`**).
 
-## Scope
+---
 
-- Apply rules to the **selected** idea only — use its `symbol`, `side`, `confidence`, `status`, `entry`, `target`, `invalidation`, and `analysisSetup` (e.g. `patternName`, `entryPhase`, `entryOffsetMode`, `setupPurposeCode` for chart patterns).
-- Do **not** pick a different idea or synthesize a new setup (that belongs in a future consensus skill).
-- If this file is empty or not installed, prefill is skipped and behaviour is unchanged.
+## 1. Scope (all protocols)
 
-Chart-pattern trade ideas store **base** entry and invalidation at pattern boundaries (support bounce or broken-boundary retest). Measured-move **target** is unchanged. Use `entryPhase` and `entryOffsetMode` from `analysisSetup.setup` when choosing offset defaults.
+- Apply rules to the **selected idea only** — use its `symbol`, `side`, `confidence`, `status`, `entry`, `target`, `invalidation`, and `analysisSetup` (`patternName`, `entryPhase`, `entryOffsetMode`, `setupPurposeCode` for chart patterns).
+- Do **not** pick a different idea or invent a new setup.
+- If this skill is not installed, prefill is skipped.
 
-## Build fields the model may prefill
+Chart-pattern ideas store **base** entry and invalidation at pattern boundaries (inside bounce or post-breakout retest). **Target** comes from measured move. Offsets below apply at **build** time on top of those base prices.
 
-| Field | Meaning |
-|-------|---------|
-| `protocolId` | Usually fixed by the UI (`hyperliquid`, `gmx`, `uniswap`) |
-| `chainId` | EVM chain for multisign (999 Hyperliquid, 42161 GMX/Uni on Arbitrum) |
-| `szHuman` | Hyperliquid size in coin units |
-| `sizeUsdHuman` | GMX position USD or Uniswap approximate swap USD |
-| `collateralToken` / `collateralAmountHuman` | GMX collateral |
-| `marketKind` | Hyperliquid `perp` or `spot` |
-| `tif` | Hyperliquid time-in-force: `alo`, `gtc`, or `ioc` |
-| `entryOffsetPct` | Limit band beyond analysis **entry** at build time (see below) |
-| `invalidationOffsetPct` | Stop band beyond analysis **invalidation** (pattern-failure level) |
-| `useCustomGas` | Apply node Custom Gas Config when true |
-| `purposeTextAdditional` | Extra multisign purpose suffix (ctm1 meta is prepended; **256** runes total; must not contain `\|` or `=`) |
-| `autoSubmitMultisign` | When **true**, skip operator review and submit the multisign draft immediately (cron or UI) |
+---
 
-## Recommended desk defaults
+## 2. Universal prefill fields (every protocol)
 
-Use these as starting values when prefill JSON does not specify otherwise:
+These apply regardless of `protocolId`:
+
+| Field | Applies to | Meaning |
+|-------|------------|---------|
+| `entryOffsetPct` | Perp limit protocols | Band beyond **base entry** at build (see §3) |
+| `invalidationOffsetPct` | Perp limit protocols | Band beyond **base invalidation** / pattern-failure level (see §3) |
+| `useCustomGas` | EVM protocols | Use node Custom Gas Config when **true** |
+| `purposeTextAdditional` | All | Human suffix after auto **ctm1** meta (§4); **256** runes total; no `\|` or `=` |
+| `autoSubmitMultisign` | All | **true** = submit without operator review (cron only when explicitly allowed here) |
+
+**Desk defaults** (use when prefill JSON omits them):
 
 ```yaml
-entryProximityPct: 1      # idea surfacing only — suppress inside bounces / Uni when price too far
-entryOffsetPct: 1         # limit band beyond pattern entry at build
-invalidationOffsetPct: 1  # stop band beyond pattern-failure invalidation
+entryOffsetPct: 1
+invalidationOffsetPct: 1
 ```
 
-`entryProximityPct` is enforced when trade ideas are built from analysis (inside-pattern bounces, key levels, candlestick, Uniswap). It is **not** applied to post-breakout retest limits.
+`entryProximityPct: 1` affects **idea surfacing** only (inside bounces, key levels, Uniswap) — not prefill JSON. Post-breakout retest limits skip proximity.
 
-## entryOffsetPct (phase-aware)
+---
 
-Adjusts the limit/trigger price from trade idea **`entry.price`**. The node reads `entryOffsetMode` from the chart-pattern setup (`bounce` or `retest`):
+## 3. Price offsets (perp limit protocols only)
 
-| Mode | Long | Short |
-|------|------|-------|
-| **retest** (post-breakout) | entry × (1 + pct/100) — above broken level | entry × (1 − pct/100) — below broken level |
-| **bounce** (inside pattern) | entry × (1 − pct/100) — below support | entry × (1 + pct/100) — above resistance |
+Read `entryOffsetMode` from `analysisSetup.setup` (`bounce` | `retest`).
 
-Default **1.0** for chart-pattern limit builds unless this skill says otherwise.
+### entryOffsetPct
 
-Legacy behaviour (when `entryOffsetMode` is absent): long below entry, short above entry — same as **bounce**.
+| Mode | Long limit | Short limit |
+|------|------------|-------------|
+| **retest** (post-breakout) | entry × (1 + pct/100) | entry × (1 − pct/100) |
+| **bounce** (inside pattern) | entry × (1 − pct/100) | entry × (1 + pct/100) |
 
-## invalidationOffsetPct
+If `entryOffsetMode` is absent, treat as **bounce**.
 
-Widens the pattern-failure stop reference from **`invalidation.price`** (informational in Purpose / cron; not an automatic stop order yet):
+### invalidationOffsetPct
+
+Informational in Purpose / cron — not an automatic stop order yet.
 
 | Side | Effective pattern-failure level |
 |------|----------------------------------|
-| **long** | invalidation × (1 − pct/100) — stop **below** failure level |
-| **short** | invalidation × (1 + pct/100) — stop **above** failure level |
+| Long | invalidation × (1 − pct/100) |
+| Short | invalidation × (1 + pct/100) |
 
-Default **1.0**.
+### Worked example (any perp limit protocol)
 
-### Example — falling wedge long retest
+Falling wedge **long retest**: base entry **1831** (upper wedge), base invalidation **1700** (lower wedge), both offsets **1%** → effective entry **~1849**, effective `pfE` **1683**.
 
-- Base entry (upper wedge / broken boundary): **1831**
-- Base invalidation (lower wedge): **1700**
-- `entryOffsetPct: 1` (retest) → effective entry **~1849**
-- `invalidationOffsetPct: 1` → effective pattern-failure stop **1683**
+---
 
-Inside-pattern bounce at **S2 ≈ 1700** uses the same invalidation base; offset pushes the stop slightly below support.
+## 4. Purpose text — ctm1 (all protocols)
 
-## Purpose text (ctm1, ≤256 runes)
-
-Multisign **Purpose** is auto-composed as compact pipe meta first, then optional human suffix:
+Auto-composed first; optional `purposeTextAdditional` after ` · ` if runes remain.
 
 ```
 ctm1|{proto}|{L|S}|{setup}|eE={px}|pfE={px}|{symShort}
 ```
 
-| Token | Meaning | Example |
-|-------|---------|---------|
-| `ctm1` | Format version | fixed |
-| `{proto}` | Protocol | `gmx`, `hl`, `uni` |
-| `{L\|S}` | Side | `L` |
-| `{setup}` | Setup code from analysis (not menu `#N`) | `fw-ret`, `fw-bnc`, `sym-ret` |
-| `eE` | Effective entry (after `entryOffsetPct`) | `1849` |
-| `pfE` | Effective pattern-failure invalidation (after `invalidationOffsetPct`) — **cron trigger** | `1683` |
-| `{symShort}` | Index symbol only | `ETH` |
+| Token | Meaning |
+|-------|---------|
+| `{proto}` | Protocol short code — see protocol table in §5 (`hl`, `gmx`, `uni`, …) |
+| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, …) — never menu `#N` |
+| `eE` / `pfE` | Effective entry / pattern-failure after offsets |
+| `eB` / `pfB` | Optional base prices when rune budget allows |
 
-Optional when rune budget allows: `eB={base entry}`, `pfB={base invalidation}`.
+**Cron:** prefix `ctm1|`; side = field 3; `pfE=([0-9.]+)`; long fail if mark ≤ pfE, short fail if mark ≥ pfE.
 
-Example:
+---
 
-```
-ctm1|gmx|L|fw-ret|eE=1849|pfE=1683|ETH
-```
+## 5. Protocol reference
 
-With bases:
+Pick **one row** based on UI `protocolId` or cron `tradeBuild.protocolId`. Only prefill fields listed for that protocol.
 
-```
-ctm1|gmx|L|fw-ret|eB=1831|eE=1849|pfB=1700|pfE=1683|ETH
-```
+| `protocolId` | ctm1 `{proto}` | Order type | Default `chainId` | Required prefill fields | Optional prefill fields |
+|--------------|----------------|------------|-------------------|-------------------------|-------------------------|
+| **`hyperliquid`** | `hl` | Perp or spot **limit** | **999** (mainnet) / **998** (testnet) | `szHuman` | `marketKind` (`perp` \| `spot`), `tif` (`gtc` \| `alo` \| `ioc`) |
+| **`gmx`** | `gmx` | Perp **limit increase** | **42161** (Arbitrum) | `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman` | — |
+| **`uniswap`** | `uni` | Spot **swap** (no limit entry) | **42161** (typical) | `sizeUsdHuman` | `slippageBps` (via build if set) |
 
-**Cron scanning:** require prefix `ctm1|`. Side = field 3 (`L` / `S`). Extract `pfE=([0-9.]+)`. Long fail when mark ≤ pfE; short fail when mark ≥ pfE. Ignore legacy Purpose without `ctm1|`.
+Add new protocols: **(1)** one row in this table, **(2)** one subsection below (copy **§5 template**), **(3)** optional desk policy in §6. Keep universal fields (§2–§4) unchanged.
 
-Common setup codes: `fw-ret` / `fw-bnc` (falling wedge), `sym-ret` (symmetrical triangle breakout-only), `kl-bnc` / `kl-brk`, `mom`, `candle`.
+### hyperliquid
 
-Trade idea menu **`#N`** stays in UI and agent chat only — never in Purpose.
+**Sizing:** call Hyperliquid open-context / balance tools for the idea’s **coin**; set **`szHuman`** in coin units (respect margin and leverage).
 
-## Example policies (edit for your desk)
+**Defaults for this desk:**
 
-**Falling wedge retest (GMX limit increase)**
+| Field | Value |
+|-------|-------|
+| `marketKind` | `perp` |
+| `tif` | `gtc` |
+| `entryOffsetPct` | `1` |
+| `invalidationOffsetPct` | `1` |
+| `useCustomGas` | `false` |
 
-When the selected idea is **chart_pattern** with `setupPurposeCode` **`fw-ret`** (or falling wedge + `entryPhase: post_breakout_retest`):
+**Build path:** `continuum__build_trade_from_trade_idea` with `protocolId: hyperliquid`.
 
-1. Call GMX open-context / balance tools for the idea’s symbol.
-2. Set **`sizeUsdHuman`** and **`collateralToken`** / **`collateralAmountHuman`** from available collateral (respect market max leverage).
-3. Set **`entryOffsetPct`** to **1.0**, **`invalidationOffsetPct`** to **1.0**.
-4. Set **`useCustomGas`** to **false**.
-5. Set **`purposeTextAdditional`** to `fw retest` (optional; ctm1 meta already encodes setup).
-6. Leave **`autoSubmitMultisign`** **false**.
+### gmx
 
-**Head & shoulders with high confidence (Hyperliquid perp)**
+**Sizing:** call GMX open-context / balance tools; set **`sizeUsdHuman`** (position notional USD) and **`collateralToken`** + **`collateralAmountHuman`**. Leverage = size ÷ collateral (market max applies). No separate leverage field.
 
-When the selected idea is a **chart_pattern** setup with `patternName` containing “head” and “shoulder”, and `confidence` ≥ **0.75**:
+**Defaults for this desk:**
 
-1. Call Hyperliquid open-context / balance tools for the idea’s symbol.
-2. Set **`szHuman`** to **10%** of available margin allocated to that coin (respect leverage).
-3. Set **`entryOffsetPct`** to **0.25** when `entryOffsetMode` is **bounce**; use **1.0** for **retest**.
-4. Set **`invalidationOffsetPct`** to **1.0** when invalidation is present.
-5. Set **`marketKind`** to **`perp`**, **`tif`** to **`gtc`**, **`useCustomGas`** to **false**.
-6. Set **`purposeTextAdditional`** to `H&S rule`.
-7. Leave **`autoSubmitMultisign`** **false** so the operator confirms size in the UI.
+| Field | Value |
+|-------|-------|
+| `collateralToken` | `USDC` (unless operator policy says otherwise) |
+| `entryOffsetPct` | `1` |
+| `invalidationOffsetPct` | `1` |
+| `useCustomGas` | `false` |
 
-**Cron auto-submit**
+**Build path:** `continuum__build_trade_from_trade_idea` with `protocolId: gmx`.
 
-When the operator message includes `tradeBuild` with a fixed `tradeIdeaNumber`, and sizing can be inferred from balance:
+### uniswap
 
-- Set **`autoSubmitMultisign`** to **true** only when this section explicitly says **“automatically submit multisign without operator review”** for that cron job class.
-- Cron `tradeBuild` YAML may also set `entryOffsetPct` and `invalidationOffsetPct`.
+**Not a perp limit** — no `entryOffsetPct` on entry price for execution (proximity gate still applies to the idea). Set **`sizeUsdHuman`** as approximate swap USD.
 
-## Workflow
+**Defaults for this desk:**
 
-1. Run **`analyze_*`** → trade ideas upsert (pattern-limit entry + proximity gate applied).
-2. Operator selects idea **#N** in the UI (or cron sets `tradeIdeaNumber`).
-3. Node loads this skill → LLM prefills the form (SSE `trade_idea_prefill`).
-4. Operator edits and submits, **or** `autoSubmitMultisign` triggers **`continuum__build_trade_from_trade_idea`** directly.
+| Field | Value |
+|-------|-------|
+| `useCustomGas` | `false` |
+
+**Build path:** `continuum__build_trade_from_trade_idea` with `protocolId: uniswap`.
+
+### Template — new protocol (copy and fill in)
+
+Duplicate this block when adding a venue. Replace `{placeholders}`. Register `protocolId` in the node/SDK build bridge before use.
+
+| Item | Fill in |
+|------|---------|
+| **`protocolId`** | `{protocol_id}` — must match UI + `continuum__build_trade_from_trade_idea` |
+| **ctm1 `{proto}`** | `{proto}` — 2–4 char code in Purpose (e.g. `hl`, `gmx`, `uni`) |
+| **Order type** | `{order_type}` — e.g. perp limit, spot swap, limit increase |
+| **Limit offsets (§3)** | `{yes \| no}` — **yes** if build uses `entryOffsetPct` / limit price from idea entry |
+| **Default `chainId`** | `{chain_id}` (+ testnet if applicable) |
+| **Required prefill fields** | `{field_a}`, `{field_b}`, … |
+| **Optional prefill fields** | `{field_c}`, … or — |
+| **MCP sizing tools** | `{tool_names}` — e.g. `ctm_{protocol}_fetch_open_context` |
+| **Build path** | `continuum__build_trade_from_trade_idea` with `protocolId: {protocol_id}` |
+
+**Sizing:** {Describe how to derive required fields from open-context / balance / quote tools for this protocol.}
+
+**Defaults for this desk:**
+
+| Field | Value |
+|-------|-------|
+| `entryOffsetPct` | `{1 \| omit if not limit}` |
+| `invalidationOffsetPct` | `{1 \| omit if not limit}` |
+| `useCustomGas` | `{true \| false}` |
+| `{protocol_field}` | `{default}` |
+
+**Build path:** `continuum__build_trade_from_trade_idea` with `protocolId: {protocol_id}`.
+
+**Policy stub (§6):** When {idea filter} → protocol `{protocol_id}` → sizing from above → `autoSubmitMultisign: false`.
+
+---
+
+## 6. Desk policies (edit per protocol)
+
+Structure: **when** (idea filter) → **which protocol** → **prefill from that protocol’s §5 defaults** → sizing steps from that protocol’s sizing notes.
+
+### Policy: falling wedge retest → GMX
+
+**When:** selected idea is **chart_pattern** with `setupPurposeCode` **`fw-ret`** (or falling wedge + `entryPhase: post_breakout_retest`).
+
+**Protocol:** `gmx` (§5 gmx).
+
+1. GMX context tools → `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman`.
+2. Set offsets and flags from **gmx defaults** table above.
+3. Optional `purposeTextAdditional`: `fw retest`.
+4. `autoSubmitMultisign`: **false**.
+
+### Policy: chart-pattern clear idea → Hyperliquid perp
+
+**When:** selected idea is **chart_pattern**, `status: clear`, operator UI protocol is **hyperliquid**.
+
+**Protocol:** `hyperliquid` (§5 hyperliquid).
+
+1. Hyperliquid open-context → `szHuman` (desk rule: e.g. fixed size or % of margin — **define your rule here**).
+2. Set fields from **hyperliquid defaults** table above.
+3. `autoSubmitMultisign`: **false**.
+
+### Policy: cron auto-submit
+
+**When:** operator message includes `tradeBuild` with fixed `tradeIdeaNumber` and sizing is inferable.
+
+- Set **`autoSubmitMultisign`: true** only if this subsection explicitly allows it for that cron class.
+- Cron YAML may set `protocolId`, `entryOffsetPct`, `invalidationOffsetPct`, and protocol-specific sizing fields from §5.
+
+### Policy template — new protocol
+
+**When:** {describe idea filter — e.g. chart_pattern + setupPurposeCode}.
+
+**Protocol:** `{protocol_id}` (§5 `{protocol_id}` or §5 template).
+
+1. {Protocol} context tools → required prefill fields from §5 table.
+2. Set offsets and flags from that protocol’s **defaults** table.
+3. Optional `purposeTextAdditional`: `{short label}`.
+4. `autoSubmitMultisign`: **false** (unless cron policy above applies).
+
+---
+
+## 7. Workflow
+
+1. **`analyze_*`** → trade ideas upsert.
+2. Operator selects **#N** (or cron sets `tradeIdeaNumber`).
+3. Node loads this skill → LLM prefills form (SSE `trade_idea_prefill`) using **§5 for the active protocol**.
+4. Operator submits, or **`autoSubmitMultisign`** → **`continuum__build_trade_from_trade_idea`**.
 5. Approve in Sign Requests.
