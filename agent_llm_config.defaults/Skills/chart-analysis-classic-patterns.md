@@ -44,27 +44,31 @@ When empty: **`classification`** and **`pattern`** are **`null`** — say no cre
 
 **Only** when the operator asks for **levels**, **entry/target/stop**, **trade setup**, **where to buy/sell**, or similar — not after every pattern scan by default.
 
-Derive a **conditional setup from one pattern row** (primary, or the menu # the operator picked). Every price must come from tool JSON on **this turn** — chiefly **`patternMenu[]`**, **`meta.ohlcvSummary.lastClose`**, and **`measuredMove`**.
+Prefer **`analysis.chartPatternTradeSetup`** from tool JSON (SDK-resolved pattern-limit levels). Do **not** derive entry from **`measuredMove.referencePrice`** alone — for wedges/triangles/channels that field is the breakout reference, not the resting limit while price is still inside the pattern.
 
 | Role | Source (tool JSON) |
 |------|---------------------|
-| **Bias** | Row **`classification`** + pattern direction (bullish → long-bias framing; bearish → short-bias; neutral → range/breakout both sides) |
-| **Trigger / reference** | **`measuredMove.referencePrice`** when present, else the labeled **neckline / break / rim** row in **`keyLevels[]`** |
-| **Target** | **`measuredMove.targetPrice`** when present — quote **`status`** (`projected` \| `active`) and **`direction`** |
-| **Invalidation (stop)** | Opposite pattern boundary from **`keyLevels[]`** (e.g. support trendline, trough, pattern low, below neckline) — **name the label** you use |
+| **Bias / side** | **`chartPatternTradeSetup.side`** (`long` \| `short` \| `neutral`) |
+| **Entry (base limit)** | **`chartPatternTradeSetup.triggerPrice`** / **`triggerLabel`** — support bounce (**inside**) or broken-boundary retest (**post-breakout**) |
+| **Target** | **`chartPatternTradeSetup.targetPrice`** when present (measured move — unchanged) |
+| **Invalidation (pattern fail)** | **`chartPatternTradeSetup.invalidationPrice`** / **`invalidationLabel`** — opposite boundary where the thesis fails |
+| **Phase** | **`entryPhase`**: `inside_pattern` \| `post_breakout_retest`; **`entryOffsetMode`**: `bounce` \| `retest` |
+| **Setup code** | **`setupPurposeCode`** (e.g. `fw-bnc`, `fw-ret`, `sym-ret`) — used in multisign Purpose |
 
 **Rules**
 
-- Compare distance to trigger/target vs **`meta.ohlcvSummary.lastClose`** — do not invent “current price”.
-- If **`measuredMove`** is **absent**, state that a measured target was **not computed** — do not guess a target from pattern name alone.
-- If **`completionState`** is **`forming`**, frame as **conditional** (*if* price breaks above/below reference…) — not as an executed signal.
-- One setup **per pattern row**. If multiple menu rows conflict (e.g. bullish double bottom vs bearish double top), present **separate conditional setups** or ask which pattern to trade — do not merge into one buy and one sell without labeling the source row.
-- Classic patterns are historically **moderate** signals (~55–65%). Offer to cross-check on the **same OHLCV session**: **`analyze_trend_structure`**, **`analyze_key_levels`**, **`analyze_momentum`** — dedicated key-level analysis is often better for ranked horizontal S/R than pattern geometry alone.
-- **Technical framing only** — not financial advice. Do not place orders or size positions.
+- If **`chartPatternTradeSetup.status`** is **`unclear`**, quote **`unclearReason`** (e.g. symmetrical triangle still inside, price too far from inside bounce for **`entryProximityPct`**).
+- Compare entry/invalidation vs **`chartPatternTradeSetup.lastClose`** (same as **`meta.ohlcvSummary.lastClose`** on the analyze turn).
+- **`measuredMove.referencePrice`** may still be quoted in the pattern table for context — it is **not** the trade entry when **`chartPatternTradeSetup`** is present.
+- If **`targetPrice`** is absent, state measured target was **not computed** — do not guess from pattern name.
+- **Symmetrical triangle:** trade idea only **after breakout** (long above upper / short below lower); no setup while price is inside the triangle.
+- One setup **per pattern row**. If multiple menu rows conflict, present separate setups or ask which row to trade.
+- Classic patterns are historically **moderate** signals (~55–65%). Cross-check with **`analyze_trend_structure`**, **`analyze_key_levels`**, **`analyze_momentum`** on the same session when helpful.
+- **Technical framing only** — not financial advice.
 
-**Example (double bottom, menu row with measured move)**
+**Example (falling wedge inside, clear setup)**
 
-> Long-bias conditional setup (Double Bottom, forming): trigger/reference **1834.0** (neckline), invalidation below **1757.8** (trough from keyLevels), measured target **1940.2** (projected, up) — last close **1777.2** from ohlcvSummary.
+> Long setup (Falling Wedge, forming): entry **1700** (S2 bounce), invalidation **1700** (lower wedge fail — offset widens stop at build), target **1940** (measured move, projected) — last close **1705**, `setupPurposeCode` **fw-bnc**.
 
 For **horizontal support/resistance ranking** without pattern geometry, use skill **`chart-analysis-levels`** → **`analyze_key_levels`**.
 
@@ -72,48 +76,49 @@ For **horizontal support/resistance ranking** without pattern geometry, use skil
 
 Use when the operator asks to **trade** the pattern, or when the task is combined (e.g. *“Analyse chart patterns and if a clear trade setup from the primary pattern is apparent, generate a multiSignRequest to trade it”*).
 
-### `analysis.lastTradeSetup` (persisted on conversation)
+### `analysis.chartPatternTradeSetup` → `conversation.tradeIdeas[]`
 
-After **`analyze_chart_patterns`**, read **`analysis.lastTradeSetup`** from tool JSON (also in the persisted conversation system hint on later turns):
+After **`analyze_chart_patterns`**, read **`analysis.chartPatternTradeSetup`** from tool JSON. When **`status === "clear"`**, the node upserts a numbered **trade idea** (menu **`#N`**) for **`continuum__build_trade_from_chart_pattern`** / **`continuum__build_trade_from_trade_idea`**.
 
 | Field | Meaning |
 |-------|---------|
-| `status` | `clear` \| `unclear` — only auto-submit multisign when **`clear`** unless the operator overrides with explicit prices |
-| `patternNumber` | 1-based primary menu row this setup derives from |
+| `status` | `clear` \| `unclear` — only auto-build when **`clear`** unless operator overrides |
+| `patternNumber` | 1-based primary menu row |
 | `side` | `long` \| `short` \| `neutral` |
-| `triggerPrice` / `triggerLabel` | Entry / breakout reference |
-| `targetPrice` / `targetStatus` / `targetDirection` | Measured-move target when computed |
-| `invalidationPrice` / `invalidationLabel` | Opposite boundary (stop reference) |
-| `lastClose` | From `meta.ohlcvSummary.lastClose` on the analyze turn |
+| `triggerPrice` / `triggerLabel` | **Base** entry (pattern boundary) |
+| `targetPrice` / `targetStatus` / `targetDirection` | Measured-move target |
+| `invalidationPrice` / `invalidationLabel` | **Base** pattern-failure level |
+| `entryPhase` / `entryOffsetMode` | Phase-aware limit rules |
+| `setupPurposeCode` | Short code for ctm1 Purpose (e.g. `fw-ret`) |
+| `lastClose` | From analyze turn |
 | `unclearReason` | Why auto-trade should not proceed |
 
 **Rules**
 
-- Prices must come from **`lastTradeSetup`** or fresh **`analyze_chart_patterns`** — never invent levels.
-- Re-run **`analyze_chart_patterns`** on the same OHLCV session if data is stale (new fetch clears persisted setup).
-- **No separate chat confirmation** before multisign — MPC **`signRequestAgree`** / reject-with-Thoughts is the gate.
-- Apply **operator proximity tweaks** from their message when choosing limit prices (e.g. *“limit buy 0.1% below neckline”* → offset `triggerPrice` for `limitPxHuman` / GMX trigger fields).
+- Prices must come from **`chartPatternTradeSetup`** / persisted **trade ideas** — never invent levels.
+- Re-run **`analyze_chart_patterns`** on the same OHLCV session if data is stale.
+- **No separate chat confirmation** before multisign — MPC **`signRequestAgree`** is the gate.
+- At **build** time, use skill **`trade-defaults`**: **`entryOffsetPct`** and **`invalidationOffsetPct`** adjust limit and pattern-failure reference; Purpose uses compact **`ctm1|…|eE=…|pfE=…`** meta (≤256 runes). Do not put menu **`#N`** in Purpose.
 
-### Protocol-specific multisign (DeFi MCP loaded)
+### Protocol-specific build (DeFi MCP loaded)
 
-Order shape depends on the **loaded DeFi protocol** (`load_defi_protocol`). Typical perp entry mapping from **`lastTradeSetup`**:
+Prefer **`continuum__build_trade_from_trade_idea`** (or chart-pattern alias) with **`tradeIdeaNumber`** / **`tradeIdeaId`** from the menu — not raw protocol builders with hand-picked prices unless the operator overrides.
 
-| Protocol | Tool | Map from setup |
-|----------|------|----------------|
-| **Hyperliquid** | `ctm_hyperliquid_build_limit_order_multisign` | `isBuy` ← `side==long`; `limitPxHuman` ← trigger (± operator offset); `szHuman` ← from `fetch_open_context`; `coin` ← OHLCV symbol; `chainId` **999** / **998** |
-| **GMX** | `ctm_gmx_build_increase_multisign` | `direction` ← `side`; `triggerPriceUsdHuman` ← trigger; `orderType: limit`; size/collateral from GMX context tools |
+| Protocol | Notes |
+|----------|--------|
+| **Hyperliquid** | Limit from adjusted entry; `szHuman` from open-context |
+| **GMX** | `orderType: limit`; `triggerPriceUsdHuman` from adjusted entry; size/collateral from GMX context |
+| **Uniswap** | Spot swap; entry proximity required |
 
 **Workflow (same turn when possible)**
 
 1. OHLCV fetch → **`analyze_chart_patterns`**
-2. If **`lastTradeSetup.status === "clear"`** (or operator explicitly asked to trade): **`load_defi_protocol`** when not loaded
-3. Protocol context tools (e.g. **`fetch_open_context`**, **`fetch_market_snapshot`**) for size/market
-4. **`get_multi_sign_gas_options`** if needed → **`build_*_multisign`** with `keyGenId`, `chainId`, `purposeText`
-5. Return `{ requestId }` — operator signs or rejects in MPC UI
+2. If **`chartPatternTradeSetup.status === "clear"`** (or operator asked to trade): **`load_defi_protocol`** when not loaded
+3. Protocol context tools for size/market; load **`trade-defaults`** for prefill offsets
+4. **`continuum__build_trade_from_trade_idea`** with `keyGenId`, `chainId`, sizing fields
+5. Return `{ requestId }` — operator signs in MPC UI
 
 If **`status === "unclear"`**, explain **`unclearReason`** and do **not** submit multisign unless the operator supplies explicit levels or asks to re-analyze.
-
-Spot swaps (Uniswap/Curve) are **not** pattern-breakout tools — use perp protocols above for directional pattern trades unless the operator directs otherwise.
 
 ## Drawing on chart (mandatory tool — not prose)
 
