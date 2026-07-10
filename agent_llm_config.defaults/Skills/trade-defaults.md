@@ -13,12 +13,38 @@ This skill is **not** machine-parsed YAML on the host. Cron jobs may still set o
 - Apply rules to the **selected idea only** — use its `symbol`, `side`, `confidence`, `status`, `entry`, `target`, `invalidation`, and `analysisSetup`:
   - **chart_pattern:** `patternName`, `entryPhase`, `entryOffsetMode`, `setupPurposeCode`
   - **trend_structure:** `bias`, `structure`, `primaryTrendKind`, `primaryTrendTouchCount`, `entryOffsetMode` (always **`retest`**), `setupPurposeCode` (**`trend-ret`**)
+  - **key_levels:** `levelNumber`, `framing`, `entryOffsetMode` (**`bounce`** default), `setupPurposeCode` (**`kl-bnc`** long bounce / **`kl-brk`** short rejection), `targetSource`, optional nested **`breakRetestAlternative`** (**`kl-ret`** when selected)
 - Do **not** pick a different idea or invent a new setup.
 - If this skill is not installed, prefill is skipped.
 
 Chart-pattern ideas store **base** entry and invalidation at pattern boundaries (inside bounce or post-breakout retest). **Target** comes from measured move.
 
 **Trend-structure** ideas (`analyze_trend_structure`) store **base entry** at the primary **support** (long bias) or **resistance** (short bias) trend-line retest; **invalidation** at the recent swing low/high; **target** at the opposing swing when available. Offsets below apply at **build** time on top of those base prices.
+
+**Key-levels** ideas (`analyze_key_levels`) auto-upsert the **primary** setup only — **bounce** at nearest support (`kl-bnc`, long) or **rejection** at nearest resistance (`kl-brk`, short). Base entry sits at the menu level price; target is the next key level in trade direction when available, else a **Fibonacci 1.618 extension** from the bracketing fib pair (`targetSource: fib_extension`) with an HTF re-analysis advisory. A nested **`breakRetestAlternative`** may be present for operator/agent selection — it is **not** used unless this skill directs you to switch (see §1.1).
+
+### 1.1 Key levels — default vs break+retest alternate
+
+**Default (auto-upserted idea):** use **primary** `keyLevelsTradeSetup` fields on the selected idea — do **not** substitute `breakRetestAlternative` unless the operator explicitly requests break+retest or the conditions below match.
+
+| Path | When | `setupPurposeCode` | `entryOffsetMode` |
+|------|------|--------------------|-------------------|
+| **Primary bounce / rejection** | Default for all key-level ideas | **`kl-bnc`** (long at support) or **`kl-brk`** (short at resistance) | **`bounce`** |
+| **Break + retest alternate** | Operator asks for “break retest”, “post-break entry”, or “trade the broken level”; **or** primary bounce is **`unclear`** but `breakRetestAlternative.status === 'clear'`; **or** structure favors post-break retest (close through level, retest in band) | **`kl-ret`** | **`retest`** |
+
+**Switching to the alternate (prefill LLM):**
+
+1. Read `breakRetestAlternative` from `analysisSetup.setup` on the **same** selected idea.
+2. Use its `entryPrice`, `targetPrice`, `invalidationPrice`, `brokenLevelNumber`, and `setupPurposeCode: kl-ret`.
+3. Apply **retest** offsets from §3; **skip proximity gate** on perp limit venues (same as pattern/trend retests).
+4. Optional `purposeTextAdditional`: e.g. `kl break retest` or `Level #N retest`.
+
+**Break level selection (multiple candidates):**
+
+- **Default:** strongest broken level (`alternateBreakCandidates[0]`, `selectionHint: strongest`).
+- **Alternates:** most recent break; nearest to last close — operator may pick from `alternateBreakCandidates[]`.
+
+**Extension targets:** when `targetSource: fib_extension` (primary or alternate), prefer **hyperliquid** or **gmx** for resting limits; add HTF re-analysis note in `purposeTextAdditional` (e.g. `fib ext — HTF confirm`).
 
 ---
 
@@ -88,7 +114,7 @@ ctm1|{proto}|{L|S}|{setup}|eE={px}|pfE={px}|{symShort}
 | Token | Meaning |
 |-------|---------|
 | `{proto}` | Protocol short code — see protocol table in §5 (`hl`, `gmx`, `uni`, …) |
-| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, …) — never menu `#N` |
+| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, …) — never menu `#N` |
 | `eE` / `pfE` | Effective entry / pattern-failure after offsets |
 | `eB` / `pfB` | Optional base prices when rune budget allows |
 
@@ -221,6 +247,30 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 2. **Hyperliquid:** open-context → `szHuman`. **GMX:** open-context → `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman`.
 3. Optional `purposeTextAdditional`: e.g. `trend retest` or `{primaryTrendKind} trend`.
 4. `autoSubmitMultisign`: **false**.
+
+### Policy: key-level bounce default → perp limit (HL or GMX)
+
+**When:** selected idea is **`key_levels`**, primary `setupPurposeCode` **`kl-bnc`** or **`kl-brk`**, `status: clear`, operator UI protocol is **hyperliquid** or **gmx**.
+
+**Protocol:** operator UI **`hyperliquid`** or **`gmx`** (§5) — **not Uniswap** unless last price is within **`entryProximityPct`** of the bounce entry.
+
+1. Use **bounce** offsets from §3 (`entryOffsetPct` / `invalidationOffsetPct` from desk defaults).
+2. **Hyperliquid:** open-context → `szHuman`. **GMX:** open-context → `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman`.
+3. Optional `purposeTextAdditional`: e.g. `kl bounce` or `Level #N support`.
+4. When `targetSource: fib_extension`, note HTF confirmation in `purposeTextAdditional`.
+5. `autoSubmitMultisign`: **false**.
+
+### Policy: key-level break retest alternate → perp limit (HL or GMX)
+
+**When:** operator explicitly selects **`breakRetestAlternative`** (or asks for break+retest) on a **`key_levels`** idea with alternate `status: clear` and `setupPurposeCode` **`kl-ret`**.
+
+**Protocol:** **`hyperliquid`** or **`gmx`** (§5) — not Uniswap unless price is already at the retest entry.
+
+1. Use **retest** offsets from §3; skip proximity gate on perp venues.
+2. Size from protocol open-context tools (same as trend-structure policy).
+3. Optional `purposeTextAdditional`: e.g. `kl break retest` or `broken Level #N`.
+4. When alternate `targetSource: fib_extension`, note HTF confirmation.
+5. `autoSubmitMultisign`: **false**.
 
 ### Policy: cron auto-submit
 
