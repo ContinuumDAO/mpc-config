@@ -28,9 +28,9 @@ Chart-pattern ideas store **base** entry and invalidation at pattern boundaries 
 
 | Regime | Last close | Primary setup | Target |
 |--------|------------|---------------|--------|
-| **`inside_range`** | Between range low and high | 0.618 retrace entry (`kl-fib`, `entryOffsetMode: bounce`) | Opposite range leg (`range_leg`) |
-| **`above_range`** | Above range high | Long break continuation at range high (`kl-fib-ext`, `entryOffsetMode: retest`) | **Fib 1.618 extension above** high (`fib_extension`) |
-| **`below_range`** | Below range low | Short break continuation at range low (`kl-fib-ext`, `entryOffsetMode: retest`) | **Fib 1.618 extension below** low (`fib_extension`; chart Fib overlay reversed) |
+| **`inside_range`** | Between range low and high | Bounce at **Fib leg** (`kl-fib`, `entryOffsetMode: bounce`): **upper half → short at Fib 1.0 (range high)** toward 0.618; **lower half → long at Fib 1.0 inverted (range low)** toward inverted 0.618. Opposite-side variant uses the other leg (long at Fib 0 / short at Fib 0 inverted) toward the opposite range leg. | Default variant: **Fib 0.618** retrace (`retrace_618`); opposite variant: opposite range leg (`range_leg`) |
+| **`above_range`** | Above range high | **Long** retest at **Fib 1.0** (range high; `kl-fib-ext`, `entryOffsetMode: retest`) — actionable when last close is within **`entryProximityPct`** of the leg or inside the **`entryOffsetPct`** retest band (§3) | **Fib 1.618 extension above** high (`fib_extension`) |
+| **`below_range`** | Below range low | **Short** retest at **Fib 1.0 inverted** (range low; `kl-fib-ext`, `entryOffsetMode: retest`) — same proximity / retest-band gates | **Fib 1.618 extension below** low (`fib_extension`; chart Fib overlay reversed) |
 
 Nested **`breakRetestAlternative`** on fib ideas (`kl-fib-ret`) waits for **retest at the broken range leg** before the same 1.618 extension target — mirror §1.1 switching rules (§1.2).
 
@@ -75,14 +75,14 @@ Nested **`breakRetestAlternative`** on fib ideas (`kl-fib-ret`) waits for **rete
 3. Apply **retest** offsets from §3; **skip proximity gate** on perp limit venues.
 4. Optional `purposeTextAdditional`: e.g. `fib break retest` or `Level #N range leg retest`.
 
-**Chart apply:** `apply_key_level_drawings` with **`fibPairNumber`** draws the Fib overlay (0 / 0.618 / 1) plus leg levels; when `targetSource: fib_extension`, also draws the bold **1.618 extension** target line. Below-range setups use **reversed** Fib orientation on chart (`displayTrend: down`).
+**Chart apply:** `apply_key_fib_drawings` with **`fibPairNumber`** draws the Fib overlay (0 / 0.618 / 1) plus leg levels; when `targetSource: fib_extension`, also draws the bold **1.618 extension** target line. Below-range setups use **reversed** Fib orientation on chart (`displayTrend: down`).
 
 **Desk percentages on setup (match §2 defaults):** each `keyLevelFibTradeSetup` includes **`entryProximityPct: 1`**, **`entryOffsetPct: 1`**, **`invalidationOffsetPct: 1`**. Analysis uses these when assessing entry actionability:
 
 | Regime | Entry assessment |
 |--------|------------------|
-| **`inside_range`** (`kl-fib`, bounce) | Last close within **`entryProximityPct`** of 0.618 entry |
-| **`above_range` / `below_range`** (`kl-fib-ext`, retest) | Break continuation — proximity skipped at surfacing (price already through leg); prefill applies **retest** **`entryOffsetPct`** band at build (§3) |
+| **`inside_range`** (`kl-fib`, bounce) | Last close within **`entryProximityPct`** of the **Fib leg entry** (Fib 1.0 / Fib 0 per variant — not the 0.618 target). At **build**, **`entryOffsetPct`** (bounce mode) shifts the resting limit slightly beyond that leg (§3). |
+| **`above_range` / `below_range`** (`kl-fib-ext`, retest) | Last close within **`entryProximityPct`** of **Fib 1.0 leg entry**, or inside the **`entryOffsetPct`** retest band between the broken leg and the offset limit (§3). At **build**, resting limit uses **retest** offsets on perp venues (proximity skipped on perp prefill per §2). |
 | **`breakRetestAlternative`** (`kl-fib-ret`) | Bar retest at broken leg (break detect); prefill uses **retest** offsets, skips proximity on perp |
 
 Same desk fields are on **`keyLevelsTradeSetup`** for nearest analysis (bounce uses **`entryProximityPct`**).
@@ -317,9 +317,9 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 
 **When:** selected idea is **`key_level_fibonacci`**, `priceRegime: inside_range`, `setupPurposeCode` **`kl-fib`**, `status: clear`.
 
-**Protocol:** **hyperliquid** or **gmx** (§5) — not Uniswap unless last price is within **`entryProximityPct`** of the 0.618 entry.
+**Protocol:** **hyperliquid** or **gmx** (§5) — not Uniswap unless last price is within **`entryProximityPct`** of the **Fib leg entry** (range high for upper-half short, range low for lower-half long, etc.).
 
-1. Use **bounce** offsets from §3.
+1. Use **bounce** offsets from §3 ( **`entryOffsetPct`** adjusts the limit relative to the leg base entry).
 2. Size from protocol open-context tools.
 3. Optional `purposeTextAdditional`: e.g. `fib 0.618 retrace`.
 4. `autoSubmitMultisign`: **false**.
