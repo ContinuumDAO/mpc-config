@@ -11,7 +11,7 @@ Reference: MCP resource **`chart_analysis_docs`**.
 | Invented “quick read” of price action after plotting | Quote **`meta.ohlcvSummary`** from the chart tool only, **or** call **`analyze_*`** |
 | Numbered menu of analysis types you made up (“1. Momentum 2. Key levels …”) | **`list_chart_analysis_options`** → numbered menu from **`analyses[]`** (each row names its **`id`** / tool) |
 | Classic pattern names, channels, double tops, etc. without a tool | **`analyze_chart_patterns`** → summarize **`analysis.patternMenu`** |
-| “Want me to layer on RSI / key levels / patterns?” without naming tools | Offer **`list_chart_analysis_options`**, or list options with explicit tool names (e.g. **`analyze_momentum`**, **`analyze_key_levels`**, **`analyze_chart_patterns`**) |
+| “Want me to layer on RSI / key levels / patterns?” without naming tools | Offer **`list_chart_analysis_options`**, or list options with explicit tool names (e.g. **`analyze_momentum`**, **`analyze_key_levels`**, **`analyze_key_level_fibonacci`**, **`analyze_chart_patterns`**) |
 | Analysis prose after the operator picks an option | Call the matching **`analyze_*`** first, then summarize tool JSON |
 
 **After a chart is already on screen:** reuse the same OHLCV session (`toolResult` or `{ title, ohlcvDigest }` from **`meta.sessionBind`**) and call the appropriate **`analyze_*`** — do **not** skip tools because the candles are visible in the UI.
@@ -40,7 +40,7 @@ Reference: MCP resource **`chart_analysis_docs`**.
 
 | Fetch result | Analysis tools |
 |--------------|----------------|
-| Candles / OHLCV | `analyze_trend_structure`, `analyze_key_levels`, `analyze_momentum`, `analyze_range_volatility`, `analyze_candlestick_patterns`, `analyze_chart_patterns` |
+| Candles / OHLCV | `analyze_trend_structure`, `analyze_key_levels`, `analyze_key_level_fibonacci`, `analyze_momentum`, `analyze_range_volatility`, `analyze_candlestick_patterns`, `analyze_chart_patterns` |
 | Line-only `{ time, value }` metrics | `analyze_time_series_trend`, `analyze_time_series_momentum`, `analyze_time_series_stats` |
 
 Load skill **`chart-analysis-time-series`** when interpreting TVL, fees, or custom metrics.

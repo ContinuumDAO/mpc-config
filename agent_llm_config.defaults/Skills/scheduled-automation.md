@@ -50,10 +50,12 @@ When a scheduled turn should propose on-chain actions:
 
 Template: **`agent_llm_config.defaults/cron/trade_analysis_cron.example.md`** (mpc-config seed catalog).
 
-- Each **`analyze_*`** step upserts a typed setup into **`conversation.tradeIdeas[]`** on the **`[Cron]`** thread.
-- Optional fenced **`tradeConsensus`** YAML in the job **`message`** gates multi-analysis agreement (node injects a matrix hint).
+- Each **`analyze_*`** step upserts a typed setup into **`conversation.tradeIdeas[]`** on the **`[Cron]`** thread (e.g. **`analyze_trend_structure`** → `trend_structure`, **`analyze_key_levels`** → `key_levels`, **`analyze_key_level_fibonacci`** → `key_level_fibonacci` — separate ideas from the same OHLCV session).
+- Optional fenced **`tradeConsensus`** YAML in the job **`message`** gates multi-analysis agreement (node injects a matrix hint). Valid `requiredSources` include `trend_structure`, `key_levels`, `key_level_fibonacci`, `chart_pattern`, `momentum`, …
+- Optional fenced **`tradeBuild`** YAML — freeze **`protocolId`** (`hyperliquid` | `gmx` | `uniswap`), chain, sizing, and offsets; see template for per-protocol fields.
 - **`submitTradeFromConsensus: true`** enables the cron-only **`submit_trade_from_consensus`** step — the agent must pass **`tradeIdeaId`** per prose selection rules in the message (YAML does not auto-pick).
 - **Plan / orchestrator** threads use **`build_trade_from_*`** only — never **`submit_trade_from_consensus`**.
+- **Uniswap V4** has no protocol OHLCV — cron message must name a separate candle source for analysis; limit-style ideas (trend, levels, fib extension) usually build on **hyperliquid** or **gmx** instead (see **`trade-defaults`**).
 
 ## Anti-patterns
 
