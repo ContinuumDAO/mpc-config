@@ -174,7 +174,7 @@ ctm1|{proto}|{L|S}|{setup}|eE={px}|pfE={px}|{symShort}
 | Token | Meaning |
 |-------|---------|
 | `{proto}` | Protocol short code — see protocol table in §5 (`hl`, `gmx`, `uni`, …) |
-| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`kl-fib-ext`**, **`kl-fib-ret`**, …) — never menu `#N` |
+| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`kl-fib-ext`**, **`kl-fib-ret`**, **`bb-fade`**, …) — never menu `#N` |
 | `eE` / `pfE` | Effective entry / pattern-failure after offsets |
 | `eB` / `pfB` | Optional base prices when rune budget allows |
 
