@@ -99,4 +99,22 @@ CoinGecko spot charts use **`coins.ohlc.get`** only — real OHLC candles, no `m
 
 ## Customization
 
-Operator overrides (preferred spot source, EMA period, etc.) go here when set on this node.
+Operator overrides (preferred spot source, EMA period, Bollinger overlay, etc.) go here when set on this node.
+
+### Optional Bollinger overlay (when operator asks or after Bollinger analysis)
+
+Merge into **`prepareReplay.overlays`** (does not replace default EMA/RSI unless you pass a full **`overlays`** array):
+
+```json
+{ "type": "bollinger", "sourceSeriesId": "<primary series id>", "period": 20, "stdDev": 2, "fill": true }
+```
+
+| Field | Default |
+|-------|---------|
+| `period` | 20 |
+| `stdDev` | 2 |
+| `fill` | true (shaded area between bands) |
+
+Pass overrides on the tool call or in **`prepareReplay.overlays`** when the operator asks (e.g. “BB(14, 2.5)”).
+
+Analysis workflow: **`chart-analysis-bollinger`**. Trade build / prefill: **`trade-defaults`** (`bb-fade`).

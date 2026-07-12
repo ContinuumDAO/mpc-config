@@ -15,6 +15,7 @@ This skill is **not** machine-parsed YAML on the host. Cron jobs may still set o
   - **trend_structure:** `bias`, `structure`, `primaryTrendKind`, `primaryTrendTouchCount`, `entryOffsetMode` (always **`retest`**), `setupPurposeCode` (**`trend-ret`**)
   - **key_levels:** `levelNumber`, `framing`, `entryOffsetMode` (**`bounce`** default), `setupPurposeCode` (**`kl-bnc`** long bounce / **`kl-brk`** short rejection), `targetSource`, optional nested **`breakRetestAlternative`** (**`kl-ret`** when selected)
   - **key_level_fibonacci:** `fibPairNumber`, `priceRegime` (`inside_range` | `above_range` | `below_range`), `framing`, `entryOffsetMode`, `setupPurposeCode` (**`kl-fib`** 0.618 retrace / **`kl-fib-ext`** range extension / **`kl-fib-ret`** when break+retest alternate selected), `targetSource` (`retrace_618` | `range_leg` | `fib_extension`), optional nested **`breakRetestAlternative`**
+  - **bollinger_bands:** `setupPurposeCode` (**`bb-fade`**), `entryOffsetMode` (**`bounce`**), band **`period`** **20**, **`stdDev`** **2**, **`entryProximityPct`** **5** (% of **band width** — gates `clear` vs `unclear`)
 - Do **not** pick a different idea or invent a new setup.
 - If this skill is not installed, prefill is skipped.
 
@@ -87,6 +88,8 @@ Nested **`breakRetestAlternative`** on fib ideas (`kl-fib-ret`) waits for **rete
 
 Same desk fields are on **`keyLevelsTradeSetup`** for nearest analysis (bounce uses **`entryProximityPct`**).
 
+**Bollinger bands** ideas (`analyze_bollinger_bands`) are **band-to-band fades**: above middle → **short** at **upper** band toward **lower**; below middle → **long** at **lower** band toward **upper**. Base entry is the outer band price; target is the **opposite** band. Invalidation is band breach (above upper for short, below lower for long). Idea is **`clear`** only when last close is within **`entryProximityPct`** (**5** by default, % of band width). Use **`setupPurposeCode: bb-fade`**, **`entryOffsetMode: bounce`**, and desk **`entryOffsetPct` / `invalidationOffsetPct`** from §2 at build time. Chart overlay defaults (`period`, `stdDev`, shaded fill) live in **`chart-defaults`**.
+
 ---
 
 ## 2. Universal prefill fields (every protocol)
@@ -108,7 +111,23 @@ entryOffsetPct: 1
 invalidationOffsetPct: 1
 ```
 
-`entryProximityPct: 1` affects **idea surfacing** only (inside bounces, key levels, Uniswap) — not prefill JSON. Post-breakout retest limits and **trend-structure retest** limits skip proximity on perp venues. Uniswap still enforces proximity at **build** time (spot swap, not a resting limit at the trend line).
+### Entry proximity (global desk switch)
+
+**`entryProximityMode`** applies to **all price-based proximity gates** together — key levels, fib, chart-pattern inside bounces, and Uniswap build-time checks. When **`atr`**, **`entryProximityPct`** is interpreted as **% of ATR** (absolute distance threshold = ATR × pct / 100), not % of entry price. When **`price`** (default), **`entryProximityPct`** is **% of entry price** as today.
+
+**Bollinger `bb-fade` is excluded** — its **`entryProximityPct`** stays **% of band width** regardless of this switch.
+
+```yaml
+entryProximityMode: price   # price | atr — default price
+entryProximityPct: 1        # 1% of price (price mode) or 1% of ATR (atr mode)
+entryProximityAtrPeriod: 14 # Wilder-style ATR lookback when entryProximityMode: atr
+```
+
+Analysis stores **`entryProximityMode`** and **`atrAtLastBar`** on level/fib setups when mode is **`atr`**, so Uniswap build can reuse the same threshold without recomputing ATR.
+
+**Bollinger bands (`bollinger_bands`):** `entryProximityPct: 5` (band-width % — not price % or ATR). Band **`period: 20`**, **`stdDev: 2`** match **`chart-defaults`** overlay defaults.
+
+`entryProximityPct: 1` (with **`entryProximityMode`**) affects **idea surfacing** for key levels, fib, chart-pattern bounces, and Uniswap spot — not Bollinger fades. Post-breakout retest limits and **trend-structure retest** limits skip proximity on perp venues. Uniswap still enforces proximity at **build** time (spot swap, not a resting limit at the trend line).
 
 ---
 

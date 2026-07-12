@@ -14,7 +14,7 @@ Embed **frozen** operator choices in the cron **`message`**: symbol, candle inte
 
 **Chain IDs (typical):** Hyperliquid **999** (mainnet) / **998** (testnet); GMX & Uniswap on Arbitrum **42161** — confirm via protocol supported-chains in staging.
 
-**Trend / limit-style ideas on Uniswap:** spot swap only — no resting limit at trend line. Prefer **`hyperliquid`** or **`gmx`** in `tradeBuild` for **`trend_structure`**, **`key_levels`**, and fib **extension/retest** ideas. Use **`uniswap`** only when last price is already within desk **`entryProximityPct`** of the idea entry (see **`trade-defaults`** §5 uniswap).
+**Trend / limit-style ideas on Uniswap:** spot swap only — no resting limit at trend line. Prefer **`hyperliquid`** or **`gmx`** in `tradeBuild` for **`trend_structure`**, **`key_levels`**, and fib **extension/retest** ideas. Use **`uniswap`** only when last price is already within desk **`entryProximityPct`** of the idea entry — per **`entryProximityMode`** in **`trade-defaults`** §2 (`price` = % of entry; `atr` = % of ATR).
 
 ### Steps (prose — customize)
 
@@ -24,9 +24,10 @@ Embed **frozen** operator choices in the cron **`message`**: symbol, candle inte
 4. `analyze_trend_structure` on the same session (upserts **`trend_structure`** / `trendStructureTradeSetup`, `setupPurposeCode` **`trend-ret`**).
 5. `analyze_key_levels` on the same session (nearest bounce/rejection — upserts **`key_levels`** / `keyLevelsTradeSetup`).
 6. `analyze_key_level_fibonacci` on the same session (outer range 0.618 / 1.618 — upserts **`key_level_fibonacci`** / `keyLevelFibTradeSetup`).
-7. If consensus gate **ALLOWED** and submit enabled, call **`submit_trade_from_consensus`** with **`tradeIdeaId`** per selection rules below. Resolve sizing from **execution** protocol open-context (Hyperliquid / GMX / Uniswap quote tools per **`trade-defaults`** §5).
+7. Optional: `analyze_bollinger_bands` on the same session (upserts **`bollinger_bands`** / `bollingerTradeSetup`, `setupPurposeCode` **`bb-fade`**).
+8. If consensus gate **ALLOWED** and submit enabled, call **`submit_trade_from_consensus`** with **`tradeIdeaId`** per selection rules below. Resolve sizing from **execution** protocol open-context (Hyperliquid / GMX / Uniswap quote tools per **`trade-defaults`** §5).
 
-Steps 4–6 share the same OHLCV session; each upserts a **separate** trade idea (`analysisType` distinct).
+Steps 4–7 share the same OHLCV session; each upserts a **separate** trade idea (`analysisType` distinct).
 
 ### Selection guidance (prose — agent decides tradeIdeaId)
 
@@ -45,6 +46,8 @@ Else prefer **key_level_fibonacci** when `status=clear` and `priceRegime` matche
 Use nested **`breakRetestAlternative`** (`kl-fib-ret`) only when cron prose explicitly favors break+retest, or primary extension is **`unclear`** and alternate is **`clear`** ( **`trade-defaults`** §1.2).
 
 Else prefer **key_levels** (nearest): rank-1 **bounce** (`kl-bnc`) or **rejection** (`kl-brk`).
+
+Else prefer **bollinger_bands** when `status=clear`, not **`invalidated`**, and last close was within **`entryProximityPct`** (**5**, band-width %) of the entry band (`bb-fade`; see **`trade-defaults`**).
 
 Skip **partial** setups unless **momentum** agrees. When multiple level/trend ideas qualify, prefer the one whose **side** matches momentum / pattern / trend bias.
 
@@ -101,6 +104,9 @@ tradeBuild:
   szHuman: "0.5"
   marketKind: perp
   tif: gtc
+  entryProximityMode: price
+  entryProximityPct: 1
+  entryProximityAtrPeriod: 14
   entryOffsetPct: 1
   invalidationOffsetPct: 1
   useCustomGas: false
@@ -116,6 +122,9 @@ tradeBuild:
   sizeUsdHuman: "500"
   collateralToken: USDC
   collateralAmountHuman: "100"
+  entryProximityMode: price
+  entryProximityPct: 1
+  entryProximityAtrPeriod: 14
   entryOffsetPct: 1
   invalidationOffsetPct: 1
   useCustomGas: false
@@ -139,4 +148,4 @@ Optional: **`tradeIdeaNumber`** — fixed menu index after you know which idea t
 
 Set `submitTradeFromConsensus: false` (or omit) to inject the consensus matrix without requiring **`submit_trade_from_consensus`**.
 
-Prefill/build for trend and level ideas follows skill **`trade-defaults`** (desk **`entryOffsetPct` / `invalidationOffsetPct`** = 1% on perp limit venues; trend always **`entryOffsetMode: retest`**).
+Prefill/build for trend and level ideas follows skill **`trade-defaults`** (desk **`entryOffsetPct` / `invalidationOffsetPct`** = 1% on perp limit venues; **`entryProximityMode: price`** with **`entryProximityPct: 1`** unless you switch the whole desk to **`atr`**; trend always **`entryOffsetMode: retest`**).
