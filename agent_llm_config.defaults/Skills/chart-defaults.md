@@ -118,3 +118,22 @@ Merge into **`prepareReplay.overlays`** (does not replace default EMA/RSI unless
 Pass overrides on the tool call or in **`prepareReplay.overlays`** when the operator asks (e.g. “BB(14, 2.5)”).
 
 Analysis workflow: **`chart-analysis-bollinger`**. Trade build / prefill: **`trade-defaults`** (`bb-fade`).
+
+### Optional moving averages overlay (when operator asks or after Moving averages analysis)
+
+Requires **≥200** bars for SMA(200). Merge into **`prepareReplay.overlays`**:
+
+```json
+[
+  { "type": "sma", "sourceSeriesId": "<primary series id>", "period": 50 },
+  { "type": "sma", "sourceSeriesId": "<primary series id>", "period": 200 }
+]
+```
+
+| Field | Default |
+|-------|---------|
+| `fastPeriod` | 50 |
+| `slowPeriod` | 200 |
+| `maType` | `sma` (or `ema` when overridden) |
+
+Analysis workflow: **`chart-analysis-moving-averages`**. Trade build / prefill: **`trade-defaults`** (`ma-cross` / `ma-ret`).

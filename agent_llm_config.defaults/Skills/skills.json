@@ -61,6 +61,16 @@
       "initialLoad": false
     },
     {
+      "name": "chart-analysis-bollinger",
+      "filename": "chart-analysis-bollinger.md",
+      "initialLoad": false
+    },
+    {
+      "name": "chart-analysis-moving-averages",
+      "filename": "chart-analysis-moving-averages.md",
+      "initialLoad": false
+    },
+    {
       "name": "orchestration-chart-analysis",
       "filename": "orchestration-chart-analysis.md",
       "initialLoad": false

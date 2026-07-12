@@ -25,6 +25,7 @@ Embed **frozen** operator choices in the cron **`message`**: symbol, candle inte
 5. `analyze_key_levels` on the same session (nearest bounce/rejection — upserts **`key_levels`** / `keyLevelsTradeSetup`).
 6. `analyze_key_level_fibonacci` on the same session (outer range 0.618 / 1.618 — upserts **`key_level_fibonacci`** / `keyLevelFibTradeSetup`).
 7. Optional: `analyze_bollinger_bands` on the same session (upserts **`bollinger_bands`** / `bollingerTradeSetup`, `setupPurposeCode` **`bb-fade`**).
+8. Optional: `analyze_moving_averages` on the same session (upserts **`moving_averages`** / `movingAveragesTradeSetup`, `setupPurposeCode` **`ma-cross`** or **`ma-ret`** per `tradeSummary`).
 8. If consensus gate **ALLOWED** and submit enabled, call **`submit_trade_from_consensus`** with **`tradeIdeaId`** per selection rules below. Resolve sizing from **execution** protocol open-context (Hyperliquid / GMX / Uniswap quote tools per **`trade-defaults`** §5).
 
 Steps 4–7 share the same OHLCV session; each upserts a **separate** trade idea (`analysisType` distinct).

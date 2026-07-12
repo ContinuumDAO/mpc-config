@@ -40,7 +40,7 @@ Reference: MCP resource **`chart_analysis_docs`**.
 
 | Fetch result | Analysis tools |
 |--------------|----------------|
-| Candles / OHLCV | `analyze_trend_structure`, `analyze_key_levels`, `analyze_key_level_fibonacci`, `analyze_momentum`, `analyze_range_volatility`, `analyze_bollinger_bands`, `analyze_candlestick_patterns`, `analyze_chart_patterns` |
+| Candles / OHLCV | `analyze_trend_structure`, `analyze_key_levels`, `analyze_key_level_fibonacci`, `analyze_momentum`, `analyze_range_volatility`, `analyze_bollinger_bands`, `analyze_moving_averages`, `analyze_candlestick_patterns`, `analyze_chart_patterns` |
 | Line-only `{ time, value }` metrics | `analyze_time_series_trend`, `analyze_time_series_momentum`, `analyze_time_series_stats`, `analyze_bollinger_bands` |
 
 Load skill **`chart-analysis-time-series`** when interpreting TVL, fees, or custom metrics.
@@ -82,6 +82,7 @@ Load with **`agent_load_skill`** when the operator picks a type or for richer na
 - `chart-analysis-momentum`
 - `chart-analysis-range`
 - `chart-analysis-bollinger` (summarize `analyze_bollinger_bands`; defaults in **`chart-defaults`** / **`trade-defaults`**)
+- `chart-analysis-moving-averages` (summarize `analyze_moving_averages`; crossover + proximity retest; defaults in **`chart-defaults`** / **`trade-defaults`**)
 - `chart-analysis-patterns` (1–3 bar candlestick recognition)
 - `chart-analysis-classic-patterns` (multi-bar H&S, doubles, triangles, cup & handle, trendline breakout/retest — **ask which menu # to draw** unless operator picked one)
 - `chart-analysis-time-series` (line-only metrics)
