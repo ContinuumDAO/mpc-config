@@ -87,6 +87,7 @@ Top-level fields (the script also accepts common **snake_case** aliases where no
 | **`composeActions`** | Yes | Non-empty array of actions (`compose_actions`). |
 | **`rpcGateway`** | No | If set, used as the JSON-RPC URL for nonce, estimateGas, and fee discovery. If omitted, the script loads RPC from **`GET /getChainDetails`** (`rpc_gateway` alias). |
 | **`purpose`** | No | Short text (app limit 256 chars for display on agree). |
+| **`expiryDate`** | No | Unix seconds (UTC) when the sign request expires. Default at creation: **timepoint + 7 days**. Must be in the future at POST. Included in signed JSON. |
 | **`noCustomGasParams`** | No | When **true**, ignores **`getChainDetails`** gas fields and estimates gas limit and fees only from the RPC. When **false** or omitted (default), uses each gas-related field from chain config when set, and RPC estimates for missing fields. |
 | **`clientId`** | No | Override; otherwise first non-empty value from **`getKeyGenResultById`** → **`ClientKeys`** / **`clientkeys`**. |
 

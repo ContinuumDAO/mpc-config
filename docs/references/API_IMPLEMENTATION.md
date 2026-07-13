@@ -4990,6 +4990,7 @@ Requires **management key authentication** (Ethereum **`NodeMgtKey`** / **`perso
 - **`txParams`** (optional, **EVM**): Proposal-time gas/nonce snapshot for **single-tx** requests — same shape as trigger/GET `txParams` (`nonce`, `gasLimit`, `txType`, EIP-1559 or legacy fee fields). Stored on **`proposal_tx_params`** (one entry) and **propagated**. **Mutually exclusive** with **`proposalTxParams`** on the same POST.
 - **`proposalTxParams`** (optional, **EVM**): For **batch**, array of length **N** = **`len(messageHashes)`**, one **`txParams`‑shaped** object per index. For **single-tx**, at most **one** element (equivalent to **`txParams`**). Propagated. **Mutually exclusive** with **`txParams`**.
 - **`skipMessageHashVerification`** (optional): Boolean; stored and propagated. Reserved for server-side hash recomputation policy (strict vs skip); does not change **`msgHash`** / **`messageHashes`** on the wire.
+- **`expiryDate`** (optional): Unix timestamp in **seconds** (UTC) when this sign request expires and can no longer be agreed or triggered. Must be strictly in the future at creation. Included in the signed JSON. When omitted, the backend sets **`expiryDate = timepoint + 7 days`** (same default idle window as before). Propagated to all nodes; returned in **`listSignRequests`** / **`getSignRequestById`** as **`expiryDate`**. When **`now > expiryDate`**, status becomes **`expired`** (terminal; cannot be resurrected).
 
 **Response (success):** Standard **`APIResponse`**. **`data`** is an object:
 
@@ -5027,7 +5028,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/multiSignRequest \
 ```
 
 **Error Responses:**
-- `400 Bad Request`: Key not found or key is not multi-agree type; for single, missing `msgHash`; for batch, invalid `messageHashes` (e.g. non-hex or `messageRawBatch` length not 0 or N); Ethereum wallet / NodeMgtKey path with empty `signedMessage`
+- `400 Bad Request`: Key not found or key is not multi-agree type; for single, missing `msgHash`; for batch, invalid `messageHashes` (e.g. non-hex or `messageRawBatch` length not 0 or N); **`expiryDate` not in the future**; Ethereum wallet / NodeMgtKey path with empty `signedMessage`
 - `401 Unauthorized`: Client signature invalid
 - `500 Internal Server Error`: Internal processing error
 
@@ -5037,13 +5038,14 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
 
 
 **Query Parameters:**
-- `filter` (optional): `all`, `live`, `pending`, `success`, `blocked`, `shelved` (default: `all`). Values align with sign request lifecycle status.
+- `filter` (optional): `all`, `live`, `pending`, `success`, `blocked`, `shelved`, `expired` (default: `all`). Values align with sign request lifecycle status.
   - `all`: All sign requests (any status, including `live`)
-  - `live`: Sign requests with status `live` (active requests not yet agreed by this node, success, blocked, or shelved)
+  - `live`: Sign requests with status `live` (active requests not yet agreed by this node, success, blocked, shelved, or expired)
   - `pending`: Sign requests with status `pending` (this node has called signRequestAgree; not propagated to other nodes)
   - `success`: Sign requests with status `success` (a sign result was created for the request)
   - `blocked`: Sign requests with status `blocked` (MPC quorum agreements can no longer be reached among remaining participants)
   - `shelved`: Sign requests with status `shelved` (originator shelved the request)
+  - `expired`: Sign requests with status `expired` (past **`expiryDate`**; auto-set by hourly worker; cannot be agreed or triggered)
 - `pagenum` (optional, default: 0)
 - `pagesize` (optional, default: 10)
 - `fromTime` (optional): Only include requests with `timepoint` ≥ this value (Unix timestamp in seconds).
@@ -5079,6 +5081,7 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
       "Purpose": { "04a1b2c3d4e5f6...128hex": "Bridge transfer to L2" },
       "Thoughts": {},
       "KeyGenRequestId": "KeyGen20260217130529999704c2304",
+      "expiryDate": 1736558240,
       "timepoint": "2026-01-11T00:37:20Z"
     }
   ]
@@ -5108,7 +5111,8 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
 - `Purpose`: Key/value map: node key (128 hex) → purpose text (max 256 chars per entry). Visible to nodes considering agree/reject. The key identifies which node created or submitted the request (multiSignRequest: creator node; signRequest/tx-check: node that received the request).
 - `Thoughts`: Map of node key → optional comment (max 256 chars each) from each node when they called `signRequestAgree` (accept or reject).
 - `KeyGenRequestId`: Key generation request ID (keyGenId) for the MPC key used by this sign request (same as the keygen request that produced `PubKey`). Included in listSignRequests, getSignRequestById, getSignResultById, and listSignRequestsReady.
-- `status`: Sign request lifecycle status: `"live"` (default after creation), `"pending"` (set locally when this node has called `POST /signRequestAgree`; not propagated), `"shelved"` (set by the originator via `POST /shelveSignRequest`), `"blocked"` (set automatically when the **MPC quorum** can no longer be reached), or `"success"` (set when a sign result is created). Omitted or `"live"` until set.
+- `expiryDate`: Unix seconds (UTC) when this sign request expires. Set at creation (default: **`timepoint + 7 days`** when omitted on POST). When past this time, status becomes **`expired`** and agree/trigger are rejected.
+- `status`: Sign request lifecycle status: `"live"` (default after creation), `"pending"` (set locally when this node has called `POST /signRequestAgree`; not propagated), `"shelved"` (set by the originator via `POST /shelveSignRequest`), `"blocked"` (set automatically when the **MPC quorum** can no longer be reached), `"expired"` (set when past **`expiryDate`**; terminal), or `"success"` (set when a sign result is created). Omitted or `"live"` until set.
 - `timepoint`: When the request was recorded
 
 **Example:**
@@ -5152,6 +5156,8 @@ Agrees to or rejects a signing request. **Requires management key authentication
 
 - **tx-check (relayer):** Unchanged. Request body is `requestId` (+ optional `clientSig`); no `accept` or `thoughts` field. Relayer flow is not affected.
 - **multi-agree:** Optional `accept` (boolean). Omitted or `true` = agree to sign (same as before). `false` = reject: this node is recorded as having declined in **RejectedBy**. The client must sign the canonical JSON body (including `requestId`, `nonce`, `nodeKey`, `clientSig` empty, `accept`, and `thoughts` when present). Other nodes may still agree; rejection is per-node.
+
+**Expiry:** If the sign request status is **`expired`** or **`now > expiryDate`**, the server returns an error and does not record agree/reject.
 
 **Request Body:**
 - `requestId` (required): Sign request ID
@@ -5322,7 +5328,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSignResultById?id=Sign20260111003720999c
 
 <a id="get-issignrequestreadybyid"></a>
 #### `GET /isSignRequestReadyById`
-Returns whether a sign request is **ready to trigger** (multi-agree only). Ready means **SigList** has at least the **MPC quorum** (see keygen **`threshold`** semantics). For tx-check or non–multi-agree keys, returns `ready: false`. Use this before calling `POST /triggerSignRequestById`.
+Returns whether a sign request is **ready to trigger** (multi-agree only). Ready means **SigList** has at least the **MPC quorum** (see keygen **`threshold`** semantics). For tx-check or non–multi-agree keys, returns `ready: false`. Returns **`ready: false`** when status is **`shelved`**, **`blocked`**, **`expired`**, or when past **`expiryDate`**. Use this before calling `POST /triggerSignRequestById`.
 
 **Query Parameters:**
 - `id` (required): Sign request ID.
@@ -5346,7 +5352,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/isSignRequestReadyById?id=Sign2026011100372
 
 <a id="get-listsignrequestsready"></a>
 #### `GET /listSignRequestsReady`
-Lists **multi-agree** sign requests that are **ready to trigger**: this node is in the agreeing set (**SigList**), at least **MPC quorum** have agreed (see keygen **`threshold`**), and the request has **not** yet been triggered (no sign result). Use `GET /getSignResultById` to see when the signature is ready after triggering. Supports pagination.
+Lists **multi-agree** sign requests that are **ready to trigger**: this node is in the agreeing set (**SigList**), at least **MPC quorum** have agreed (see keygen **`threshold`**), and the request has **not** yet been triggered (no sign result). Excludes **`shelved`**, **`blocked`**, **`expired`**, and requests past **`expiryDate`**. Use `GET /getSignResultById` to see when the signature is ready after triggering. Supports pagination.
 
 **Query Parameters:**
 - `pagenum` (optional): Page number (default `0`).
@@ -5363,7 +5369,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequestsReady?pagenum=0&pagesize=10
 
 <a id="post-triggersignrequestbyid"></a>
 #### `POST /triggerSignRequestById`
-**Multi-agree only.** When at least the **MPC quorum** for this key have accepted in **SigList** (and rejections are excluded), triggers signature generation: sends **SIGNREQUESTCONFIRMSUCCESS** and starts the sign worker(s). For **single** requests, one signature is produced; for **batch** requests, one trigger produces one SignResult with N signatures (retrieved via `GET /getSignResultById` as the `batchSignatures` array). **Only the originator may call this:** the request’s **Purpose** map must have this node’s key as the (originator) key; otherwise the server returns an error. **If the sign request status is `"shelved"`** (set via `POST /shelveSignRequest`), the server returns an error and does not trigger. **Idempotent:** if the request was already triggered, returns success with data `"Already triggered"`. Does not affect tx-check flow. Requires management key signature (Ethereum wallet / NodeMgtKey or Ed25519).
+**Multi-agree only.** When at least the **MPC quorum** for this key have accepted in **SigList** (and rejections are excluded), triggers signature generation: sends **SIGNREQUESTCONFIRMSUCCESS** and starts the sign worker(s). For **single** requests, one signature is produced; for **batch** requests, one trigger produces one SignResult with N signatures (retrieved via `GET /getSignResultById` as the `batchSignatures` array). **Only the originator may call this:** the request’s **Purpose** map must have this node’s key as the (originator) key; otherwise the server returns an error. **If the sign request status is `"shelved"` or `"expired"`**, or **`now > expiryDate`**, the server returns an error and does not trigger. **Idempotent:** if the request was already triggered, returns success with data `"Already triggered"`. Does not affect tx-check flow. Requires management key signature (Ethereum wallet / NodeMgtKey or Ed25519).
 
 **EVM unsigned transaction (typical `executeSignResult` / broadcast):** The originator should include **`messageHash`** (single-tx: the **RLP/unsigned-tx** signing hash the MPC will sign; if present, the backend updates the sign request’s **MessageHash** on this node before the worker runs). For gas/nonce/fees stored on **this node only** (not propagated), send:
 - **`txParams`**: one object — used for **single-tx**, or for **batch** merged **only at index 0** with **`proposal_tx_params[0]`** unless **`txParamsBatch`** is set (see below).
@@ -5522,7 +5528,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/updateSignResultStatusById \
 
 <a id="post-shelvesignrequest"></a>
 #### `POST /shelveSignRequest`
-**Originator only.** Sets the sign request lifecycle status to `"shelved"`. Only the node that created the sign request (originator: node key in **Purpose**) may call. The update is propagated to other nodes so all nodes see the status in `GET /getSignRequestById` and `GET /listSignRequests`. **The update can only happen once:** if the sign request is already shelved or blocked, a second call returns an error. Requires management key signature (Ethereum wallet / NodeMgtKey or Ed25519). **Note:** When a node rejects via `POST /signRequestAgree` with `accept: false`, if the number of remaining nodes that could still agree falls below the **MPC quorum** for this key, the backend automatically sets the sign request status to `"blocked"` and propagates it to other nodes; `GET /getSignRequestById` then returns `"status": "blocked"`.
+**Originator only.** Sets the sign request lifecycle status to `"shelved"`. Only the node that created the sign request (originator: node key in **Purpose**) may call. The update is propagated to other nodes so all nodes see the status in `GET /getSignRequestById` and `GET /listSignRequests`. **Cannot shelve** requests with status **`expired`** or past **`expiryDate`**. **The update can only happen once:** if the sign request is already shelved, blocked, or expired, a second call returns an error. Requires management key signature (Ethereum wallet / NodeMgtKey or Ed25519). **Note:** When a node rejects via `POST /signRequestAgree` with `accept: false`, if the number of remaining nodes that could still agree falls below the **MPC quorum** for this key, the backend automatically sets the sign request status to `"blocked"` and propagates it to other nodes; `GET /getSignRequestById` then returns `"status": "blocked"`.
 
 **Request Body:**
 - `requestId` (required): Sign request ID.

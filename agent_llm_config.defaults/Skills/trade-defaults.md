@@ -113,13 +113,18 @@ These apply regardless of `protocolId`:
 | `useCustomGas` | EVM protocols | Use node Custom Gas Config when **true** |
 | `purposeTextAdditional` | All | Human suffix after auto **ctm1** meta (§4); **256** runes total; no `\|` or `=` |
 | `autoSubmitMultisign` | All | **true** = submit without operator review (cron only when explicitly allowed here) |
+| `expiryDate` | DeFi multisign | Optional **Unix seconds (UTC)** when the MPC sign request expires. Omit for protocol default (**30 min** for hyperliquid / gmx / uniswap). Prefill into the build form datetime picker. |
 
 **Desk defaults** (use when prefill JSON omits them):
 
 ```yaml
 entryOffsetPct: 1
 invalidationOffsetPct: 1
+# Optional: minutes from build time until multisign expiry (DeFi default 30 when omitted)
+# expiryMinutesFromNow: 60
 ```
+
+When desk **`expiryMinutesFromNow`** is set, compute **`expiryDate`** as `now + minutes × 60` (Unix seconds) in the prefill JSON fence. Cron **`tradeBuild`** may use **`expiryMinutesFromNow`** (relative at run time) or absolute **`expiryDate`** — see **`scheduled-automation`**.
 
 ### Entry proximity (global desk switch)
 

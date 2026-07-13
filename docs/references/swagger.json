@@ -7004,6 +7004,11 @@
                 },
                 "value": {
                     "type": "string"
+                },
+                "expiryDate": {
+                    "type": "integer",
+                    "format": "int64",
+                    "description": "Optional Unix seconds (UTC) when this sign request expires. Default at creation: timepoint + 7 days. Included in signed JSON."
                 }
             }
         },
