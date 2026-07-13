@@ -1,0 +1,57 @@
+# Machine-readable desk defaults for trade idea prefill (fast path).
+# Policy-only prose (break+retest alternates, fib regime switching) lives in Skills/trade-defaults.md (LLM fallback).
+# Cron jobs may still override via fenced tradeBuild YAML blocks (see scheduled-automation skill).
+
+version: 1
+
+universal:
+  entryOffsetPct: 1
+  invalidationOffsetPct: 1
+  useCustomGas: false
+  entryProximityMode: price
+  entryProximityPct: 1
+  entryProximityAtrPeriod: 14
+  autoSubmitMultisign: false
+  # expiryMinutesFromNow: 60
+
+llmFallback:
+  whenStatusUnclear: true
+  whenBreakRetestAlternateEligible: true
+  setupPurposeCodes:
+    - kl-ret
+    - kl-fib-ret
+
+protocols:
+  hyperliquid:
+    marketKind: perp
+    tif: gtc
+    sizing:
+      mode: marginPct
+      marginPct: 10
+      minSzHuman: "0.001"
+    purposeSuffix:
+      trend_structure: "trend retest"
+      chart_pattern: ""
+      key_levels: "kl bounce"
+      key_level_fibonacci: "fib setup"
+      bollinger_bands: "bb fade"
+      moving_averages: "ma setup"
+
+  gmx:
+    collateralToken: USDC
+    sizing:
+      mode: fixed
+      sizeUsdHuman: "500"
+      collateralAmountHuman: "150"
+    purposeSuffix:
+      trend_structure: "trend retest"
+      chart_pattern: ""
+      key_levels: "kl bounce"
+      key_level_fibonacci: "fib setup"
+
+  uniswap:
+    sizing:
+      mode: fixed
+      sizeUsdHuman: "100"
+    purposeSuffix:
+      default: "spot swap"
