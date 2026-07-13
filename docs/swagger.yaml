@@ -2557,6 +2557,66 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.ResetSkillsFromDefaultsPost'
+  /getTradeDeskConfig:
+    get:
+      description: 'Get trade-desk.yaml (runtime file or bundled defaults preview) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /getTradeDeskConfig).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Management API
+      summary: Get trade-desk.yaml (runtime file or bundled defaults preview)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /upsertTradeDeskConfig:
+    post:
+      description: 'Write agent_llm_config/trade-desk.yaml after YAML validation (management-signed) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (POST /upsertTradeDeskConfig).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Management API
+      summary: Write agent_llm_config/trade-desk.yaml after YAML validation (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.UpsertTradeDeskConfigPost'
+  /resetTradeDeskFromDefaults:
+    post:
+      description: 'Install or reset trade-desk.yaml from agent_llm_config.defaults/ (management-signed) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (POST /resetTradeDeskFromDefaults).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Management API
+      summary: Install or reset trade-desk.yaml from agent_llm_config.defaults/ (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.ResetTradeDeskFromDefaultsPost'
   /listCronJobs:
     get:
       description: 'List active cron jobs and available repository catalog (agent_llm_config.defaults/cron/jobs.json) Full
@@ -4735,6 +4795,11 @@ definitions:
         type: boolean
       value:
         type: string
+      expiryDate:
+        type: integer
+        format: int64
+        description: 'Optional Unix seconds (UTC) when this sign request expires. Default at creation: timepoint + 7 days.
+          Included in signed JSON.'
   node.AddEnvironmentVariablePost:
     type: object
     allOf:
@@ -4932,3 +4997,23 @@ definitions:
         enabled:
           type: boolean
           description: Override catalog default enabled flag (optional)
+  node.UpsertTradeDeskConfigPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - content
+      description: 'POST /upsertTradeDeskConfig. Canonical JSON to sign: {"content":"<yaml>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
+        with clientSig cleared before signing. Validates YAML structure before write.'
+      properties:
+        content:
+          type: string
+          description: Full trade-desk.yaml body (version, universal, llmFallback, protocols)
+  node.ResetTradeDeskFromDefaultsPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      description: 'POST /resetTradeDeskFromDefaults. Canonical JSON to sign: {"nonce":N,"clientSig":"","nodeKey":"<128-hex>"}.
+        Copies agent_llm_config.defaults/trade-desk.yaml into agent_llm_config/trade-desk.yaml.'

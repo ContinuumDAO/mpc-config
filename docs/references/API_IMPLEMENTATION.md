@@ -241,6 +241,9 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /addSkill`](#post-addskill) - Add or update a skill file (**management signature**)
 - [`POST /removeSkill`](#post-removeskill) - Remove a skill by name (**management signature**)
 - [`POST /resetSkillsFromDefaults`](#post-resetskillsfromdefaults) - Overwrite bundled default skill files from **`agent_llm_config.defaults/Skills/`** (**management signature**; custom skills preserved)
+- [`GET /getTradeDeskConfig`](#get-gettradedeskconfig) - Get **`trade-desk.yaml`** (installed runtime file or bundled defaults preview)
+- [`POST /upsertTradeDeskConfig`](#post-upserttradedeskconfig) - Write **`agent_llm_config/trade-desk.yaml`** after YAML validation (**management signature**)
+- [`POST /resetTradeDeskFromDefaults`](#post-resettradedeskfromdefaults) - Install or reset **`trade-desk.yaml`** from **`agent_llm_config.defaults/`** (**management signature**)
 - [`GET /listCronJobs`](#get-listcronjobs) - List active cron jobs and available repository catalog (`agent_llm_config.defaults/cron/jobs.json`; **read JWT** on Browser HTTPS / loopback)
 - [`GET /getCronJob`](#get-getcronjob) - Get one cron job including message (**read JWT** when JWT applies)
 - [`GET /listCronJobRuns`](#get-listcronjobruns) - Recent run history for a job (**read JWT**)
@@ -2693,7 +2696,7 @@ Cloud LLM settings for the **node agent** (MCP chat / in-app agent) are stored i
 | **Config key** | **`AgentLlmConfigDir`** in **`configs.yaml`** (default **`agent_llm_config`**; relative paths resolve next to **`configs.yaml`**) |
 | **Env override** | **`MPC_AUTH_AGENT_LLM_CONFIG_FILE`** (wins over YAML dir resolution) |
 | **Docker** | **`./agent_llm_config`** bind-mounted to **`/app/agent_llm_config`** (same pattern as **`database_backups/`**) |
-| **Provisioning** | **`process_config.sh`** sets **`AgentLlmConfigDir`**, creates runtime **`./agent_llm_config/`** (gitignored on nodes; seeded from **`agent_llm_config.defaults/`** once per file if missing), including **`Skills/`**, **`cron/`**, **`cron/runs/`**, **`conversations/`** at runtime), and sets compose env by default; use **`--no-agent-llm-config-path`** or **`PROCESS_CONFIG_SKIP_AGENT_LLM_CONFIG_PATH=1`** to skip |
+| **Provisioning** | **`process_config.sh`** sets **`AgentLlmConfigDir`**, creates runtime **`./agent_llm_config/`** (gitignored on nodes; seeded from **`agent_llm_config.defaults/`** once per file if missing), including **`Skills/`**, **`trade-desk.yaml`**, **`cron/`**, **`cron/runs/`**, **`conversations/`** at runtime), and sets compose env by default; use **`--no-agent-llm-config-path`** or **`PROCESS_CONFIG_SKIP_AGENT_LLM_CONFIG_PATH=1`** to skip |
 | **Write** | Atomic temp file + `rename`; file mode **0640**; parent dirs **0755** |
 | **Listeners** | **ManagementAPIsPort**, **Browser HTTPS** (`:8443`), **BrowserLoopbackReadHTTP** (SSH tunnel), and plain co-located attach — same route registration as other management APIs |
 
@@ -2970,6 +2973,61 @@ Each skill: **`initialLoad`** — when true, content is injected as a **system**
 **Behavior:** Copies each bundled default skill file from **`agent_llm_config.defaults/Skills/`** over the matching runtime file under **`agent_llm_config/Skills/`**, and updates matching **`skills.json`** manifest entries (`initialLoad`, `filename`, etc.). Skills you added that are **not** in the defaults catalog are **unchanged** (files and manifest entries preserved).
 
 **Response data:** `{ "skillCount": <int> }` — count of default skills refreshed.
+
+### Agent trade desk (`trade-desk.yaml`)
+
+Machine-readable defaults for **Build Trade** prefill (entry/invalidation offsets, proximity, per-protocol sizing, LLM-fallback triggers). This is **not** an agent skill — it is a single YAML file beside **`Skills/`** and **`cron/`**. Policy-only prose (break+retest alternates, fib regime switching, discretionary purpose text) stays in the **`trade-defaults`** skill under **`agent_llm_config/Skills/`**. Cron jobs may still override build fields via fenced **`tradeBuild`** YAML blocks inside a job **`message`**.
+
+| Path | Role |
+|------|------|
+| **`agent_llm_config.defaults/trade-desk.yaml`** | Bundled defaults (bind-mounted catalog; edit in **mpc-config** repo) |
+| **`agent_llm_config/trade-desk.yaml`** | Active file on this node (used by deterministic prefill fast path when present) |
+
+**Provisioning:** **`process_config.sh`** copies **`trade-desk.yaml`** from **`agent_llm_config.defaults/`** into runtime **`agent_llm_config/`** once if missing. Operators can also install via **`POST /resetTradeDeskFromDefaults`** or the **Trade desk** section on the Skills tab in continuumdao-node-app.
+
+**Runtime behavior:** On trade idea prefill, mpc-auth loads **`trade-desk.yaml`** (runtime file, else defaults bind-mount). When the idea is eligible for the fast path (clear status, no LLM-fallback rules), desk defaults are applied without an LLM turn; otherwise the **`trade-defaults`** skill guides LLM fallback.
+
+<a id="get-gettradedeskconfig"></a>
+#### `GET /getTradeDeskConfig`
+
+**Auth:** Management API (same as **`GET /listSkills`** — no read JWT on plain management port).
+
+**Response data:**
+```json
+{
+  "content": "<full yaml text>",
+  "configured": true,
+  "path": "/app/agent_llm_config/trade-desk.yaml",
+  "filename": "trade-desk.yaml"
+}
+```
+
+| Field | Notes |
+|-------|--------|
+| `content` | Full YAML body |
+| `configured` | `true` when **`agent_llm_config/trade-desk.yaml`** exists on the node; `false` when previewing bundled defaults only |
+| `path` | Source path used for the response (runtime or defaults) |
+| `filename` | Always **`trade-desk.yaml`** |
+
+<a id="post-upserttradedeskconfig"></a>
+#### `POST /upsertTradeDeskConfig`
+
+**Auth:** Management signature.
+
+**Body:** `{ "content", "nonce", "clientSig", "nodeKey" }` — **`content`** is the full YAML file. Server validates YAML structure (`version`, `universal`, `llmFallback`, `protocols`) before atomic write to **`agent_llm_config/trade-desk.yaml`**.
+
+**Response data:** Same shape as **`GET /getTradeDeskConfig`** with **`configured: true`** and **`path`** set to the runtime file.
+
+<a id="post-resettradedeskfromdefaults"></a>
+#### `POST /resetTradeDeskFromDefaults`
+
+**Auth:** Management signature.
+
+**Body:** `{ "nonce", "clientSig", "nodeKey" }` — no other fields. Use the same [management signatures (`nonce`, `clientSig`, `nodeKey`)](#management-signatures-nodekey) flow as **`POST /resetSkillsFromDefaults`**: canonical JSON to sign is `{"nonce":N,"clientSig":"","nodeKey":"<128-hex>"}` with **`clientSig` cleared** before signing (Ed25519 128 hex, or EIP-191 **`signedMessage`** + **`clientSig`** from **`NodeMgtKey`**).
+
+**Behavior:** Copies **`agent_llm_config.defaults/trade-desk.yaml`** over **`agent_llm_config/trade-desk.yaml`**, overwriting any operator edits.
+
+**Response data:** Same shape as **`GET /getTradeDeskConfig`** after install (`configured: true`).
 
 ### Agent cron jobs (local filesystem + in-process scheduler)
 
