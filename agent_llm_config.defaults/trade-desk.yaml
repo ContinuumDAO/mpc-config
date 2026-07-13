@@ -1,34 +1,95 @@
-# Machine-readable desk defaults for trade idea prefill (fast path).
-# Policy-only prose (break+retest alternates, fib regime switching) lives in Skills/trade-defaults.md (LLM fallback).
-# Cron jobs may still override via fenced tradeBuild YAML blocks (see scheduled-automation skill).
+# trade-desk.yaml — machine-readable Build Trade prefill defaults
+#
+# Used by mpc-auth on the deterministic fast path when a selected trade idea is
+# "clear" (no LLM-fallback rules below). Edit on the node under
+# agent_llm_config/trade-desk.yaml (Skills tab → Trade desk, or POST /upsertTradeDeskConfig).
+#
+# Related config (not duplicated here):
+#   • Skills/trade-defaults.md — policy-only LLM fallback (break+retest alternates, fib regime, etc.)
+#   • Cron job message — optional fenced `tradeBuild:` YAML overrides per scheduled run
+#
+# Protocol blocks are keyed by build-form protocolId (lowercase): hyperliquid, gmx, uniswap, …
+# At least one protocols.* entry is required.
 
-version: 1
+version: 1  # Schema version (must be 1 today).
 
+# ---------------------------------------------------------------------------
+# universal — applied to every protocol on the fast path
+# ---------------------------------------------------------------------------
 universal:
+  # Percentage band applied at build time on top of the idea's base entry price.
+  # Pattern/trend/key-level ideas store base entry at structure boundaries; offsets
+  # widen the limit entry slightly (long: below base, short: above base). Typical: 0.5–2.
   entryOffsetPct: 1
+
+  # Same idea for invalidation/stop — widens stop away from base invalidation. Typical: 0.5–2.
   invalidationOffsetPct: 1
+
+  # When true, Build Trade sends useCustomGas on EVM protocols (gmx, uniswap). Usually false.
   useCustomGas: false
+
+  # How "near entry" is measured when analysis marks an idea unclear vs clear:
+  #   price — entryProximityPct is % of last close price
+  #   atr   — entryProximityPct is % of ATR(entryProximityAtrPeriod) on the analysis timeframe
+  # Used by chart analysis / trade-defaults skill; bollinger and MA setups often use atr or wider %.
   entryProximityMode: price
+
+  # Max distance from last close to idea entry for a "clear" actionable idea (see entryProximityMode).
+  # Example: 1 with mode price → within 1% of last close. BB setups in trade-defaults often use 5.
   entryProximityPct: 1
+
+  # ATR lookback when entryProximityMode is atr (ignored for price mode).
   entryProximityAtrPeriod: 14
+
+  # When true, cron or automation may submit multisign without operator review (interactive UI still
+  # shows the form unless cron tradeBuild also sets this). Default false — require human confirm.
   autoSubmitMultisign: false
+
+  # Optional multisign expiry: minutes from prefill/build time. Omit to use protocol default / no expiry.
   # expiryMinutesFromNow: 60
 
+# ---------------------------------------------------------------------------
+# llmFallback — when set, skip the fast path and run trade-defaults skill via LLM
+# ---------------------------------------------------------------------------
 llmFallback:
+  # Idea status "unclear" (price not near entry, conflicting structure, etc.) → LLM decides offsets/alternate.
   whenStatusUnclear: true
+
+  # Primary idea unclear but nested breakRetestAlternative.status is "clear" → LLM picks primary vs alternate.
   whenBreakRetestAlternateEligible: true
+
+  # Always use LLM for these setupPurposeCode values (even if status is clear):
+  #   kl-ret     — key-level break + retest alternate
+  #   kl-fib-ret — fib range break + retest alternate
   setupPurposeCodes:
     - kl-ret
     - kl-fib-ret
 
+# ---------------------------------------------------------------------------
+# protocols — per-venue defaults (key = protocolId from Build Trade)
+# ---------------------------------------------------------------------------
 protocols:
+
+  # --- Hyperliquid (perp / spot) -------------------------------------------------
   hyperliquid:
+    # perp | spot — default market for HL build when not overridden in the form.
     marketKind: perp
+
+    # Time-in-force for limit orders: gtc | ioc | alo (venue-specific).
     tif: gtc
+
     sizing:
+      # fixed     — use fixedSzHuman (coin size, e.g. "0.1" ETH)
+      # marginPct — size from account: (withdrawableUsd * marginPct / 100) / markPx, capped by
+      #             availableToBuy/Sell; may call fetch_open_context once. Falls back to fixedSzHuman if set.
       mode: marginPct
-      marginPct: 10
-      minSzHuman: "0.001"
+      marginPct: 10          # % of withdrawable USD notional (marginPct mode only)
+      minSzHuman: "0.001"    # Floor coin size after marginPct calc (string decimal)
+      # fixedSzHuman: "0.05" # Example fixed size when mode: fixed (or marginPct fallback)
+
+    # Appended to auto-generated purposeText (256 char total limit). Keys match analysis type:
+    # trend_structure | chart_pattern | key_levels | key_level_fibonacci | bollinger_bands |
+    # moving_averages | default (fallback when kind unknown)
     purposeSuffix:
       trend_structure: "trend retest"
       chart_pattern: ""
@@ -37,21 +98,54 @@ protocols:
       bollinger_bands: "bb fade"
       moving_averages: "ma setup"
 
+  # --- GMX (EVM perps) -----------------------------------------------------------
   gmx:
-    collateralToken: USDC
+    collateralToken: USDC   # Collateral symbol for GMX build payload
+
     sizing:
-      mode: fixed
-      sizeUsdHuman: "500"
-      collateralAmountHuman: "150"
+      mode: fixed             # GMX fast path expects fixed USD + collateral (not marginPct)
+      sizeUsdHuman: "500"     # Position size in USD (string decimal)
+      collateralAmountHuman: "150"  # Collateral to post (string decimal)
+
     purposeSuffix:
       trend_structure: "trend retest"
       chart_pattern: ""
       key_levels: "kl bounce"
       key_level_fibonacci: "fib setup"
 
+  # --- Uniswap (spot swap) -------------------------------------------------------
   uniswap:
     sizing:
       mode: fixed
-      sizeUsdHuman: "100"
+      sizeUsdHuman: "100"     # Swap notional in USD
+
     purposeSuffix:
       default: "spot swap"
+
+# ---------------------------------------------------------------------------
+# Examples (commented — copy into protocols.* to try alternatives)
+# ---------------------------------------------------------------------------
+#
+# Conservative HL fixed size:
+#   hyperliquid:
+#     marketKind: perp
+#     tif: gtc
+#     sizing:
+#       mode: fixed
+#       fixedSzHuman: "0.02"
+#     purposeSuffix:
+#       default: "small probe"
+#
+# Wider proximity for swing setups (universal):
+#   universal:
+#     entryProximityMode: atr
+#     entryProximityPct: 25
+#     entryProximityAtrPeriod: 14
+#     entryOffsetPct: 1.5
+#     invalidationOffsetPct: 1.5
+#
+# Disable LLM for unclear status (fast path only when status is clear):
+#   llmFallback:
+#     whenStatusUnclear: false
+#     whenBreakRetestAlternateEligible: false
+#     setupPurposeCodes: []
