@@ -159,7 +159,7 @@ Bullish **trend-structure long retest**: base entry **2950** (support trend line
 Auto-composed first; optional `purposeTextAdditional` after ` · ` if runes remain.
 
 ```
-ctm1|{proto}|{L|S}|{setup}|eE={px}|pfE={px}|{symShort}
+ctm1|{proto}|{L|S}|{setup}|eE={px}|pfE={px}|ds={src}|iv={interval}|n={bars}|{symShort}
 ```
 
 | Token | Meaning |
@@ -168,6 +168,9 @@ ctm1|{proto}|{L|S}|{setup}|eE={px}|pfE={px}|{symShort}
 | `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`kl-fib-ext`**, **`kl-fib-ret`**, **`bb-fade`**, **`ma-cross`**, **`ma-ret`**, …) — never menu `#N` |
 | `eE` / `pfE` | Effective entry / pattern-failure after offsets |
 | `eB` / `pfB` | Optional base prices when rune budget allows |
+| `ds` | Chart data source short code (`hl`, `gmx`, `uni`, `cg`, `cmc`, `ts`, …) |
+| `iv` | Chart interval / timeframe (`4h`, `1h`, `1d`, …) |
+| `n` | Bar / candle count used for analysis |
 
 **Cron:** prefix `ctm1|`; side = field 3; `pfE=([0-9.]+)`; long fail if mark ≤ pfE, short fail if mark ≥ pfE.
 
