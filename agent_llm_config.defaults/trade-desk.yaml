@@ -9,7 +9,8 @@
 #   • Cron job message — optional fenced `tradeBuild:` YAML overrides per scheduled run
 #
 # Protocol blocks are keyed by build-form protocolId (lowercase): hyperliquid, gmx, uniswap, …
-# At least one protocols.* entry is required.
+# At least one protocols.* entry is required. Listing hyperliquid here does NOT make it the UI default
+# protocol — the Build Trade form still picks protocol from the loaded session / operator choice.
 
 version: 1  # Schema version (must be 1 today).
 
@@ -109,13 +110,13 @@ protocols:
     tif: gtc
 
     sizing:
-      # fixed     — use fixedSzHuman (coin size, e.g. "0.1" ETH)
-      # marginPct — size from account: (withdrawableUsd * marginPct / 100) / markPx, capped by
-      #             availableToBuy/Sell; may call fetch_open_context once. Falls back to fixedSzHuman if set.
+      # Primary: marginPct sizes from withdrawable balance (one fetch_open_context when HL tools are loaded).
+      # fixedSzHuman below is NOT the primary mode — it is used only when marginPct cannot run
+      # (open-context unavailable, missing executor, etc.) so prefill stays on the desk fast path.
       mode: marginPct
       marginPct: 10          # % of withdrawable USD notional (marginPct mode only)
       minSzHuman: "0.001"    # Floor coin size after marginPct calc (string decimal)
-      # fixedSzHuman: "0.05" # Example fixed size when mode: fixed (or marginPct fallback)
+      fixedSzHuman: "0.05"   # Fallback coin size (ETH units here) when marginPct path fails — HL block only
 
     # Appended to auto-generated purposeText (256 char total limit). Keys match analysis type:
     # trend_structure | chart_pattern | key_levels | key_level_fibonacci | bollinger_bands |
@@ -156,15 +157,13 @@ protocols:
 # Examples (commented — copy into protocols.* to try alternatives)
 # ---------------------------------------------------------------------------
 #
-# Conservative HL fixed size:
+# marginPct-only HL sizing with a larger fallback probe (still HL-specific, not a global default):
 #   hyperliquid:
-#     marketKind: perp
-#     tif: gtc
 #     sizing:
-#       mode: fixed
+#       mode: marginPct
+#       marginPct: 10
 #       fixedSzHuman: "0.02"
-#     purposeSuffix:
-#       default: "small probe"
+#       minSzHuman: "0.001"
 #
 # Wider proximity — ATR-based (volatile alts / higher timeframes):
 #   universal:
