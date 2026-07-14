@@ -115,7 +115,7 @@ protocols:
     # targetOffsetPct: conservative TP inside analysis target (long: below target; short: above).
     #   mode price → % of target price (typical 0.5–2; 0 = exact target).
     #   mode atr   → % of one ATR bar from analysis OHLCV (typical 15–50; uses atrAtLastBar on idea).
-    targetOffsetPct: 1
+    targetOffsetPct: 0.1
     targetOffsetMode: price
     # tpslExecMode: limit_at_trigger (default — resting limit at trigger px) | market (HL 10% slippage).
     tpslExecMode: limit_at_trigger

@@ -92,7 +92,7 @@ tradeBuild:
   invalidationOffsetPct: 1
 
   # Hyperliquid bracket (when idea has target / invalidation) — optional overrides:
-  # targetOffsetPct: 1          # conservative TP inside target (0 = exact target)
+  # targetOffsetPct: 0.1        # conservative TP inside target (0 = exact target)
   # targetOffsetMode: price      # price | atr
   # tpslExecMode: limit_at_trigger   # or market
 

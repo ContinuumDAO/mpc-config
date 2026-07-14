@@ -124,7 +124,7 @@ Edit **`trade-desk.yaml`** → `universal:` and per-protocol `protocols:` blocks
 
 | Field | Meaning |
 |-------|---------|
-| `targetOffsetPct` | Conservative TP band inside analysis target (default **1**) |
+| `targetOffsetPct` | Conservative TP band inside analysis target (default **0.1**) |
 | `targetOffsetMode` | `price` (default) or `atr` — see §3 |
 | `tpslExecMode` | `limit_at_trigger` (default) or `market` when bracket TP/SL is included at build |
 
@@ -173,7 +173,7 @@ Example (price mode, 1%): target **3100** long → TP **3069**; target **3100** 
 
 Example (atr mode, 25%, ATR **40**): long → **3090**; short → **3110**.
 
-Default from desk: **`targetOffsetPct: 1`**, **`targetOffsetMode: price`**. Set **`targetOffsetPct: 0`** for TP exactly at the analysis target.
+Default from desk: **`targetOffsetPct: 0.1`**, **`targetOffsetMode: price`**. Set **`targetOffsetPct: 0`** for TP exactly at the analysis target.
 
 ### tpslExecMode (Hyperliquid bracket only)
 
