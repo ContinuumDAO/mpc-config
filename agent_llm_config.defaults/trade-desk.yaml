@@ -19,9 +19,11 @@ version: 1  # Schema version (must be 1 today).
 # ---------------------------------------------------------------------------
 # The desk uses three different "%" meanings. Do not mix them up:
 #
-# 1) PRICE % — entryOffsetPct, invalidationOffsetPct (always)
-#    Applied at build time as a fraction of the idea's entry or invalidation *price*.
+# 1) PRICE % — entryOffsetPct, invalidationOffsetPct, targetOffsetPct (Hyperliquid only)
+#    Applied at build time as a fraction of the idea's entry, invalidation, or target *price*.
 #    Example entryOffsetPct 1, retest long: limit = entry × (1 + 1/100).
+#    targetOffsetPct widens the take-profit trigger *inside* the idea target (conservative exit):
+#      long → below target; short → above target. See trade-defaults §3 and protocols.hyperliquid.targetOffsetMode.
 #    See trade-defaults skill §3. These are never ATR-based.
 #
 # 2) PROXIMITY — entryProximityPct + entryProximityMode (price | atr)
@@ -109,6 +111,15 @@ protocols:
     # Time-in-force for limit orders: gtc | ioc | alo (venue-specific).
     tif: gtc
 
+    # Hyperliquid bracket (TP/SL on open) — when trade idea has target and/or invalidation:
+    # targetOffsetPct: conservative TP inside analysis target (long: below target; short: above).
+    #   mode price → % of target price (typical 0.5–2; 0 = exact target).
+    #   mode atr   → % of one ATR bar from analysis OHLCV (typical 15–50; uses atrAtLastBar on idea).
+    targetOffsetPct: 1
+    targetOffsetMode: price
+    # tpslExecMode: limit_at_trigger (default — resting limit at trigger px) | market (HL 10% slippage).
+    tpslExecMode: limit_at_trigger
+
     sizing:
       # Primary: marginPct sizes from withdrawable balance (one fetch_open_context when HL tools are loaded).
       # fixedSzHuman below is NOT the primary mode — it is used only when marginPct cannot run
@@ -172,6 +183,12 @@ protocols:
 #     entryProximityAtrPeriod: 14
 #     entryOffsetPct: 1          # offsets stay PRICE % (unchanged)
 #     invalidationOffsetPct: 1
+#
+# Hyperliquid TP offset on ATR (conservative — inside analysis target):
+#   hyperliquid:
+#     targetOffsetMode: atr
+#     targetOffsetPct: 25        # 25% of one ATR bar below/above target
+#     tpslExecMode: limit_at_trigger
 #
 # MA proximity retest on ATR (moving_averages ma-ret reads desk mode):
 #   universal:

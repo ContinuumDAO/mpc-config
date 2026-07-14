@@ -111,12 +111,24 @@ Edit **`trade-desk.yaml`** → `universal:` and per-protocol `protocols:` blocks
 | Field | Meaning |
 |-------|---------|
 | `entryOffsetPct` / `invalidationOffsetPct` | Perp limit bands (see §3) |
-| `useCustomGas` | EVM Custom Gas Config |
+| `targetOffsetPct` | Hyperliquid only — TP trigger band **inside** idea target (see §3) |
+| `targetOffsetMode` | Hyperliquid only — `price` (% of target) or `atr` (% of one ATR bar) |
+| `useCustomGas` | EVM Custom Gas Config (ignored when Hyperliquid bracket uses EIP-712) |
 | `entryProximityMode` / `entryProximityPct` | Idea surfacing gates (`price` \| `atr`; Bollinger uses band-width % on the setup) |
 | `autoSubmitMultisign` | Submit without operator review (cron only when explicitly allowed) |
 | `expiryMinutesFromNow` | Optional multisign expiry (Unix seconds computed at prefill time) |
 
-**Protocol blocks** (`hyperliquid`, `gmx`, `uniswap`): `marketKind`, `tif`, `collateralToken`, `sizing` (`fixed` or `marginPct` for Hyperliquid), and optional `purposeSuffix` per analysis kind.
+**Protocol blocks** (`hyperliquid`, `gmx`, `uniswap`): `marketKind`, `tif`, `collateralToken`, `sizing` (`fixed` or `marginPct` for Hyperliquid), optional `purposeSuffix` per analysis kind.
+
+**Hyperliquid-only** (`protocols.hyperliquid` in `trade-desk.yaml`):
+
+| Field | Meaning |
+|-------|---------|
+| `targetOffsetPct` | Conservative TP band inside analysis target (default **1**) |
+| `targetOffsetMode` | `price` (default) or `atr` — see §3 |
+| `tpslExecMode` | `limit_at_trigger` (default) or `market` when bracket TP/SL is included at build |
+
+When a trade idea has **target** and/or **invalidation**, **`build_trade_from_*`** for Hyperliquid auto-includes bracket fields (`takeProfitTriggerPxHuman`, `stopLossTriggerPxHuman`) via one L1 EIP-712 `normalTpsl` action — not CoreWriter. Geometry: long → SL < entry < TP; short → TP < entry < SL. See **`ctm-mpc-defi`** Hyperliquid skill § Bracket limit order.
 
 **LLM fallback** (this skill): `llmFallback` in `trade-desk.yaml` lists when the fast path is skipped — e.g. `status: unclear`, `setupPurposeCode` **`kl-ret`** / **`kl-fib-ret`**, or primary unclear with a clear **`breakRetestAlternative`**.
 
@@ -139,12 +151,38 @@ If `entryOffsetMode` is absent, treat as **bounce** — except when `analysisSet
 
 ### invalidationOffsetPct
 
-Informational in Purpose / cron — not an automatic stop order yet.
+On **Hyperliquid**, when the idea has an **invalidation** level, the effective level maps to **`stopLossTriggerPxHuman`** on bracket builds (L1 `normalTpsl`). On **GMX**, still informational in Purpose only (pattern-failure reference).
 
-| Side | Effective pattern-failure level |
-|------|----------------------------------|
+| Side | Effective pattern-failure / SL trigger level |
+|------|----------------------------------------------|
 | Long | invalidation × (1 − pct/100) |
 | Short | invalidation × (1 + pct/100) |
+
+### targetOffsetPct / targetOffsetMode (Hyperliquid bracket only)
+
+Conservative take-profit: exit **before** the full analysis target is reached (long TP below target, short TP above target). Configure in **`trade-desk.yaml` → `protocols.hyperliquid`**. Override per build via `targetOffsetPct` / `targetOffsetMode` on `build_trade_from_*` or the Build Trade form.
+
+| `targetOffsetMode` | `targetOffsetPct` meaning | Long effective TP | Short effective TP |
+|--------------------|---------------------------|-------------------|------------------|
+| **`price`** (default) | % of target price | target × (1 − pct/100) | target × (1 + pct/100) |
+| **`atr`** | % of one ATR bar | target − (ATR × pct/100) | target + (ATR × pct/100) |
+
+ATR comes from the analysis session (`atrAtLastBar` on the trade idea setup, or `atr` on range/volatility ideas). When `targetOffsetMode: atr` but ATR is unavailable at build, the SDK falls back to **price** mode with the same pct.
+
+Example (price mode, 1%): target **3100** long → TP **3069**; target **3100** short → TP **3131**.
+
+Example (atr mode, 25%, ATR **40**): long → **3090**; short → **3110**.
+
+Default from desk: **`targetOffsetPct: 1`**, **`targetOffsetMode: price`**. Set **`targetOffsetPct: 0`** for TP exactly at the analysis target.
+
+### tpslExecMode (Hyperliquid bracket only)
+
+| Value | Behavior |
+|-------|----------|
+| **`limit_at_trigger`** (default) | Resting limit at trigger price when TP/SL fires |
+| **`market`** | Market order with HL slippage tolerance when triggered |
+
+Configure default in **`trade-desk.yaml` → `protocols.hyperliquid.tpslExecMode`**. Bracket orders use **EIP-712** `/exchange` — not CoreWriter; **`useCustomGas`** does not apply.
 
 ### Worked examples (any perp limit protocol)
 
@@ -159,7 +197,7 @@ Bullish **trend-structure long retest**: base entry **2950** (support trend line
 Auto-composed first; optional `purposeTextAdditional` after ` · ` if runes remain.
 
 ```
-ctm1|{proto}|{L|S}|{setup}|eE={px}|pfE={px}|ds={src}|iv={interval}|n={bars}|{symShort}
+ctm1|{proto}|{L|S}|{setup}|eE={px}|pfE={px}|tpE={px}|slE={px}|ds={src}|iv={interval}|n={bars}|{symShort}
 ```
 
 | Token | Meaning |
@@ -167,6 +205,7 @@ ctm1|{proto}|{L|S}|{setup}|eE={px}|pfE={px}|ds={src}|iv={interval}|n={bars}|{sym
 | `{proto}` | Protocol short code — see protocol table in §5 (`hl`, `gmx`, `uni`, …) |
 | `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`kl-fib-ext`**, **`kl-fib-ret`**, **`bb-fade`**, **`ma-cross`**, **`ma-ret`**, …) — never menu `#N` |
 | `eE` / `pfE` | Effective entry / pattern-failure after offsets |
+| `tpE` / `slE` | Effective take-profit / stop-loss triggers (Hyperliquid bracket builds when target/invalidation present) |
 | `eB` / `pfB` | Optional base prices when rune budget allows |
 | `ds` | Chart data source short code (`hl`, `gmx`, `uni`, `cg`, `cmc`, `ts`, …) |
 | `iv` | Chart interval / timeframe (`4h`, `1h`, `1d`, …) |
@@ -182,7 +221,7 @@ Protocol-specific defaults and sizing live under **`trade-desk.yaml` → `protoc
 
 | `protocolId` | Required prefill fields |
 |--------------|-------------------------|
-| **`hyperliquid`** | `szHuman` (coin units; fast path uses `sizing.marginPct` + one `fetch_open_context` call, or `sizing.fixed`) |
+| **`hyperliquid`** | `szHuman` (coin units; fast path uses `sizing.marginPct` + one `fetch_open_context` call, or `sizing.fixed`); optional bracket via idea target/invalidation + desk `targetOffsetPct` / `tpslExecMode` |
 | **`gmx`** | `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman` |
 | **`uniswap`** | `sizeUsdHuman` (spot swap; proximity enforced at build) |
 
