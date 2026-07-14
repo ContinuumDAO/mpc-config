@@ -302,3 +302,21 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 3. Node loads **`trade-desk.yaml`** → deterministic prefill when eligible (SSE `trade_idea_prefill`); otherwise loads this skill → LLM prefill.
 4. Operator submits, or **`autoSubmitMultisign`** → **`continuum__build_trade_from_trade_idea`**.
 5. Approve in Sign Requests.
+
+---
+
+## 8. Trade ideas — conclusion / consensus (operator chat)
+
+When the operator asks for a **conclusion**, **consensus**, **summary**, or **verdict** across trade ideas (e.g. “should I trade ETH now?”, “what’s your view from the trade ideas?”):
+
+1. **Call `continuum__list_trade_ideas` first** — `tradeIdeas[]` is bound from the session; do not synthesize from memory or analysis run order alone.
+2. **Cite `tradeIdeaNumber`** from `items[]` exactly (menu order: newest analysis first). Do **not** renumber by the order analyses were run.
+3. **Quote chart lineage** from each item when present:
+   - `chartDataSource` (`hl`, `cg`, `cmc`, …)
+   - `chartInterval` (`1h`, `4h`, …)
+   - `chartBarCount`
+   Do **not** guess interval from chart title or operator phrasing.
+4. Compare **`side`**, **`status`**, and **`confidence`** from tool JSON. State **hold** vs **build** clearly.
+5. Do **not** call **`build_trade_from_*`** unless the operator explicitly asks to submit a multisign draft.
+
+For cron-only automated submission after consensus gates, use **`submit_trade_from_consensus`** (see **`scheduled-automation`**).

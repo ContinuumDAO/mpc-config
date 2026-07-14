@@ -88,3 +88,13 @@ Load with **`agent_load_skill`** when the operator picks a type or for richer na
 - `chart-analysis-time-series` (line-only metrics)
 
 For orchestration plan drafts involving charts, load **`orchestration-chart-analysis`** (optional, on demand).
+
+## Trade ideas — operator conclusion
+
+When the operator asks for a **conclusion**, **consensus**, or **verdict** across analyses (e.g. “should I trade now?”):
+
+1. Call **`continuum__list_trade_ideas`** first.
+2. Cite **`tradeIdeaNumber`** from `items[]` (menu order — not analysis run order).
+3. Quote **`chartDataSource`**, **`chartInterval`**, **`chartBarCount`** from each item — do not guess from chart title.
+
+See **`trade-defaults`** §8.

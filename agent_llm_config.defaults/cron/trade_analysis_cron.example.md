@@ -52,7 +52,7 @@ Else prefer **bollinger_bands** when `status=clear`, not **`invalidated`**, and 
 
 Skip **partial** setups unless **momentum** agrees. When multiple level/trend ideas qualify, prefer the one whose **side** matches momentum / pattern / trend bias.
 
-### tradeConsensus (YAML fence — paste into cron message)
+### tradeConsensus (YAML fence — paste into cron message, or edit node file `cron/trade-cron.yaml`)
 
 Default — pattern + momentum gate; level and trend ideas are **fallback** selection unless listed in `requiredSources`:
 
@@ -92,7 +92,7 @@ tradeConsensus:
 
 Raise **`minAgree`** when adding sources. **`requiredSources`** values must match upserted `analysisType` (`chart_pattern`, `momentum`, `trend_structure`, `key_levels`, `key_level_fibonacci`, …).
 
-### tradeBuild (YAML fence — paste into cron message)
+### tradeBuild (YAML fence — paste into cron message, or edit node file `cron/trade-cron.yaml`)
 
 Set **`protocolId`** and protocol-specific sizing. Agent still picks **`tradeIdeaId`** from selection rules unless you also pin **`tradeIdeaNumber`** after a dry-run.
 
