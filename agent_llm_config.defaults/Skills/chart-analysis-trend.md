@@ -12,7 +12,7 @@ Input: `{ "title": "<from fetch>", "toolResult": { ... } }` — optional **`labe
 - **`analysis.phases`**: early / mid / recent segment direction.
 - **`analysis.trendLines`**: scored support/resistance line summaries (**not drawable** — no `pointA`/`pointB`).
 - **`analysis.trendLineMenu`**: ranked drawable lines (for **`apply_trend_line_drawings`** by menu #).
-- **`analysis.trendStructureTradeSetup`**: auto-upserted trade idea — **`trend-ret`** limit at primary support (long bias) or resistance (short bias) trend-line **retest**; invalidation at recent swing; target at opposing swing when available.
+- **`analysis.trendStructureTradeSetup`**: auto-upserted trade idea — **`trend-ret`** limit at primary support (long bias) or resistance (short bias) trend-line **retest**; invalidation at recent swing; **primary target** at opposing swing when available; optional **`measuredMove`** (impulse-leg projection).
 
 ## Trade idea (`trend_structure`)
 
@@ -22,7 +22,11 @@ Input: `{ "title": "<from fetch>", "toolResult": { ... } }` — optional **`labe
 | `entryOffsetMode` | Always **`retest`** |
 | `trendLineNumber` | 1-based menu index for bias-aligned entry line |
 | `primaryTrendKind` | `support` (long) or `resistance` (short) |
+| `targetPrice` / `targetLabel` | **Primary take-profit** — recent swing high (long) or swing low (short) beyond entry |
+| `measuredMove` | **Supplementary** impulse-leg target: `entry ± (swingHigh − swingLow)` — quote `targetPrice`, `referencePrice`, `height`, `formula`, `status` from tool JSON |
 | `status` | `clear` when bias, line kind, and swing invalidation align |
+
+**Take-profit at build:** default **`swing`** (`targetPrice` → `idea.target`). For a farther impulse-leg TP, pass **`takeProfitSource: impulse_leg`** on `build_trade_from_*` — see skill **`trade-defaults`** §1 (trend structure) and §6 policy.
 
 Build/prefill: skill **`trade-defaults`** §6 (perp limit on **hyperliquid** / **gmx**; **uniswap** spot only when price is at entry).
 
@@ -32,7 +36,7 @@ Build/prefill: skill **`trade-defaults`** §6 (perp limit on **hyperliquid** / *
 2. Mention swing high/low as key reference levels.
 3. Summarize phase progression (e.g. decline → base → consolidation).
 4. Note strongest trend-line scores if present.
-5. If `trendStructureTradeSetup.status === 'clear'`, summarize side, retest entry, target, and invalidation from setup fields.
+5. If `trendStructureTradeSetup.status === 'clear'`, summarize side, retest entry, **primary target** (`targetPrice`), invalidation, and — when present — **`measuredMove`** as an optional farther impulse-leg projection (do not conflate with primary target).
 
 ## Plotting (separate step)
 

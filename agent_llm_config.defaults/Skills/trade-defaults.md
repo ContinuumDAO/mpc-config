@@ -24,7 +24,7 @@ Cron jobs may still set overrides in a fenced **`tradeBuild`** YAML block (see *
 
 Chart-pattern ideas store **base** entry and invalidation at pattern boundaries (inside bounce or post-breakout retest). **Target** comes from measured move.
 
-**Trend-structure** ideas (`analyze_trend_structure`) store **base entry** at the primary **support** (long bias) or **resistance** (short bias) trend-line retest; **invalidation** at the recent swing low/high; **target** at the opposing swing when available. Offsets below apply at **build** time on top of those base prices.
+**Trend-structure** ideas (`analyze_trend_structure`) store **base entry** at the primary **support** (long bias) or **resistance** (short bias) trend-line retest; **invalidation** at the recent swing low/high; **primary target** (`targetPrice` / `idea.target`) at the opposing swing when available. Optional **`measuredMove`** on the setup is an **impulse-leg** projection (`entry ± (swingHigh − swingLow)`) — supplementary only; **default take-profit at build is the swing target**. Pass **`takeProfitSource: impulse_leg`** on `build_trade_from_*` when the operator or desk policy wants the farther measured-move TP (falls back to swing if `measuredMove` is absent). Offsets below apply at **build** time on top of those base prices.
 
 **Key-levels (nearest)** ideas (`analyze_key_levels`) auto-upsert the **primary** setup only — **bounce** at nearest support (`kl-bnc`, long) or **rejection** at nearest resistance (`kl-brk`, short). Base entry sits at the menu level price; target is the **next key level** in trade direction when available (`targetSource: next_level`). A nested **`breakRetestAlternative`** may be present for operator/agent selection — it is **not** used unless this skill directs you to switch (see §1.1).
 
@@ -113,6 +113,7 @@ Edit **`trade-desk.yaml`** → `universal:` and per-protocol `protocols:` blocks
 | `entryOffsetPct` / `invalidationOffsetPct` | Perp limit bands (see §3) |
 | `targetOffsetPct` | Hyperliquid only — TP trigger band **inside** idea target (see §3) |
 | `targetOffsetMode` | Hyperliquid only — `price` (% of target) or `atr` (% of one ATR bar) |
+| `takeProfitSource` | **Trend structure only** — `swing` (default) or `impulse_leg` (use `measuredMove.targetPrice` as TP base; falls back to swing when absent) |
 | `useCustomGas` | EVM Custom Gas Config (ignored when Hyperliquid bracket uses EIP-712) |
 | `entryProximityMode` / `entryProximityPct` | Idea surfacing gates (`price` \| `atr`; Bollinger uses band-width % on the setup) |
 | `autoSubmitMultisign` | Submit without operator review (cron only when explicitly allowed) |
@@ -263,9 +264,10 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 **Protocol:** operator UI **`hyperliquid`** or **`gmx`** (§5) — **not Uniswap** unless price is already at the retest entry.
 
 1. Use **retest** offsets from §3 (`entryOffsetPct` / `invalidationOffsetPct` from desk defaults).
-2. **Hyperliquid:** open-context → `szHuman`. **GMX:** open-context → `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman`.
-3. Optional `purposeTextAdditional`: e.g. `trend retest` or `{primaryTrendKind} trend`.
-4. `autoSubmitMultisign`: **false**.
+2. **Take-profit:** default **`takeProfitSource: swing`** (recent swing target). Use **`impulse_leg`** only when the operator asks for the impulse measured-move target or desk policy prefers it.
+3. **Hyperliquid:** open-context → `szHuman`. **GMX:** open-context → `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman`.
+4. Optional `purposeTextAdditional`: e.g. `trend retest` or `{primaryTrendKind} trend`.
+5. `autoSubmitMultisign`: **false**.
 
 ### Policy: key-level bounce default → perp limit (HL or GMX)
 
