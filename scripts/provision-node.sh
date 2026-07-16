@@ -296,7 +296,6 @@ if ! python3 -c "import cryptography" 2>/dev/null; then
     echo "       e.g. sudo apt install python3-cryptography  or  sudo pip install cryptography" >&2
     exit 1
 fi
-
 echo "==> Creating $CONFIG_FILE from configs-original.yaml" >&2
 install_progress_topic_begin provision-setup "Node config bootstrap"
 install_progress_topic_set provision-setup 10

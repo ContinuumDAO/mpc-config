@@ -20,7 +20,7 @@ Chart/analysis tools return a clear error when called without data; treat that a
 
 | Kind | Examples | How to enable in this chat | Fetch tool |
 |------|----------|----------------------------|------------|
-| **DeFi protocol** (already on **continuum** MCP) | Hyperliquid, GMX, Aave, Uniswap, … | **`continuum__load_defi_protocol`** `{ "protocolId": "hyperliquid" }` — **not** **`agent_load_mcp_server`** | `ctm_<protocol>_fetch_ohlcv` |
+| **DeFi protocol** (already on **continuum** MCP) | Hyperliquid, Arcus, GMX, Aave, Uniswap, … | **`continuum__load_defi_protocol`** `{ "protocolId": "hyperliquid" }` — **not** **`agent_load_mcp_server`** | `ctm_<protocol>_fetch_ohlcv` |
 | **Optional catalog MCP server** | `coinmarketcap-public`, `coingecko`, `technical-indicators`, … | **`continuum__agent_load_mcp_server`** `{ "serverId": "…" }` after operator choice | `coinmarketcap-public__*`, `coingecko__*`, … |
 
 **Hyperliquid is a DeFi protocol, not an MCP `serverId`.**  
@@ -42,7 +42,7 @@ Use **`list_mcp_servers`** → **`activeServers`** before loading. Match **`serv
 
 ## Load DeFi protocols before fetch (DeFi sources only)
 
-When the operator names **Hyperliquid**, **GMX**, or another DeFi venue:
+When the operator names **Hyperliquid**, **Arcus**, **GMX**, or another DeFi venue:
 
 1. **`continuum__list_defi_protocols`** (optional) — confirm `protocolId`.
 2. **`continuum__load_defi_protocol`** `{ "protocolId": "hyperliquid" }` (idempotent).
@@ -68,6 +68,8 @@ If a chosen server is **missing** from **`activeServers`** → tell the operator
 | Operator says | Enable | Fetch |
 |---------------|--------|-------|
 | Hyperliquid, perp, HL | **`load_defi_protocol({ "protocolId": "hyperliquid" })`** | **`ctm_hyperliquid_fetch_ohlcv`** |
+| Arcus, perp, Robinhood Chain | **`load_defi_protocol({ "protocolId": "arcus" })`** | **`ctm_arcus_fetch_ohlcv`** (chain **4663**) |
+| Arcus spot Stock Tokens | **`load_defi_protocol({ "protocolId": "arcus" })`** | **`ctm_arcus_spot_fetch_ohlcv`** (chain **4663**) |
 | GMX | **`load_defi_protocol({ "protocolId": "gmx" })`** | **`ctm_gmx_fetch_ohlcv`** |
 | CoinMarketCap / CMC | **`agent_load_mcp_server({ "serverId": "coinmarketcap-public" })`** | **`coinmarketcap-public__get_kline_candles`** (etc.) |
 | CoinGecko | **`agent_load_mcp_server({ "serverId": "coingecko" })`** or **`coingecko-pro`** | **`coingecko__execute`** |

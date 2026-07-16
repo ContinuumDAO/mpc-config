@@ -2,7 +2,7 @@
 
 Use with skills **`orchestration_planning`** and **`orchestration-chart-analysis`**. Plan chat drafts manifest only; sub-agents analyze and return **`tradeIdeas[]`** in **`mpc-task-result v1`**.
 
-Embed **symbol, interval, lookback, and execution protocol** (`hyperliquid` | `gmx` | `uniswap`) in each task prompt — sub-agents do not elicit mid-run. For **`uniswap`** builds, also name the OHLCV source in the prompt (HL/GMX perp fetch or CoinGecko/CMC — see **`trade_analysis_cron.example.md`** protocol table).
+Embed **symbol, interval, lookback, and execution protocol** (`hyperliquid` | `arcus` | `gmx` | `uniswap`) in each task prompt — sub-agents do not elicit mid-run. For **`uniswap`** builds, also name the OHLCV source in the prompt (HL/Arcus/GMX perp fetch or CoinGecko/CMC — see **`trade_analysis_cron.example.md`** protocol table).
 
 ```yaml
 # mpc-orchestrate v1
@@ -37,7 +37,7 @@ tasks:
     skills: ["chart-analysis-levels"]
 ```
 
-Replace **`hyperliquid`** in `mcpServers` with **`gmx`** when the operator goal is GMX execution (load GMX + explicit `chainId` on fetch). For Uniswap spot goals, keep an OHLCV-capable server in `mcpServers` for analysis tasks and load **uniswap** only on the orchestrator Continue / build step.
+Replace **`hyperliquid`** in `mcpServers` with **`gmx`** or **`arcus`** when the operator goal is GMX or Arcus execution (load protocol + explicit `chainId` on fetch — Arcus **4663**). For Uniswap spot goals, keep an OHLCV-capable server in `mcpServers` for analysis tasks and load **uniswap** only on the orchestrator Continue / build step.
 
 ### mpc-task-result v1 (sub-agent reply on KeyGen)
 
@@ -102,6 +102,6 @@ charts: []
 
 ### Continue in Orchestrator (execution)
 
-**`POST /agent/orchestration/continue`** copies aggregated **`tradeIdeas`** to the **`[Orchestrator]`** conversation. Operator: *“Trade the trend retest on GMX”* → **`load_defi_protocol`** → **`build_trade_from_trade_idea`** with chosen **`tradeIdeaId`** and **`protocolId`** from operator goal (**hyperliquid** / **gmx** / **uniswap** per **`trade-defaults`** §5).
+**`POST /agent/orchestration/continue`** copies aggregated **`tradeIdeas`** to the **`[Orchestrator]`** conversation. Operator: *“Trade the trend retest on GMX”* → **`load_defi_protocol`** → **`build_trade_from_trade_idea`** with chosen **`tradeIdeaId`** and **`protocolId`** from operator goal (**hyperliquid** / **arcus** / **gmx** / **uniswap** per **`trade-defaults`** §5).
 
 **Never** use **`submit_trade_from_consensus`** on orchestrator threads — that tool is **cron-only**.

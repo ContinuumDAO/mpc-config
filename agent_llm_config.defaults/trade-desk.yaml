@@ -164,6 +164,34 @@ protocols:
     purposeSuffix:
       default: "spot swap"
 
+  # --- Arcus (Robinhood Chain 4663 — perps + spot Stock Tokens) ------------------
+  arcus:
+    # perp | spot — perp uses limit + optional bracket; spot uses RFQ (no TP/SL at build).
+    marketKind: perp
+
+    # Time-in-force for perp limit orders: gtc | ioc (venue-specific).
+    tif: gtc
+
+    # Perp bracket (TP/SL) when trade idea has target and/or invalidation — same geometry as Hyperliquid.
+    targetOffsetPct: 0.1
+    targetOffsetMode: price
+    tpslExecMode: limit_at_trigger
+
+    sizing:
+      mode: fixed
+      fixedSzHuman: "0.05"   # Coin size (e.g. ETH units) — required for perp/spot RFQ builds
+      minSzHuman: "0.001"
+
+    # Trading requires paired KeyGens (same GroupId): secp256k1 (custody/billing) + ed25519 (API signing).
+    # Set ed25519KeyGenId on build_trade_from_* / tradeBuild YAML when automating cron (UI session may supply it).
+
+    purposeSuffix:
+      trend_structure: "trend retest"
+      chart_pattern: ""
+      key_levels: "kl bounce"
+      key_level_fibonacci: "fib setup"
+      default: "arcus perp"
+
 # ---------------------------------------------------------------------------
 # Examples (commented — copy into protocols.* to try alternatives)
 # ---------------------------------------------------------------------------

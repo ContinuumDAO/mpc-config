@@ -31,13 +31,14 @@ Chart tools are **not** pinned at session start. When the operator asks for char
 
 Load skill **`chart-defaults`** (via **`agent_load_skill`**) after activating the chart bundle for OHLCV source guidance. **Never auto-load** market-data MCP servers — if no OHLCV source is loaded, ask the operator to choose one (skill **`chart-ohlcv-sources`**).
 
-## DeFi protocols (Hyperliquid, GMX, Aave, … — on continuum MCP)
+## DeFi protocols (Hyperliquid, Arcus, GMX, Aave, … — on continuum MCP)
 
 DeFi tools are **already registered** on the **continuum** MCP server. They are **not** separate optional MCP servers in **`list_mcp_servers`**.
 
 | Operator says | Wrong | Right |
 |---------------|-------|-------|
 | “Load Hyperliquid”, “use HL”, “Hyperliquid OHLCV” | **`agent_load_mcp_server({ "serverId": "hyperliquid" })`** → *not configured* | **`continuum__load_defi_protocol({ "protocolId": "hyperliquid" })`** → **`continuum__ctm_hyperliquid_*`** |
+| “Load Arcus”, “Robinhood Chain perps”, “Arcus OHLCV” | **`agent_load_mcp_server({ "serverId": "arcus" })`** → *not configured* | **`continuum__load_defi_protocol({ "protocolId": "arcus" })`** → **`continuum__ctm_arcus_*`** / **`continuum__ctm_arcus_spot_*`** (chain **4663**) |
 | “Load the DeFi protocol hyperliquid” | Ask for RPC/wallet before fetch/chart | **`continuum__load_defi_protocol`** only; wallet only for multisign **orders** |
 
 Workflow:

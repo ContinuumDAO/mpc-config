@@ -122,7 +122,7 @@ For **`analyze_*`**, use the same fetch and pass **`toolResult`** — same turn,
 
 Title e.g. **`ETH/USDC Uniswap v3 — 4H — last 90d`**.
 
-### Perp / DeFi (Hyperliquid or GMX — when operator names the venue)
+### Perp / DeFi (Hyperliquid, Arcus, or GMX — when operator names the venue)
 
 **Never slice or shorten `candles` from the fetch** before `prepare_chart_from_rows`. Honor the operator’s interval and lookback exactly (e.g. 7d @ 1h ≈ 168–169 bars — chart as-is).
 
@@ -139,6 +139,11 @@ Title e.g. **`ETH/USDC Uniswap v3 — 4H — last 90d`**.
 ```
 
 **Never** re-fetch at a coarser interval because the loaded bar count “won’t fit” — the chart tool loads the full window and downsamples display only (`meta.loadStatus.barCount` vs `displayBarCount`, `meta.windowExpectation`).
+
+**Arcus** — perp fetch returns `{ ohlcv: { market, interval, candles, dataSource: "arcus" }, chainId: 4663 }`; spot uses `ctm_arcus_spot_fetch_ohlcv`:
+
+1. `ctm_arcus_fetch_ohlcv` or `ctm_arcus_spot_fetch_ohlcv` (after `load_defi_protocol({ protocolId: "arcus" })`, chain **4663**).
+2. **`continuum__prepare_chart_from_rows`** — same turn; pass **full fetch JSON** as **`toolResult`**.
 
 **GMX** — fetch returns `{ symbol, timeframe, candles }` (no volume on rows):
 

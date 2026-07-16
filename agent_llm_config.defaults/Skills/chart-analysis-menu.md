@@ -71,7 +71,7 @@ If load of **`coinmarketcap`** fails on missing key → offer **`coinmarketcap-p
 
 See **`chart-periods`**.
 
-If **`hyperliquid`** / **`gmx`** (or operator names the venue) → **`continuum__load_defi_protocol`** `{ "protocolId": "hyperliquid" | "gmx" }`, then that protocol’s **`fetch_ohlcv`**. **Do not** use **`agent_load_mcp_server`** for DeFi protocol ids.
+If **`hyperliquid`** / **`arcus`** / **`gmx`** (or operator names the venue) → **`continuum__load_defi_protocol`** `{ "protocolId": "hyperliquid" | "arcus" | "gmx" }`, then that protocol’s **`fetch_ohlcv`**. **Do not** use **`agent_load_mcp_server`** for DeFi protocol ids.
 
 ## Optional per-type skills
 

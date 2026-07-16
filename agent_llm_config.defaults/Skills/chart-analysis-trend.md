@@ -28,7 +28,7 @@ Input: `{ "title": "<from fetch>", "toolResult": { ... } }` — optional **`labe
 
 **Take-profit at build:** default **`impulse_leg`** (`measuredMove.targetPrice`; falls back to swing). For the nearer swing TP only, pass **`takeProfitSource: swing`** on `build_trade_from_*` — see skill **`trade-defaults`** §1 (trend structure) and §6 policy.
 
-Build/prefill: skill **`trade-defaults`** §6 (perp limit on **hyperliquid** / **gmx**; **uniswap** spot only when price is at entry).
+Build/prefill: skill **`trade-defaults`** §6 (perp limit on **hyperliquid**, **arcus**, or **gmx**; **uniswap** spot only when price is at entry).
 
 ## Narrative template
 

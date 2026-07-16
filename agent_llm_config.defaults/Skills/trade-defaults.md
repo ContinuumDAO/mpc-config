@@ -59,7 +59,7 @@ Nested **`breakRetestAlternative`** on fib ideas (`kl-fib-ret`) waits for **rete
 - **Default:** strongest broken level (`alternateBreakCandidates[0]`, `selectionHint: strongest`).
 - **Alternates:** most recent break; nearest to last close — operator may pick from `alternateBreakCandidates[]`.
 
-**Extension targets:** when `targetSource: fib_extension` (nearest alternate only, or fib primary/alternate), prefer **hyperliquid** or **gmx** for resting limits; add HTF re-analysis note in `purposeTextAdditional` (e.g. `fib ext — HTF confirm`).
+**Extension targets:** when `targetSource: fib_extension` (nearest alternate only, or fib primary/alternate), prefer **hyperliquid**, **arcus**, or **gmx** for resting limits; add HTF re-analysis note in `purposeTextAdditional` (e.g. `fib ext — HTF confirm`).
 
 ### 1.2 Key level Fibonacci — default vs break+retest alternate
 
@@ -119,7 +119,7 @@ Edit **`trade-desk.yaml`** → `universal:` and per-protocol `protocols:` blocks
 | `autoSubmitMultisign` | Submit without operator review (cron only when explicitly allowed) |
 | `expiryMinutesFromNow` | Optional multisign expiry (Unix seconds computed at prefill time) |
 
-**Protocol blocks** (`hyperliquid`, `gmx`, `uniswap`): `marketKind`, `tif`, `collateralToken`, `sizing` (`fixed` or `marginPct` for Hyperliquid), optional `purposeSuffix` per analysis kind.
+**Protocol blocks** (`hyperliquid`, `arcus`, `gmx`, `uniswap`): `marketKind`, `tif`, `collateralToken`, `sizing` (`fixed` or `marginPct` for Hyperliquid), optional `purposeSuffix` per analysis kind.
 
 **Hyperliquid-only** (`protocols.hyperliquid` in `trade-desk.yaml`):
 
@@ -129,7 +129,7 @@ Edit **`trade-desk.yaml`** → `universal:` and per-protocol `protocols:` blocks
 | `targetOffsetMode` | `price` (default) or `atr` — see §3 |
 | `tpslExecMode` | `limit_at_trigger` (default) or `market` when bracket TP/SL is included at build |
 
-When a trade idea has **target** and/or **invalidation**, **`build_trade_from_*`** for Hyperliquid auto-includes bracket fields (`takeProfitTriggerPxHuman`, `stopLossTriggerPxHuman`) via one L1 EIP-712 `normalTpsl` action — not CoreWriter. Geometry: long → SL < entry < TP; short → TP < entry < SL. See **`ctm-mpc-defi`** Hyperliquid skill § Bracket limit order.
+When a trade idea has **target** and/or **invalidation**, **`build_trade_from_*`** for Hyperliquid auto-includes bracket fields (`takeProfitTriggerPxHuman`, `stopLossTriggerPxHuman`) via one L1 EIP-712 `normalTpsl` action — not CoreWriter. **Arcus perp** uses the same bracket geometry via `ctm_arcus_build_place_order_multisign` (ed25519-signed API payload). Geometry: long → SL < entry < TP; short → TP < entry < SL. See **`ctm-mpc-defi`** Hyperliquid / Arcus skills.
 
 **LLM fallback** (this skill): `llmFallback` in `trade-desk.yaml` lists when the fast path is skipped — e.g. `status: unclear`, `setupPurposeCode` **`kl-ret`** / **`kl-fib-ret`**, or primary unclear with a clear **`breakRetestAlternative`**.
 
@@ -203,12 +203,12 @@ ctm1|{proto}|{L|S}|{setup}|eE={px}|pfE={px}|tpE={px}|slE={px}|ds={src}|iv={inter
 
 | Token | Meaning |
 |-------|---------|
-| `{proto}` | Protocol short code — see protocol table in §5 (`hl`, `gmx`, `uni`, …) |
+| `{proto}` | Protocol short code — see protocol table in §5 (`hl`, `arc`, `gmx`, `uni`, …) |
 | `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`kl-fib-ext`**, **`kl-fib-ret`**, **`bb-fade`**, **`ma-cross`**, **`ma-ret`**, …) — never menu `#N` |
 | `eE` / `pfE` | Effective entry / pattern-failure after offsets |
 | `tpE` / `slE` | Effective take-profit / stop-loss triggers (Hyperliquid bracket builds when target/invalidation present) |
 | `eB` / `pfB` | Optional base prices when rune budget allows |
-| `ds` | Chart data source short code (`hl`, `gmx`, `uni`, `cg`, `cmc`, `ts`, …) |
+| `ds` | Chart data source short code (`hl`, `arc`, `gmx`, `uni`, `cg`, `cmc`, `ts`, …) |
 | `iv` | Chart interval / timeframe (`4h`, `1h`, `1d`, …) |
 | `n` | Bar / candle count used for analysis |
 
@@ -223,10 +223,11 @@ Protocol-specific defaults and sizing live under **`trade-desk.yaml` → `protoc
 | `protocolId` | Required prefill fields |
 |--------------|-------------------------|
 | **`hyperliquid`** | `szHuman` (coin units; fast path uses `sizing.marginPct` + one `fetch_open_context` call, or `sizing.fixed`); optional bracket via idea target/invalidation + desk `targetOffsetPct` / `tpslExecMode` |
+| **`arcus`** | `szHuman` (coin units); **`ed25519KeyGenId`** (paired ed25519 KeyGen, same `GroupId` as `keyGenId`); `marketKind` (`perp` \| `spot`); perp optional bracket via idea target/invalidation + desk `targetOffsetPct` / `tpslExecMode`; spot uses RFQ (no TP/SL at build) |
 | **`gmx`** | `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman` |
 | **`uniswap`** | `sizeUsdHuman` (spot swap; proximity enforced at build) |
 
-ctm1 `{proto}` codes: `hl`, `gmx`, `uni`. Default chainIds: Hyperliquid **999**, GMX / Uniswap **42161**.
+ctm1 `{proto}` codes: `hl`, `arc`, `gmx`, `uni`. Default chainIds: Hyperliquid **999**, Arcus **4663**, GMX / Uniswap **42161**.
 
 Build path: **`continuum__build_trade_from_trade_idea`** with matching `protocolId`.
 
@@ -257,35 +258,35 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 2. Set fields from **hyperliquid defaults** table above.
 3. `autoSubmitMultisign`: **false**.
 
-### Policy: trend-structure clear idea → perp limit (HL or GMX)
+### Policy: trend-structure clear idea → perp limit (HL, Arcus, or GMX)
 
 **When:** selected idea is **`trend_structure`**, `setupPurposeCode` **`trend-ret`**, `status: clear`, `side` is **long** or **short**.
 
-**Protocol:** operator UI **`hyperliquid`** or **`gmx`** (§5) — **not Uniswap** unless price is already at the retest entry.
+**Protocol:** operator UI **`hyperliquid`**, **`arcus`**, or **`gmx`** (§5) — **not Uniswap** unless price is already at the retest entry.
 
 1. Use **retest** offsets from §3 (`entryOffsetPct` / `invalidationOffsetPct` from desk defaults).
 2. **Take-profit:** default **`takeProfitSource: impulse_leg`** (measured-move target; falls back to swing). Use **`swing`** only when the operator asks for the nearer swing target.
-3. **Hyperliquid:** open-context → `szHuman`. **GMX:** open-context → `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman`.
+3. **Hyperliquid / Arcus:** open-context → `szHuman` (+ **`ed25519KeyGenId`** for Arcus). **GMX:** open-context → `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman`.
 4. Optional `purposeTextAdditional`: e.g. `trend retest` or `{primaryTrendKind} trend`.
 5. `autoSubmitMultisign`: **false**.
 
-### Policy: key-level bounce default → perp limit (HL or GMX)
+### Policy: key-level bounce default → perp limit (HL, Arcus, or GMX)
 
-**When:** selected idea is **`key_levels`**, primary `setupPurposeCode` **`kl-bnc`** or **`kl-brk`**, `status: clear`, operator UI protocol is **hyperliquid** or **gmx**.
+**When:** selected idea is **`key_levels`**, primary `setupPurposeCode` **`kl-bnc`** or **`kl-brk`**, `status: clear`, operator UI protocol is **hyperliquid**, **arcus**, or **gmx**.
 
-**Protocol:** operator UI **`hyperliquid`** or **`gmx`** (§5) — **not Uniswap** unless last price is within **`entryProximityPct`** of the bounce entry.
+**Protocol:** operator UI **`hyperliquid`**, **`arcus`**, or **`gmx`** (§5) — **not Uniswap** unless last price is within **`entryProximityPct`** of the bounce entry.
 
 1. Use **bounce** offsets from §3 (`entryOffsetPct` / `invalidationOffsetPct` from desk defaults).
-2. **Hyperliquid:** open-context → `szHuman`. **GMX:** open-context → `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman`.
+2. **Hyperliquid / Arcus:** open-context → `szHuman` (+ **`ed25519KeyGenId`** for Arcus). **GMX:** open-context → `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman`.
 3. Optional `purposeTextAdditional`: e.g. `kl bounce` or `Level #N support`.
 4. When `targetSource: fib_extension`, note HTF confirmation in `purposeTextAdditional`.
 5. `autoSubmitMultisign`: **false**.
 
-### Policy: key-level Fibonacci extension → perp limit (HL or GMX)
+### Policy: key-level Fibonacci extension → perp limit (HL, Arcus, or GMX)
 
-**When:** selected idea is **`key_level_fibonacci`**, `setupPurposeCode` **`kl-fib-ext`** or **`kl-fib-ret`**, `targetSource: fib_extension`, `status: clear`, operator UI protocol is **hyperliquid** or **gmx**.
+**When:** selected idea is **`key_level_fibonacci`**, `setupPurposeCode` **`kl-fib-ext`** or **`kl-fib-ret`**, `targetSource: fib_extension`, `status: clear`, operator UI protocol is **hyperliquid**, **arcus**, or **gmx**.
 
-**Protocol:** operator UI **`hyperliquid`** or **`gmx`** (§5) — not Uniswap unless price is already at the retest entry.
+**Protocol:** operator UI **`hyperliquid`**, **`arcus`**, or **`gmx`** (§5) — not Uniswap unless price is already at the retest entry.
 
 1. Use **retest** offsets from §3; skip proximity gate on perp venues.
 2. Size from protocol open-context tools (same as trend-structure policy).
@@ -293,22 +294,22 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 4. Note HTF confirmation when `higherTimeframeAdvisory` is set on the idea.
 5. `autoSubmitMultisign`: **false**.
 
-### Policy: key-level Fibonacci 0.618 retrace → perp limit (HL or GMX)
+### Policy: key-level Fibonacci 0.618 retrace → perp limit (HL, Arcus, or GMX)
 
 **When:** selected idea is **`key_level_fibonacci`**, `priceRegime: inside_range`, `setupPurposeCode` **`kl-fib`**, `status: clear`.
 
-**Protocol:** **hyperliquid** or **gmx** (§5) — not Uniswap unless last price is within **`entryProximityPct`** of the **Fib leg entry** (range high for upper-half short, range low for lower-half long, etc.).
+**Protocol:** **hyperliquid**, **arcus**, or **gmx** (§5) — not Uniswap unless last price is within **`entryProximityPct`** of the **Fib leg entry** (range high for upper-half short, range low for lower-half long, etc.).
 
 1. Use **bounce** offsets from §3 ( **`entryOffsetPct`** adjusts the limit relative to the leg base entry).
 2. Size from protocol open-context tools.
 3. Optional `purposeTextAdditional`: e.g. `fib 0.618 retrace`.
 4. `autoSubmitMultisign`: **false**.
 
-### Policy: key-level break retest alternate → perp limit (HL or GMX)
+### Policy: key-level break retest alternate → perp limit (HL, Arcus, or GMX)
 
 **When:** operator explicitly selects **`breakRetestAlternative`** (or asks for break+retest) on a **`key_levels`** idea with alternate `status: clear` and `setupPurposeCode` **`kl-ret`**.
 
-**Protocol:** **`hyperliquid`** or **`gmx`** (§5) — not Uniswap unless price is already at the retest entry.
+**Protocol:** **`hyperliquid`**, **`arcus`**, or **`gmx`** (§5) — not Uniswap unless price is already at the retest entry.
 
 1. Use **retest** offsets from §3; skip proximity gate on perp venues.
 2. Size from protocol open-context tools (same as trend-structure policy).
