@@ -57,6 +57,17 @@ Template: **`agent_llm_config.defaults/cron/trade_analysis_cron.example.md`** (m
 - **Plan / orchestrator** threads use **`build_trade_from_*`** only — never **`submit_trade_from_consensus`**.
 - **Uniswap V4** has no protocol OHLCV — cron message must name a separate candle source for analysis; limit-style ideas (trend, levels, fib extension) usually build on **hyperliquid**, **arcus**, or **gmx** instead (see **`trade-defaults`**).
 
+## MultiSign Join acceptance (cron)
+
+| Catalog job | Behavior |
+|-------------|----------|
+| **`auto-accept-sign-request`** | Blind accept every pending Join request (`accept: true`) with timestamped thoughts. |
+| **`conditional-accept-sign-request`** | Evaluate embedded **`signAcceptPolicy`** YAML: parse ctm1 Purpose short codes (`proto`, `setup`, `sz=` / `szUsd=`, symbol) **and** additional Purpose prose after ` · `; accept or **reject** with full Purpose cited in thoughts. Template: **`cron/sign_accept_policy.example.md`**. |
+
+Gather policy in **interactive chat first** (test against sample `get_sign_request_by_id`), paste frozen YAML into the cron **`message`**, **`run_cron_job`** once, then enable.
+
+**v1:** agent-evaluated policy only (no mpc-auth parser). Originator trades should use **ctm1** Purpose (see **`trade-defaults`** §4) so peer nodes can enforce protocol, size, and suffix rules.
+
 ## Anti-patterns
 
 - **`every` + short interval** “auto-sign-and-broadcast” loops without embedded confirmation — forbidden for orchestration follow-up; risky elsewhere.
