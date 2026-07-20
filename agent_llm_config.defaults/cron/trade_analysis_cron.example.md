@@ -1,5 +1,57 @@
 ## Analysis + optional trade submit (multi-protocol)
 
+### How to use this template
+
+This file is a **read-only copy-paste guide** — it is **not** a bundled catalog job. In continuumdao-node-app open **Agent → Cron → View template**, or copy from **`agent_llm_config.defaults/cron/trade_analysis_cron.example.md`** in mpc-config. Paste into a **custom cron job** (**+** on the Cron tab) as the job **`message`**.
+
+**Do not paste this entire document unchanged.** Customize it for one symbol, one schedule, and **one execution protocol**. The agent runs non-interactively — every choice (symbol, interval, lookback, protocol, sizing) must be **frozen in the message** or in node defaults before the job runs.
+
+#### Two configuration layers
+
+| Layer | Where | What it holds |
+|-------|--------|----------------|
+| **Node-wide defaults** | **`agent_llm_config/cron/trade-cron.yaml`** — edit on **Cron → Trade cron** (or bundled defaults until installed) | Default **`tradeConsensus`** + **`tradeBuild`** for every trade-analysis cron on this node |
+| **Per-job message** | Custom cron job **`message`** field | Workflow prose + optional fenced YAML that **overrides** `trade-cron.yaml` for **this job only** |
+
+On each run, mpc-auth uses YAML fences **in the job message** when present; otherwise it falls back to **`trade-cron.yaml`**.
+
+#### What to put in the custom cron message
+
+| Include | Notes |
+|---------|--------|
+| **Workflow prose** | **Steps** below — edit step 1 with your symbol, interval, and lookback; drop optional `analyze_*` steps you do not want |
+| **Selection guidance** | How to pick **`tradeIdeaId`** before **`submit_trade_from_consensus`** — trim if you only care about one idea type |
+| **One** **`tradeConsensus`** YAML fence | Pick **one** example block below — not all four |
+| **One** **`tradeBuild`** YAML fence | Pick **one** protocol block below (Hyperliquid, GMX, Arcus, or Uniswap) — **delete the other protocol examples** |
+
+**Reference only (do not need to paste):** the protocol table, chain-ID notes, and Arcus/Uniswap caveats — unless you want them inline for the agent.
+
+#### Recommended setup patterns
+
+**Pattern A — split (good when you run several trade crons on one node)**
+
+1. Configure **`tradeConsensus`** + **`tradeBuild`** once under **Cron → Trade cron** for your venue and sizing.
+2. Custom job **`message`** = opening instructions + customized **Steps** + **Selection guidance** only (no YAML fences unless this job needs different gates than the node file).
+3. Create the job, **Run now** once, then enable on schedule.
+
+**Pattern B — self-contained (good for one-off or per-job overrides)**
+
+1. Copy **Steps** + **Selection guidance** into the job **`message`**.
+2. Append **one** **`tradeConsensus`** fence and **one** **`tradeBuild`** fence for your protocol.
+3. Remove every other protocol’s **`tradeBuild`** example from the pasted text.
+
+#### Operator checklist
+
+- [ ] Symbol, interval, and lookback are explicit in step 1 (Elliott needs **≥200** bars when possible; **≥50** hard minimum)
+- [ ] Exactly **one** execution **`protocolId`** in **`tradeBuild`** (or in **Trade cron** defaults)
+- [ ] **`submitTradeFromConsensus: false`** for the first **Run now** (hint-only dry-run); set **`true`** only after you trust selection + sizing
+- [ ] Arcus: **`ed25519KeyGenId`** filled in; API key registered before live cron
+- [ ] Uniswap build: only for proximity-gated ideas — prefer HL / Arcus / GMX for trend, levels, and fib limits
+
+Load skill **`scheduled-automation`** for schedule kinds and non-interactive rules.
+
+---
+
 Load MCP: **continuum** (chart bundle) + **one DeFi protocol for execution** (see **`tradeBuild.protocolId`** below). Non-interactive. Load skill **`trade-defaults`** when prefill/build runs.
 
 Embed **frozen** operator choices in the cron **`message`**: symbol, candle interval, lookback, **`tradeBuild.protocolId`**, chain, and sizing defaults — do not ask mid-run.
@@ -58,7 +110,9 @@ Else prefer **bollinger_bands** when `status=clear`, not **`invalidated`**, and 
 
 Skip **partial** setups unless **momentum** agrees. When multiple level/trend ideas qualify, prefer the one whose **side** matches momentum / pattern / trend bias.
 
-### tradeConsensus (YAML fence — paste into cron message, or edit node file `cron/trade-cron.yaml`)
+### tradeConsensus (YAML fence — pick **one** example below, or configure node file `cron/trade-cron.yaml`)
+
+If **`tradeConsensus`** is already set under **Cron → Trade cron**, you can omit this section from the job message unless this job needs a different gate.
 
 Default — pattern + momentum gate; level and trend ideas are **fallback** selection unless listed in `requiredSources`:
 
@@ -110,11 +164,13 @@ tradeConsensus:
 
 Raise **`minAgree`** when adding sources. **`requiredSources`** values must match upserted `analysisType` (`chart_pattern`, `momentum`, `trend_structure`, `key_levels`, `key_level_fibonacci`, `elliott_waves`, `bollinger_bands`, `moving_averages`, …).
 
-### tradeBuild (YAML fence — paste into cron message, or edit node file `cron/trade-cron.yaml`)
+### tradeBuild (YAML fence — pick **one** protocol block below, or configure node file `cron/trade-cron.yaml`)
+
+If **`tradeBuild`** is already set under **Cron → Trade cron**, omit this section from the job message unless this job overrides protocol or sizing. **Do not paste more than one protocol block** into a single job.
 
 Set **`protocolId`** and protocol-specific sizing. Agent still picks **`tradeIdeaId`** from selection rules unless you also pin **`tradeIdeaNumber`** after a dry-run.
 
-**Hyperliquid perp:**
+**Hyperliquid perp** (copy this block only if HL is your execution venue):
 
 ```yaml
 tradeBuild:
@@ -135,7 +191,7 @@ tradeBuild:
   # expiryDate: 1735689600
 ```
 
-**GMX perp (Arbitrum):**
+**GMX perp (Arbitrum)** — copy only if GMX is your execution venue; otherwise delete:
 
 ```yaml
 tradeBuild:
@@ -153,7 +209,7 @@ tradeBuild:
   purposeText: Generated by cron.
 ```
 
-**Uniswap V4 spot (proximity-gated ideas only):**
+**Uniswap V4 spot (proximity-gated ideas only)** — copy only if Uniswap is your execution venue; otherwise delete:
 
 ```yaml
 tradeBuild:
@@ -164,7 +220,7 @@ tradeBuild:
   purposeText: Generated by cron.
 ```
 
-**Arcus perp (Robinhood Chain 4663):**
+**Arcus perp (Robinhood Chain 4663)** — copy only if Arcus perp is your execution venue; otherwise delete:
 
 ```yaml
 tradeBuild:
@@ -179,7 +235,7 @@ tradeBuild:
   purposeText: Generated by cron.
 ```
 
-**Arcus spot RFQ:**
+**Arcus spot RFQ** — copy only if Arcus spot is your execution venue; otherwise delete:
 
 ```yaml
 tradeBuild:
