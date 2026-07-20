@@ -174,6 +174,16 @@
       "aiReady": false
     },
     {
+      "id": "venice",
+      "displayName": "Venice AI",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@veniceai/mcp-server@0.2.0"],
+      "apiKeyEnvVar": "VENICE_API_KEY",
+      "runtime": { "requireCommands": ["npx"] },
+      "initialLoad": false
+    },
+    {
       "id": "binance",
       "displayName": "Binance (public market data)",
       "transport": "stdio",
