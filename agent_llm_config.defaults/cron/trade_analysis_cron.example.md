@@ -21,7 +21,7 @@ On each run, mpc-auth uses YAML fences **in the job message** when present; othe
 |---------|--------|
 | **Workflow prose** | **Steps** below — edit step 1 with your symbol, interval, and lookback; drop optional `analyze_*` steps you do not want |
 | **Selection guidance** | How to pick **`tradeIdeaId`** before **`submit_trade_from_consensus`** — trim if you only care about one idea type |
-| **One** **`tradeConsensus`** YAML fence | Pick **one** example block below — not all four |
+| **One** **`tradeConsensus`** YAML fence | Pick **one** example block below — not all examples |
 | **One** **`tradeBuild`** YAML fence | Pick **one** protocol block below (Hyperliquid, GMX, Arcus, or Uniswap) — **delete the other protocol examples** |
 
 **Reference only (do not need to paste):** the protocol table, chain-ID notes, and Arcus/Uniswap caveats — unless you want them inline for the agent.
@@ -73,26 +73,43 @@ Embed **frozen** operator choices in the cron **`message`**: symbol, candle inte
 
 ### Steps (prose — customize)
 
-1. Load OHLCV source per table above; **`fetch_ohlcv`** (or equivalent) for operator symbol/interval/lookback. Keep the same session for all analysis tools (`toolResult` / `ohlcvDigest`). When this cron includes **`analyze_elliott_waves`**, load **≥200** bars when possible (hard minimum **50**; **≥400** preferred for primary-degree counts — e.g. 4H × 60d or 1D × 90d). If `dataStatus` is **`insufficient_data`**, quote **`dataGuidance`** and skip Elliott-based submit for that run.
+1. Load OHLCV source per table above; **`fetch_ohlcv`** (or equivalent) for operator symbol/interval/lookback. Keep the same session for all analysis tools (`toolResult` / `ohlcvDigest`). When this cron includes **`analyze_elliott_waves`**, load **≥200** bars when possible (hard minimum **50**; **≥400** preferred for primary-degree counts — e.g. 4H × 60d or 1D × 90d). If `dataStatus` is **`insufficient_data`**, quote **`dataGuidance`** and skip Elliott-based submit for that run. **`analyze_candlestick_patterns`** needs **≥14** bars (same fetch).
 2. `analyze_chart_patterns` on the session-bound OHLCV.
-3. `analyze_momentum` on the same session.
-4. `analyze_trend_structure` on the same session (upserts **`trend_structure`** / `trendStructureTradeSetup`, `setupPurposeCode` **`trend-ret`**).
-5. `analyze_key_levels` on the same session (nearest bounce/rejection — upserts **`key_levels`** / `keyLevelsTradeSetup`).
-6. `analyze_key_level_fibonacci` on the same session (outer range 0.618 / 1.618 — upserts **`key_level_fibonacci`** / `keyLevelFibTradeSetup`).
-7. `analyze_elliott_waves` on the same session (upserts **`elliott_waves`** / `elliottWaveTradeSetup`; optional `waveMenuNumber`, default **1** — use menu # from **`waveMenu`** when pinning). **`corrective`** (`ew-corr`) stays **`unclear`**; cron submit uses **`ew-imp`** / **`ew-dia`** only when **`status=clear`**. Chart labels are optional in cron — **`apply_elliott_wave_drawings`** is not required for trade submit.
-8. Optional: `analyze_bollinger_bands` on the same session (upserts **`bollinger_bands`** / `bollingerTradeSetup`, `setupPurposeCode` **`bb-fade`**).
-9. Optional: `analyze_moving_averages` on the same session (upserts **`moving_averages`** / `movingAveragesTradeSetup`, `setupPurposeCode` **`ma-cross`** or **`ma-ret`** per `tradeSummary`).
-10. If consensus gate **ALLOWED** and submit enabled, call **`submit_trade_from_consensus`** with **`tradeIdeaId`** per selection rules below. Resolve sizing from **execution** protocol open-context (Hyperliquid / GMX / Uniswap quote tools per **`trade-defaults`** §5).
+3. `analyze_momentum` on the same session (upserts **`momentum`** / `momentumTradeSetup` — RSI/MACD bias; often **`partial`**).
+4. `analyze_candlestick_patterns` on the same session (upserts **`candlestick`** / `candlestickTradeSetup`; **`signal`** buy/sell/hold, **`side`** long/short/neutral from bullish/bearish primary hit). Requires **≥14** bars.
+5. `analyze_trend_structure` on the same session (upserts **`trend_structure`** / `trendStructureTradeSetup`, `setupPurposeCode` **`trend-ret`**).
+6. `analyze_key_levels` on the same session (nearest bounce/rejection — upserts **`key_levels`** / `keyLevelsTradeSetup`).
+7. `analyze_key_level_fibonacci` on the same session (outer range 0.618 / 1.618 — upserts **`key_level_fibonacci`** / `keyLevelFibTradeSetup`).
+8. `analyze_elliott_waves` on the same session (upserts **`elliott_waves`** / `elliottWaveTradeSetup`; optional `waveMenuNumber`, default **1** — use menu # from **`waveMenu`** when pinning). **`corrective`** (`ew-corr`) stays **`unclear`**; cron submit uses **`ew-imp`** / **`ew-dia`** only when **`status=clear`**. Chart labels are optional in cron — **`apply_elliott_wave_drawings`** is not required for trade submit.
+9. Optional: `analyze_bollinger_bands` on the same session (upserts **`bollinger_bands`** / `bollingerTradeSetup`, `setupPurposeCode` **`bb-fade`**).
+10. Optional: `analyze_moving_averages` on the same session (upserts **`moving_averages`** / `movingAveragesTradeSetup`, `setupPurposeCode` **`ma-cross`** or **`ma-ret`** per `tradeSummary`).
+11. If consensus gate **ALLOWED** and submit enabled, call **`submit_trade_from_consensus`** with **`tradeIdeaId`** per selection rules below. Resolve sizing from **execution** protocol open-context (Hyperliquid / GMX / Uniswap quote tools per **`trade-defaults`** §5).
 
-Steps 4–9 share the same OHLCV session; each upserts a **separate** trade idea (`analysisType` distinct).
+Steps 5–10 share the same OHLCV session; each upserts a **separate** trade idea (`analysisType` distinct). Steps 3–4 are **confirmation** sources (momentum and/or candlestick), not substitutes for a structural primary idea unless you retarget the cron (see **`tradeConsensus`** examples).
 
 ### Selection guidance (prose — agent decides tradeIdeaId)
 
-Prefer **chart_pattern** when `status=clear` and consensus agrees.
+#### Confirmation rule — momentum **OR** candlestick (required before submit)
 
-Else prefer **elliott_waves** when `status=clear`, `patternType` is **`impulse`** or **`diagonal`** (not **`corrective`**), `setupPurposeCode` **`ew-imp`** or **`ew-dia`**, and `side` matches **`analyze_momentum`** bias when momentum is in **`requiredSources`**. Prefer the primary **`waveMenuNumber`** (default **1**) unless cron prose pins another menu index. Skip when `dataStatus` was **`insufficient_data`** or `unclearReason` cites low confidence / unconfirmed waves.
+Every **primary** structural idea you submit (**chart_pattern**, **trend_structure**, **elliott_waves**, **key_levels**, **key_level_fibonacci**, **bollinger_bands**, **moving_averages**) must be **confirmed** by **at least one** of **`momentum`** or **`candlestick`** with **matching side**:
 
-Else prefer **trend_structure** when `status=clear`, `setupPurposeCode` **`trend-ret`**, and `side` matches **`analysis.bias`** (support-line long / resistance-line short). Skip if **`tradeBuild.protocolId`** is **`uniswap`** unless last close is within **`entryProximityPct`** of entry (retest limit not actionable as spot otherwise).
+| Primary `side` | Accept when **either** supporter is **`clear`** (or momentum **`partial`** with matching side when `allowPartial: true`) |
+|----------------|-----------------------------------------------------------------------------------------------------------------------------|
+| **long** | **`momentum`** `side: long` **OR** **`candlestick`** `side: long` (`signal: buy`, bullish primary pattern) |
+| **short** | **`momentum`** `side: short` **OR** **`candlestick`** `side: short` (`signal: sell`, bearish primary pattern) |
+
+- If **both** supporters are present and **conflict** (one long, one short), **do not submit**.
+- If **neither** supporter matches the primary side, **do not submit** — even when the YAML consensus gate is **ALLOWED**.
+- **`candlestick`** and **`momentum`** are **confirmation only** in this template — do not submit a candlestick or momentum idea as the primary **`tradeIdeaId`** unless you retarget the cron (see **`tradeConsensus`** “candlestick-primary” example).
+- Standalone candlestick hit rates are weak (~50–55%); pairing with structure is intentional (see skill **`chart-analysis-patterns`**).
+
+#### Primary idea priority (after confirmation passes)
+
+Prefer **chart_pattern** when `status=clear` and confirmation rule passes.
+
+Else prefer **elliott_waves** when `status=clear`, `patternType` is **`impulse`** or **`diagonal`** (not **`corrective`**), `setupPurposeCode` **`ew-imp`** or **`ew-dia`**, and confirmation rule passes. Prefer the primary **`waveMenuNumber`** (default **1**) unless cron prose pins another menu index. Skip when `dataStatus` was **`insufficient_data`** or `unclearReason` cites low confidence / unconfirmed waves.
+
+Else prefer **trend_structure** when `status=clear`, `setupPurposeCode` **`trend-ret`**, `side` matches **`analysis.bias`** (support-line long / resistance-line short), and confirmation rule passes. Skip if **`tradeBuild.protocolId`** is **`uniswap`** unless last close is within **`entryProximityPct`** of entry (retest limit not actionable as spot otherwise).
 
 Else prefer **key_level_fibonacci** when `status=clear` and `priceRegime` matches structure:
 
@@ -106,63 +123,75 @@ Use nested **`breakRetestAlternative`** (`kl-fib-ret`) only when cron prose expl
 
 Else prefer **key_levels** (nearest): rank-1 **bounce** (`kl-bnc`) or **rejection** (`kl-brk`).
 
-Else prefer **bollinger_bands** when `status=clear`, not **`invalidated`**, and last close was within **`entryProximityPct`** (**5**, band-width %) of the entry band (`bb-fade`; see **`trade-defaults`**).
+Else prefer **bollinger_bands** when `status=clear`, not **`invalidated`**, last close was within **`entryProximityPct`** (**5**, band-width %) of the entry band (`bb-fade`; see **`trade-defaults`**), and confirmation rule passes.
 
-Skip **partial** setups unless **momentum** agrees. When multiple level/trend ideas qualify, prefer the one whose **side** matches momentum / pattern / trend bias.
+Skip **partial** structural setups unless **momentum or candlestick** confirms the same side. When multiple level/trend ideas qualify, prefer the one whose **side** matches the confirming supporter.
 
 ### tradeConsensus (YAML fence — pick **one** example below, or configure node file `cron/trade-cron.yaml`)
 
 If **`tradeConsensus`** is already set under **Cron → Trade cron**, you can omit this section from the job message unless this job needs a different gate.
 
-Default — pattern + momentum gate; level and trend ideas are **fallback** selection unless listed in `requiredSources`:
+Default — chart pattern primary with **momentum OR candlestick** confirmation; level and trend ideas are **fallback** selection unless listed in `requiredSources`. The YAML gate ensures all three analysis types ran and at least two pass filters; **side-match confirmation** is enforced in prose above (OR logic is not expressible in `requiredSources` alone).
 
 ```yaml
 tradeConsensus:
-  requiredSources: [chart_pattern, momentum]
+  requiredSources: [chart_pattern, momentum, candlestick]
   minAgree: 2
+  minConfidence: 0.45
+  allowPartial: true
+  blockOnConflict: true
+  submitTradeFromConsensus: true
+```
+
+Example — require clear **trend_structure** primary with the same confirmation sources (perp cron):
+
+```yaml
+tradeConsensus:
+  requiredSources: [trend_structure, momentum, candlestick]
+  minAgree: 2
+  minConfidence: 0.45
+  allowPartial: true
+  blockOnConflict: true
+  submitTradeFromConsensus: true
+```
+
+Example — fib + momentum **or** candlestick confirmation:
+
+```yaml
+tradeConsensus:
+  requiredSources: [key_level_fibonacci, momentum, candlestick]
+  minAgree: 2
+  minConfidence: 0.45
+  allowPartial: true
+  blockOnConflict: true
+  submitTradeFromConsensus: true
+```
+
+Example — Elliott wave + momentum **or** candlestick confirmation:
+
+```yaml
+tradeConsensus:
+  requiredSources: [elliott_waves, momentum, candlestick]
+  minAgree: 2
+  minConfidence: 0.45
+  allowPartial: true
+  blockOnConflict: true
+  submitTradeFromConsensus: true
+```
+
+Example — candlestick-primary (unusual; no structural idea required in `requiredSources`):
+
+```yaml
+tradeConsensus:
+  requiredSources: [candlestick, momentum]
+  minAgree: 1
   minConfidence: 0.45
   allowPartial: false
   blockOnConflict: true
   submitTradeFromConsensus: true
 ```
 
-Example — require clear **trend_structure** + **momentum** (perp cron):
-
-```yaml
-tradeConsensus:
-  requiredSources: [trend_structure, momentum]
-  minAgree: 2
-  minConfidence: 0.45
-  allowPartial: false
-  blockOnConflict: true
-  submitTradeFromConsensus: true
-```
-
-Example — fib + momentum:
-
-```yaml
-tradeConsensus:
-  requiredSources: [key_level_fibonacci, momentum]
-  minAgree: 2
-  minConfidence: 0.45
-  allowPartial: false
-  blockOnConflict: true
-  submitTradeFromConsensus: true
-```
-
-Example — Elliott wave + momentum:
-
-```yaml
-tradeConsensus:
-  requiredSources: [elliott_waves, momentum]
-  minAgree: 2
-  minConfidence: 0.45
-  allowPartial: false
-  blockOnConflict: true
-  submitTradeFromConsensus: true
-```
-
-Raise **`minAgree`** when adding sources. **`requiredSources`** values must match upserted `analysisType` (`chart_pattern`, `momentum`, `trend_structure`, `key_levels`, `key_level_fibonacci`, `elliott_waves`, `bollinger_bands`, `moving_averages`, …).
+Raise **`minAgree`** when adding sources. **`requiredSources`** values must match upserted `analysisType` (`chart_pattern`, `momentum`, `candlestick`, `trend_structure`, `key_levels`, `key_level_fibonacci`, `elliott_waves`, `bollinger_bands`, `moving_averages`, …).
 
 ### tradeBuild (YAML fence — pick **one** protocol block below, or configure node file `cron/trade-cron.yaml`)
 

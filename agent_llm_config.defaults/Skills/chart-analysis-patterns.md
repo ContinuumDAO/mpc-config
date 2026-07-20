@@ -22,7 +22,7 @@ Direction is **bullish** / **bearish** / **neutral** (indecision) / **signal** (
 1. Name the primary pattern and whether it is bullish, bearish, or indecision.
 2. State confidence and which bar it applies to (usually the last bar).
 3. Quote the tool **`description`** for geometry; add trend/level context from sibling analyses if available.
-4. Note standalone candlestick hit rates are weak (~50–55%); do not treat as sole trade signal.
+4. Note standalone candlestick hit rates are weak (~50–55%); in trade-analysis cron use as **confirmation** alongside **`analyze_momentum`** (either may confirm a structural primary — see **`trade_analysis_cron.example.md`**).
 
 ## Plotting (separate step)
 

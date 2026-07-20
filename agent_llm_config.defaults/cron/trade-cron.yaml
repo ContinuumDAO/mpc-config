@@ -25,21 +25,23 @@ version: 1  # Schema version (must be 1 today).
 tradeConsensus:
   # Analysis types that must appear in the session AND pass filters below.
   # Values match upserted idea source.analysisType (lowercase snake_case):
-  #   chart_pattern | momentum | trend_structure | key_levels |
+  #   chart_pattern | momentum | candlestick | trend_structure | key_levels |
   #   key_level_fibonacci | elliott_waves | bollinger_bands | moving_averages
   # Omit or use [] to consider all analysis types (still subject to minAgree/filters).
-  requiredSources: [chart_pattern, momentum]
+  # Default runs chart_pattern + momentum + candlestick; cron prose requires primary side
+  # confirmed by momentum OR candlestick (OR logic is prose — not expressible in YAML alone).
+  requiredSources: [chart_pattern, momentum, candlestick]
 
   # Minimum count of ideas that pass all filters (status, confidence, completeness).
-  # Raise when you add more requiredSources (e.g. 3 when requiring three distinct types).
+  # With default sources: typically chart_pattern clear + one clear/partial supporter.
   minAgree: 2
 
   # Ideas below this confidence are excluded. Scale 0–1 (default 0.45 when omitted in message fences).
   minConfidence: 0.45
 
   # When false, only ideas with completeness: full count toward minAgree.
-  # When true (default if omitted), partial setups may count.
-  allowPartial: false
+  # When true (default if omitted), partial setups may count (momentum is often partial).
+  allowPartial: true
 
   # When true (default if omitted), BLOCK if consensus candidates mix long and short sides.
   blockOnConflict: true
@@ -127,26 +129,27 @@ tradeBuild:
 # Examples (commented — copy into tradeConsensus / tradeBuild to try alternatives)
 # ---------------------------------------------------------------------------
 #
-# Trend + momentum gate (perp cron):
+# Trend + momentum/candlestick confirmation gate (perp cron):
 #   tradeConsensus:
-#     requiredSources: [trend_structure, momentum]
+#     requiredSources: [trend_structure, momentum, candlestick]
 #     minAgree: 2
 #     minConfidence: 0.45
-#     allowPartial: false
+#     allowPartial: true
 #     blockOnConflict: true
 #     submitTradeFromConsensus: true
 #
-# Fib + momentum gate:
+# Fib + momentum/candlestick confirmation gate:
 #   tradeConsensus:
-#     requiredSources: [key_level_fibonacci, momentum]
+#     requiredSources: [key_level_fibonacci, momentum, candlestick]
 #     minAgree: 2
+#     allowPartial: true
 #
-# Elliott wave + momentum gate (OHLCV lookback ≥200 bars recommended):
+# Elliott wave + momentum/candlestick gate (OHLCV lookback ≥200 bars recommended):
 #   tradeConsensus:
-#     requiredSources: [elliott_waves, momentum]
+#     requiredSources: [elliott_waves, momentum, candlestick]
 #     minAgree: 2
 #     minConfidence: 0.45
-#     allowPartial: false
+#     allowPartial: true
 #     blockOnConflict: true
 #     submitTradeFromConsensus: true
 #

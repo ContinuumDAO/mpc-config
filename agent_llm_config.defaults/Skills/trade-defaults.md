@@ -14,6 +14,8 @@ Cron jobs may still set overrides in a fenced **`tradeBuild`** YAML block (see *
 
 - Apply rules to the **selected idea only** — use its `symbol`, `side`, `confidence`, `status`, `entry`, `target`, `invalidation`, and `analysisSetup`:
   - **chart_pattern:** `patternName`, `entryPhase`, `entryOffsetMode`, `setupPurposeCode`
+  - **momentum:** RSI zone, MACD crossover, `side` long/short/neutral — often **`partial`**; use as **confirmation** for structural primaries in cron (see **`scheduled-automation`**)
+  - **candlestick:** `patternName`, `signal` (`buy` | `sell` | `hold`), `side` long/short/neutral, `setupPurposeCode` **`candle`** — **confirmation** alongside momentum in trade-analysis cron; requires **≥14** OHLCV bars
   - **trend_structure:** `bias`, `structure`, `primaryTrendKind`, `primaryTrendTouchCount`, `entryOffsetMode` (always **`retest`**), `setupPurposeCode` (**`trend-ret`**)
   - **key_levels:** `levelNumber`, `framing`, `entryOffsetMode` (**`bounce`** default), `setupPurposeCode` (**`kl-bnc`** long bounce / **`kl-brk`** short rejection), `targetSource`, optional nested **`breakRetestAlternative`** (**`kl-ret`** when selected)
   - **key_level_fibonacci:** `fibPairNumber`, `priceRegime` (`inside_range` | `above_range` | `below_range`), `framing`, `entryOffsetMode`, `setupPurposeCode` (**`kl-fib`** 0.618 retrace / **`kl-fib-ext`** range extension / **`kl-fib-ret`** when break+retest alternate selected), `targetSource` (`retrace_618` | `range_leg` | `fib_extension`), optional nested **`breakRetestAlternative`**
@@ -95,6 +97,8 @@ Same desk fields are on **`keyLevelsTradeSetup`** for nearest analysis (bounce u
 **Bollinger bands** ideas (`analyze_bollinger_bands`) are **band-to-band fades**: above middle → **short** at **upper** band toward **lower**; below middle → **long** at **lower** band toward **upper**. Base entry is the outer band price; target is the **opposite** band. Invalidation is band breach (above upper for short, below lower for long). Idea is **`clear`** only when last close is within **`entryProximityPct`** (**5** by default, % of band width). Use **`setupPurposeCode: bb-fade`**, **`entryOffsetMode: bounce`**, and desk **`entryOffsetPct` / `invalidationOffsetPct`** from §2 at build time. Chart overlay defaults (`period`, `stdDev`, shaded fill) live in **`chart-defaults`**.
 
 **Elliott waves** ideas (`analyze_elliott_waves`) bind to a **`waveMenuNumber`** (default **1**). **Impulse** / **diagonal** counts with confirmed structure and projection targets can be **`clear`** with **`setupPurposeCode: ew-imp`** or **`ew-dia`**. Base entry is **last close** (`triggerPrice`); target is the highest-probability in-progress wave projection above/below last close; invalidation is the wave **`invalidationPoint`**. **`corrective`** A–B–C counts (`ew-corr`) stay **`unclear`**. Cron and prefill skip when `dataStatus: insufficient_data` — widen OHLCV lookback per tool **`dataGuidance`**. Offsets from §2 apply at build on perp limit venues. Optional chart labels: **`apply_elliott_wave_drawings`** (not required for submit).
+
+**Candlestick** ideas (`analyze_candlestick_patterns`) reflect the last-bar primary pattern: **`signal: buy`** → **`side: long`**, **`signal: sell`** → **`side: short`**, **`hold`** / neutral → **`unclear`**. In trade-analysis cron, use **`candlestick`** as **confirmation** for a structural primary — **momentum OR candlestick** must match the primary side before submit (see **`trade_analysis_cron.example.md`**). Standalone candlestick builds are possible but weak (~50–55% hit rate); skill **`chart-analysis-patterns`** for narrative rules.
 
 **Moving averages** ideas (`analyze_moving_averages`) support two strategies from the same fast/slow pair (default **SMA 50/200**):
 
@@ -209,7 +213,7 @@ Optional **`purposeTextAdditional`** after ` · ` (e.g. `trend retest`, `Generat
 | Token | Meaning |
 |-------|---------|
 | `{proto}` | Protocol short code — see protocol table in §5 (`hl`, `arc`, `gmx`, `uni`, …) |
-| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`kl-fib-ext`**, **`kl-fib-ret`**, **`bb-fade`**, **`ma-cross`**, **`ma-ret`**, **`ew-imp`**, **`ew-dia`**, …) — never menu `#N` |
+| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`kl-fib-ext`**, **`kl-fib-ret`**, **`bb-fade`**, **`ma-cross`**, **`ma-ret`**, **`ew-imp`**, **`ew-dia`**, **`candle`**, **`mom`**, …) — never menu `#N` |
 | `eE` / `pfE` | Effective entry / pattern-failure after offsets |
 | `tpE` / `slE` | Effective take-profit / stop-loss triggers (Hyperliquid bracket builds when target/invalidation present) |
 | `eB` / `pfB` | Optional base prices when rune budget allows |
@@ -342,6 +346,7 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 
 - Set **`autoSubmitMultisign`: true** only if this subsection explicitly allows it for that cron class.
 - Cron YAML may set `protocolId`, `entryOffsetPct`, `invalidationOffsetPct`, and protocol-specific sizing fields from §5.
+- Trade-analysis cron: before submit, enforce **momentum OR candlestick** confirmation with matching side on the selected primary idea (template prose in **`trade_analysis_cron.example.md`**).
 
 ### Policy template — new protocol
 
