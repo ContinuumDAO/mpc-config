@@ -131,7 +131,7 @@ protocols:
 
     # Appended to auto-generated purposeText (256 char total limit). Keys match analysis type:
     # trend_structure | chart_pattern | key_levels | key_level_fibonacci | bollinger_bands |
-    # moving_averages | default (fallback when kind unknown)
+    # moving_averages | elliott_waves | default (fallback when kind unknown)
     purposeSuffix:
       trend_structure: "trend retest"
       chart_pattern: ""
@@ -139,6 +139,7 @@ protocols:
       key_level_fibonacci: "fib setup"
       bollinger_bands: "bb fade"
       moving_averages: "ma setup"
+      elliott_waves: "ew wave"
 
   # --- GMX (EVM perps) -----------------------------------------------------------
   gmx:
@@ -154,6 +155,7 @@ protocols:
       chart_pattern: ""
       key_levels: "kl bounce"
       key_level_fibonacci: "fib setup"
+      elliott_waves: "ew wave"
 
   # --- Uniswap (spot swap) -------------------------------------------------------
   uniswap:
@@ -190,6 +192,7 @@ protocols:
       chart_pattern: ""
       key_levels: "kl bounce"
       key_level_fibonacci: "fib setup"
+      elliott_waves: "ew wave"
       default: "arcus perp"
 
 # ---------------------------------------------------------------------------

@@ -26,7 +26,7 @@ tradeConsensus:
   # Analysis types that must appear in the session AND pass filters below.
   # Values match upserted idea source.analysisType (lowercase snake_case):
   #   chart_pattern | momentum | trend_structure | key_levels |
-  #   key_level_fibonacci | bollinger_bands | moving_averages
+  #   key_level_fibonacci | elliott_waves | bollinger_bands | moving_averages
   # Omit or use [] to consider all analysis types (still subject to minAgree/filters).
   requiredSources: [chart_pattern, momentum]
 
@@ -140,6 +140,15 @@ tradeBuild:
 #   tradeConsensus:
 #     requiredSources: [key_level_fibonacci, momentum]
 #     minAgree: 2
+#
+# Elliott wave + momentum gate (OHLCV lookback ≥200 bars recommended):
+#   tradeConsensus:
+#     requiredSources: [elliott_waves, momentum]
+#     minAgree: 2
+#     minConfidence: 0.45
+#     allowPartial: false
+#     blockOnConflict: true
+#     submitTradeFromConsensus: true
 #
 # Hyperliquid perp build block:
 #   tradeBuild:

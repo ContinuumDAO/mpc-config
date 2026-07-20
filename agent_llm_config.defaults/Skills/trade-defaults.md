@@ -18,6 +18,7 @@ Cron jobs may still set overrides in a fenced **`tradeBuild`** YAML block (see *
   - **key_levels:** `levelNumber`, `framing`, `entryOffsetMode` (**`bounce`** default), `setupPurposeCode` (**`kl-bnc`** long bounce / **`kl-brk`** short rejection), `targetSource`, optional nested **`breakRetestAlternative`** (**`kl-ret`** when selected)
   - **key_level_fibonacci:** `fibPairNumber`, `priceRegime` (`inside_range` | `above_range` | `below_range`), `framing`, `entryOffsetMode`, `setupPurposeCode` (**`kl-fib`** 0.618 retrace / **`kl-fib-ext`** range extension / **`kl-fib-ret`** when break+retest alternate selected), `targetSource` (`retrace_618` | `range_leg` | `fib_extension`), optional nested **`breakRetestAlternative`**
   - **bollinger_bands:** `setupPurposeCode` (**`bb-fade`**), `entryOffsetMode` (**`bounce`**), band **`period`** **20**, **`stdDev`** **2**, **`entryProximityPct`** **5** (% of **band width** — gates `clear` vs `unclear`)
+  - **elliott_waves:** `patternType` (`impulse` | `diagonal` | `corrective`), `setupPurposeCode` (**`ew-imp`** | **`ew-dia`** | **`ew-corr`**), `waveMenuNumber` (default **1**), `confirmedWaveCount`, in-progress wave projection target/invalidation. **`corrective`** (`ew-corr`) is **`unclear`** — no directional build. Requires **≥50** OHLCV bars (hard minimum); **≥200** recommended; **≥400** for primary degree (see **`scheduled-automation`** / template bar-count note).
   - **moving_averages:** `strategy` (**`crossover`** | **`proximity_retest`**), `setupPurposeCode` (**`ma-cross`** crossover at last close | **`ma-ret`** slow-MA retest), `fastPeriod` **50**, `slowPeriod` **200**, `maType` **`sma`**, `entryOffsetMode` (**`bounce`** for crossover, **`retest`** for proximity), **`entryProximityPct`** **1** with desk **`entryProximityMode`** (**`price`** | **`atr`**)
 - Do **not** pick a different idea or invent a new setup.
 - If this skill is not installed, prefill is skipped.
@@ -92,6 +93,8 @@ Nested **`breakRetestAlternative`** on fib ideas (`kl-fib-ret`) waits for **rete
 Same desk fields are on **`keyLevelsTradeSetup`** for nearest analysis (bounce uses **`entryProximityPct`**).
 
 **Bollinger bands** ideas (`analyze_bollinger_bands`) are **band-to-band fades**: above middle → **short** at **upper** band toward **lower**; below middle → **long** at **lower** band toward **upper**. Base entry is the outer band price; target is the **opposite** band. Invalidation is band breach (above upper for short, below lower for long). Idea is **`clear`** only when last close is within **`entryProximityPct`** (**5** by default, % of band width). Use **`setupPurposeCode: bb-fade`**, **`entryOffsetMode: bounce`**, and desk **`entryOffsetPct` / `invalidationOffsetPct`** from §2 at build time. Chart overlay defaults (`period`, `stdDev`, shaded fill) live in **`chart-defaults`**.
+
+**Elliott waves** ideas (`analyze_elliott_waves`) bind to a **`waveMenuNumber`** (default **1**). **Impulse** / **diagonal** counts with confirmed structure and projection targets can be **`clear`** with **`setupPurposeCode: ew-imp`** or **`ew-dia`**. Base entry is **last close** (`triggerPrice`); target is the highest-probability in-progress wave projection above/below last close; invalidation is the wave **`invalidationPoint`**. **`corrective`** A–B–C counts (`ew-corr`) stay **`unclear`**. Cron and prefill skip when `dataStatus: insufficient_data` — widen OHLCV lookback per tool **`dataGuidance`**. Offsets from §2 apply at build on perp limit venues. Optional chart labels: **`apply_elliott_wave_drawings`** (not required for submit).
 
 **Moving averages** ideas (`analyze_moving_averages`) support two strategies from the same fast/slow pair (default **SMA 50/200**):
 
@@ -206,7 +209,7 @@ Optional **`purposeTextAdditional`** after ` · ` (e.g. `trend retest`, `Generat
 | Token | Meaning |
 |-------|---------|
 | `{proto}` | Protocol short code — see protocol table in §5 (`hl`, `arc`, `gmx`, `uni`, …) |
-| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`kl-fib-ext`**, **`kl-fib-ret`**, **`bb-fade`**, **`ma-cross`**, **`ma-ret`**, …) — never menu `#N` |
+| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`kl-fib-ext`**, **`kl-fib-ret`**, **`bb-fade`**, **`ma-cross`**, **`ma-ret`**, **`ew-imp`**, **`ew-dia`**, …) — never menu `#N` |
 | `eE` / `pfE` | Effective entry / pattern-failure after offsets |
 | `tpE` / `slE` | Effective take-profit / stop-loss triggers (Hyperliquid bracket builds when target/invalidation present) |
 | `eB` / `pfB` | Optional base prices when rune budget allows |
@@ -308,6 +311,18 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 2. Size from protocol open-context tools.
 3. Optional `purposeTextAdditional`: e.g. `fib 0.618 retrace`.
 4. `autoSubmitMultisign`: **false**.
+
+### Policy: Elliott wave impulse/diagonal → perp limit (HL, Arcus, or GMX)
+
+**When:** selected idea is **`elliott_waves`**, `setupPurposeCode` **`ew-imp`** or **`ew-dia`**, `patternType` **`impulse`** or **`diagonal`**, `status: clear`, `side` is **long** or **short**.
+
+**Protocol:** **`hyperliquid`**, **`arcus`**, or **`gmx`** (§5) — not Uniswap (limit-style projection entry).
+
+1. Respect **`waveMenuNumber`** on the selected idea (default **1**).
+2. Use desk **`entryOffsetPct` / `invalidationOffsetPct`** from §3 on perp limit venues; entry base is last close / trigger price from the setup.
+3. Size from protocol open-context tools (same as trend-structure policy).
+4. Optional `purposeTextAdditional`: e.g. `ew impulse` or `ew diagonal`.
+5. `autoSubmitMultisign`: **false** unless cron policy below applies.
 
 ### Policy: key-level break retest alternate → perp limit (HL, Arcus, or GMX)
 
