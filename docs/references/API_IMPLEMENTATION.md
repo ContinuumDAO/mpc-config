@@ -245,6 +245,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /upsertTradeDeskConfig`](#post-upserttradedeskconfig) - Write **`agent_llm_config/trade-desk.yaml`** after YAML validation (**management signature**)
 - [`POST /resetTradeDeskFromDefaults`](#post-resettradedeskfromdefaults) - Install or reset **`trade-desk.yaml`** from **`agent_llm_config.defaults/`** (**management signature**)
 - [`GET /getCronTradeConfig`](#get-getcrontradeconfig) - Get **`cron/trade-cron.yaml`** (installed runtime file or bundled defaults preview)
+- [`GET /getCronTradeAnalysisExample`](#get-getcrontradeanalysisexample) - Get bundled **`cron/trade_analysis_cron.example.md`** (read-only trade proposal cron message template)
 - [`POST /upsertCronTradeConfig`](#post-upsertcrontradeconfig) - Write **`agent_llm_config/cron/trade-cron.yaml`** after YAML validation (**management signature**)
 - [`POST /resetCronTradeFromDefaults`](#post-resetcrontradefromdefaults) - Install or reset **`cron/trade-cron.yaml`** from **`agent_llm_config.defaults/cron/`** (**management signature**)
 - [`GET /listCronJobs`](#get-listcronjobs) - List active cron jobs and available repository catalog (`agent_llm_config.defaults/cron/jobs.json`; **read JWT** on Browser HTTPS / loopback)
@@ -3040,6 +3041,7 @@ Node-wide **`tradeConsensus`** and **`tradeBuild`** defaults for scheduled trade
 |------|------|
 | **`agent_llm_config.defaults/cron/trade-cron.yaml`** | Bundled defaults (bind-mounted catalog; edit in **mpc-config** repo) |
 | **`agent_llm_config/cron/trade-cron.yaml`** | Active file on this node (applied on every cron turn when the job message has no inline YAML fences) |
+| **`agent_llm_config.defaults/cron/trade_analysis_cron.example.md`** | Read-only example cron **message** for analyze → consensus → **`submit_trade_from_consensus`** → **`multiSignRequest`** workflows (not a job entry; copy into a custom cron job). View in continuumdao-node-app **Cron** tab (**View template**) or **`GET /getCronTradeAnalysisExample`**. |
 
 **Provisioning:** **`process_config.sh`** copies **`cron/trade-cron.yaml`** from **`agent_llm_config.defaults/`** into runtime **`agent_llm_config/cron/`** once if missing. Operators can also install via **`POST /resetCronTradeFromDefaults`** or the **Trade cron** section on the Cron tab in continuumdao-node-app.
 
@@ -3086,6 +3088,28 @@ Node-wide **`tradeConsensus`** and **`tradeBuild`** defaults for scheduled trade
 **Behavior:** Copies **`agent_llm_config.defaults/cron/trade-cron.yaml`** over **`agent_llm_config/cron/trade-cron.yaml`**, overwriting any operator edits.
 
 **Response data:** Same shape as **`GET /getCronTradeConfig`** after install (`configured: true`).
+
+<a id="get-getcrontradeanalysisexample"></a>
+#### `GET /getCronTradeAnalysisExample`
+
+**Auth:** Management API (same as **`GET /getCronTradeConfig`** — no read JWT on plain management port).
+
+**Behavior:** Returns the bundled **`agent_llm_config.defaults/cron/trade_analysis_cron.example.md`** file only. There is no runtime install path — operators copy the **`content`** into a custom cron job **`message`** (or use it as a starting point when editing an active job). This template is **not** listed in **`jobs.json`** catalog entries.
+
+**Response data:**
+```json
+{
+  "content": "<full markdown text>",
+  "path": "/app/agent_llm_config.defaults/cron/trade_analysis_cron.example.md",
+  "filename": "cron/trade_analysis_cron.example.md"
+}
+```
+
+| Field | Notes |
+|-------|--------|
+| `content` | Full markdown body (includes fenced YAML blocks for per-job `tradeConsensus` / `tradeBuild` overrides) |
+| `path` | Absolute path on the node to the bundled defaults file that was read |
+| `filename` | Always **`cron/trade_analysis_cron.example.md`** |
 
 ### Agent cron jobs (local filesystem + in-process scheduler)
 

@@ -3913,6 +3913,118 @@
                 ]
             }
         },
+        "/getCronTradeConfig": {
+            "get": {
+                "description": "Get cron/trade-cron.yaml (runtime file or bundled defaults preview) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getCronTradeConfig).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Get cron/trade-cron.yaml (runtime file or bundled defaults preview)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/getCronTradeAnalysisExample": {
+            "get": {
+                "description": "Get bundled cron/trade_analysis_cron.example.md (read-only trade proposal cron message template) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getCronTradeAnalysisExample).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Get bundled cron/trade_analysis_cron.example.md (read-only trade proposal cron message template)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/upsertCronTradeConfig": {
+            "post": {
+                "description": "Write agent_llm_config/cron/trade-cron.yaml after YAML validation (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /upsertCronTradeConfig).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Write agent_llm_config/cron/trade-cron.yaml after YAML validation (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.UpsertCronTradeConfigPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/resetCronTradeFromDefaults": {
+            "post": {
+                "description": "Install or reset cron/trade-cron.yaml from agent_llm_config.defaults/cron/ (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /resetCronTradeFromDefaults).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Install or reset cron/trade-cron.yaml from agent_llm_config.defaults/cron/ (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.ResetCronTradeFromDefaultsPost"
+                        }
+                    }
+                ]
+            }
+        },
         "/listCronJobs": {
             "get": {
                 "description": "List active cron jobs and available repository catalog (agent_llm_config.defaults/cron/jobs.json) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /listCronJobs).",
@@ -7446,6 +7558,39 @@
                 {
                     "type": "object",
                     "description": "POST /resetTradeDeskFromDefaults. Canonical JSON to sign: {\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}. Copies agent_llm_config.defaults/trade-desk.yaml into agent_llm_config/trade-desk.yaml."
+                }
+            ]
+        },
+        "node.UpsertCronTradeConfigPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "content"
+                    ],
+                    "description": "POST /upsertCronTradeConfig. Canonical JSON to sign: {\"content\":\"<yaml>\",\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"} with clientSig cleared before signing. Validates YAML structure before write.",
+                    "properties": {
+                        "content": {
+                            "type": "string",
+                            "description": "Full cron/trade-cron.yaml body (version, tradeConsensus, tradeBuild)"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.ResetCronTradeFromDefaultsPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "description": "POST /resetCronTradeFromDefaults. Canonical JSON to sign: {\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}. Copies agent_llm_config.defaults/cron/trade-cron.yaml into agent_llm_config/cron/trade-cron.yaml."
                 }
             ]
         }
