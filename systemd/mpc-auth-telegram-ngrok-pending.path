@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for mpc-auth Telegram ngrok enable/disable trigger (pending-telegram-ngrok.json)
+
+[Path]
+PathExists=/var/lib/mpc-auth-docker/pending-telegram-ngrok.json
+PathChanged=/var/lib/mpc-auth-docker/pending-telegram-ngrok.json
+
+[Install]
+WantedBy=multi-user.target

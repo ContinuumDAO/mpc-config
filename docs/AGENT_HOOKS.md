@@ -321,6 +321,8 @@ All types run your **prompt** plus a formatted event body. Max payload **256 KiB
 
 **Use when:** operators chat with a **bot** and get agent replies in Telegram.
 
+**Step-by-step with free ngrok (Docker + Agent Endpoint):** **[`TELEGRAM_WEBHOOK_NGROK.md`](TELEGRAM_WEBHOOK_NGROK.md)**
+
 **Steps:**
 
 1. Create a bot with **@BotFather**; copy the **bot token**.

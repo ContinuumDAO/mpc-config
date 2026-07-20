@@ -15,6 +15,7 @@ This directory contains reference docs for node APIs, agent workflows, and local
 | `$MPA_PATH/scripts/mpc_sign_request_digest.py` | Reserved hook for future non–unsigned-tx trigger rules; digest-only detection is currently disabled (automation always uses standard EVM trigger fields). |
 | `./API_KEYGEN_MESSAGING.md` | KeyGen-scoped messaging API model and endpoint usage. |
 | [`../AGENT_HOOKS.md`](../AGENT_HOOKS.md) | **User guide:** inbound webhooks (all types), KeyGen `@agent` hooks, Plan mode, and orchestration (`mpc-orchestrate`). |
+| [`../TELEGRAM_WEBHOOK_NGROK.md`](../TELEGRAM_WEBHOOK_NGROK.md) | **Telegram + free ngrok:** Agent Endpoint tunnel to hook port **18090** (Docker container network included). |
 | `./instructions.md` | End-to-end operational instructions for agent-managed node workflows. |
 | `./KNOWN_ADDRESSES_SCHEMA.md` | Local storage schema for known addresses. |
 | `./TOKEN_STORAGE_SCHEMA.md` | Local storage schema for token configuration data. |

@@ -1,0 +1,8 @@
+[Unit]
+Description=Apply mpc-auth Telegram ngrok sidecar enable/disable request
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-apply-pending-telegram-ngrok.sh
+StandardInput=null

@@ -65,6 +65,9 @@ install -m 0755 \
 	"$HERE/mpc-auth-apply-pending-vpn-egress.sh" \
 	"$HERE/mpc-auth-vpn-egress-enable.sh" \
 	"$HERE/mpc-auth-vpn-egress-disable.sh" \
+	"$HERE/mpc-auth-apply-pending-telegram-ngrok.sh" \
+	"$HERE/mpc-auth-telegram-ngrok-enable.sh" \
+	"$HERE/mpc-auth-telegram-ngrok-disable.sh" \
 	"$HERE/mpc-auth-apply-agent-llm-config.sh" \
 	"$HERE/mpc-auth-sync-compose-role.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-wg0-hooks.sh" \
@@ -118,6 +121,8 @@ install -m 0644 \
 	"$HERE/mpc-auth-shadowsocks-egress.service" \
 	"$HERE/mpc-auth-wg-obfuscator-egress.service" \
 	"$HERE/mpc-auth-udp2raw-egress.service" \
+	"$HERE/mpc-auth-telegram-ngrok-pending.path" \
+	"$HERE/mpc-auth-telegram-ngrok-pending.service" \
 	"$HERE/mpc-auth-agent-llm-config.path" \
 	"$HERE/mpc-auth-agent-llm-config.service" \
 	"$UNIT_DIR/"
@@ -190,6 +195,9 @@ systemctl restart mpc-auth-vpn-pending.path || systemctl start mpc-auth-vpn-pend
 systemctl enable mpc-auth-vpn-egress-pending.path
 systemctl restart mpc-auth-vpn-egress-pending.path || systemctl start mpc-auth-vpn-egress-pending.path
 
+systemctl enable mpc-auth-telegram-ngrok-pending.path
+systemctl restart mpc-auth-telegram-ngrok-pending.path || systemctl start mpc-auth-telegram-ngrok-pending.path
+
 echo
 echo "Installed:"
 echo "  $LIBEXEC/mpc-auth-docker-{restart,update}.sh + mpc-auth-apply-pending-{update,reboot}.sh"
@@ -207,6 +215,8 @@ echo "  $LIBEXEC/mpc-auth-apply-pending-vpn.sh + mpc-auth-vpn-{enable,disable}.s
 echo "  $LIBEXEC/mpc-auth-apply-pending-vpn-egress.sh + mpc-auth-vpn-egress-{enable,disable}.sh (POST /vpn/egress/setSharing — wg-egress)"
 echo "  $UNIT_DIR/mpc-auth-vpn-pending.{path,service} (bind-mount /var/lib/mpc-auth-docker in compose)"
 echo "  $UNIT_DIR/mpc-auth-vpn-egress-pending.{path,service} (peer egress VPN)"
+echo "  $LIBEXEC/mpc-auth-apply-pending-telegram-ngrok.sh + mpc-auth-telegram-ngrok-{enable,disable}.sh (POST /telegramNgrok/setEnabled — ngrok sidecar)"
+echo "  $UNIT_DIR/mpc-auth-telegram-ngrok-pending.{path,service} (Telegram webhook tunnel)"
 echo "  $UNIT_DIR/mpc-auth-wireguard-wg0.service + mpc-auth-vpn-mgmt-proxy.service + mpc-auth-shadowsocks.service + mpc-auth-wg-obfuscator.service + mpc-auth-udp2raw.service + mpc-auth-lwo.service"
 echo "  $UNIT_DIR/mpc-auth-wireguard-wg-egress.service + mpc-auth-shadowsocks-egress.service + mpc-auth-wg-obfuscator-egress.service + mpc-auth-udp2raw-egress.service"
 echo "  ${HERE}/write-vpn-host-obfuscation-capabilities.sh (refresh vpn-host-obfuscation.json after obfuscation binary install)"
