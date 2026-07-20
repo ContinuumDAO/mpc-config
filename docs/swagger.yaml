@@ -3127,6 +3127,88 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.ResetWebhooksFromDefaultsPost'
+  /getTelegramWebhookNgrokGuide:
+    get:
+      description: 'Bundled TELEGRAM_WEBHOOK_NGROK.md operator guide (read JWT when JWT applies) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /getTelegramWebhookNgrokGuide).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Bundled TELEGRAM_WEBHOOK_NGROK.md operator guide (read JWT when JWT applies)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /telegramNgrok/status:
+    get:
+      description: 'Telegram ngrok sidecar host automation status (read JWT when JWT applies) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /telegramNgrok/status).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Telegram ngrok sidecar host automation status (read JWT when JWT applies)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: webhookId
+        in: query
+        required: false
+        description: Telegram webhook job id — prerequisites reflect this webhook when set
+  /telegramNgrok/setEnabled:
+    post:
+      description: 'Enable or disable host ngrok sidecar for Telegram webhooks (management-signed) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (POST /telegramNgrok/setEnabled).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Enable or disable host ngrok sidecar for Telegram webhooks (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.TelegramNgrokSetEnabledPost'
+  /telegramNgrok/registerWebhook:
+    post:
+      description: 'Call Telegram setWebhook using active ngrok inbound URL (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /telegramNgrok/registerWebhook).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Call Telegram setWebhook using active ngrok inbound URL (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.TelegramNgrokRegisterWebhookPost'
   /agent/plan/start:
     post:
       description: MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /agent/plan/start).
@@ -5113,3 +5195,32 @@ definitions:
     - type: object
       description: 'POST /resetCronTradeFromDefaults. Canonical JSON to sign: {"nonce":N,"clientSig":"","nodeKey":"<128-hex>"}.
         Copies agent_llm_config.defaults/cron/trade-cron.yaml into agent_llm_config/cron/trade-cron.yaml.'
+  node.TelegramNgrokSetEnabledPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      required:
+      - enabled
+      description: 'POST /telegramNgrok/setEnabled. Canonical JSON to sign: {"enabled":true,"webhookId":"<uuid>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
+        with clientSig cleared before signing. When enabled, webhookId must be a telegram webhook job id; requires NGROK_AUTHTOKEN,
+        TELEGRAM_BOT_TOKEN, and webhook secret in Variables. Writes pending-telegram-ngrok.json for host systemd automation.'
+      properties:
+        enabled:
+          type: boolean
+          description: true = start ngrok sidecar; false = stop sidecar
+        webhookId:
+          type: string
+          description: Telegram webhook job id (required when enabled=true)
+  node.TelegramNgrokRegisterWebhookPost:
+    type: object
+    allOf:
+    - *id001
+    - type: object
+      description: 'POST /telegramNgrok/registerWebhook. Canonical JSON to sign: {"webhookId":"<uuid optional>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
+        with clientSig cleared before signing. Calls Telegram setWebhook with active inboundUrl from telegram-ngrok-state.json
+        and secret_token from Variables.'
+      properties:
+        webhookId:
+          type: string
+          description: Telegram webhook job id; defaults to webhook id from host tunnel state

@@ -154,7 +154,7 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on **`GET`** requests. **`POST`** is not JWT-gated on that listener; use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same **`GET`** rules when Browser HTTPS is configured.
 
-**JWT-protected agent paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, and webhook read routes **`/listWebhooks`**, **`/getWebhookById`**.
+**JWT-protected agent paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, and **`GET /telegramNgrok/status`**.
 
 ## Quick Reference: All Endpoints
 
@@ -268,6 +268,10 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /deactivateWebhook`](#post-deactivatewebhook) - Disable webhook (**management signature**)
 - [`POST /runWebhook`](#post-runwebhook) - Manual test trigger (**management signature**)
 - [`POST /resetWebhooksFromDefaults`](#post-resetwebhooksfromdefaults) - Overwrite bundled default webhooks from **`agent_llm_config.defaults/hooks/webhooks.json`** (**management signature**; custom webhooks preserved)
+- [`GET /getTelegramWebhookNgrokGuide`](#get-gettelegramwebhookngrokguide) - Bundled operator guide markdown for manual ngrok setup (**read JWT** when JWT applies)
+- [`GET /telegramNgrok/status`](#get-telegramngrok-status) - Telegram ngrok sidecar automation status (**read JWT** when JWT applies)
+- [`POST /telegramNgrok/setEnabled`](#post-telegramngrok-setenabled) - Enable or disable host ngrok sidecar (**management signature**; writes **`pending-telegram-ngrok.json`**)
+- [`POST /telegramNgrok/registerWebhook`](#post-telegramngrok-registerwebhook) - Call Telegram **`setWebhook`** with active tunnel URL (**management signature**)
 - [`POST /agent/plan/start`](#post-agentplanstart) - Start a plan thread with optional prior-orchestration rollup injected (**read JWT**)
 - [`POST /agent/orchestration/continue`](#post-agentorchestrationcontinue) - Open the [Orchestrator] thread for interactive post-synthesis follow-up (**read JWT**)
 - [`POST /agent/plan/execute`](#post-agentplanexecute) - Post latest `mpc-orchestrate v1` manifest from a plan thread to KeyGen (**read JWT**)
@@ -3391,6 +3395,104 @@ Same body as activate; sets **`enabled: false`**.
 
 **Side effect:** Operator should **restart mpc-auth** so the hook listener reloads active jobs (same as other webhook CRUD that changes prompts/types).
 
+<a id="get-gettelegramwebhookngrokguide"></a>
+#### `GET /getTelegramWebhookNgrokGuide`
+
+**Auth:** Same as **`GET /listWebhooks`** (read JWT when JWT applies).
+
+**Response data:** `{ "content": "<markdown>", "path": "<bundled file path on node>", "filename": "hooks/TELEGRAM_WEBHOOK_NGROK.md" }` — contents of **`agent_llm_config.defaults/hooks/TELEGRAM_WEBHOOK_NGROK.md`** (manual ngrok Agent Endpoint setup). Canonical copy also in **`docs/TELEGRAM_WEBHOOK_NGROK.md`** (mpc-config).
+
+**Errors:** **500** when the bundled file is missing from the node image or bind mount.
+
+<a id="telegram-ngrok-sidecar-automation"></a>
+#### Telegram ngrok sidecar (host systemd)
+
+For **`telegram`** webhooks on Docker nodes, Telegram requires a **public HTTPS** URL to hook port **`18090`**. The continuumdao-node-app **Webhooks** panel can enable a host-managed **ngrok sidecar** that shares the **`app`** container network namespace (no SSH after one-time **`install-mpc-auth-docker-systemd.sh`**).
+
+Requires **`MPC_AUTH_TELEGRAM_NGROK_PENDING_FILE`** / **`MPC_AUTH_TELEGRAM_NGROK_STATE_FILE`** in **`docker-compose.relay.yml`** / **`docker-compose.client.yml`** (bind-mounted **`/var/lib/mpc-auth-docker`**) plus **`mpc-auth-telegram-ngrok-pending.path`** on the Docker host. See **`systemd/README.md`**.
+
+**Variables (prerequisites before enable):**
+
+| Variable | Purpose |
+|----------|---------|
+| **`NGROK_AUTHTOKEN`** | ngrok dashboard authtoken |
+| **`TELEGRAM_BOT_TOKEN`** | Bot token from @BotFather |
+| **`WEBHOOK_SECRET_TELEGRAM_UPDATES`** (or job **`secretEnvVar`**) | **`secret_token`** for Telegram **`setWebhook`** |
+
+<a id="get-telegramngrok-status"></a>
+#### `GET /telegramNgrok/status`
+
+**Auth:** Read JWT on Browser HTTPS / loopback when JWT applies.
+
+**Query:** **`webhookId`** (optional) — when set, **`prerequisites`** reflect that Telegram webhook job; otherwise uses the webhook id from host state.
+
+**Response `data` (typical):**
+```json
+{
+  "available": true,
+  "active": true,
+  "webhookId": "c11e6cb0-ea18-422b-af6f-fc21523b90f9",
+  "publicUrl": "https://example.ngrok-free.dev",
+  "inboundUrl": "https://example.ngrok-free.dev/hooks/inbound/c11e6cb0-ea18-422b-af6f-fc21523b90f9",
+  "localInboundUrl": "http://127.0.0.1:18090/hooks/inbound/c11e6cb0-ea18-422b-af6f-fc21523b90f9",
+  "hookPort": 18090,
+  "sidecarContainerName": "mpc-auth-telegram-ngrok",
+  "pendingTelegramNgrokPath": "/var/lib/mpc-auth-docker/pending-telegram-ngrok.json",
+  "prerequisites": {
+    "ngrokAuthtokenConfigured": true,
+    "telegramBotTokenConfigured": true,
+    "webhookSecretConfigured": true
+  }
+}
+```
+
+- **`available`**: **`true`** when **`MPC_AUTH_TELEGRAM_NGROK_PENDING_FILE`** / **`MpcAuthTelegramNgrokPendingPath`** is configured in compose.
+- **`active`**: read from host **`telegram-ngrok-state.json`** (written by **`mpc-auth-telegram-ngrok-enable.sh`** / **`disable`**).
+- **`inboundUrl`**: public HTTPS URL for Telegram **`setWebhook`** (empty until host automation publishes ngrok tunnels).
+- **`localInboundUrl`**: loopback URL inside the **`app`** container (not reachable from Telegram directly).
+- **`lastError`**: present when enable failed (e.g. app container not running, ngrok tunnel timeout).
+
+<a id="post-telegramngrok-setenabled"></a>
+#### `POST /telegramNgrok/setEnabled`
+
+Management-signed JSON (canonical body with **`clientSig`** cleared for verification):
+
+```json
+{
+  "nonce": 12,
+  "clientSig": "0x… or 128-hex-ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
+  "enabled": true,
+  "webhookId": "<telegram webhook job id>"
+}
+```
+
+**When `enabled: true`:** validates **`webhookId`** refers to an active **`telegram`** webhook; requires **`NGROK_AUTHTOKEN`**, bot token, and webhook secret in Variables. Writes **`pending-telegram-ngrok.json`** atomically (includes **`ngrokAuthtoken`** for the host script, file mode **`0600`**). Host **`mpc-auth-telegram-ngrok-pending.path`** runs **`docker run --network container:$MPC_AUTH_CONTAINER_NAME`** with **`ngrok/ngrok http 18090`**, polls ngrok **`4040/api/tunnels`**, and writes **`telegram-ngrok-state.json`**.
+
+**When `enabled: false`:** **`webhookId`** optional; stops sidecar container **`mpc-auth-telegram-ngrok`** (or **`MPC_AUTH_TELEGRAM_NGROK_CONTAINER_NAME`**) and clears public URLs in state.
+
+**Response data:** `{ "message", "enabled", "webhookId", "pendingTelegramNgrokWritten", "prerequisites", … }`.
+
+<a id="post-telegramngrok-registerwebhook"></a>
+#### `POST /telegramNgrok/registerWebhook`
+
+Management-signed JSON:
+
+```json
+{
+  "nonce": 13,
+  "clientSig": "…",
+  "nodeKey": "<128-hex>",
+  "webhookId": "<optional; defaults to active tunnel webhook>"
+}
+```
+
+Calls Telegram Bot API **`setWebhook`** with **`url`** = active **`inboundUrl`** from **`telegram-ngrok-state.json`** and **`secret_token`** from Variables. Requires tunnel **`active`** and **`inboundUrl`** populated.
+
+**Response data:** `{ "message": "Telegram setWebhook succeeded.", "webhookId", "inboundUrl" }`.
+
+**Errors:** **400** when tunnel not ready or prerequisites missing; **502** when Telegram API rejects the request.
+
 #### Inbound HTTP (hook listener, not management port)
 
 ```
@@ -3405,7 +3507,7 @@ Authorization: Bearer <WEBHOOK_SECRET_*>
 - **Telegram** returns **200** `{ "ok": true }` immediately and replies after the agent turn.
 - Other types return **202 Accepted** after enqueueing the agent turn.
 
-The hook listener binds **`127.0.0.1:18090`** by default (not Browser HTTPS **:8443**). There is no built-in public CA-trusted URL; expose **`AgentHookListenPort`** via a relay, tunnel, or operator reverse proxy (see **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**).
+The hook listener binds **`127.0.0.1:18090`** by default (not Browser HTTPS **:8443**). There is no built-in public CA-trusted URL; use **[Telegram ngrok sidecar automation](#telegram-ngrok-sidecar-automation)** from the Webhooks panel, or expose **`AgentHookListenPort`** via a relay, tunnel, or operator reverse proxy (see **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**).
 
 <a id="post-agentplanstart"></a>
 #### `POST /agent/plan/start`
