@@ -137,11 +137,12 @@ if [[ -z "$PUBLIC_URL" ]]; then
 	exit 1
 fi
 
-python3 - "$STATE_FILE" "$WEBHOOK_ID" "$PUBLIC_URL" "$HOOK_PORT" "$SIDECAR" <<'PY'
+python3 - "$STATE_FILE" "$WEBHOOK_ID" "$PUBLIC_URL" "$HOOK_PORT" "$SIDECAR" "$APP_CID" <<'PY'
 import json, sys, datetime
-path, webhook_id, public_url, hook_port, sidecar = sys.argv[1:6]
+path, webhook_id, public_url, hook_port, sidecar, app_cid = sys.argv[1:7]
 public_url = public_url.rstrip("/")
 inbound = f"{public_url}/hooks/inbound/{webhook_id}"
+app_short = (app_cid or "").strip().lower()[:12]
 state = {
     "active": True,
     "webhookId": webhook_id,
@@ -149,6 +150,7 @@ state = {
     "inboundUrl": inbound,
     "hookPort": int(hook_port),
     "sidecarContainerName": sidecar,
+    "appContainerShortId": app_short,
     "updatedAt": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
 }
 with open(path + ".tmp", "w", encoding="utf-8") as f:

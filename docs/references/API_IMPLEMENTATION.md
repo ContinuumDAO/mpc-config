@@ -3442,7 +3442,11 @@ Requires **`MPC_AUTH_TELEGRAM_NGROK_PENDING_FILE`** / **`MPC_AUTH_TELEGRAM_NGROK
     "ngrokAuthtokenConfigured": true,
     "telegramBotTokenConfigured": true,
     "webhookSecretConfigured": true
-  }
+  },
+  "sidecarStale": false,
+  "sidecarStaleReason": "",
+  "appContainerShortId": "8e367d31ba71",
+  "currentAppContainerShortId": "8e367d31ba71"
 }
 ```
 
@@ -3450,6 +3454,8 @@ Requires **`MPC_AUTH_TELEGRAM_NGROK_PENDING_FILE`** / **`MPC_AUTH_TELEGRAM_NGROK
 - **`active`**: read from host **`telegram-ngrok-state.json`** (written by **`mpc-auth-telegram-ngrok-enable.sh`** / **`disable`**).
 - **`inboundUrl`**: public HTTPS URL for Telegram **`setWebhook`** (empty until host automation publishes ngrok tunnels).
 - **`localInboundUrl`**: loopback URL inside the **`app`** container (not reachable from Telegram directly).
+- **`sidecarStale`**: **`true`** when host state **`appContainerShortId`** (written at enable time) differs from this mpc-auth container’s hostname (Docker container id). Typical after **`docker compose up -d app`** / node restart without re-enabling the tunnel — ngrok still forwards to the old network namespace and Telegram gets **404**.
+- **`sidecarStaleReason`**: operator-facing fix text when **`sidecarStale`** is true.
 - **`lastError`**: present when enable failed (e.g. app container not running, ngrok tunnel timeout).
 
 <a id="post-telegramngrok-setenabled"></a>
@@ -3492,6 +3498,41 @@ Calls Telegram Bot API **`setWebhook`** with **`url`** = active **`inboundUrl`**
 **Response data:** `{ "message": "Telegram setWebhook succeeded.", "webhookId", "inboundUrl" }`.
 
 **Errors:** **400** when tunnel not ready or prerequisites missing; **502** when Telegram API rejects the request.
+
+<a id="post-telegramngrok-testinbound"></a>
+#### `POST /telegramNgrok/testInbound`
+
+Management-signed JSON:
+
+```json
+{
+  "nonce": 14,
+  "clientSig": "…",
+  "nodeKey": "<128-hex>",
+  "webhookId": "<optional; defaults to active tunnel webhook>"
+}
+```
+
+Probes Telegram delivery (not the same as **`POST /runWebhook`**):
+
+1. **Local hook** — `POST` to **`localInboundUrl`** with **`X-Telegram-Bot-Api-Secret-Token`** from Variables (empty Telegram message body → HTTP **200** without enqueueing an agent turn).
+2. **Public path** — same probe against active **`inboundUrl`** (through ngrok, the path Telegram uses).
+
+**Response `data` (typical):**
+
+```json
+{
+  "message": "Telegram delivery path OK (public ngrok URL and local hook listener returned HTTP 200).",
+  "webhookId": "…",
+  "inboundUrl": "https://….ngrok-free.dev/hooks/inbound/…",
+  "localHookStatus": 200,
+  "publicDeliveryStatus": 200,
+  "deliveryHealthy": true,
+  "sidecarStale": false
+}
+```
+
+When **`sidecarStale`** is **`true`**, **`publicDeliveryStatus`** is often **404** even though the webhook **Run** test still passes — reattach the tunnel (**Disable → Enable → Register with Telegram**).
 
 #### Inbound HTTP (hook listener, not management port)
 
