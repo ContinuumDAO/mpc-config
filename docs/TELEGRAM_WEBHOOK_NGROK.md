@@ -276,6 +276,65 @@ curl -sS "https://api.telegram.org/bot<BOT_TOKEN>/deleteWebhook"
 
 ---
 
+## Chart analysis menus in Telegram
+
+After OHLCV fetch and analysis tools run, mpc-auth sends **numbered option lists** and **inline keyboard buttons** in Telegram (same menus as SSE pickers in the node app chat).
+
+| Action | How |
+|--------|-----|
+| Pick analysis / chain / overlay | Tap a button, or reply with a number (`2`) or phrase (`Run analysis #1`) |
+| Trade ideas | Tap **Build #N**, confirm sizing if prompted, then **Confirm build** |
+| Chart / plot | After `plot` / `show chart`, tap **Open chart** (Telegram Mini App — scroll, zoom, live Hyperliquid ticks) |
+| Chart overlays (Bollinger bands, etc.) | Summary text in chat; full overlay chart in Mini App after plot + apply tools |
+
+### Interactive chart (Telegram Mini App)
+
+When the agent calls `prepare_chart_from_rows`, mpc-auth stores the `continuum/chart/v1` envelope and sends an **Open chart** button (`web_app`). Tapping it opens a full-screen chart in Telegram (same ngrok host as webhooks).
+
+**Hook listener routes** (default port **18090**, same mux as **`POST /hooks/inbound/{webhookId}`**):
+
+```text
+GET /telegram/chart/{token}
+GET /telegram/chart/{token}/envelope
+GET /telegram/chart/static/*
+```
+
+**Operator setup (once per bot):**
+
+1. Enable ngrok for webhooks (existing flow) — note the public host, e.g. `https://abc123.ngrok-free.dev`.
+2. In **@BotFather** → your bot → **Bot Settings** → configure the **Mini App domain** to that host (`abc123.ngrok-free.dev`, no path).
+3. Optional override: set agent env **`TELEGRAM_WEBAPP_BASE_URL`** to `https://abc123.ngrok-free.dev` if auto-detection from ngrok state fails.
+
+**Typical flow:**
+
+```text
+load hyperliquid
+load the 4 hour ETH perp for the last 30 days
+plot ETH 4H
+```
+
+→ Bot replies with summary + **Open chart** → pinch/drag to zoom; Hyperliquid charts live-update every ~4s when `live` binding is present.
+
+**Limits:** CoinGecko-sourced live ticks in the Mini App may be static until a proxy is added; Hyperliquid/GMX/Arcus use direct browser API calls.
+
+### Trade build from Telegram
+
+1. Tap **Build #N** on a trade idea.
+2. If size is missing, reply with e.g. **`0.5 ETH`** (Hyperliquid/Arcus) or paste a **`tradeBuild:`** YAML block (same format as cron jobs).
+3. Review the summary and tap **Confirm build** to call `build_trade_from_trade_idea` (multisign).
+
+Optional: attach the **`trade-defaults`** skill to the webhook job prompt path so sizing can be prefilled automatically.
+
+Example sizing reply for Hyperliquid:
+
+```text
+0.5 ETH
+```
+
+Example YAML block (message body contains `tradeBuild:` followed by a yaml fence with `protocolId`, `chainId`, `szHuman`, etc.).
+
+---
+
 ## Related docs
 
 - **[`AGENT_HOOKS.md`](AGENT_HOOKS.md)** — all webhook types, exposure options, KeyGen `@agent` hooks

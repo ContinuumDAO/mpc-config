@@ -3550,6 +3550,58 @@ Authorization: Bearer <WEBHOOK_SECRET_*>
 
 The hook listener binds **`127.0.0.1:18090`** by default (not Browser HTTPS **:8443**). There is no built-in public CA-trusted URL; use **[Telegram ngrok sidecar automation](#telegram-ngrok-sidecar-automation)** from the Webhooks panel, or expose **`AgentHookListenPort`** via a relay, tunnel, or operator reverse proxy (see **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**).
 
+#### Telegram chart Mini App (hook listener GET routes)
+
+These routes are served on the **same hook listener** as **`POST /hooks/inbound/{webhookId}`** (default **`127.0.0.1:18090`**). They are **not** on the management port (**8080**) or Browser HTTPS (**8443**). Expose them the same way as inbound webhooks (ngrok sidecar, tunnel, or reverse proxy to **18090**).
+
+When a Telegram hook turn runs **`prepare_chart*`** MCP tools, mpc-auth stores the **`continuum/chart/v1`** envelope in memory and may attach an **Open chart** inline button (`web_app`) whose URL is:
+
+```text
+https://<public-hook-host>/telegram/chart/<token>
+```
+
+**Public base URL:** derived from active Telegram ngrok state (host prefix of **`inboundUrl`**) or env **`TELEGRAM_WEBAPP_BASE_URL`**. Register that hostname (no path) as the bot **Mini App domain** in **@BotFather** (see **[`docs/TELEGRAM_WEBHOOK_NGROK.md`](../TELEGRAM_WEBHOOK_NGROK.md)**).
+
+**Session storage:** in-memory map keyed by opaque **`token`** (32 hex chars); one active token per hook conversation (reused on replot). **TTL:** **7 days**; tokens are lost on process restart.
+
+<a id="get-telegram-chart-token"></a>
+##### `GET /telegram/chart/{token}`
+
+**Auth:** None (security is the unguessable token).
+
+**Response:** **`text/html; charset=utf-8`** — embedded Mini App shell (lightweight-charts viewer). **`Cache-Control: no-store`**.
+
+**Errors:** **404** `chart not found or expired` when **`token`** is unknown or past TTL. **405** for non-GET.
+
+<a id="get-telegram-chart-envelope"></a>
+##### `GET /telegram/chart/{token}/envelope`
+
+**Auth:** None (opaque token).
+
+**Response:** Standard **`node.APIResponse`** JSON:
+
+```json
+{
+  "code": 0,
+  "data": { "schema": "continuum/chart/v1", "chart": { "…" }, "live": { "…" } }
+}
+```
+
+**`data`** is the stored chart envelope (same shape as MCP **`tool_result.chartEnvelope`**). **`Cache-Control: no-store`**.
+
+**Errors:** **404** when **`token`** is unknown or expired. **405** for non-GET.
+
+<a id="get-telegram-chart-static"></a>
+##### `GET /telegram/chart/static/{path}`
+
+**Auth:** None.
+
+**Response:** Embedded static assets for the Mini App viewer (**`.js`**, **`.css`**). **`Cache-Control: public, max-age=3600`** for static files.
+
+**Errors:** **404** when the path is not embedded. **405** for non-GET.
+
+**Operator notes:** CoinGecko-sourced **`live`** bindings may remain static in the Mini App until a browser proxy exists; Hyperliquid / GMX / Arcus use direct browser API calls from the viewer.
+
 <a id="post-agentplanstart"></a>
 #### `POST /agent/plan/start`
 

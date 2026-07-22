@@ -343,6 +343,20 @@ All types run your **prompt** plus a formatted event body. Max payload **256 KiB
 
 **Note:** Inbound listener must be reachable from Telegram’s servers (not loopback-only without a tunnel/proxy).
 
+#### Interactive charts (Telegram Mini App)
+
+After **`prepare_chart*`** tools run in a Telegram hook turn, mpc-auth stores the chart envelope and sends an **Open chart** button (`web_app`). The Mini App loads from the **same public hook host** as webhooks (not Browser HTTPS **:8443**):
+
+| Route | Purpose |
+|-------|---------|
+| **`GET /telegram/chart/{token}`** | Full-screen chart HTML (scroll / zoom) |
+| **`GET /telegram/chart/{token}/envelope`** | JSON chart envelope for the viewer |
+| **`GET /telegram/chart/static/*`** | Embedded viewer assets |
+
+**Once per bot:** in **@BotFather** → **Bot Settings** → set **Mini App domain** to your ngrok hostname (e.g. `abc123.ngrok-free.dev`, no path). Optional env override: **`TELEGRAM_WEBAPP_BASE_URL=https://…`**.
+
+Chart tokens live in memory (**7-day TTL**; cleared on restart). Operator walkthrough: **[`TELEGRAM_WEBHOOK_NGROK.md`](TELEGRAM_WEBHOOK_NGROK.md)** (chart menus + Mini App setup). API detail: **[`references/API_IMPLEMENTATION.md`](references/API_IMPLEMENTATION.md)** (Telegram chart Mini App section).
+
 ---
 
 ## KeyGen messaging with `@agent`

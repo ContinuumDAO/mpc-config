@@ -3,7 +3,7 @@
     "info": {
         "contact": {},
         "title": "MPC Auth Management API",
-        "description": "Distributed Auth / MPC node HTTP API. All responses use node.APIResponse (code, error, data). Keygen and sign GET/list response bodies include effectiveEcdsaMpcProtocol for secp256k1 (\"gg18\" or \"cggmp24\"); empty when not applicable. For completed secp256k1 keys, GET /getKeyGenResultById data and GET /getAllGroupIds keyGens[] include ethereumaddress plus bitcoinp2wpkhmainnet (bc1… mainnet), bitcoinp2wpkhtestnet (Bitcoin TestNet3 tb1…), bitcoinp2wpkhsignet (Bitcoin Signet; btcd SigNet witness HRP tb so encoding may duplicate testnet). GET /getGlobalNonceByKeyGenId data map includes effectiveEcdsaMpcProtocol (see that path description). See mpc-config docs/references/API_IMPLEMENTATION.md.",
+        "description": "Distributed Auth / MPC node HTTP API. All responses use node.APIResponse (code, error, data). Keygen and sign GET/list response bodies include effectiveEcdsaMpcProtocol for secp256k1 (\"gg18\" or \"cggmp24\"); empty when not applicable. For completed secp256k1 keys, GET /getKeyGenResultById data and GET /getAllGroupIds keyGens[] include ethereumaddress plus bitcoinp2wpkhmainnet (bc1… mainnet), bitcoinp2wpkhtestnet (Bitcoin TestNet3 tb1…), bitcoinp2wpkhsignet (Bitcoin Signet; btcd SigNet witness HRP tb so encoding may duplicate testnet). GET /getGlobalNonceByKeyGenId data map includes effectiveEcdsaMpcProtocol (see that path description). See mpc-config docs/references/API_IMPLEMENTATION.md. Agent hook listener routes (default 127.0.0.1:18090) are tagged \"Agent hook listener\" — inbound webhooks and Telegram chart Mini App GET routes; not served on the management port.",
         "version": "1.0"
     },
     "paths": {
@@ -4811,6 +4811,39 @@
                 ]
             }
         },
+        "/telegramNgrok/testInbound": {
+            "post": {
+                "description": "Probe public ngrok inbound URL and local hook listener (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /telegramNgrok/testInbound).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "Probe public ngrok inbound URL and local hook listener (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.TelegramNgrokTestInboundPost"
+                        }
+                    }
+                ]
+            }
+        },
         "/agent/plan/start": {
             "post": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /agent/plan/start).",
@@ -5799,6 +5832,156 @@
                         }
                     }
                 ]
+            }
+        },
+        "/hooks/inbound/{webhookId}": {
+            "post": {
+                "tags": [
+                    "Agent hook listener"
+                ],
+                "summary": "POST hooks/inbound/{webhookId}",
+                "description": "Inbound webhook callback (GitHub, Stripe, Slack, Telegram, generic). Served on AgentHookListenAddr:AgentHookListenPort (default 127.0.0.1:18090), not the management port (8080) or Browser HTTPS (8443). Expose via tunnel, relay, or reverse proxy like inbound webhooks. See mpc-config docs/references/API_IMPLEMENTATION.md (Inbound HTTP; Telegram chart Mini App). Max body 256 KiB. Auth: Bearer WEBHOOK_SECRET_* , X-Mpc-Auth-Hook-Token, or provider headers.",
+                "consumes": [
+                    "application/json",
+                    "application/x-www-form-urlencoded",
+                    "*/*"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "parameters": [
+                    {
+                        "name": "webhookId",
+                        "in": "path",
+                        "required": true,
+                        "type": "string",
+                        "description": "Webhook job id"
+                    },
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": false,
+                        "type": "string",
+                        "description": "Bearer WEBHOOK_SECRET_* or provider signature headers"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Telegram immediate ack or Slack url_verification challenge",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "202": {
+                        "description": "Accepted — agent turn enqueued",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unknown or disabled webhook"
+                    }
+                }
+            }
+        },
+        "/telegram/chart/{token}": {
+            "get": {
+                "tags": [
+                    "Agent hook listener"
+                ],
+                "summary": "GET telegram/chart/{token}",
+                "description": "Telegram Mini App HTML shell for an interactive chart. Served on AgentHookListenAddr:AgentHookListenPort (default 127.0.0.1:18090), not the management port (8080) or Browser HTTPS (8443). Expose via tunnel, relay, or reverse proxy like inbound webhooks. See mpc-config docs/references/API_IMPLEMENTATION.md (Inbound HTTP; Telegram chart Mini App). Token issued after prepare_chart* in a Telegram hook turn; 7-day in-memory TTL.",
+                "produces": [
+                    "text/html"
+                ],
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "type": "string",
+                        "description": "Opaque chart session token"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Mini App HTML (Cache-Control: no-store)"
+                    },
+                    "404": {
+                        "description": "Chart not found or expired"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    }
+                }
+            }
+        },
+        "/telegram/chart/{token}/envelope": {
+            "get": {
+                "tags": [
+                    "Agent hook listener"
+                ],
+                "summary": "GET telegram/chart/{token}/envelope",
+                "description": "JSON chart envelope (continuum/chart/v1) for the Mini App viewer. Served on AgentHookListenAddr:AgentHookListenPort (default 127.0.0.1:18090), not the management port (8080) or Browser HTTPS (8443). Expose via tunnel, relay, or reverse proxy like inbound webhooks. See mpc-config docs/references/API_IMPLEMENTATION.md (Inbound HTTP; Telegram chart Mini App).",
+                "produces": [
+                    "application/json"
+                ],
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "type": "string",
+                        "description": "Opaque chart session token"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "node.APIResponse with data = chart envelope map",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Chart not found or expired"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    }
+                }
+            }
+        },
+        "/telegram/chart/static/{assetPath}": {
+            "get": {
+                "tags": [
+                    "Agent hook listener"
+                ],
+                "summary": "GET telegram/chart/static/{assetPath}",
+                "description": "Embedded Mini App static assets (.js, .css). Served on AgentHookListenAddr:AgentHookListenPort (default 127.0.0.1:18090), not the management port (8080) or Browser HTTPS (8443). Expose via tunnel, relay, or reverse proxy like inbound webhooks. See mpc-config docs/references/API_IMPLEMENTATION.md (Inbound HTTP; Telegram chart Mini App).",
+                "produces": [
+                    "application/javascript",
+                    "text/css"
+                ],
+                "parameters": [
+                    {
+                        "name": "assetPath",
+                        "in": "path",
+                        "required": true,
+                        "type": "string",
+                        "description": "Relative path under static/telegram-chart/ (e.g. chart-viewer.js)"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Static asset (Cache-Control: public, max-age=3600)"
+                    },
+                    "404": {
+                        "description": "Unknown asset path"
+                    },
+                    "405": {
+                        "description": "Method not allowed"
+                    }
+                }
             }
         }
     },
@@ -7749,6 +7932,24 @@
                 {
                     "type": "object",
                     "description": "POST /telegramNgrok/registerWebhook. Canonical JSON to sign: {\"webhookId\":\"<uuid optional>\",\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"} with clientSig cleared before signing. Calls Telegram setWebhook with active inboundUrl from telegram-ngrok-state.json and secret_token from Variables.",
+                    "properties": {
+                        "webhookId": {
+                            "type": "string",
+                            "description": "Telegram webhook job id; defaults to webhook id from host tunnel state"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.TelegramNgrokTestInboundPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "description": "POST /telegramNgrok/testInbound. Canonical JSON to sign: {\"webhookId\":\"<uuid optional>\",\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"} with clientSig cleared before signing. Probes local hook and public ngrok inbound URL.",
                     "properties": {
                         "webhookId": {
                             "type": "string",

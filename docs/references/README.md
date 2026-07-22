@@ -11,11 +11,11 @@ This directory contains reference docs for node APIs, agent workflows, and local
 | `./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md` | Authoritative guide for **`multiSignRequest`** payloads: recipes, compose + Foundry helpers, **`multiSignJoin`**, **`messageToSign`** rules. |
 | `./AI_AGENT_FORGE_SIGNREQUEST.md` | Foundry broadcast JSON → **`bodyForSign`** / **`messageToSign`** (same envelope as compose). |
 | `./AI_AGENT_NEW_SESSION.md` | Agent startup: read `$MPA_PATH/.env`, symlinks to `MPC_CONFIG_PATH`, `GET /health`, then `KEYGEN_ID` or KeyGen creation. |
-| `./API_IMPLEMENTATION.md` | Full management API behavior, endpoint contracts, and conventions. § **`POST /triggerSignRequestById`** documents **EVM** trigger (**`txParams`/`messageHash`/`txParamsBatch`**) for supported automation (**executeSignResult.py**, **continuumdao-node-app**). |
+| `./API_IMPLEMENTATION.md` | Full management API behavior, endpoint contracts, and conventions. Includes **agent hook listener** routes on port **18090** (`POST /hooks/inbound/{webhookId}`, Telegram chart Mini App **`GET /telegram/chart/*`**). § **`POST /triggerSignRequestById`** documents **EVM** trigger (**`txParams`/`messageHash`/`txParamsBatch`**) for supported automation (**executeSignResult.py**, **continuumdao-node-app**). |
 | `$MPA_PATH/scripts/mpc_sign_request_digest.py` | Reserved hook for future non–unsigned-tx trigger rules; digest-only detection is currently disabled (automation always uses standard EVM trigger fields). |
 | `./API_KEYGEN_MESSAGING.md` | KeyGen-scoped messaging API model and endpoint usage. |
 | [`../AGENT_HOOKS.md`](../AGENT_HOOKS.md) | **User guide:** inbound webhooks (all types), KeyGen `@agent` hooks, Plan mode, and orchestration (`mpc-orchestrate`). |
-| [`../TELEGRAM_WEBHOOK_NGROK.md`](../TELEGRAM_WEBHOOK_NGROK.md) | **Telegram + free ngrok:** Agent Endpoint tunnel to hook port **18090** (Docker container network included). |
+| [`../TELEGRAM_WEBHOOK_NGROK.md`](../TELEGRAM_WEBHOOK_NGROK.md) | **Telegram + free ngrok:** Agent Endpoint tunnel to hook port **18090** (Docker container network included); chart menus and **Mini App** (`GET /telegram/chart/*`) setup. |
 | `./instructions.md` | End-to-end operational instructions for agent-managed node workflows. |
 | `./KNOWN_ADDRESSES_SCHEMA.md` | Local storage schema for known addresses. |
 | `./TOKEN_STORAGE_SCHEMA.md` | Local storage schema for token configuration data. |
