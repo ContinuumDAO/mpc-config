@@ -252,7 +252,7 @@ Message your bot in Telegram (e.g. `list pending sign requests`).
 | **Keep ngrok running** | Free Agent Endpoints stop when the process exits; the bot stops receiving updates. |
 | **URL changes** | Free ngrok hostnames often change on restart → run **`setWebhook`** again with the new URL. |
 | **Two secrets** | **`TELEGRAM_BOT_TOKEN`** ≠ **`WEBHOOK_SECRET_TELEGRAM_UPDATES`**. Never reuse the bot token as the webhook secret. |
-| **Shared conversation** | All Telegram messages use one agent conversation for this webhook until you clear it (**AI Agent → Conversations**). |
+| **Shared conversation** | All Telegram messages use one agent conversation for this webhook until you tap **New chat** or delete it in **AI Agent → Conversations**. |
 | **App attach URL** | Browser HTTPS / SSH tunnel URLs are for **operating** the node — **not** for Telegram `setWebhook`. |
 
 To clear a bad registration:
@@ -316,6 +316,10 @@ plot ETH 4H
 → Bot replies with summary + **Open chart** → pinch/drag to zoom; Hyperliquid charts live-update every ~4s when `live` binding is present.
 
 **Limits:** CoinGecko-sourced live ticks in the Mini App may be static until a proxy is added; Hyperliquid/GMX/Arcus use direct browser API calls.
+
+### Resetting the chat session
+
+Tap **New chat** on any bot reply (inline button), or send **`/new`** or **`new chat`**. That clears persisted messages, OHLCV/chart session state, and pending trade-build prompts for this webhook thread — same as deleting the conversation in **AI Agent → Conversations**.
 
 ### Trade build from Telegram
 
