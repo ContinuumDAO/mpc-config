@@ -203,18 +203,28 @@ If you prefer `ngrok http 18090` on the VPS shell:
 
 ## Part 5 — Register with Telegram
 
+Use **`Register with Telegram`** in the node app (recommended), or call **`setWebhook`** manually. Inline keyboard buttons (chain pickers, analysis menus, trade build) require **`callback_query`** in **`allowed_updates`**.
+
 ```bash
 curl -sS "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
-  -d "url=https://<ngrok-host>/hooks/inbound/<webhook-id>" \
-  -d "secret_token=<WEBHOOK_SECRET_TELEGRAM_UPDATES>"
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://<ngrok-host>/hooks/inbound/<webhook-id>",
+    "secret_token": "<WEBHOOK_SECRET_TELEGRAM_UPDATES>",
+    "allowed_updates": ["message", "edited_message", "channel_post", "callback_query"]
+  }'
 ```
 
 Example (placeholders):
 
 ```bash
 curl -sS "https://api.telegram.org/bot123456:ABC-DEF/setWebhook" \
-  -d "url=https://lukewarm-example.ngrok-free.dev/hooks/inbound/c11e6cb0-ea18-422b-af6f-fc21523b90f9" \
-  -d "secret_token=your_random_webhook_secret"
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://lukewarm-example.ngrok-free.dev/hooks/inbound/c11e6cb0-ea18-422b-af6f-fc21523b90f9",
+    "secret_token": "your_random_webhook_secret",
+    "allowed_updates": ["message", "edited_message", "channel_post", "callback_query"]
+  }'
 ```
 
 Verify:
@@ -251,6 +261,7 @@ Message your bot in Telegram (e.g. `list pending sign requests`).
 |-------|--------|
 | **Keep ngrok running** | Free Agent Endpoints stop when the process exits; the bot stops receiving updates. |
 | **URL changes** | Free ngrok hostnames often change on restart → run **`setWebhook`** again with the new URL. |
+| **Charts vs bot chat** | **Free ngrok** (`*.ngrok-free.dev` / `*.ngrok-free.app`): bot messages, analysis buttons, trade ideas, and trade builds work. **Interactive chart Mini Apps do not** — ngrok serves a browser warning page on chart GETs that Telegram WebViews cannot bypass. Use a **paid ngrok plan** with a reserved domain for **Open chart**, or view charts in **continuumdao-node-app** agent chat. |
 | **Two secrets** | **`TELEGRAM_BOT_TOKEN`** ≠ **`WEBHOOK_SECRET_TELEGRAM_UPDATES`**. Never reuse the bot token as the webhook secret. |
 | **Shared conversation** | All Telegram messages use one agent conversation for this webhook until you tap **New chat** or delete it in **AI Agent → Conversations**. |
 | **App attach URL** | Browser HTTPS / SSH tunnel URLs are for **operating** the node — **not** for Telegram `setWebhook`. |
@@ -270,6 +281,7 @@ curl -sS "https://api.telegram.org/bot<BOT_TOKEN>/deleteWebhook"
 | `Couldn't connect to 127.0.0.1:18090` on **host** | Docker: hook is inside **`app`** | Use Part 4A; test with **`docker compose exec app`** curl |
 | Telegram **`404 Not Found`** | ngrok on host forwarding to empty/wrong port | Run ngrok on **container network** (Part 4A) |
 | Telegram **`401`** / no reply | Webhook disabled or secret mismatch | Enable webhook; align **`WEBHOOK_SECRET_*`** with `secret_token` in `setWebhook` |
+| Inline buttons do nothing | **`setWebhook`** missing **`callback_query`** in **`allowed_updates`** | Run **Register with Telegram** again (node app) or include **`callback_query`** in manual `setWebhook` |
 | `bad webhook: An HTTPS URL must be provided` | Used `http://` or localhost in `setWebhook` | Use **`https://<ngrok-host>/hooks/inbound/...`** |
 | ngrok **`ERR_NGROK_4018`** | No authtoken | [Linux setup](https://dashboard.ngrok.com/get-started/setup/linux) → `ngrok config add-authtoken` |
 | **`inside: 000`** in container | Hooks off or **`app`** not restarted | **`EnableAgentHooks: true`**; restart; check logs for hook listener line |
@@ -289,7 +301,17 @@ After OHLCV fetch and analysis tools run, mpc-auth sends **numbered option lists
 
 ### Interactive chart (Telegram Mini App)
 
-When the agent calls `prepare_chart_from_rows`, mpc-auth stores the `continuum/chart/v1` envelope and sends an **Open chart** button (`web_app`). Tapping it opens a full-screen chart in Telegram (same ngrok host as webhooks).
+When the agent calls `prepare_chart_from_rows`, mpc-auth stores the `continuum/chart/v1` envelope and sends an **Open chart** button (`web_app`) when your public HTTPS host supports Telegram Mini Apps.
+
+**Free ngrok vs paid ngrok**
+
+| Capability | Free ngrok (`*.ngrok-free.dev`) | Paid ngrok (reserved domain) |
+|------------|----------------------------------|------------------------------|
+| Bot chat, analysis menus, trade ideas, trade build | Yes | Yes |
+| Chart preview in chat (text sparkline + recent OHLC) | Yes | Yes |
+| **Open chart** Mini App (interactive) | **No** — blank WebView (ngrok interstitial) | Yes |
+
+If you plot on free ngrok, the bot sends a **text sparkline** and the last few OHLC bars, plus a note that the interactive Mini App needs paid ngrok. Upgrade at [ngrok billing](https://dashboard.ngrok.com/billing), use a reserved HTTPS hostname, register it as the bot **Mini App domain** in @BotFather, and optionally set **`TELEGRAM_WEBAPP_BASE_URL`** to that host.
 
 **Hook listener routes** (default port **18090**, same mux as **`POST /hooks/inbound/{webhookId}`**):
 
@@ -301,9 +323,9 @@ GET /telegram/chart/static/*
 
 **Operator setup (once per bot):**
 
-1. Enable ngrok for webhooks (existing flow) — note the public host, e.g. `https://abc123.ngrok-free.dev`.
-2. In **@BotFather** → your bot → **Bot Settings** → configure the **Mini App domain** to that host (`abc123.ngrok-free.dev`, no path).
-3. Optional override: set agent env **`TELEGRAM_WEBAPP_BASE_URL`** to `https://abc123.ngrok-free.dev` if auto-detection from ngrok state fails.
+1. Enable ngrok for webhooks (existing flow) — note the public host.
+2. **For charts:** upgrade to a paid ngrok plan and reserve a domain (not `*.ngrok-free.dev`). In **@BotFather** → your bot → **Bot Settings** → configure the **Mini App domain** to that host (no path).
+3. Optional override: set agent env **`TELEGRAM_WEBAPP_BASE_URL`** to your reserved HTTPS host if auto-detection from ngrok state fails.
 
 **Typical flow:**
 
