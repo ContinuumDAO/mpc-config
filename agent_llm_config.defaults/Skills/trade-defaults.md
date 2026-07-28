@@ -4,7 +4,7 @@ Load when the operator opens **Trade ideas**, selects a numbered idea, or before
 
 **Desk numeric defaults** (offsets, proximity, protocol sizing, `marketKind`, `tif`, `autoSubmitMultisign`) are machine-parsed from **`trade-desk.yaml`** beside `agent_llm_config/` (seeded from `agent_llm_config.defaults/trade-desk.yaml`). The node applies them on a **deterministic fast path** for clear ideas — no LLM round-trip.
 
-**This skill** is for **policy-only** cases the fast path cannot decide: break+retest alternates, fib regime switching, unclear status with a clear alternate, and discretionary `purposeTextAdditional`. When the fast path applies, the operator still reviews the prefilled form unless **`autoSubmitMultisign`** is enabled in `trade-desk.yaml` or cron **`tradeBuild`** YAML.
+**This skill** is for **policy-only** cases the fast path cannot decide: nearest-level break+retest alternates (`kl-ret`), unclear status with a clear alternate, and discretionary `purposeTextAdditional`. When the fast path applies, the operator still reviews the prefilled form unless **`autoSubmitMultisign`** is enabled in `trade-desk.yaml` or cron **`tradeBuild`** YAML.
 
 Cron jobs may still set overrides in a fenced **`tradeBuild`** YAML block (see **`scheduled-automation`**).
 
@@ -18,8 +18,10 @@ Cron jobs may still set overrides in a fenced **`tradeBuild`** YAML block (see *
   - **candlestick:** `patternName`, `signal` (`buy` | `sell` | `hold`), `side` long/short/neutral, `setupPurposeCode` **`candle`** — **confirmation** alongside momentum in trade-analysis cron; requires **≥14** OHLCV bars
   - **trend_structure:** `bias`, `structure`, `primaryTrendKind`, `primaryTrendTouchCount`, `entryOffsetMode` (always **`retest`**), `setupPurposeCode` (**`trend-ret`**)
   - **key_levels:** `levelNumber`, `framing`, `entryOffsetMode` (**`bounce`** default), `setupPurposeCode` (**`kl-bnc`** long bounce / **`kl-brk`** short rejection), `targetSource`, optional nested **`breakRetestAlternative`** (**`kl-ret`** when selected)
-  - **key_level_fibonacci:** `fibPairNumber`, `priceRegime` (`inside_range` | `above_range` | `below_range`), `framing`, `entryOffsetMode`, `setupPurposeCode` (**`kl-fib`** 0.618 retrace / **`kl-fib-ext`** range extension / **`kl-fib-ret`** when break+retest alternate selected), `targetSource` (`retrace_618` | `range_leg` | `fib_extension`), optional nested **`breakRetestAlternative`**
+  - **key_level_fibonacci:** `fibPairNumber`, `priceRegime` (**`inside_range`** when valid), `framing` (**`retrace`**), `entryOffsetMode` (**`bounce`**), `setupPurposeCode` (**`kl-fib`**), `targetSource` (`retrace_618` | `range_leg`); quote both bracket Level #s. Break+retest of a level is **`key_levels`** / **`kl-ret`**, not Fib.
   - **bollinger_bands:** `setupPurposeCode` (**`bb-fade`**), `entryOffsetMode` (**`bounce`**), band **`period`** **20**, **`stdDev`** **2**, **`entryProximityPct`** **5** (% of **band width** — gates `clear` vs `unclear`)
+  - **donchian_breakout:** `setupPurposeCode` (**`dc-ret`** retest default / **`dc-brk`** immediate), `entryMode` from desk **`donchianEntryMode`**, channel **`period`** from desk **`donchianPeriod`** (default **20**), `entryOffsetMode` (**`retest`** or **`bounce`**), desk **`entryProximityPct`** (price %); **target** = entry ± (**`donchianTargetAtrMultiple`** × ATR, default **3**); **invalidation** = Donchian mid; nested **`immediateAlternative`** or **`breakRetestAlternative`**
+  - **z_score:** `setupPurposeCode` (**`zs-fade`**), `entryOffsetMode` (**`bounce`**); enter when \|Z\| ≥ desk **`zScoreEntry`** (default **2**); **target** = SMA ± **`zScoreExit`**×SD (default **0.5**); **invalidation** = entry ± **`zScoreStopAtrMultiple`**×ATR (default **2**); optional **`zScoreAtrFilter: contracting`**
   - **elliott_waves:** `patternType` (`impulse` | `diagonal` | `corrective`), `setupPurposeCode` (**`ew-imp`** | **`ew-dia`** | **`ew-corr`**), `waveMenuNumber` (default **1**), `confirmedWaveCount`, in-progress wave projection target/invalidation. **`corrective`** (`ew-corr`) is **`unclear`** — no directional build. Requires **≥50** OHLCV bars (hard minimum); **≥200** recommended; **≥400** for primary degree (see **`scheduled-automation`** / template bar-count note).
   - **moving_averages:** `strategy` (**`crossover`** | **`proximity_retest`**), `setupPurposeCode` (**`ma-cross`** crossover at last close | **`ma-ret`** slow-MA retest), `fastPeriod` **50**, `slowPeriod` **200**, `maType` **`sma`**, `entryOffsetMode` (**`bounce`** for crossover, **`retest`** for proximity), **`entryProximityPct`** **1** with desk **`entryProximityMode`** (**`price`** | **`atr`**)
 - Do **not** pick a different idea or invent a new setup.
@@ -31,15 +33,13 @@ Chart-pattern ideas store **base** entry and invalidation at pattern boundaries 
 
 **Key-levels (nearest)** ideas (`analyze_key_levels`) auto-upsert the **primary** setup only — **bounce** at nearest support (`kl-bnc`, long) or **rejection** at nearest resistance (`kl-brk`, short). Base entry sits at the menu level price; target is the **next key level** in trade direction when available (`targetSource: next_level`). A nested **`breakRetestAlternative`** may be present for operator/agent selection — it is **not** used unless this skill directs you to switch (see §1.1).
 
-**Key-level Fibonacci** ideas (`analyze_key_level_fibonacci`) use the **outer concentric** swing range. Regime depends on last close vs range legs:
+**Key-level Fibonacci** ideas (`analyze_key_level_fibonacci`) use the **strongest-bracket** range: strongest key level below last close × strongest key level above last close, each with confidence (`strength/100`) ≥ desk **`fibKeyLevelMinConfidence`** (default **0.35**). If either leg is missing or weak, the analysis is invalid (no `primaryFibPair` / no trade setup). A valid bracket always places last close **between** the legs (`priceRegime: inside_range`). Always quote both Level #s, prices, strengths, and confidences when reporting.
 
 | Regime | Last close | Primary setup | Target |
 |--------|------------|---------------|--------|
-| **`inside_range`** | Between range low and high | Bounce at **Fib leg** (`kl-fib`, `entryOffsetMode: bounce`): **upper half → short at Fib 1.0 (range high)** toward 0.618; **lower half → long at Fib 1.0 inverted (range low)** toward inverted 0.618. Opposite-side variant uses the other leg (long at Fib 0 / short at Fib 0 inverted) toward the opposite range leg. | Default variant: **Fib 0.618** retrace (`retrace_618`); opposite variant: opposite range leg (`range_leg`) |
-| **`above_range`** | Above range high | **Long** retest at **Fib 1.0** (range high; `kl-fib-ext`, `entryOffsetMode: retest`) — actionable when last close is within **`entryProximityPct`** of the leg or inside the **`entryOffsetPct`** retest band (§3) | **Fib 1.618 extension above** high (`fib_extension`) |
-| **`below_range`** | Below range low | **Short** retest at **Fib 1.0 inverted** (range low; `kl-fib-ext`, `entryOffsetMode: retest`) — same proximity / retest-band gates | **Fib 1.618 extension below** low (`fib_extension`; chart Fib overlay reversed) |
+| **`inside_range`** | Between strongest bracket low and high | Bounce at **Fib leg** (`kl-fib`, `entryOffsetMode: bounce`): **upper half → short at Fib 1.0 (range high)** toward 0.618; **lower half → long at Fib 1.0 inverted (range low)** toward inverted 0.618. Opposite-side variant uses the other leg (long at Fib 0 / short at Fib 0 inverted) toward the opposite range leg. | Default variant: **Fib 0.618** retrace (`retrace_618`); opposite variant: opposite range leg (`range_leg`) |
 
-Nested **`breakRetestAlternative`** on fib ideas (`kl-fib-ret`) waits for **retest at the broken range leg** before the same 1.618 extension target — mirror §1.1 switching rules (§1.2).
+Fib analyze does **not** emit outside-range extension or Fib break+retest setups. For break+retest of a broken menu level, use **`analyze_key_levels`** (§1.1).
 
 ### 1.1 Key levels (nearest) — default vs break+retest alternate
 
@@ -62,39 +62,25 @@ Nested **`breakRetestAlternative`** on fib ideas (`kl-fib-ret`) waits for **rete
 - **Default:** strongest broken level (`alternateBreakCandidates[0]`, `selectionHint: strongest`).
 - **Alternates:** most recent break; nearest to last close — operator may pick from `alternateBreakCandidates[]`.
 
-**Extension targets:** when `targetSource: fib_extension` (nearest alternate only, or fib primary/alternate), prefer **hyperliquid**, **arcus**, or **gmx** for resting limits; add HTF re-analysis note in `purposeTextAdditional` (e.g. `fib ext — HTF confirm`).
+### 1.2 Key level Fibonacci — inside-range 0.618 fade
 
-### 1.2 Key level Fibonacci — default vs break+retest alternate
-
-**Default (auto-upserted fib idea):** use **primary** `keyLevelFibTradeSetup` — do **not** substitute `breakRetestAlternative` unless the operator explicitly requests break+retest or the conditions below match.
+**Default (auto-upserted fib idea):** use **primary** `keyLevelFibTradeSetup` with **`setupPurposeCode: kl-fib`**, **`priceRegime: inside_range`**, **`entryOffsetMode: bounce`**.
 
 | Path | When | `setupPurposeCode` | `entryOffsetMode` |
 |------|------|--------------------|-------------------|
-| **Inside range — 0.618 retrace** | `priceRegime: inside_range` | **`kl-fib`** | **`bounce`** |
-| **Above range — extension long** | `priceRegime: above_range` | **`kl-fib-ext`** | **`retest`** |
-| **Below range — extension short** | `priceRegime: below_range` | **`kl-fib-ext`** | **`retest`** |
-| **Break + retest alternate** | Operator asks for “fib break retest”, “retest broken range leg”, or primary extension is **`unclear`** but `breakRetestAlternative.status === 'clear'`; **or** desk policy favors retest over continuation at the broken high/low | **`kl-fib-ret`** | **`retest`** |
+| **Inside range — 0.618 fade** | Valid strongest-bracket (`priceRegime: inside_range`) | **`kl-fib`** | **`bounce`** |
 
-**Switching to the fib alternate (prefill LLM):**
+**Chart apply:** `apply_key_fib_drawings` with **`fibPairNumber`** draws the Fib overlay (**0 / 0.618 / 1**) plus leg horizontals. Lower-half setups use inverted Fib orientation (`displayTrend: up`).
 
-1. Read `breakRetestAlternative` from `analysisSetup.setup` on the **same** selected **`key_level_fibonacci`** idea.
-2. Use its `entryPrice`, `targetPrice`, `invalidationPrice`, `brokenLevelNumber`, and `setupPurposeCode: kl-fib-ret`.
-3. Apply **retest** offsets from §3; **skip proximity gate** on perp limit venues.
-4. Optional `purposeTextAdditional`: e.g. `fib break retest` or `Level #N range leg retest`.
-
-**Chart apply:** `apply_key_fib_drawings` with **`fibPairNumber`** draws the Fib overlay (0 / 0.618 / 1) plus leg levels; when `targetSource: fib_extension`, also draws the bold **1.618 extension** target line. Below-range setups use **reversed** Fib orientation on chart (`displayTrend: down`).
-
-**Desk percentages on setup (match §2 defaults):** each `keyLevelFibTradeSetup` includes **`entryProximityPct: 1`**, **`entryOffsetPct: 1`**, **`invalidationOffsetPct: 1`**. Analysis uses these when assessing entry actionability:
-
-| Regime | Entry assessment |
-|--------|------------------|
-| **`inside_range`** (`kl-fib`, bounce) | Last close within **`entryProximityPct`** of the **Fib leg entry** (Fib 1.0 / Fib 0 per variant — not the 0.618 target). At **build**, **`entryOffsetPct`** (bounce mode) shifts the resting limit slightly beyond that leg (§3). |
-| **`above_range` / `below_range`** (`kl-fib-ext`, retest) | Last close within **`entryProximityPct`** of **Fib 1.0 leg entry**, or inside the **`entryOffsetPct`** retest band between the broken leg and the offset limit (§3). At **build**, resting limit uses **retest** offsets on perp venues (proximity skipped on perp prefill per §2). |
-| **`breakRetestAlternative`** (`kl-fib-ret`) | Bar retest at broken leg (break detect); prefill uses **retest** offsets, skips proximity on perp |
+**Desk percentages on setup (match §2 defaults):** each `keyLevelFibTradeSetup` includes **`entryProximityPct: 1`**, **`entryOffsetPct: 1`**, **`invalidationOffsetPct: 1`**. Bracket formation also uses desk **`fibKeyLevelMinConfidence: 0.35`** (per-leg `strength/100`). Analysis uses proximity/offsets when assessing entry actionability: last close within **`entryProximityPct`** of the **Fib leg entry** (Fib 1.0 / Fib 0 per variant — not the 0.618 target). At **build**, **`entryOffsetPct`** (bounce mode) shifts the resting limit slightly beyond that leg (§3).
 
 Same desk fields are on **`keyLevelsTradeSetup`** for nearest analysis (bounce uses **`entryProximityPct`**).
 
 **Bollinger bands** ideas (`analyze_bollinger_bands`) are **band-to-band fades**: above middle → **short** at **upper** band toward **lower**; below middle → **long** at **lower** band toward **upper**. Base entry is the outer band price; target is the **opposite** band. Invalidation is band breach (above upper for short, below lower for long). Idea is **`clear`** only when last close is within **`entryProximityPct`** (**5** by default, % of band width). Use **`setupPurposeCode: bb-fade`**, **`entryOffsetMode: bounce`**, and desk **`entryOffsetPct` / `invalidationOffsetPct`** from §2 at build time. Chart overlay defaults (`period`, `stdDev`, shaded fill) live in **`chart-defaults`**.
+
+**Donchian breakout** ideas (`analyze_donchian_breakout`) use channel length **`donchianPeriod`** (default **20**) and primary **`donchianEntryMode`** from **`trade-desk.yaml`**. Default **`retest`**: after a channel break, enter on pullback to the broken band (`dc-ret`, `entryOffsetMode: retest`). Alternate **`immediate`**: enter on break/hold beyond the prior channel (`dc-brk`). **Target** = breakout entry ± (**`donchianTargetAtrMultiple`** × ATR) — default multiple **3**, ATR period from **`entryProximityAtrPeriod`**. **Invalidation** = Donchian mid-channel. Desk **`entryProximityPct`** (price %) gates `clear`. Nested alternate setups may be present — switch only when the operator asks or primary is unclear and the alternate is clear (mirror §1.1). Overlay period matches desk **`donchianPeriod`** (see **`chart-defaults`**).
+
+**Z-score mean reversion** ideas (`analyze_z_score`) use **`Z = (close − SMA) / SD`** with desk **`zScorePeriod`** (default **20**). Enter long when Z ≤ −**`zScoreEntry`**, short when Z ≥ +**`zScoreEntry`** (default **2**). **Target** = SMA ± **`zScoreExit`**×SD (default **0.5**). **Invalidation** = entry ± **`zScoreStopAtrMultiple`**×ATR (default **2**, ATR from **`entryProximityAtrPeriod`**). Optional **`zScoreAtrFilter: contracting`**. Use **`setupPurposeCode: zs-fade`**, **`entryOffsetMode: bounce`**. Overlay: **`chart-defaults`**.
 
 **Elliott waves** ideas (`analyze_elliott_waves`) bind to a **`waveMenuNumber`** (default **1**). **Impulse** / **diagonal** counts with confirmed structure and projection targets can be **`clear`** with **`setupPurposeCode: ew-imp`** or **`ew-dia`**. Base entry is **last close** (`triggerPrice`); target is the highest-probability in-progress wave projection above/below last close; invalidation is the wave **`invalidationPoint`**. **`corrective`** A–B–C counts (`ew-corr`) stay **`unclear`**. Cron and prefill skip when `dataStatus: insufficient_data` — widen OHLCV lookback per tool **`dataGuidance`**. Offsets from §2 apply at build on perp limit venues. Optional chart labels: **`apply_elliott_wave_drawings`** (not required for submit).
 
@@ -138,7 +124,7 @@ Edit **`trade-desk.yaml`** → `universal:` and per-protocol `protocols:` blocks
 
 When a trade idea has **target** and/or **invalidation**, **`build_trade_from_*`** for Hyperliquid auto-includes bracket fields (`takeProfitTriggerPxHuman`, `stopLossTriggerPxHuman`) via one L1 EIP-712 `normalTpsl` action — not CoreWriter. **Arcus perp** uses the same bracket geometry via `ctm_arcus_build_place_order_multisign` (ed25519-signed API payload). Geometry: long → SL < entry < TP; short → TP < entry < SL. See **`ctm-mpc-defi`** Hyperliquid / Arcus skills.
 
-**LLM fallback** (this skill): `llmFallback` in `trade-desk.yaml` lists when the fast path is skipped — e.g. `status: unclear`, `setupPurposeCode` **`kl-ret`** / **`kl-fib-ret`**, or primary unclear with a clear **`breakRetestAlternative`**.
+**LLM fallback** (this skill): `llmFallback` in `trade-desk.yaml` lists when the fast path is skipped — e.g. `status: unclear`, `setupPurposeCode` **`kl-ret`**, or primary unclear with a clear nearest-level **`breakRetestAlternative`**.
 
 ---
 
@@ -213,7 +199,7 @@ Optional **`purposeTextAdditional`** after ` · ` (e.g. `trend retest`, `Generat
 | Token | Meaning |
 |-------|---------|
 | `{proto}` | Protocol short code — see protocol table in §5 (`hl`, `arc`, `gmx`, `uni`, …) |
-| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`kl-fib-ext`**, **`kl-fib-ret`**, **`bb-fade`**, **`ma-cross`**, **`ma-ret`**, **`ew-imp`**, **`ew-dia`**, **`candle`**, **`mom`**, …) — never menu `#N` |
+| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`bb-fade`**, **`dc-ret`**, **`dc-brk`**, **`zs-fade`**, **`ma-cross`**, **`ma-ret`**, **`ew-imp`**, **`ew-dia`**, **`candle`**, **`mom`**, …) — never menu `#N` |
 | `eE` / `pfE` | Effective entry / pattern-failure after offsets |
 | `tpE` / `slE` | Effective take-profit / stop-loss triggers (Hyperliquid bracket builds when target/invalidation present) |
 | `eB` / `pfB` | Optional base prices when rune budget allows |
@@ -290,22 +276,9 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 1. Use **bounce** offsets from §3 (`entryOffsetPct` / `invalidationOffsetPct` from desk defaults).
 2. **Hyperliquid / Arcus:** open-context → `szHuman` (+ **`ed25519KeyGenId`** for Arcus). **GMX:** open-context → `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman`.
 3. Optional `purposeTextAdditional`: e.g. `kl bounce` or `Level #N support`.
-4. When `targetSource: fib_extension`, note HTF confirmation in `purposeTextAdditional`.
-5. `autoSubmitMultisign`: **false**.
+4. `autoSubmitMultisign`: **false**.
 
-### Policy: key-level Fibonacci extension → perp limit (HL, Arcus, or GMX)
-
-**When:** selected idea is **`key_level_fibonacci`**, `setupPurposeCode` **`kl-fib-ext`** or **`kl-fib-ret`**, `targetSource: fib_extension`, `status: clear`, operator UI protocol is **hyperliquid**, **arcus**, or **gmx**.
-
-**Protocol:** operator UI **`hyperliquid`**, **`arcus`**, or **`gmx`** (§5) — not Uniswap unless price is already at the retest entry.
-
-1. Use **retest** offsets from §3; skip proximity gate on perp venues.
-2. Size from protocol open-context tools (same as trend-structure policy).
-3. Optional `purposeTextAdditional`: e.g. `fib 1.618 ext` or `fib range break`.
-4. Note HTF confirmation when `higherTimeframeAdvisory` is set on the idea.
-5. `autoSubmitMultisign`: **false**.
-
-### Policy: key-level Fibonacci 0.618 retrace → perp limit (HL, Arcus, or GMX)
+### Policy: key-level Fibonacci 0.618 fade → perp limit (HL, Arcus, or GMX)
 
 **When:** selected idea is **`key_level_fibonacci`**, `priceRegime: inside_range`, `setupPurposeCode` **`kl-fib`**, `status: clear`.
 
@@ -313,7 +286,7 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 
 1. Use **bounce** offsets from §3 ( **`entryOffsetPct`** adjusts the limit relative to the leg base entry).
 2. Size from protocol open-context tools.
-3. Optional `purposeTextAdditional`: e.g. `fib 0.618 retrace`.
+3. Optional `purposeTextAdditional`: e.g. `fib 618 fade`.
 4. `autoSubmitMultisign`: **false**.
 
 ### Policy: Elliott wave impulse/diagonal → perp limit (HL, Arcus, or GMX)
@@ -337,8 +310,7 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 1. Use **retest** offsets from §3; skip proximity gate on perp venues.
 2. Size from protocol open-context tools (same as trend-structure policy).
 3. Optional `purposeTextAdditional`: e.g. `kl break retest` or `broken Level #N`.
-4. When alternate `targetSource: fib_extension`, note HTF confirmation.
-5. `autoSubmitMultisign`: **false**.
+4. `autoSubmitMultisign`: **false**.
 
 ### Policy: cron auto-submit
 

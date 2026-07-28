@@ -119,6 +119,37 @@ Pass overrides on the tool call or in **`prepareReplay.overlays`** when the oper
 
 Analysis workflow: **`chart-analysis-bollinger`**. Trade build / prefill: **`trade-defaults`** (`bb-fade`).
 
+### Optional Donchian overlay (when operator asks or after Donchian breakout analysis)
+
+Merge into **`prepareReplay.overlays`** (does not replace default EMA/RSI unless you pass a full **`overlays`** array). **`period`** is owned by **`trade-desk.yaml`** `universal.donchianPeriod` (default **20**); the node injects it on analyze/overlay apply when unset:
+
+```json
+{ "type": "donchian", "sourceSeriesId": "<primary series id>", "period": 20, "fill": true }
+```
+
+| Field | Default |
+|-------|---------|
+| `period` | **20** from **`trade-desk.yaml`** `donchianPeriod` (override in YAML or tool args) |
+| `fill` | true (shaded area between channels) |
+
+Requires a **candlestick** primary series. Analysis workflow: **`chart-analysis-donchian`**. Trade build: **`trade-defaults`** (`dc-ret` / `dc-brk`).
+
+### Optional Z-score overlay (when operator asks or after Z-score analysis)
+
+Merge into **`prepareReplay.overlays`**. **`period` / `entryZ` / `exitZ`** are owned by **`trade-desk.yaml`** (`zScorePeriod`, `zScoreEntry`, `zScoreExit`):
+
+```json
+{ "type": "zscore", "sourceSeriesId": "<primary series id>", "period": 20, "entryZ": 2, "exitZ": 0.5 }
+```
+
+| Field | Default |
+|-------|---------|
+| `period` | **20** from **`zScorePeriod`** |
+| `entryZ` | **2** from **`zScoreEntry`** (horizontal guides at ±entry) |
+| `exitZ` | **0.5** from **`zScoreExit`** (guides at ±exit) |
+
+Renders in a **separate oscillator pane** (Z line + guides). Analysis workflow: **`chart-analysis-z-score`**. Trade build: **`trade-defaults`** (`zs-fade`).
+
 ### Optional moving averages overlay (when operator asks or after Moving averages analysis)
 
 Requires **≥200** bars for SMA(200). Merge into **`prepareReplay.overlays`**:

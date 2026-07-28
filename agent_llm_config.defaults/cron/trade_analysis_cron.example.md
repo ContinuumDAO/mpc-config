@@ -67,7 +67,7 @@ Embed **frozen** operator choices in the cron **`message`**: symbol, candle inte
 
 **Chain IDs (typical):** Hyperliquid **999** (mainnet) / **998** (testnet); Arcus (Robinhood Chain) **4663**; GMX & Uniswap on Arbitrum **42161** — confirm via protocol supported-chains in staging.
 
-**Trend / limit-style ideas on Uniswap:** spot swap only — no resting limit at trend line. Prefer **`hyperliquid`**, **`arcus`**, or **`gmx`** in `tradeBuild` for **`trend_structure`**, **`key_levels`**, and fib **extension/retest** ideas. Use **`uniswap`** only when last price is already within desk **`entryProximityPct`** of the idea entry — per **`entryProximityMode`** in **`trade-defaults`** §2 (`price` = % of entry; `atr` = % of ATR).
+**Trend / limit-style ideas on Uniswap:** spot swap only — no resting limit at trend line. Prefer **`hyperliquid`**, **`arcus`**, or **`gmx`** in `tradeBuild` for **`trend_structure`**, **`key_levels`**, and fib **618 fade** ideas. Use **`uniswap`** only when last price is already within desk **`entryProximityPct`** of the idea entry — per **`entryProximityMode`** in **`trade-defaults`** §2 (`price` = % of entry; `atr` = % of ATR).
 
 **Arcus trading:** requires paired KeyGens (secp256k1 custody + ed25519 API signing, same `GroupId`). Register API key once via multisign before orders. Spot RFQ has no bracket TP/SL at build.
 
@@ -79,9 +79,11 @@ Embed **frozen** operator choices in the cron **`message`**: symbol, candle inte
 4. `analyze_candlestick_patterns` on the same session (upserts **`candlestick`** / `candlestickTradeSetup`; **`signal`** buy/sell/hold, **`side`** long/short/neutral from bullish/bearish primary hit). Requires **≥14** bars.
 5. `analyze_trend_structure` on the same session (upserts **`trend_structure`** / `trendStructureTradeSetup`, `setupPurposeCode` **`trend-ret`**).
 6. `analyze_key_levels` on the same session (nearest bounce/rejection — upserts **`key_levels`** / `keyLevelsTradeSetup`).
-7. `analyze_key_level_fibonacci` on the same session (outer range 0.618 / 1.618 — upserts **`key_level_fibonacci`** / `keyLevelFibTradeSetup`).
+7. `analyze_key_level_fibonacci` on the same session (strongest-bracket **0.618** fade — upserts **`key_level_fibonacci`** / `keyLevelFibTradeSetup`; quote both leg Level #s).
 8. `analyze_elliott_waves` on the same session (upserts **`elliott_waves`** / `elliottWaveTradeSetup`; optional `waveMenuNumber`, default **1** — use menu # from **`waveMenu`** when pinning). **`corrective`** (`ew-corr`) stays **`unclear`**; cron submit uses **`ew-imp`** / **`ew-dia`** only when **`status=clear`**. Chart labels are optional in cron — **`apply_elliott_wave_drawings`** is not required for trade submit.
 9. Optional: `analyze_bollinger_bands` on the same session (upserts **`bollinger_bands`** / `bollingerTradeSetup`, `setupPurposeCode` **`bb-fade`**).
+9b. Optional: `analyze_donchian_breakout` on the same session (upserts **`donchian_breakout`** / `donchianTradeSetup`; period/mode from **`trade-desk.yaml`** `donchianPeriod` / `donchianEntryMode`; `dc-ret` or `dc-brk`).
+9c. Optional: `analyze_z_score` on the same session (upserts **`z_score`** / `zScoreTradeSetup`; knobs from **`trade-desk.yaml`**; `zs-fade`).
 10. Optional: `analyze_moving_averages` on the same session (upserts **`moving_averages`** / `movingAveragesTradeSetup`, `setupPurposeCode` **`ma-cross`** or **`ma-ret`** per `tradeSummary`).
 11. If consensus gate **ALLOWED** and submit enabled, call **`submit_trade_from_consensus`** with **`tradeIdeaId`** per selection rules below. Resolve sizing from **execution** protocol open-context (Hyperliquid / GMX / Uniswap quote tools per **`trade-defaults`** §5).
 
@@ -91,7 +93,7 @@ Steps 5–10 share the same OHLCV session; each upserts a **separate** trade ide
 
 #### Confirmation rule — momentum **OR** candlestick (required before submit)
 
-Every **primary** structural idea you submit (**chart_pattern**, **trend_structure**, **elliott_waves**, **key_levels**, **key_level_fibonacci**, **bollinger_bands**, **moving_averages**) must be **confirmed** by **at least one** of **`momentum`** or **`candlestick`** with **matching side**:
+Every **primary** structural idea you submit (**chart_pattern**, **trend_structure**, **elliott_waves**, **key_levels**, **key_level_fibonacci**, **bollinger_bands**, **donchian_breakout**, **z_score**, **moving_averages**) must be **confirmed** by **at least one** of **`momentum`** or **`candlestick`** with **matching side**:
 
 | Primary `side` | Accept when **either** supporter is **`clear`** (or momentum **`partial`** with matching side when `allowPartial: true`) |
 |----------------|-----------------------------------------------------------------------------------------------------------------------------|
@@ -111,17 +113,9 @@ Else prefer **elliott_waves** when `status=clear`, `patternType` is **`impulse`*
 
 Else prefer **trend_structure** when `status=clear`, `setupPurposeCode` **`trend-ret`**, `side` matches **`analysis.bias`** (support-line long / resistance-line short), and confirmation rule passes. Skip if **`tradeBuild.protocolId`** is **`uniswap`** unless last close is within **`entryProximityPct`** of entry (retest limit not actionable as spot otherwise).
 
-Else prefer **key_level_fibonacci** when `status=clear` and `priceRegime` matches structure:
+Else prefer **key_level_fibonacci** when `status=clear`, `priceRegime: inside_range`, and both bracket legs are quoted (strongest Level # below and above last close). Primary is **`kl-fib`** (0.618 fade). Skip when analysis is invalid (no strong legs on both sides of last close / below desk **`fibKeyLevelMinConfidence`**).
 
-| Regime | Prefer when |
-|--------|-------------|
-| **`inside_range`** | Last close between outer range legs; primary **`kl-fib`** (0.618 retrace) |
-| **`above_range`** | Last close above range high; primary **`kl-fib-ext`** (long, 1.618 extension target) |
-| **`below_range`** | Last close below range low; primary **`kl-fib-ext`** (short, 1.618 extension target) |
-
-Use nested **`breakRetestAlternative`** (`kl-fib-ret`) only when cron prose explicitly favors break+retest, or primary extension is **`unclear`** and alternate is **`clear`** ( **`trade-defaults`** §1.2).
-
-Else prefer **key_levels** (nearest): rank-1 **bounce** (`kl-bnc`) or **rejection** (`kl-brk`).
+Else prefer **key_levels** (nearest): rank-1 **bounce** (`kl-bnc`) or **rejection** (`kl-brk`). For historical break+retest, use nested **`breakRetestAlternative`** (`kl-ret`) per **`trade-defaults`** §1.1 when prose favors it or primary is unclear and alternate is clear.
 
 Else prefer **bollinger_bands** when `status=clear`, not **`invalidated`**, last close was within **`entryProximityPct`** (**5**, band-width %) of the entry band (`bb-fade`; see **`trade-defaults`**), and confirmation rule passes.
 
@@ -191,7 +185,7 @@ tradeConsensus:
   submitTradeFromConsensus: true
 ```
 
-Raise **`minAgree`** when adding sources. **`requiredSources`** values must match upserted `analysisType` (`chart_pattern`, `momentum`, `candlestick`, `trend_structure`, `key_levels`, `key_level_fibonacci`, `elliott_waves`, `bollinger_bands`, `moving_averages`, …).
+Raise **`minAgree`** when adding sources. **`requiredSources`** values must match upserted `analysisType` (`chart_pattern`, `momentum`, `candlestick`, `trend_structure`, `key_levels`, `key_level_fibonacci`, `elliott_waves`, `bollinger_bands`, `donchian_breakout`, `z_score`, `moving_averages`, …).
 
 ### tradeBuild (YAML fence — pick **one** protocol block below, or configure node file `cron/trade-cron.yaml`)
 

@@ -58,7 +58,7 @@ Template: **`agent_llm_config.defaults/cron/trade_analysis_cron.example.md`** (m
 - Optional fenced **`tradeBuild`** YAML — freeze **`protocolId`** (`hyperliquid` | `arcus` | `gmx` | `uniswap`), chain, sizing, offsets, and optional multisign expiry (**`expiryMinutesFromNow`** relative at build time, or absolute **`expiryDate`** Unix seconds); see template for per-protocol fields.
 - **`submitTradeFromConsensus: true`** enables the cron-only **`submit_trade_from_consensus`** step — the agent must pass **`tradeIdeaId`** per prose selection rules in the message (YAML does not auto-pick).
 - **Plan / orchestrator** threads use **`build_trade_from_*`** only — never **`submit_trade_from_consensus`**.
-- **Uniswap V4** has no protocol OHLCV — cron message must name a separate candle source for analysis; limit-style ideas (trend, levels, fib extension) usually build on **hyperliquid**, **arcus**, or **gmx** instead (see **`trade-defaults`**).
+- **Uniswap V4** has no protocol OHLCV — cron message must name a separate candle source for analysis; limit-style ideas (trend, levels, fib 618 fade) usually build on **hyperliquid**, **arcus**, or **gmx** instead (see **`trade-defaults`**).
 
 ## MultiSign Join acceptance (cron)
 

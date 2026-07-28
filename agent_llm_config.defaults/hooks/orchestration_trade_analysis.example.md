@@ -31,7 +31,7 @@ tasks:
 
   - id: eth-fib-levels-analysis
     prompt: |
-      Same OHLCV session. Run analyze_key_level_fibonacci (outer range 0.618 / 1.618 extension).
+      Same OHLCV session. Run analyze_key_level_fibonacci (strongest-bracket 0.618 fade; quote both leg Level #s).
       Include tradeIdeas[] in mpc-task-result (keyLevelFibTradeSetup, analysisType key_level_fibonacci).
     mcpServers: ["hyperliquid", "continuum"]
     skills: ["chart-analysis-levels"]
@@ -87,16 +87,16 @@ Fib sub-agent example (truncated):
 # mpc-task-result v1
 taskId: eth-fib-levels-analysis
 status: complete
-summary: Above outer range — kl-fib-ext long clear
+summary: Strongest-bracket Fib — kl-fib short clear
 tradeIdeas:
   - id: "<uuid>"
     source: { analysisType: key_level_fibonacci, toolName: analyze_key_level_fibonacci }
     status: clear
-    side: long
+    side: short
     symbol: ETH
     analysisSetup:
       kind: key_level_fibonacci
-      setup: { priceRegime: above_range, setupPurposeCode: kl-fib-ext, fibPairNumber: 1, ... }
+      setup: { priceRegime: inside_range, setupPurposeCode: kl-fib, fibPairNumber: 1, ... }
 charts: []
 ```
 

@@ -74,6 +74,37 @@ universal:
   # ATR lookback (bars) when entryProximityMode is atr. Standard: 14. Ignored when mode is price.
   entryProximityAtrPeriod: 14
 
+  # Per-leg key-level confidence (strength/100) for Fib strongest-bracket range.
+  # Both the strongest level below and above last close must meet this, else fib analysis is invalid.
+  # Injected into analyze_key_level_fibonacci as fibKeyLevelMinConfidence (default 0.35).
+  fibKeyLevelMinConfidence: 0.35
+
+  # Donchian channel length (bars) for analyze_donchian_breakout and chart overlay type:donchian.
+  # Injected as period / donchianPeriod when the tool arg is unset. Default 20.
+  donchianPeriod: 20
+
+  # Donchian primary entry style for analyze_donchian_breakout:
+  #   retest    — post-breakout retest of broken band (dc-ret); default
+  #   immediate — channel break / hold beyond prior band (dc-brk)
+  donchianEntryMode: retest
+
+  # Donchian take-profit distance as a multiple of ATR (entryProximityAtrPeriod bars):
+  #   Target = breakout entry ± (donchianTargetAtrMultiple × ATR). Default 3.
+  # Invalidation is always the Donchian mid-channel (not this multiple).
+  donchianTargetAtrMultiple: 3
+
+  # Z-score mean reversion (analyze_z_score + overlay type:zscore).
+  # Injected when tool args omit these fields. Default period 20.
+  zScorePeriod: 20
+  # Enter long when Z ≤ −entry; short when Z ≥ +entry.
+  zScoreEntry: 2
+  # Target when Z returns to ±exit vs mean (price = SMA ± exit × SD).
+  zScoreExit: 0.5
+  # Invalidation = entry ± (zScoreStopAtrMultiple × ATR). Default 2.
+  zScoreStopAtrMultiple: 2
+  # Optional ATR gate: none | contracting (ATR[t] < ATR[t-1]).
+  zScoreAtrFilter: none
+
   # When true, cron or automation may submit multisign without operator review (interactive UI still
   # shows the form unless cron tradeBuild also sets this). Default false — require human confirm.
   autoSubmitMultisign: false
@@ -92,11 +123,9 @@ llmFallback:
   whenBreakRetestAlternateEligible: true
 
   # Always use LLM for these setupPurposeCode values (even if status is clear):
-  #   kl-ret     — key-level break + retest alternate
-  #   kl-fib-ret — fib range break + retest alternate
+  #   kl-ret — nearest key-level break + retest alternate
   setupPurposeCodes:
     - kl-ret
-    - kl-fib-ret
 
 # ---------------------------------------------------------------------------
 # protocols — per-venue defaults (key = protocolId from Build Trade)
@@ -131,13 +160,15 @@ protocols:
 
     # Appended to auto-generated purposeText (256 char total limit). Keys match analysis type:
     # trend_structure | chart_pattern | key_levels | key_level_fibonacci | bollinger_bands |
-    # moving_averages | elliott_waves | candlestick | momentum | default (fallback when kind unknown)
+    # donchian_breakout | z_score | moving_averages | elliott_waves | candlestick | momentum | default
     purposeSuffix:
       trend_structure: "trend retest"
       chart_pattern: ""
       key_levels: "kl bounce"
-      key_level_fibonacci: "fib setup"
+      key_level_fibonacci: "fib 618 fade"
       bollinger_bands: "bb fade"
+      donchian_breakout: "dc breakout"
+      z_score: "zs fade"
       moving_averages: "ma setup"
       elliott_waves: "ew wave"
       candlestick: "candle confirm"
@@ -156,7 +187,9 @@ protocols:
       trend_structure: "trend retest"
       chart_pattern: ""
       key_levels: "kl bounce"
-      key_level_fibonacci: "fib setup"
+      key_level_fibonacci: "fib 618 fade"
+      donchian_breakout: "dc breakout"
+      z_score: "zs fade"
       elliott_waves: "ew wave"
 
   # --- Uniswap (spot swap) -------------------------------------------------------
@@ -193,7 +226,9 @@ protocols:
       trend_structure: "trend retest"
       chart_pattern: ""
       key_levels: "kl bounce"
-      key_level_fibonacci: "fib setup"
+      key_level_fibonacci: "fib 618 fade"
+      donchian_breakout: "dc breakout"
+      z_score: "zs fade"
       elliott_waves: "ew wave"
       default: "arcus perp"
 

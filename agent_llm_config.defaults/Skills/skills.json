@@ -66,6 +66,16 @@
       "initialLoad": false
     },
     {
+      "name": "chart-analysis-donchian",
+      "filename": "chart-analysis-donchian.md",
+      "initialLoad": false
+    },
+    {
+      "name": "chart-analysis-z-score",
+      "filename": "chart-analysis-z-score.md",
+      "initialLoad": false
+    },
+    {
       "name": "chart-analysis-moving-averages",
       "filename": "chart-analysis-moving-averages.md",
       "initialLoad": false
