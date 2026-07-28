@@ -6,8 +6,8 @@
 # or POST /upsertCronTradeConfig).
 #
 # Related config (not duplicated here):
-#   • trade-desk.yaml — entryProximity*, offsets for analyze_* and Build Trade fast path
-#   • Skills/trade-defaults.md — LLM policy fallback (break+retest, fib regime, etc.)
+#   • trade-desk.yaml — entryProximity*, offsets, Donchian/Z-score/Fib knobs for analyze_* and Build Trade
+#   • Skills/trade-defaults.md — LLM policy fallback (nearest-level break+retest, unclear + clear alternate, etc.)
 #   • cron/trade_analysis_cron.example.md — full analysis steps + selection prose template
 
 version: 1  # Schema version (must be 1 today).
@@ -26,7 +26,8 @@ tradeConsensus:
   # Analysis types that must appear in the session AND pass filters below.
   # Values match upserted idea source.analysisType (lowercase snake_case):
   #   chart_pattern | momentum | candlestick | trend_structure | key_levels |
-  #   key_level_fibonacci | elliott_waves | bollinger_bands | moving_averages
+  #   key_level_fibonacci | elliott_waves | bollinger_bands | donchian_breakout |
+  #   z_score | moving_averages
   # Omit or use [] to consider all analysis types (still subject to minAgree/filters).
   # Default runs chart_pattern + momentum + candlestick; cron prose requires primary side
   # confirmed by momentum OR candlestick (OR logic is prose — not expressible in YAML alone).
@@ -143,6 +144,24 @@ tradeBuild:
 #     requiredSources: [key_level_fibonacci, momentum, candlestick]
 #     minAgree: 2
 #     allowPartial: true
+#
+# Donchian breakout + momentum/candlestick confirmation gate:
+#   tradeConsensus:
+#     requiredSources: [donchian_breakout, momentum, candlestick]
+#     minAgree: 2
+#     minConfidence: 0.45
+#     allowPartial: true
+#     blockOnConflict: true
+#     submitTradeFromConsensus: true
+#
+# Z-score fade + momentum/candlestick confirmation gate:
+#   tradeConsensus:
+#     requiredSources: [z_score, momentum, candlestick]
+#     minAgree: 2
+#     minConfidence: 0.45
+#     allowPartial: true
+#     blockOnConflict: true
+#     submitTradeFromConsensus: true
 #
 # Elliott wave + momentum/candlestick gate (OHLCV lookback ≥200 bars recommended):
 #   tradeConsensus:

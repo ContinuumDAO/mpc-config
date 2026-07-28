@@ -67,7 +67,7 @@ Embed **frozen** operator choices in the cron **`message`**: symbol, candle inte
 
 **Chain IDs (typical):** Hyperliquid **999** (mainnet) / **998** (testnet); Arcus (Robinhood Chain) **4663**; GMX & Uniswap on Arbitrum **42161** — confirm via protocol supported-chains in staging.
 
-**Trend / limit-style ideas on Uniswap:** spot swap only — no resting limit at trend line. Prefer **`hyperliquid`**, **`arcus`**, or **`gmx`** in `tradeBuild` for **`trend_structure`**, **`key_levels`**, and fib **618 fade** ideas. Use **`uniswap`** only when last price is already within desk **`entryProximityPct`** of the idea entry — per **`entryProximityMode`** in **`trade-defaults`** §2 (`price` = % of entry; `atr` = % of ATR).
+**Trend / limit-style ideas on Uniswap:** spot swap only — no resting limit at structure. Prefer **`hyperliquid`**, **`arcus`**, or **`gmx`** in `tradeBuild` for **`trend_structure`**, **`key_levels`**, fib **618 fade**, **Donchian** (`dc-ret` / `dc-brk`), and **Z-score** (`zs-fade`) ideas. Use **`uniswap`** only when last price is already within desk **`entryProximityPct`** of the idea entry — per **`entryProximityMode`** in **`trade-defaults`** §2 (`price` = % of entry; `atr` = % of ATR).
 
 **Arcus trading:** requires paired KeyGens (secp256k1 custody + ed25519 API signing, same `GroupId`). Register API key once via multisign before orders. Spot RFQ has no bracket TP/SL at build.
 
@@ -119,6 +119,10 @@ Else prefer **key_levels** (nearest): rank-1 **bounce** (`kl-bnc`) or **rejectio
 
 Else prefer **bollinger_bands** when `status=clear`, not **`invalidated`**, last close was within **`entryProximityPct`** (**5**, band-width %) of the entry band (`bb-fade`; see **`trade-defaults`**), and confirmation rule passes.
 
+Else prefer **donchian_breakout** when `status=clear`, not **`invalidated`**, and confirmation rule passes. Primary follows desk **`donchianEntryMode`**: **`dc-ret`** (retest default) or **`dc-brk`** (immediate). Skip if **`tradeBuild.protocolId`** is **`uniswap`** unless last close is within **`entryProximityPct`** of entry.
+
+Else prefer **z_score** when `status=clear`, not **`invalidated`**, `setupPurposeCode` **`zs-fade`**, and confirmation rule passes (ATR filter OK when desk **`zScoreAtrFilter: contracting`**). Skip if **`tradeBuild.protocolId`** is **`uniswap`** unless last close is within **`entryProximityPct`** of entry.
+
 Skip **partial** structural setups unless **momentum or candlestick** confirms the same side. When multiple level/trend ideas qualify, prefer the one whose **side** matches the confirming supporter.
 
 ### tradeConsensus (YAML fence — pick **one** example below, or configure node file `cron/trade-cron.yaml`)
@@ -154,6 +158,30 @@ Example — fib + momentum **or** candlestick confirmation:
 ```yaml
 tradeConsensus:
   requiredSources: [key_level_fibonacci, momentum, candlestick]
+  minAgree: 2
+  minConfidence: 0.45
+  allowPartial: true
+  blockOnConflict: true
+  submitTradeFromConsensus: true
+```
+
+Example — Donchian breakout + momentum **or** candlestick confirmation (desk `donchianEntryMode` / `donchianPeriod`):
+
+```yaml
+tradeConsensus:
+  requiredSources: [donchian_breakout, momentum, candlestick]
+  minAgree: 2
+  minConfidence: 0.45
+  allowPartial: true
+  blockOnConflict: true
+  submitTradeFromConsensus: true
+```
+
+Example — Z-score fade + momentum **or** candlestick confirmation:
+
+```yaml
+tradeConsensus:
+  requiredSources: [z_score, momentum, candlestick]
   minAgree: 2
   minConfidence: 0.45
   allowPartial: true

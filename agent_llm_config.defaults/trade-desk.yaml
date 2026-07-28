@@ -5,7 +5,7 @@
 # agent_llm_config/trade-desk.yaml (Skills tab → Trade desk, or POST /upsertTradeDeskConfig).
 #
 # Related config (not duplicated here):
-#   • Skills/trade-defaults.md — policy-only LLM fallback (break+retest alternates, fib regime, etc.)
+#   • Skills/trade-defaults.md — policy-only LLM fallback (nearest break+retest, Donchian alternate, unclear + clear alternate, etc.)
 #   • Cron job message — optional fenced `tradeBuild:` YAML overrides per scheduled run
 #
 # Protocol blocks are keyed by build-form protocolId (lowercase): hyperliquid, gmx, uniswap, …

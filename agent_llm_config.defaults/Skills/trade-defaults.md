@@ -4,7 +4,7 @@ Load when the operator opens **Trade ideas**, selects a numbered idea, or before
 
 **Desk numeric defaults** (offsets, proximity, protocol sizing, `marketKind`, `tif`, `autoSubmitMultisign`) are machine-parsed from **`trade-desk.yaml`** beside `agent_llm_config/` (seeded from `agent_llm_config.defaults/trade-desk.yaml`). The node applies them on a **deterministic fast path** for clear ideas — no LLM round-trip.
 
-**This skill** is for **policy-only** cases the fast path cannot decide: nearest-level break+retest alternates (`kl-ret`), unclear status with a clear alternate, and discretionary `purposeTextAdditional`. When the fast path applies, the operator still reviews the prefilled form unless **`autoSubmitMultisign`** is enabled in `trade-desk.yaml` or cron **`tradeBuild`** YAML.
+**This skill** is for **policy-only** cases the fast path cannot decide: nearest-level break+retest alternates (`kl-ret`), Donchian primary vs nested alternate (`dc-ret` / `dc-brk`), unclear status with a clear alternate, and discretionary `purposeTextAdditional`. When the fast path applies, the operator still reviews the prefilled form unless **`autoSubmitMultisign`** is enabled in `trade-desk.yaml` or cron **`tradeBuild`** YAML.
 
 Cron jobs may still set overrides in a fenced **`tradeBuild`** YAML block (see **`scheduled-automation`**).
 
@@ -287,6 +287,29 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 1. Use **bounce** offsets from §3 ( **`entryOffsetPct`** adjusts the limit relative to the leg base entry).
 2. Size from protocol open-context tools.
 3. Optional `purposeTextAdditional`: e.g. `fib 618 fade`.
+4. `autoSubmitMultisign`: **false**.
+
+### Policy: Donchian breakout → perp limit (HL, Arcus, or GMX)
+
+**When:** selected idea is **`donchian_breakout`**, `status: clear`, not **`invalidated`**, `setupPurposeCode` **`dc-ret`** or **`dc-brk`**.
+
+**Protocol:** **`hyperliquid`**, **`arcus`**, or **`gmx`** (§5) — not Uniswap unless last price is within **`entryProximityPct`** of entry.
+
+1. Prefer the **primary** setup from desk **`donchianEntryMode`**. Switch to nested **`immediateAlternative`** / **`breakRetestAlternative`** only when the operator asks or primary is **`unclear`** and the alternate is **`clear`** (mirror §1.1).
+2. **`dc-ret`:** use **retest** offsets from §3; skip proximity gate on perp venues. **`dc-brk`:** use **bounce** offsets from §3.
+3. Size from protocol open-context tools (same as trend-structure policy).
+4. Optional `purposeTextAdditional`: e.g. `dc breakout` or `dc retest`.
+5. `autoSubmitMultisign`: **false**.
+
+### Policy: Z-score mean reversion → perp limit (HL, Arcus, or GMX)
+
+**When:** selected idea is **`z_score`**, `status: clear`, not **`invalidated`**, `setupPurposeCode` **`zs-fade`**.
+
+**Protocol:** **`hyperliquid`**, **`arcus`**, or **`gmx`** (§5) — not Uniswap unless last price is within **`entryProximityPct`** of entry.
+
+1. Use **bounce** offsets from §3 (`entryOffsetPct` / `invalidationOffsetPct` from desk defaults).
+2. Size from protocol open-context tools.
+3. Optional `purposeTextAdditional`: e.g. `zs fade`.
 4. `autoSubmitMultisign`: **false**.
 
 ### Policy: Elliott wave impulse/diagonal → perp limit (HL, Arcus, or GMX)
