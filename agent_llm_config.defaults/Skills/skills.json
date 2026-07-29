@@ -76,6 +76,16 @@
       "initialLoad": false
     },
     {
+      "name": "chart-analysis-supertrend",
+      "filename": "chart-analysis-supertrend.md",
+      "initialLoad": false
+    },
+    {
+      "name": "chart-analysis-ichimoku",
+      "filename": "chart-analysis-ichimoku.md",
+      "initialLoad": false
+    },
+    {
       "name": "chart-analysis-z-score",
       "filename": "chart-analysis-z-score.md",
       "initialLoad": false

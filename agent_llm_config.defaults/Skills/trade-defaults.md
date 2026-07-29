@@ -22,6 +22,8 @@ Cron jobs may still set overrides in a fenced **`tradeBuild`** YAML block (see *
   - **key_level_fibonacci:** `fibPairNumber`, `priceRegime` (**`inside_range`** when valid), `framing` (**`retrace`**), `entryOffsetMode` (**`bounce`**), `setupPurposeCode` (**`kl-fib`**), `targetSource` (`retrace_618` | `range_leg`); quote both bracket Level #s. Break+retest of a level is **`key_levels`** / **`kl-ret`**, not Fib.
   - **bollinger_bands:** `setupPurposeCode` (**`bb-fade`**), `entryOffsetMode` (**`bounce`**), band **`period`** **20**, **`stdDev`** **2**, **`entryProximityPct`** **5** (% of **band width** — gates `clear` vs `unclear`)
   - **donchian_breakout:** `setupPurposeCode` (**`dc-ret`** retest default / **`dc-brk`** immediate), `entryMode` from desk **`donchianEntryMode`**, channel **`period`** from desk **`donchianPeriod`** (default **20**), `entryOffsetMode` (**`retest`** or **`bounce`**), desk **`entryProximityPct`** (price %); **target** = entry ± (**`donchianTargetAtrMultiple`** × ATR, default **3**); **invalidation** = Donchian mid; nested **`immediateAlternative`** or **`breakRetestAlternative`**
+  - **supertrend:** `setupPurposeCode` (**`st-flip`** flip default / **`st-ret`** retest), `entryMode` from desk **`supertrendEntryMode`**, **`period`/`multiplier`** from desk **`supertrendPeriod`**/**`supertrendMultiplier`** (default **10**/**3**), `entryOffsetMode` (**`bounce`** or **`retest`**); **target** = entry ± (**`supertrendTargetAtrMultiple`** × ATR, default **3**); **invalidation** = Supertrend trail; nested **`retestAlternative`** or **`flipAlternative`**
+  - **ichimoku:** `setupPurposeCode` (**`ichi-tk`** TK cross / **`ichi-cloud`** cloud retest), periods from desk **`ichimokuConversionPeriod`/`ichimokuBasePeriod`/`ichimokuSpanPeriod`/`ichimokuDisplacement`** (default **9/26/52/26**); **target** = entry ± (**`ichimokuTargetAtrMultiple`** × ATR, default **3**); **invalidation** = cloud edge / kijun; nested **`cloudAlternative`** or **`tkCrossAlternative`**
   - **z_score:** `setupPurposeCode` (**`zs-fade`**), `entryOffsetMode` (**`bounce`**); enter when \|Z\| ≥ desk **`zScoreEntry`** (default **2**); **target** = SMA ± **`zScoreExit`**×SD (default **0.5**); **invalidation** = entry ± **`zScoreStopAtrMultiple`**×ATR (default **2**); optional **`zScoreAtrFilter: contracting`**
   - **elliott_waves:** `patternType` (`impulse` | `diagonal` | `corrective`), `setupPurposeCode` (**`ew-imp`** | **`ew-dia`** | **`ew-corr`**), `waveMenuNumber` (default **1**), `confirmedWaveCount`, in-progress wave projection target/invalidation. **`corrective`** (`ew-corr`) is **`unclear`** — no directional build. Requires **≥50** OHLCV bars (hard minimum); **≥200** recommended; **≥400** for primary degree (see **`scheduled-automation`** / template bar-count note).
   - **moving_averages:** `strategy` (**`crossover`** | **`proximity_retest`**), `setupPurposeCode` (**`ma-cross`** crossover at last close | **`ma-ret`** slow-MA retest), `fastPeriod` **50**, `slowPeriod` **200**, `maType` **`sma`**, `entryOffsetMode` (**`bounce`** for crossover, **`retest`** for proximity), **`entryProximityPct`** **1** with desk **`entryProximityMode`** (**`price`** | **`atr`**)
@@ -80,6 +82,10 @@ Same desk fields are on **`keyLevelsTradeSetup`** for nearest analysis (bounce u
 **Bollinger bands** ideas (`analyze_bollinger_bands`) are **band-to-band fades**: above middle → **short** at **upper** band toward **lower**; below middle → **long** at **lower** band toward **upper**. Base entry is the outer band price; target is the **opposite** band. Invalidation is band breach (above upper for short, below lower for long). Idea is **`clear`** only when last close is within **`entryProximityPct`** (**5** by default, % of band width). Use **`setupPurposeCode: bb-fade`**, **`entryOffsetMode: bounce`**, and desk **`entryOffsetPct` / `invalidationOffsetPct`** from §2 at build time. Chart overlay defaults (`period`, `stdDev`, shaded fill) live in **`chart-defaults`**.
 
 **Donchian breakout** ideas (`analyze_donchian_breakout`) use channel length **`donchianPeriod`** (default **20**) and primary **`donchianEntryMode`** from **`trade-desk.yaml`**. Default **`retest`**: after a channel break, enter on pullback to the broken band (`dc-ret`, `entryOffsetMode: retest`). Alternate **`immediate`**: enter on break/hold beyond the prior channel (`dc-brk`). **Target** = breakout entry ± (**`donchianTargetAtrMultiple`** × ATR) — default multiple **3**, ATR period from **`entryProximityAtrPeriod`**. **Invalidation** = Donchian mid-channel. Desk **`entryProximityPct`** (price %) gates `clear`. Nested alternate setups may be present — switch only when the operator asks or primary is unclear and the alternate is clear (mirror §1.1). Overlay period matches desk **`donchianPeriod`** (see **`chart-defaults`**).
+
+**Supertrend** ideas (`analyze_supertrend`) use ATR length **`supertrendPeriod`** (default **10**), multiplier **`supertrendMultiplier`** (default **3**), and primary **`supertrendEntryMode`** from **`trade-desk.yaml`**. Default **`flip`**: enter on direction change (`st-flip`, `entryOffsetMode: bounce`). Alternate **`retest`**: enter when price tags the trail in trend direction (`st-ret`). **Target** = entry ± (**`supertrendTargetAtrMultiple`** × ATR) — default multiple **3**. **Invalidation** = Supertrend trail. Desk **`entryProximityPct`** gates `clear`. Nested alternate setups may be present — switch only when the operator asks or primary is unclear and the alternate is clear (mirror §1.1). Overlay params match desk (see **`chart-defaults`**).
+
+**Ichimoku** ideas (`analyze_ichimoku`) use classic periods from desk (**`ichimokuConversionPeriod`/`ichimokuBasePeriod`/`ichimokuSpanPeriod`/`ichimokuDisplacement`**, default **9/26/52/26**). Primary **TK cross** (`ichi-tk`): fresh Tenkan/Kijun cross with price outside the cloud. Alternate **cloud retest** (`ichi-cloud`): price above/below cloud near kijun or cloud edge. **Target** = entry ± (**`ichimokuTargetAtrMultiple`** × ATR). **Invalidation** = cloud edge / kijun. Nested alternate setups may be present — switch only when the operator asks or primary is unclear and the alternate is clear. Overlay: **`chart-defaults`**.
 
 **Z-score mean reversion** ideas (`analyze_z_score`) use **`Z = (close − SMA) / SD`** with desk **`zScorePeriod`** (default **20**). Enter long when Z ≤ −**`zScoreEntry`**, short when Z ≥ +**`zScoreEntry`** (default **2**). **Target** = SMA ± **`zScoreExit`**×SD (default **0.5**). **Invalidation** = entry ± **`zScoreStopAtrMultiple`**×ATR (default **2**, ATR from **`entryProximityAtrPeriod`**). Optional **`zScoreAtrFilter: contracting`**. Use **`setupPurposeCode: zs-fade`**, **`entryOffsetMode: bounce`**. Overlay: **`chart-defaults`**.
 
@@ -302,6 +308,30 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 2. **`dc-ret`:** use **retest** offsets from §3; skip proximity gate on perp venues. **`dc-brk`:** use **bounce** offsets from §3.
 3. Size from protocol open-context tools (same as trend-structure policy).
 4. Optional `purposeTextAdditional`: e.g. `dc breakout` or `dc retest`.
+5. `autoSubmitMultisign`: **false**.
+
+### Policy: Supertrend → perp limit (HL, Arcus, or GMX)
+
+**When:** selected idea is **`supertrend`**, `status: clear`, not **`invalidated`**, `setupPurposeCode` **`st-flip`** or **`st-ret`**.
+
+**Protocol:** **`hyperliquid`**, **`arcus`**, or **`gmx`** (§5) — not Uniswap unless last price is within **`entryProximityPct`** of entry.
+
+1. Prefer the **primary** setup from desk **`supertrendEntryMode`**. Switch to nested **`retestAlternative`** / **`flipAlternative`** only when the operator asks or primary is **`unclear`** and the alternate is **`clear`** (mirror §1.1).
+2. **`st-flip`:** use **bounce** offsets from §3. **`st-ret`:** use **retest** offsets from §3; skip proximity gate on perp venues.
+3. Size from protocol open-context tools (same as trend-structure policy).
+4. Optional `purposeTextAdditional`: e.g. `st trail` or `st flip`.
+5. `autoSubmitMultisign`: **false**.
+
+### Policy: Ichimoku → perp limit (HL, Arcus, or GMX)
+
+**When:** selected idea is **`ichimoku`**, `status: clear`, `setupPurposeCode` **`ichi-tk`** or **`ichi-cloud`**.
+
+**Protocol:** **`hyperliquid`**, **`arcus`**, or **`gmx`** (§5) — not Uniswap unless last price is within **`entryProximityPct`** of entry.
+
+1. Prefer primary **TK cross** (`ichi-tk`). Switch to nested **`cloudAlternative`** only when the operator asks or primary is **`unclear`** and the alternate is **`clear`** (mirror §1.1).
+2. **`ichi-tk`:** use **bounce** offsets from §3. **`ichi-cloud`:** use **retest** offsets from §3; skip proximity gate on perp venues.
+3. Size from protocol open-context tools (same as trend-structure policy).
+4. Optional `purposeTextAdditional`: e.g. `ichi cloud` or `ichi tk`.
 5. `autoSubmitMultisign`: **false**.
 
 ### Policy: Z-score mean reversion → perp limit (HL, Arcus, or GMX)

@@ -35,6 +35,20 @@ tasks:
       Include tradeIdeas[] in mpc-task-result (keyLevelFibTradeSetup, analysisType key_level_fibonacci).
     mcpServers: ["hyperliquid", "continuum"]
     skills: ["chart-analysis-levels"]
+
+  - id: eth-supertrend-analysis
+    prompt: |
+      Same OHLCV session. Run analyze_supertrend (desk supertrendPeriod/multiplier/entryMode).
+      Include tradeIdeas[] in mpc-task-result (supertrendTradeSetup, analysisType supertrend).
+    mcpServers: ["hyperliquid", "continuum"]
+    skills: ["chart-analysis-supertrend"]
+
+  - id: eth-ichimoku-analysis
+    prompt: |
+      Same OHLCV session. Run analyze_ichimoku (desk 9/26/52/26).
+      Include tradeIdeas[] in mpc-task-result (ichimokuTradeSetup, analysisType ichimoku).
+    mcpServers: ["hyperliquid", "continuum"]
+    skills: ["chart-analysis-ichimoku"]
 ```
 
 Replace **`hyperliquid`** in `mcpServers` with **`gmx`** or **`arcus`** when the operator goal is GMX or Arcus execution (load protocol + explicit `chainId` on fetch — Arcus **4663**). For Uniswap spot goals, keep an OHLCV-capable server in `mcpServers` for analysis tasks and load **uniswap** only on the orchestrator Continue / build step.

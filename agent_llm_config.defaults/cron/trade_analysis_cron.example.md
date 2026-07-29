@@ -85,6 +85,8 @@ Embed **frozen** operator choices in the cron **`message`**: symbol, candle inte
 9. Optional: `analyze_bollinger_bands` on the same session (upserts **`bollinger_bands`** / `bollingerTradeSetup`, `setupPurposeCode` **`bb-fade`**).
 9b. Optional: `analyze_donchian_breakout` on the same session (upserts **`donchian_breakout`** / `donchianTradeSetup`; period/mode from **`trade-desk.yaml`** `donchianPeriod` / `donchianEntryMode`; `dc-ret` or `dc-brk`).
 9c. Optional: `analyze_z_score` on the same session (upserts **`z_score`** / `zScoreTradeSetup`; knobs from **`trade-desk.yaml`**; `zs-fade`).
+9d. Optional: `analyze_supertrend` on the same session (upserts **`supertrend`** / `supertrendTradeSetup`; knobs from **`trade-desk.yaml`** `supertrendPeriod` / `supertrendMultiplier` / `supertrendEntryMode`; `st-flip` or `st-ret`).
+9e. Optional: `analyze_ichimoku` on the same session (upserts **`ichimoku`** / `ichimokuTradeSetup`; knobs from **`trade-desk.yaml`** 9/26/52/26; `ichi-tk` or `ichi-cloud`).
 10. Optional: `analyze_moving_averages` on the same session (upserts **`moving_averages`** / `movingAveragesTradeSetup`, `setupPurposeCode` **`ma-cross`** or **`ma-ret`** per `tradeSummary`).
 11. If consensus gate **ALLOWED** and submit enabled, call **`submit_trade_from_consensus`** with **`tradeIdeaId`** per selection rules below. Resolve sizing from **execution** protocol open-context (Hyperliquid / GMX / Uniswap quote tools per **`trade-defaults`** §5).
 
@@ -94,7 +96,7 @@ Steps 5–10 share the same OHLCV session; each upserts a **separate** trade ide
 
 #### Confirmation rule — momentum **OR** candlestick **OR** divergence (required before submit)
 
-Every **primary** structural idea you submit (**chart_pattern**, **trend_structure**, **elliott_waves**, **key_levels**, **key_level_fibonacci**, **bollinger_bands**, **donchian_breakout**, **z_score**, **moving_averages**) must be **confirmed** by **at least one** of **`momentum`**, **`candlestick`**, or **`divergence`** with **matching side**:
+Every **primary** structural idea you submit (**chart_pattern**, **trend_structure**, **elliott_waves**, **key_levels**, **key_level_fibonacci**, **bollinger_bands**, **donchian_breakout**, **supertrend**, **ichimoku**, **z_score**, **moving_averages**) must be **confirmed** by **at least one** of **`momentum`**, **`candlestick`**, or **`divergence`** with **matching side**:
 
 | Primary `side` | Accept when **any** supporter is **`clear`** (or momentum **`partial`** / divergence **`clear`** with matching side when `allowPartial: true`) |
 |----------------|-----------------------------------------------------------------------------------------------------------------------------|
@@ -121,6 +123,10 @@ Else prefer **key_levels** (nearest): rank-1 **bounce** (`kl-bnc`) or **rejectio
 Else prefer **bollinger_bands** when `status=clear`, not **`invalidated`**, last close was within **`entryProximityPct`** (**5**, band-width %) of the entry band (`bb-fade`; see **`trade-defaults`**), and confirmation rule passes.
 
 Else prefer **donchian_breakout** when `status=clear`, not **`invalidated`**, and confirmation rule passes. Primary follows desk **`donchianEntryMode`**: **`dc-ret`** (retest default) or **`dc-brk`** (immediate). Skip if **`tradeBuild.protocolId`** is **`uniswap`** unless last close is within **`entryProximityPct`** of entry.
+
+Else prefer **supertrend** when `status=clear`, not **`invalidated`**, and confirmation rule passes. Primary follows desk **`supertrendEntryMode`**: **`st-flip`** (flip default) or **`st-ret`** (retest). Skip if **`tradeBuild.protocolId`** is **`uniswap`** unless last close is within **`entryProximityPct`** of entry.
+
+Else prefer **ichimoku** when `status=clear` and confirmation rule passes. Prefer **`ichi-tk`** (TK cross) then **`ichi-cloud`**. Skip if **`tradeBuild.protocolId`** is **`uniswap`** unless last close is within **`entryProximityPct`** of entry.
 
 Else prefer **z_score** when `status=clear`, not **`invalidated`**, `setupPurposeCode` **`zs-fade`**, and confirmation rule passes (ATR filter OK when desk **`zScoreAtrFilter: contracting`**). Skip if **`tradeBuild.protocolId`** is **`uniswap`** unless last close is within **`entryProximityPct`** of entry.
 
@@ -178,6 +184,30 @@ tradeConsensus:
   submitTradeFromConsensus: true
 ```
 
+Example — Supertrend + momentum **or** candlestick confirmation (desk `supertrendEntryMode` / `supertrendPeriod`):
+
+```yaml
+tradeConsensus:
+  requiredSources: [supertrend, momentum, candlestick]
+  minAgree: 2
+  minConfidence: 0.45
+  allowPartial: true
+  blockOnConflict: true
+  submitTradeFromConsensus: true
+```
+
+Example — Ichimoku + momentum **or** candlestick confirmation (desk 9/26/52/26):
+
+```yaml
+tradeConsensus:
+  requiredSources: [ichimoku, momentum, candlestick]
+  minAgree: 2
+  minConfidence: 0.45
+  allowPartial: true
+  blockOnConflict: true
+  submitTradeFromConsensus: true
+```
+
 Example — Z-score fade + momentum **or** candlestick confirmation:
 
 ```yaml
@@ -226,7 +256,7 @@ tradeConsensus:
   submitTradeFromConsensus: true
 ```
 
-Raise **`minAgree`** when adding sources. **`requiredSources`** values must match upserted `analysisType` (`chart_pattern`, `momentum`, `candlestick`, `divergence`, `trend_structure`, `key_levels`, `key_level_fibonacci`, `elliott_waves`, `bollinger_bands`, `donchian_breakout`, `z_score`, `moving_averages`, …).
+Raise **`minAgree`** when adding sources. **`requiredSources`** values must match upserted `analysisType` (`chart_pattern`, `momentum`, `candlestick`, `divergence`, `trend_structure`, `key_levels`, `key_level_fibonacci`, `elliott_waves`, `bollinger_bands`, `donchian_breakout`, `supertrend`, `ichimoku`, `z_score`, `moving_averages`, …).
 
 ### tradeBuild (YAML fence — pick **one** protocol block below, or configure node file `cron/trade-cron.yaml`)
 

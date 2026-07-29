@@ -27,7 +27,7 @@ tradeConsensus:
   # Values match upserted idea source.analysisType (lowercase snake_case):
   #   chart_pattern | momentum | candlestick | divergence | trend_structure | key_levels |
   #   key_level_fibonacci | elliott_waves | bollinger_bands | donchian_breakout |
-  #   z_score | moving_averages
+  #   supertrend | ichimoku | z_score | moving_averages
   # Omit or use [] to consider all analysis types (still subject to minAgree/filters).
   # Default runs chart_pattern + momentum + candlestick; cron prose requires primary side
   # confirmed by momentum OR candlestick OR divergence (OR logic is prose — not expressible in YAML alone).
@@ -149,6 +149,24 @@ tradeBuild:
 # Donchian breakout + momentum/candlestick confirmation gate:
 #   tradeConsensus:
 #     requiredSources: [donchian_breakout, momentum, candlestick]
+#     minAgree: 2
+#     minConfidence: 0.45
+#     allowPartial: true
+#     blockOnConflict: true
+#     submitTradeFromConsensus: true
+#
+# Supertrend + momentum/candlestick confirmation gate:
+#   tradeConsensus:
+#     requiredSources: [supertrend, momentum, candlestick]
+#     minAgree: 2
+#     minConfidence: 0.45
+#     allowPartial: true
+#     blockOnConflict: true
+#     submitTradeFromConsensus: true
+#
+# Ichimoku + momentum/candlestick confirmation gate:
+#   tradeConsensus:
+#     requiredSources: [ichimoku, momentum, candlestick]
 #     minAgree: 2
 #     minConfidence: 0.45
 #     allowPartial: true

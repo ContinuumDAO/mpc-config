@@ -134,6 +134,49 @@ Merge into **`prepareReplay.overlays`** (does not replace default EMA/RSI unless
 
 Requires a **candlestick** primary series. Analysis workflow: **`chart-analysis-donchian`**. Trade build: **`trade-defaults`** (`dc-ret` / `dc-brk`).
 
+### Optional Supertrend overlay (when operator asks or after Supertrend analysis)
+
+Merge into **`prepareReplay.overlays`**. **`period` / `multiplier`** are owned by **`trade-desk.yaml`** (`supertrendPeriod`, `supertrendMultiplier`):
+
+```json
+{ "type": "supertrend", "sourceSeriesId": "<primary series id>", "period": 10, "multiplier": 3 }
+```
+
+| Field | Default |
+|-------|---------|
+| `period` | **10** from **`supertrendPeriod`** |
+| `multiplier` | **3** from **`supertrendMultiplier`** |
+
+Renders as **green/red trail segments** by direction. Requires a **candlestick** primary series. Analysis workflow: **`chart-analysis-supertrend`**. Trade build: **`trade-defaults`** (`st-flip` / `st-ret`).
+
+### Optional Ichimoku overlay (when operator asks or after Ichimoku analysis)
+
+Merge into **`prepareReplay.overlays`**. Periods are owned by **`trade-desk.yaml`** (`ichimokuConversionPeriod`, `ichimokuBasePeriod`, `ichimokuSpanPeriod`, `ichimokuDisplacement`):
+
+```json
+{
+  "type": "ichimoku",
+  "sourceSeriesId": "<primary series id>",
+  "conversionPeriod": 9,
+  "basePeriod": 26,
+  "spanPeriod": 52,
+  "displacement": 26,
+  "fill": true,
+  "chikou": true
+}
+```
+
+| Field | Default |
+|-------|---------|
+| `conversionPeriod` | **9** |
+| `basePeriod` | **26** |
+| `spanPeriod` | **52** |
+| `displacement` | **26** |
+| `fill` | true (bull/bear cloud bands) |
+| `chikou` | true (lagging span) |
+
+Requires a **candlestick** primary series. Analysis workflow: **`chart-analysis-ichimoku`**. Trade build: **`trade-defaults`** (`ichi-tk` / `ichi-cloud`).
+
 ### Optional Z-score overlay (when operator asks or after Z-score analysis)
 
 Merge into **`prepareReplay.overlays`**. **`period` / `entryZ` / `exitZ`** are owned by **`trade-desk.yaml`** (`zScorePeriod`, `zScoreEntry`, `zScoreExit`):
