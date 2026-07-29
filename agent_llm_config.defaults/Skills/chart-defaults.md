@@ -168,3 +168,7 @@ Requires **≥200** bars for SMA(200). Merge into **`prepareReplay.overlays`**:
 | `maType` | `sma` (or `ema` when overridden) |
 
 Analysis workflow: **`chart-analysis-moving-averages`**. Trade build / prefill: **`trade-defaults`** (`ma-cross` / `ma-ret`).
+
+### Divergence overlay (after Divergence detector analysis)
+
+Do **not** hand-build divergence lines. After **`analyze_divergence`**, call **`apply_divergence_drawings`** with **`prepareReplay`** + **`live`** + `{ title, ohlcvDigest }` and the analysis JSON. That tool draws price + oscillator segments and **always ensures Stochastic RSI** is on the chart (plus RSI when needed). Analysis workflow: **`chart-analysis-divergence`**.

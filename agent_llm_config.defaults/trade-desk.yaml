@@ -105,6 +105,12 @@ universal:
   # Optional ATR gate: none | contracting (ATR[t] < ATR[t-1]).
   zScoreAtrFilter: none
 
+  # Divergence detector (analyze_divergence). Injected when tool args omit these fields.
+  # oscillator mode: rsi | stochasticrsi | both (default both)
+  divergenceOscillator: both
+  # Max bars between paired price/oscillator pivots (default 3).
+  divergenceMaxLag: 3
+
   # When true, cron or automation may submit multisign without operator review (interactive UI still
   # shows the form unless cron tradeBuild also sets this). Default false — require human confirm.
   autoSubmitMultisign: false
@@ -160,7 +166,8 @@ protocols:
 
     # Appended to auto-generated purposeText (256 char total limit). Keys match analysis type:
     # trend_structure | chart_pattern | key_levels | key_level_fibonacci | bollinger_bands |
-    # donchian_breakout | z_score | moving_averages | elliott_waves | candlestick | momentum | default
+    # donchian_breakout | z_score | moving_averages | elliott_waves | candlestick | momentum |
+    # divergence | default
     purposeSuffix:
       trend_structure: "trend retest"
       chart_pattern: ""
@@ -173,6 +180,7 @@ protocols:
       elliott_waves: "ew wave"
       candlestick: "candle confirm"
       momentum: "mom confirm"
+      divergence: "div confirm"
 
   # --- GMX (EVM perps) -----------------------------------------------------------
   gmx:
@@ -191,6 +199,7 @@ protocols:
       donchian_breakout: "dc breakout"
       z_score: "zs fade"
       elliott_waves: "ew wave"
+      divergence: "div confirm"
 
   # --- Uniswap (spot swap) -------------------------------------------------------
   uniswap:
@@ -230,6 +239,7 @@ protocols:
       donchian_breakout: "dc breakout"
       z_score: "zs fade"
       elliott_waves: "ew wave"
+      divergence: "div confirm"
       default: "arcus perp"
 
 # ---------------------------------------------------------------------------

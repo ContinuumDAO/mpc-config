@@ -15,6 +15,7 @@ Cron jobs may still set overrides in a fenced **`tradeBuild`** YAML block (see *
 - Apply rules to the **selected idea only** — use its `symbol`, `side`, `confidence`, `status`, `entry`, `target`, `invalidation`, and `analysisSetup`:
   - **chart_pattern:** `patternName`, `entryPhase`, `entryOffsetMode`, `setupPurposeCode`
   - **momentum:** RSI zone, MACD crossover, `side` long/short/neutral — often **`partial`**; use as **confirmation** for structural primaries in cron (see **`scheduled-automation`**)
+  - **divergence:** PRIMARY regular/hidden RSI or Stochastic RSI divergence; `setupPurposeCode` **`div`**; pivot-structure **entry** (last close), **target** (measured move of \|p1−p2\| from p2), **invalidation** (beyond swing extreme) → usually **`full`** when clear. Buildable standalone primary **or** cron **confirmation** (side match) alongside momentum/candlestick
   - **candlestick:** `patternName`, `signal` (`buy` | `sell` | `hold`), `side` long/short/neutral, `setupPurposeCode` **`candle`** — **confirmation** alongside momentum in trade-analysis cron; requires **≥14** OHLCV bars
   - **trend_structure:** `bias`, `structure`, `primaryTrendKind`, `primaryTrendTouchCount`, `entryOffsetMode` (always **`retest`**), `setupPurposeCode` (**`trend-ret`**)
   - **key_levels:** `levelNumber`, `framing`, `entryOffsetMode` (**`bounce`** default), `setupPurposeCode` (**`kl-bnc`** long bounce / **`kl-brk`** short rejection), `targetSource`, optional nested **`breakRetestAlternative`** (**`kl-ret`** when selected)
@@ -84,7 +85,9 @@ Same desk fields are on **`keyLevelsTradeSetup`** for nearest analysis (bounce u
 
 **Elliott waves** ideas (`analyze_elliott_waves`) bind to a **`waveMenuNumber`** (default **1**). **Impulse** / **diagonal** counts with confirmed structure and projection targets can be **`clear`** with **`setupPurposeCode: ew-imp`** or **`ew-dia`**. Base entry is **last close** (`triggerPrice`); target is the highest-probability in-progress wave projection above/below last close; invalidation is the wave **`invalidationPoint`**. **`corrective`** A–B–C counts (`ew-corr`) stay **`unclear`**. Cron and prefill skip when `dataStatus: insufficient_data` — widen OHLCV lookback per tool **`dataGuidance`**. Offsets from §2 apply at build on perp limit venues. Optional chart labels: **`apply_elliott_wave_drawings`** (not required for submit).
 
-**Candlestick** ideas (`analyze_candlestick_patterns`) reflect the last-bar primary pattern: **`signal: buy`** → **`side: long`**, **`signal: sell`** → **`side: short`**, **`hold`** / neutral → **`unclear`**. In trade-analysis cron, use **`candlestick`** as **confirmation** for a structural primary — **momentum OR candlestick** must match the primary side before submit (see **`trade_analysis_cron.example.md`**). Standalone candlestick builds are possible but weak (~50–55% hit rate); skill **`chart-analysis-patterns`** for narrative rules.
+**Candlestick** ideas (`analyze_candlestick_patterns`) reflect the last-bar primary pattern: **`signal: buy`** → **`side: long`**, **`signal: sell`** → **`side: short`**, **`hold`** / neutral → **`unclear`**. In trade-analysis cron, use **`candlestick`** as **confirmation** for a structural primary — **momentum OR candlestick OR divergence** must match the primary side before submit (see **`trade_analysis_cron.example.md`**). Standalone candlestick builds are possible but weak (~50–55% hit rate); skill **`chart-analysis-patterns`** for narrative rules.
+
+**Divergence** ideas (`analyze_divergence`) use the PRIMARY regular/hidden RSI or Stochastic RSI hit: **`side`** long/short from bullish/bearish kind, **`setupPurposeCode: div`**. Entry = last close; target = measured move of the divergence price swing; invalidation beyond the swing extreme. Prefer **`hyperliquid`**, **`arcus`**, or **`gmx`** for limit builds. Optional `purposeTextAdditional`: e.g. `rsi div` / `stoch div`. Skill **`chart-analysis-divergence`** for narrative and chart overlay (`apply_divergence_drawings` always adds Stoch RSI).
 
 **Moving averages** ideas (`analyze_moving_averages`) support two strategies from the same fast/slow pair (default **SMA 50/200**):
 
@@ -199,7 +202,7 @@ Optional **`purposeTextAdditional`** after ` · ` (e.g. `trend retest`, `Generat
 | Token | Meaning |
 |-------|---------|
 | `{proto}` | Protocol short code — see protocol table in §5 (`hl`, `arc`, `gmx`, `uni`, …) |
-| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`bb-fade`**, **`dc-ret`**, **`dc-brk`**, **`zs-fade`**, **`ma-cross`**, **`ma-ret`**, **`ew-imp`**, **`ew-dia`**, **`candle`**, **`mom`**, …) — never menu `#N` |
+| `{setup}` | From analysis (`fw-ret`, `fw-bnc`, `sym-ret`, **`trend-ret`**, **`kl-bnc`**, **`kl-brk`**, **`kl-ret`**, **`kl-fib`**, **`bb-fade`**, **`dc-ret`**, **`dc-brk`**, **`zs-fade`**, **`ma-cross`**, **`ma-ret`**, **`ew-imp`**, **`ew-dia`**, **`candle`**, **`mom`**, **`div`**, …) — never menu `#N` |
 | `eE` / `pfE` | Effective entry / pattern-failure after offsets |
 | `tpE` / `slE` | Effective take-profit / stop-loss triggers (Hyperliquid bracket builds when target/invalidation present) |
 | `eB` / `pfB` | Optional base prices when rune budget allows |
@@ -341,7 +344,7 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 
 - Set **`autoSubmitMultisign`: true** only if this subsection explicitly allows it for that cron class.
 - Cron YAML may set `protocolId`, `entryOffsetPct`, `invalidationOffsetPct`, and protocol-specific sizing fields from §5.
-- Trade-analysis cron: before submit, enforce **momentum OR candlestick** confirmation with matching side on the selected primary idea (template prose in **`trade_analysis_cron.example.md`**).
+- Trade-analysis cron: before submit, enforce **momentum OR candlestick OR divergence** confirmation with matching side on the selected primary idea (template prose in **`trade_analysis_cron.example.md`**).
 
 ### Policy template — new protocol
 

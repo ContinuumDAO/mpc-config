@@ -41,6 +41,11 @@
       "initialLoad": false
     },
     {
+      "name": "chart-analysis-divergence",
+      "filename": "chart-analysis-divergence.md",
+      "initialLoad": false
+    },
+    {
       "name": "chart-analysis-range",
       "filename": "chart-analysis-range.md",
       "initialLoad": false

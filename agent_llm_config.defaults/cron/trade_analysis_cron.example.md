@@ -76,6 +76,7 @@ Embed **frozen** operator choices in the cron **`message`**: symbol, candle inte
 1. Load OHLCV source per table above; **`fetch_ohlcv`** (or equivalent) for operator symbol/interval/lookback. Keep the same session for all analysis tools (`toolResult` / `ohlcvDigest`). When this cron includes **`analyze_elliott_waves`**, load **≥200** bars when possible (hard minimum **50**; **≥400** preferred for primary-degree counts — e.g. 4H × 60d or 1D × 90d). If `dataStatus` is **`insufficient_data`**, quote **`dataGuidance`** and skip Elliott-based submit for that run. **`analyze_candlestick_patterns`** needs **≥14** bars (same fetch).
 2. `analyze_chart_patterns` on the session-bound OHLCV.
 3. `analyze_momentum` on the same session (upserts **`momentum`** / `momentumTradeSetup` — RSI/MACD bias; often **`partial`**).
+3b. Optional: `analyze_divergence` on the same session (upserts **`divergence`** / `divergenceTradeSetup` — regular/hidden RSI & Stoch RSI; pivot-structure entry/target/invalidation when **`clear`**).
 4. `analyze_candlestick_patterns` on the same session (upserts **`candlestick`** / `candlestickTradeSetup`; **`signal`** buy/sell/hold, **`side`** long/short/neutral from bullish/bearish primary hit). Requires **≥14** bars.
 5. `analyze_trend_structure` on the same session (upserts **`trend_structure`** / `trendStructureTradeSetup`, `setupPurposeCode` **`trend-ret`**).
 6. `analyze_key_levels` on the same session (nearest bounce/rejection — upserts **`key_levels`** / `keyLevelsTradeSetup`).
@@ -87,22 +88,22 @@ Embed **frozen** operator choices in the cron **`message`**: symbol, candle inte
 10. Optional: `analyze_moving_averages` on the same session (upserts **`moving_averages`** / `movingAveragesTradeSetup`, `setupPurposeCode` **`ma-cross`** or **`ma-ret`** per `tradeSummary`).
 11. If consensus gate **ALLOWED** and submit enabled, call **`submit_trade_from_consensus`** with **`tradeIdeaId`** per selection rules below. Resolve sizing from **execution** protocol open-context (Hyperliquid / GMX / Uniswap quote tools per **`trade-defaults`** §5).
 
-Steps 5–10 share the same OHLCV session; each upserts a **separate** trade idea (`analysisType` distinct). Steps 3–4 are **confirmation** sources (momentum and/or candlestick), not substitutes for a structural primary idea unless you retarget the cron (see **`tradeConsensus`** examples).
+Steps 5–10 share the same OHLCV session; each upserts a **separate** trade idea (`analysisType` distinct). Steps 3–4 (and optional 3b) are **confirmation** sources (momentum and/or candlestick and/or divergence), not substitutes for a structural primary idea unless you retarget the cron (see **`tradeConsensus`** examples).
 
 ### Selection guidance (prose — agent decides tradeIdeaId)
 
-#### Confirmation rule — momentum **OR** candlestick (required before submit)
+#### Confirmation rule — momentum **OR** candlestick **OR** divergence (required before submit)
 
-Every **primary** structural idea you submit (**chart_pattern**, **trend_structure**, **elliott_waves**, **key_levels**, **key_level_fibonacci**, **bollinger_bands**, **donchian_breakout**, **z_score**, **moving_averages**) must be **confirmed** by **at least one** of **`momentum`** or **`candlestick`** with **matching side**:
+Every **primary** structural idea you submit (**chart_pattern**, **trend_structure**, **elliott_waves**, **key_levels**, **key_level_fibonacci**, **bollinger_bands**, **donchian_breakout**, **z_score**, **moving_averages**) must be **confirmed** by **at least one** of **`momentum`**, **`candlestick`**, or **`divergence`** with **matching side**:
 
-| Primary `side` | Accept when **either** supporter is **`clear`** (or momentum **`partial`** with matching side when `allowPartial: true`) |
+| Primary `side` | Accept when **any** supporter is **`clear`** (or momentum **`partial`** / divergence **`clear`** with matching side when `allowPartial: true`) |
 |----------------|-----------------------------------------------------------------------------------------------------------------------------|
-| **long** | **`momentum`** `side: long` **OR** **`candlestick`** `side: long` (`signal: buy`, bullish primary pattern) |
-| **short** | **`momentum`** `side: short` **OR** **`candlestick`** `side: short` (`signal: sell`, bearish primary pattern) |
+| **long** | **`momentum`** `side: long` **OR** **`candlestick`** `side: long` **OR** **`divergence`** `side: long` |
+| **short** | **`momentum`** `side: short` **OR** **`candlestick`** `side: short` **OR** **`divergence`** `side: short` |
 
 - If **both** supporters are present and **conflict** (one long, one short), **do not submit**.
 - If **neither** supporter matches the primary side, **do not submit** — even when the YAML consensus gate is **ALLOWED**.
-- **`candlestick`** and **`momentum`** are **confirmation only** in this template — do not submit a candlestick or momentum idea as the primary **`tradeIdeaId`** unless you retarget the cron (see **`tradeConsensus`** “candlestick-primary” example).
+- **`candlestick`**, **`momentum`**, and **`divergence`** are **confirmation only** in this template by default — do not submit them as the primary **`tradeIdeaId`** unless you retarget the cron (see **`tradeConsensus`** examples). Divergence may also be selected as a standalone primary when `status=clear` and `completeness: full`.
 - Standalone candlestick hit rates are weak (~50–55%); pairing with structure is intentional (see skill **`chart-analysis-patterns`**).
 
 #### Primary idea priority (after confirmation passes)
@@ -123,7 +124,7 @@ Else prefer **donchian_breakout** when `status=clear`, not **`invalidated`**, an
 
 Else prefer **z_score** when `status=clear`, not **`invalidated`**, `setupPurposeCode` **`zs-fade`**, and confirmation rule passes (ATR filter OK when desk **`zScoreAtrFilter: contracting`**). Skip if **`tradeBuild.protocolId`** is **`uniswap`** unless last close is within **`entryProximityPct`** of entry.
 
-Skip **partial** structural setups unless **momentum or candlestick** confirms the same side. When multiple level/trend ideas qualify, prefer the one whose **side** matches the confirming supporter.
+Skip **partial** structural setups unless **momentum, candlestick, or divergence** confirms the same side. When multiple level/trend ideas qualify, prefer the one whose **side** matches the confirming supporter.
 
 ### tradeConsensus (YAML fence — pick **one** example below, or configure node file `cron/trade-cron.yaml`)
 
@@ -213,7 +214,19 @@ tradeConsensus:
   submitTradeFromConsensus: true
 ```
 
-Raise **`minAgree`** when adding sources. **`requiredSources`** values must match upserted `analysisType` (`chart_pattern`, `momentum`, `candlestick`, `trend_structure`, `key_levels`, `key_level_fibonacci`, `elliott_waves`, `bollinger_bands`, `donchian_breakout`, `z_score`, `moving_averages`, …).
+Example — chart pattern + divergence confirmation:
+
+```yaml
+tradeConsensus:
+  requiredSources: [chart_pattern, divergence]
+  minAgree: 2
+  minConfidence: 0.45
+  allowPartial: true
+  blockOnConflict: true
+  submitTradeFromConsensus: true
+```
+
+Raise **`minAgree`** when adding sources. **`requiredSources`** values must match upserted `analysisType` (`chart_pattern`, `momentum`, `candlestick`, `divergence`, `trend_structure`, `key_levels`, `key_level_fibonacci`, `elliott_waves`, `bollinger_bands`, `donchian_breakout`, `z_score`, `moving_averages`, …).
 
 ### tradeBuild (YAML fence — pick **one** protocol block below, or configure node file `cron/trade-cron.yaml`)
 

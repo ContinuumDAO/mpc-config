@@ -25,12 +25,13 @@ version: 1  # Schema version (must be 1 today).
 tradeConsensus:
   # Analysis types that must appear in the session AND pass filters below.
   # Values match upserted idea source.analysisType (lowercase snake_case):
-  #   chart_pattern | momentum | candlestick | trend_structure | key_levels |
+  #   chart_pattern | momentum | candlestick | divergence | trend_structure | key_levels |
   #   key_level_fibonacci | elliott_waves | bollinger_bands | donchian_breakout |
   #   z_score | moving_averages
   # Omit or use [] to consider all analysis types (still subject to minAgree/filters).
   # Default runs chart_pattern + momentum + candlestick; cron prose requires primary side
-  # confirmed by momentum OR candlestick (OR logic is prose — not expressible in YAML alone).
+  # confirmed by momentum OR candlestick OR divergence (OR logic is prose — not expressible in YAML alone).
+  # Operators may add `divergence` to requiredSources as an extra confirmation source.
   requiredSources: [chart_pattern, momentum, candlestick]
 
   # Minimum count of ideas that pass all filters (status, confidence, completeness).
