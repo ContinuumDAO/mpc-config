@@ -74,6 +74,16 @@ universal:
   # ATR lookback (bars) when entryProximityMode is atr. Standard: 14. Ignored when mode is price.
   entryProximityAtrPeriod: 14
 
+  # Minimum Trade Ratio for CLEAR ideas (reward/risk using invalidation as risk):
+  #   long  (target − entry) / (entry − invalidation)
+  #   short (entry − target) / (invalidation − entry)
+  # Ideas with a computable ratio below this become UNCLEAR.
+  minTradeRatio: 3
+
+  # Assumed isolated leverage for analysis-time liquidation estimate (perp venues only;
+  # omitted for Uniswap / spot). long entry × (1 − 1/leverage); short entry × (1 + 1/leverage)
+  assumedLeverage: 10
+
   # Per-leg key-level confidence (strength/100) for Fib strongest-bracket range.
   # Both the strongest level below and above last close must meet this, else fib analysis is invalid.
   # Injected into analyze_key_level_fibonacci as fibKeyLevelMinConfidence (default 0.35).
