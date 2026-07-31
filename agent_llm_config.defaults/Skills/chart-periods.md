@@ -16,7 +16,7 @@ Put window in **`title`** (interval + lookback, e.g. `ETH-PERP 1H — last 7d`).
 
 | Path | Trim candles? |
 |------|----------------|
-| **`prepare_chart_from_rows`** + vendor **`toolResult`** (Hyperliquid, GMX, CMC, CoinGecko execute return) | **Never.** Pass the **full, unmodified** fetch JSON. Chart downsamples for **display** via `maxPoints` (default 400) — that is not deleting history. |
+| **`prepare_chart_from_rows`** + vendor **`toolResult`** (Hyperliquid, GMX, CMC, CoinGecko execute return, Binance klines JSON) | **Never.** Pass the **full, unmodified** fetch JSON. Chart downsamples for **display** via `maxPoints` (default 400) — that is not deleting history. |
 | **`coingecko__execute`** building `result: bars` inside your script | May `slice(-400)` **only inside execute** when the API returns far more bars than needed — then pass the **whole execute object** as `toolResult`. Do **not** slice again before `prepare_chart_from_rows`. |
 | **`prepare_chart`** with hand-built `series[].data` | May cap at ~400 bars (newest-first) — see **`chart_docs`**. |
 
@@ -122,6 +122,35 @@ For **`analyze_*`**, use the same fetch and pass **`toolResult`** — same turn,
 
 Title e.g. **`ETH/USDC Uniswap v3 — 4H — last 90d`**.
 
+### Spot / CEX OHLC — Binance (`binance`)
+
+**When the operator chooses Binance.** Load **`binance`** only after that choice (`initialLoad: false`).
+
+1. **`binance_get_klines`** (or the loaded server’s klines tool) with **`response_format: "json"`** — default markdown is **not** chartable. Set **`symbol`**, **`interval`**, and **`limit`** (and optional **`start_time`** / **`end_time`** ms) for the requested window.
+2. Parse the tool text into a JSON **object** if needed (`{ symbol, interval, klines, count }`).
+3. **`continuum__prepare_chart_from_rows`** — same turn; pass that **object** as **`toolResult`**. Keep **`openTime`** on rows — Continuum normalizes it. Chart may attach **`live.providerId: "binance.tickerPrice"`**.
+
+```json
+{
+  "symbol": "BTCUSDT",
+  "interval": "1h",
+  "limit": 168,
+  "response_format": "json"
+}
+```
+
+Then:
+
+```json
+{
+  "title": "BTCUSDT 1H — last 7d",
+  "label": "BTCUSDT",
+  "toolResult": { "symbol": "BTCUSDT", "interval": "1h", "klines": [ "... full klines from fetch ..." ], "count": 168 }
+}
+```
+
+**Never** skip prepare because the chart renderer is on Continuum MCP. **Never** rewrite **`openTime`** to **`time`** / **`timestampMs`**.
+
 ### Perp / DeFi (Hyperliquid, Arcus, or GMX — when operator names the venue)
 
 **Never slice or shorten `candles` from the fetch** before `prepare_chart_from_rows`. Honor the operator’s interval and lookback exactly (e.g. 7d @ 1h ≈ 168–169 bars — chart as-is).
@@ -166,5 +195,6 @@ See **`get_defi_protocol_skill`** for fetch params. Never skip chart prepare whe
 - [ ] **`title`** matches fetched asset, interval, and window (e.g. `last 7d` when `lookbackDays: 7`)
 - [ ] **Hyperliquid / GMX:** full fetch **`toolResult`** — never hand-trimmed candles or “last 24h” substitute for a 7d request
 - [ ] Spot **CoinGecko**: **`ohlc.get`** only; **`coinId`** + **`bucketSec`** for live ticks
+- [ ] Spot **Binance**: **`response_format: "json"`**; full parsed object as **`toolResult`**; keep **`openTime`**
 - [ ] **`prepare_chart_from_rows`** in the **same turn** as fetch
 - [ ] Chart tool succeeded — MCP result shows `[Chart prepared: … · continuum/chart/v1]`

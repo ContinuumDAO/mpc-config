@@ -11,7 +11,7 @@ Input: `{ "title": "<from fetch>", "toolResult": { ... } }` — optional **`labe
 - **`analysis.swingHigh` / `swingLow`**: recent swing pivot prices and times.
 - **`analysis.phases`**: early / mid / recent segment direction.
 - **`analysis.trendLines`**: scored support/resistance line summaries (**not drawable** — no `pointA`/`pointB`).
-- **`analysis.trendLineMenu`**: ranked drawable lines (for **`apply_trend_line_drawings`** by menu #).
+- **`analysis.trendLineMenu`**: ranked drawable lines (for **`apply_trend_line_drawings`** by menu #). Each row has ranking **`score`** plus **`confidence`** (0–1, `score/20` capped) — quote confidence when summarizing options.
 - **`analysis.trendStructureTradeSetup`**: auto-upserted trade idea — **`trend-ret`** limit at primary support (long bias) or resistance (short bias) trend-line **retest**; invalidation at recent swing; **primary target** at opposing swing when available; optional **`measuredMove`** (impulse-leg projection).
 
 ## Trade idea (`trend_structure`)
