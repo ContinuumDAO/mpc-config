@@ -41,6 +41,11 @@
       "initialLoad": false
     },
     {
+      "name": "chart-analysis-liquidity-depth",
+      "filename": "chart-analysis-liquidity-depth.md",
+      "initialLoad": false
+    },
+    {
       "name": "chart-analysis-divergence",
       "filename": "chart-analysis-divergence.md",
       "initialLoad": false

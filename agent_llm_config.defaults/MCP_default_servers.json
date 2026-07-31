@@ -13,6 +13,14 @@
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/cmc-public",
       "initialLoad": false
+    },
+    {
+      "id": "coinbase-public",
+      "displayName": "Coinbase Advanced Trade (public)",
+      "setupUrl": "https://docs.cdp.coinbase.com/coinbase-app/advanced-trade-apis/rest-api",
+      "transport": "http",
+      "url": "http://continuum-mcp:8446/mcp/coinbase-public",
+      "initialLoad": false
     }
   ]
 }

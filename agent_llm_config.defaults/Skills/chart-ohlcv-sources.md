@@ -1,6 +1,6 @@
 # OHLCV source priority
 
-Pair with **`chart-defaults`**, **`chart-periods`**, **`chart-analysis-menu`**. Reference: **`chart_docs`**, **`coinmarketcap_public_docs`**.
+Pair with **`chart-defaults`**, **`chart-periods`**, **`chart-analysis-menu`**. Reference: **`chart_docs`**, **`coinmarketcap_public_docs`**, **`coinbase_public_docs`**.
 
 Continuum does **not** endorse third-party data providers. Pick sources from **operator intent** and **what is loaded in this chat** — not brand preference.
 
@@ -21,7 +21,7 @@ Chart/analysis tools return a clear error when called without data; treat that a
 | Kind | Examples | How to enable in this chat | Fetch tool |
 |------|----------|----------------------------|------------|
 | **DeFi protocol** (already on **continuum** MCP) | Hyperliquid, Arcus, GMX, Aave, Uniswap, … | **`continuum__load_defi_protocol`** `{ "protocolId": "hyperliquid" }` — **not** **`agent_load_mcp_server`** | `ctm_<protocol>_fetch_ohlcv` |
-| **Optional catalog MCP server** | `coinmarketcap-public`, `coingecko`, `binance`, `technical-indicators`, … | **`continuum__agent_load_mcp_server`** `{ "serverId": "…" }` after operator choice | `coinmarketcap-public__*`, `coingecko__*`, `binance__*`, … |
+| **Optional catalog MCP server** | `coinmarketcap-public`, `coinbase-public`, `coingecko`, `binance`, `technical-indicators`, … | **`continuum__agent_load_mcp_server`** `{ "serverId": "…" }` after operator choice | `coinmarketcap-public__*`, `coinbase-public__*`, `coingecko__*`, `binance__*`, … |
 
 **Hyperliquid is a DeFi protocol, not an MCP `serverId`.**  
 `agent_load_mcp_server({ "serverId": "hyperliquid" })` fails with *not configured* — that is expected. Use **`load_defi_protocol({ "protocolId": "hyperliquid" })`** instead, then **`ctm_hyperliquid_fetch_ohlcv`**.
@@ -30,7 +30,7 @@ Read-only DeFi (markets, OHLCV, charts, analysis) does **not** require RPC URL, 
 
 ## Load catalog MCP servers before fetch (catalog sources only)
 
-For **CoinGecko, CoinMarketCap public, Binance**, etc. — not for Hyperliquid/GMX.
+For **CoinGecko, CoinMarketCap public, Coinbase public, Binance**, etc. — not for Hyperliquid/GMX.
 
 Most catalog servers have **`initialLoad: false`**. Call **`continuum__agent_load_mcp_server`** same turn, **before** fetch, only after the operator picks a **catalog** provider:
 
@@ -74,6 +74,7 @@ If a chosen server is **missing** from **`activeServers`** → tell the operator
 | CoinMarketCap / CMC | **`agent_load_mcp_server({ "serverId": "coinmarketcap-public" })`** | **`coinmarketcap-public__get_kline_candles`** (etc.) |
 | CoinGecko | **`agent_load_mcp_server({ "serverId": "coingecko" })`** or **`coingecko-pro`** | **`coingecko__execute`** |
 | Binance | **`agent_load_mcp_server({ "serverId": "binance" })`** | **`binance_get_klines`** (or `binance__*` klines tool) with **`response_format: "json"`** |
+| Coinbase / Advanced Trade | **`agent_load_mcp_server({ "serverId": "coinbase-public" })`** | **`coinbase-public__get_product_candles`** (`productId` e.g. `BTC-USD`, `interval` e.g. `1h`) |
 | Other DeFi (Aave, Uniswap, …) | **`load_defi_protocol({ "protocolId": "<id>" })`** | That protocol’s **`ctm_*`** tools (see **`get_defi_protocol_skill`**) |
 
 ## Rule 2 — Generic spot (no venue or provider named)
@@ -83,13 +84,15 @@ Use the **first loaded OHLCV-capable MCP server** in this chat, in order:
 1. **`coingecko-pro`** (if loaded and key configured)
 2. **`coingecko`** (if loaded)
 3. **`binance`** (if loaded)
-4. Any other **loaded** server that exposes spot OHLCV (future catalog sources)
+4. **`coinbase-public`** (if loaded)
+5. Any other **loaded** server that exposes spot OHLCV (future catalog sources)
 
-**If no OHLCV source is loaded in this session** → **ask the operator** which provider to use. Offer concise options (e.g. CoinGecko, CoinMarketCap public, Binance, Hyperliquid). **Do not** silently load **`coinmarketcap-public`**, **`coingecko`**, or **`binance`**.
+**If no OHLCV source is loaded in this session** → **ask the operator** which provider to use. Offer concise options (e.g. CoinGecko, CoinMarketCap public, Coinbase, Binance, Hyperliquid). **Do not** silently load **`coinmarketcap-public`**, **`coinbase-public`**, **`coingecko`**, or **`binance`**.
 
 After the operator chooses and you load the server:
 
 - **`coinmarketcap-public`**: keyless **`get_kline_candles`**, optional Pro **`get_crypto_ohlcv_historical`** when **`COINMARKETCAP_API_KEY`** is in Variables
+- **`coinbase-public`**: keyless **`get_product_candles`** (normalized Continuum bars); optional CDP Variables for authenticated routes
 - **`coingecko`** / **`coingecko-pro`**: **`coingecko__execute`** → **`coins.ohlc.get`** or market chart — see **`chart-periods`**
 - **`binance`**: **`binance_get_klines`** with **`response_format: "json"`** — see **`chart-periods`**
 
@@ -97,6 +100,7 @@ After the operator chooses and you load the server:
 |------|-------|
 | **`coingecko`** / **`coingecko-pro`** loaded (operator chose) | **`coingecko__execute`** — see **`chart-periods`** |
 | Operator chose CMC | **`coinmarketcap-public__get_kline_candles`** (or **`get_crypto_ohlcv_historical`** if Pro key on continuum-mcp) |
+| Operator chose Coinbase | **`coinbase-public__get_product_candles`** — see **`chart-periods`** |
 | Operator chose Binance | **`binance_get_klines`** with **`response_format: "json"`** — see **`chart-periods`** |
 
 If fetch fails (429, empty, stale), report to the operator and offer **other sources** — do not auto-switch without their choice.

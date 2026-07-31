@@ -17,6 +17,7 @@ Builtin default **active** servers in **`MCP_default_servers.json`** (DB seed on
 |----|-------------|--------|
 | **continuum** | `true` | Node MCP; always connected at chat startup |
 | **coinmarketcap-public** | `false` | Also in **`MCP_servers.json`**; load per chat via **`agent_load_mcp_server`** only when the operator chooses CoinMarketCap (not auto-loaded for charts) |
+| **coinbase-public** | `false` | Also in **`MCP_servers.json`**; load per chat via **`agent_load_mcp_server`** only when the operator chooses Coinbase (not auto-loaded for charts). Optional CDP Variables for authenticated routes — public tools work without secrets |
 
 Other optional servers belong in **`MCP_servers.json`** only — operators activate via catalog unless also added to **`MCP_default_servers.json`** for new-node seed.
 

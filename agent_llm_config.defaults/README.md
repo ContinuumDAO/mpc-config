@@ -8,7 +8,7 @@ Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent
 
 | File | Runtime path | Purpose |
 |------|--------------|---------|
-| **`MCP_default_servers.json`** | Same name (legacy seed) | Default **active** servers seeded on first DB migration: **continuum** (`initialLoad: true`), **coinmarketcap-public** (`initialLoad: false`). |
+| **`MCP_default_servers.json`** | Same name (legacy seed) | Default **active** servers seeded on first DB migration: **continuum** (`initialLoad: true`), **coinmarketcap-public** / **coinbase-public** (`initialLoad: false`). |
 | **`MCP_servers.json`** | Not copied to active storage | **Repository catalog** of optional MCP servers. Use **Add from repository** in the UI or `POST /addMcpServerFromCatalog` to activate on this node. See **MCP catalog secrets** below. |
 | **`Skills/`** | Same path | Agent skills: **`skills.json`** manifest plus **`.md`** / **`.txt`** bodies. |
 | **`cron/jobs.json`** | Not copied to runtime | **Repository catalog** of cron job templates. Use **Available from repository** in the UI or `POST /addCronJobFromCatalog`. Active jobs live in **`agent_llm_config/cron/jobs.json`**. |

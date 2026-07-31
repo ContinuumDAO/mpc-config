@@ -63,7 +63,7 @@ Embed **frozen** operator choices in the cron **`message`**: symbol, candle inte
 | **`hyperliquid`** | `load_defi_protocol` **hyperliquid** | Same — `ctm_hyperliquid_fetch_ohlcv` | `szHuman`, optional `marketKind` (`perp`\|`spot`), `tif` |
 | **`arcus`** | `load_defi_protocol` **arcus** | Perp: `ctm_arcus_fetch_ohlcv`; spot: `ctm_arcus_spot_fetch_ohlcv` (chain **4663**) | `szHuman`, `marketKind` (`perp`\|`spot`), `tif` (perp); **`ed25519KeyGenId`** (paired KeyGen, same GroupId as `keyGenId`) |
 | **`gmx`** | `load_defi_protocol` **gmx** | Same — `ctm_gmx_fetch_ohlcv` (explicit **`chainId`**) | `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman` |
-| **`uniswap`** | `load_defi_protocol` **uniswap** (V4) | **Separate source required** — Uniswap has no protocol OHLCV. Cron message must name one: load **hyperliquid**, **arcus**, or **gmx** for perp candles, **or** load **coingecko** / **coinmarketcap-public** for spot series (trend/levels/patterns need **`dataKind: ohlcv`** — prefer HL/Arcus/GMX for full menu). | `sizeUsdHuman` (spot swap USD) |
+| **`uniswap`** | `load_defi_protocol` **uniswap** (V4) | **Separate source required** — Uniswap has no protocol OHLCV. Cron message must name one: load **hyperliquid**, **arcus**, or **gmx** for perp candles, **or** load **coingecko** / **coinmarketcap-public** / **coinbase-public** for spot series (trend/levels/patterns need **`dataKind: ohlcv`** — prefer HL/Arcus/GMX for full menu). | `sizeUsdHuman` (spot swap USD) |
 
 **Chain IDs (typical):** Hyperliquid **999** (mainnet) / **998** (testnet); Arcus (Robinhood Chain) **4663**; GMX & Uniswap on Arbitrum **42161** — confirm via protocol supported-chains in staging.
 

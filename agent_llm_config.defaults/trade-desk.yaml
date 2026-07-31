@@ -140,6 +140,18 @@ universal:
   # Max bars between paired price/oscillator pivots (default 3).
   divergenceMaxLag: 3
 
+  # Spot liquidity depth (analyze_liquidity_depth). Not a Trade Idea — table + optional left-axis profile.
+  # Injected when tool args omit these fields. v1 exchange: binance (spot book only).
+  depthExchangeId: binance
+  # Seconds between depth polls (default 12).
+  depthSampleIntervalSec: 12
+  # Rolling average window seconds (default 300 = 5m).
+  depthAverageWindowSec: 300
+  # Venue depth limit (Binance enum; default 500).
+  depthLimit: 500
+  # Rows in liquidity depth levelMenu (default 8).
+  depthLevelCount: 8
+
   # When true, cron or automation may submit multisign without operator review (interactive UI still
   # shows the form unless cron tradeBuild also sets this). Default false — require human confirm.
   autoSubmitMultisign: false

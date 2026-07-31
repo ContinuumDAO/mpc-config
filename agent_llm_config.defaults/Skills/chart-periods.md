@@ -151,6 +151,34 @@ Then:
 
 **Never** skip prepare because the chart renderer is on Continuum MCP. **Never** rewrite **`openTime`** to **`time`** / **`timestampMs`**.
 
+### Spot / CEX OHLC — Coinbase Advanced Trade (`coinbase-public`)
+
+**When the operator chooses Coinbase.** Load **`coinbase-public`** only after that choice (`initialLoad: false`). Keyless public market API; optional CDP Variables for authenticated routes — see **`coinbase_public_docs`**.
+
+1. **`coinbase-public__get_product_candles`** with **`productId`** (e.g. `BTC-USD`), **`interval`** (`1m`/`5m`/`15m`/`30m`/`1h`/`2h`/`4h`/`6h`/`1d`) or **`granularity`**, and **`lookbackDays`** or **`limit`** (max 350).
+2. Tool returns Continuum-normalized bars: `{ dataSource: "coinbase_candles", productId, interval, candles: [{ time, open, high, low, close, volume? }] }`.
+3. **`continuum__prepare_chart_from_rows`** — same turn; pass that **object** as **`toolResult`**. Do **not** rewrite bars. Chart may attach **`live.providerId: "coinbase.productTicker"`**.
+
+```json
+{
+  "productId": "BTC-USD",
+  "interval": "1h",
+  "lookbackDays": 7
+}
+```
+
+Then:
+
+```json
+{
+  "title": "BTC-USD 1H — last 7d",
+  "label": "BTC-USD",
+  "toolResult": { "dataSource": "coinbase_candles", "productId": "BTC-USD", "interval": "1H", "candles": [ "... full candles from fetch ..." ], "count": 168 }
+}
+```
+
+For liquidity depth on the same session: **`analyze_liquidity_depth`** (defaults to **`depthExchangeId: coinbase`** when `dataSource` is `coinbase_candles`).
+
 ### Perp / DeFi (Hyperliquid, Arcus, or GMX — when operator names the venue)
 
 **Never slice or shorten `candles` from the fetch** before `prepare_chart_from_rows`. Honor the operator’s interval and lookback exactly (e.g. 7d @ 1h ≈ 168–169 bars — chart as-is).
@@ -196,5 +224,6 @@ See **`get_defi_protocol_skill`** for fetch params. Never skip chart prepare whe
 - [ ] **Hyperliquid / GMX:** full fetch **`toolResult`** — never hand-trimmed candles or “last 24h” substitute for a 7d request
 - [ ] Spot **CoinGecko**: **`ohlc.get`** only; **`coinId`** + **`bucketSec`** for live ticks
 - [ ] Spot **Binance**: **`response_format: "json"`**; full parsed object as **`toolResult`**; keep **`openTime`**
+- [ ] Spot **Coinbase**: **`get_product_candles`**; full object as **`toolResult`**; keep Continuum **`time`** bars
 - [ ] **`prepare_chart_from_rows`** in the **same turn** as fetch
 - [ ] Chart tool succeeded — MCP result shows `[Chart prepared: … · continuum/chart/v1]`

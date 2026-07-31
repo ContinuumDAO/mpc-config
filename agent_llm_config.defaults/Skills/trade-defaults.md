@@ -406,7 +406,7 @@ When the operator asks for a **conclusion**, **consensus**, **summary**, or **ve
 1. **Call `continuum__list_trade_ideas` first** — `tradeIdeas[]` is bound from the session; do not synthesize from memory or analysis run order alone.
 2. **Cite `tradeIdeaNumber`** from `items[]` exactly (menu order: newest analysis first). Do **not** renumber by the order analyses were run.
 3. **Quote chart lineage** from each item when present:
-   - `chartDataSource` (`hl`, `cg`, `cmc`, …)
+   - `chartDataSource` (`hl`, `cg`, `cmc`, `cb`, `bn`, …)
    - `chartInterval` (`1h`, `4h`, …)
    - `chartBarCount`
    Do **not** guess interval from chart title or operator phrasing.
