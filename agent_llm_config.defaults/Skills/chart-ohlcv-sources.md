@@ -116,7 +116,7 @@ Fetch OHLCV first. Then branch on operator intent:
 
 **Never** call **`prepare_chart_from_rows`** with only **`title`** / **`label`**. **Never** rewrite candle timestamps — pass fetch JSON verbatim (Hyperliquid uses **`timestampMs`**; Binance uses **`openTime`** ms — do not add or replace with a generic **`time`** field).
 
-**Binance chart path:** Continuum MCP renders the chart. After a successful Binance klines JSON fetch, call **`continuum__prepare_chart_from_rows`** with the **parsed JSON object** as **`toolResult`** (not a JSON string; not markdown). Do **not** skip prepare because “chart lives on Continuum” or because rows use **`openTime`** instead of **`timestampMs`**.
+**Binance chart path:** Continuum MCP renders the chart. After a successful Binance klines JSON fetch (`response_format: "json"`), the node **binds the session and auto-prepares the chart** when the operator asked to chart — do **not** re-paste the full `klines` array into **`prepare_chart_from_rows`** (that stalls the model). If you must call prepare yourself, pass **`{ title, ohlcvDigest }`** from the bound session, or the fetch object once without rewriting **`openTime`**. Do **not** skip prepare because “chart lives on Continuum” or because rows use **`openTime`** instead of **`timestampMs`**.
 
 Plot example:
 
