@@ -282,7 +282,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /agent/conversations`](#get-agentconversations) - List thread metadata for multi-tab UI (**read JWT**)
 - [`GET /agent/conversations/:id`](#get-agentconversationsid) - Load one thread by id (**read JWT**)
 - [`DELETE /agent/conversations/:id`](#delete-agentconversationsid) - Delete a thread (**read JWT**)
-- [`GET /agent/mcp/tools`](#get-agentmcptools) - **tools/list** from **continuum-mcp** (Streamable HTTP; **read JWT** when JWT applies)
+- [`GET /agent/mcp/tools`](#get-agentmcptools) - **tools/list** from **continuum-mcp** (`toolCount` wire + `llmToolCount` default LLM filter; Streamable HTTP; **read JWT** when JWT applies)
 
 ### Node Ping & Connectivity
 - [`GET /pingNodesRequest`](#get-pingnodesrequest) - Ping nodes to test connectivity
@@ -3705,7 +3705,7 @@ At least one of **`priorOrchestratorConversationId`** or **`priorTopLevelMessage
 | Event | Data |
 |-------|------|
 | `meta` | `{ "conversationId", "provider", "model" }` |
-| `tools` | `{ "mcpServerUrl", "toolCount", "tools", "error"? }` |
+| `tools` | `{ "mcpServerUrl", "toolCount", "tools", "error"? }` — here **`toolCount`** is the **LLM-visible** hub tool count for the turn (filtered Continuum groups + host meta tools), not the full continuum-mcp wire catalog |
 | `tool_call` | `{ "name", "id"?, "arguments"?, "error"? }` |
 | `tool_result` | `{ "name", "id"?, "content", "isError"? }` |
 | `elicitation` | `{ "conversationId", "elicitationId", "mode", "message", "url"?, "requestedSchema"? }` — browser must **`POST /agent/chat/elicitation`** |
@@ -3781,7 +3781,33 @@ Removes the persisted thread file and index entry.
 
 **Behavior:** mpc-auth connects to the MCP server as an MCP client (`@modelcontextprotocol/go-sdk`), runs **`tools/list`**, and returns summaries. Default server URL from env **`MPC_AGENT_MCP_SERVER_URL`** (`http://continuum-mcp:8446/mcp` in compose). MCP client advertises **elicitation**; **`tools/call`** may trigger **`elicitation/create`** during **`POST /agent/chat`**.
 
-**Response `data`:** `{ "mcpServerUrl", "toolCount", "tools": [ { "name", "title", "description" } ] }`
+With MCP 2026-07-28 / static **`tools/list`**, continuum-mcp exposes the full Continuum catalog on the wire. Chat still filters which Continuum groups the model receives (default pinned groups + host meta tools; expands after catalog search / activate / load_defi_protocol).
+
+**Response `data`:**
+
+| Field | Meaning |
+|-------|---------|
+| `mcpServerUrl` | Resolved continuum-mcp URL |
+| `toolCount` | Wire catalog size — length of continuum-mcp **`tools/list`** (all Continuum tools) |
+| `llmToolCount` | How many tools the chat LLM sees at turn start with **default** Continuum groups expanded (pinned defaults + always-on host meta tools). Not the full wire catalog. |
+| `tools` | Summaries for the wire list: `{ "name", "title", "description" }` |
+
+```json
+{
+  "code": 0,
+  "error": "",
+  "data": {
+    "mcpServerUrl": "http://continuum-mcp:8446/mcp",
+    "toolCount": 316,
+    "llmToolCount": 42,
+    "tools": [
+      { "name": "version", "title": "", "description": "…" }
+    ]
+  }
+}
+```
+
+On connect failure: **503** with `code: 1`, empty `tools`, and `toolCount` / `llmToolCount` of `0`.
 
 ### 3. Node Tools
 

@@ -4844,6 +4844,35 @@
                 ]
             }
         },
+        "/agent/mcp/tools": {
+            "get": {
+                "description": "Connects to continuum-mcp (Streamable HTTP), runs tools/list, and returns wire tool summaries. With static tools/list, toolCount is the full Continuum catalog; llmToolCount is the default LLM-visible subset (pinned Continuum groups + host meta tools). Requires read JWT on Browser HTTPS / loopback when JWT applies. See mpc-config docs/references/API_IMPLEMENTATION.md (GET /agent/mcp/tools).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Agent automation"
+                ],
+                "summary": "List continuum-mcp tools/list (wire catalog) plus llmToolCount for default LLM-visible Continuum tools (read JWT on Browser HTTPS / loopback)",
+                "responses": {
+                    "200": {
+                        "description": "OK — wire tools/list plus llmToolCount",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponseAgentMcpTools"
+                        }
+                    },
+                    "503": {
+                        "description": "MCP connect or tools/list failed (code: 1; empty tools; counts 0)",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponseAgentMcpTools"
+                        }
+                    }
+                }
+            }
+        },
         "/agent/plan/start": {
             "post": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /agent/plan/start).",
@@ -7958,6 +7987,59 @@
                     }
                 }
             ]
+        },
+        "node.AgentMcpToolSummary": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                }
+            }
+        },
+        "node.AgentMcpToolsListData": {
+            "type": "object",
+            "description": "GET /agent/mcp/tools data. toolCount is the full continuum-mcp tools/list (wire). llmToolCount is how many tools the chat LLM sees at turn start with default Continuum groups expanded (pinned defaults + host meta tools).",
+            "properties": {
+                "mcpServerUrl": {
+                    "type": "string",
+                    "description": "Resolved continuum-mcp URL"
+                },
+                "toolCount": {
+                    "type": "integer",
+                    "description": "Wire catalog size (length of continuum-mcp tools/list)"
+                },
+                "llmToolCount": {
+                    "type": "integer",
+                    "description": "LLM-visible tool count at chat start with default Continuum groups (not the full wire catalog)"
+                },
+                "tools": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/node.AgentMcpToolSummary"
+                    },
+                    "description": "Wire tools/list summaries"
+                }
+            }
+        },
+        "node.APIResponseAgentMcpTools": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "data": {
+                    "$ref": "#/definitions/node.AgentMcpToolsListData"
+                }
+            }
         }
     }
 }
