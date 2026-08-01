@@ -19,12 +19,12 @@ version: 1  # Schema version (must be 1 today).
 # ---------------------------------------------------------------------------
 # The desk uses three different "%" meanings. Do not mix them up:
 #
-# 1) PRICE % — entryOffsetPct, invalidationOffsetPct, targetOffsetPct (Hyperliquid only)
-#    Applied at build time as a fraction of the idea's entry, invalidation, or target *price*.
-#    Example entryOffsetPct 1, retest long: limit = entry × (1 + 1/100).
+# 1) OFFSET % — entryOffsetPct (always price %), invalidationOffsetPct, targetOffsetPct (Hyperliquid)
+#    entryOffsetPct is always a fraction of entry *price* (never ATR).
+#    invalidationOffsetPct meaning depends on universal.invalidationOffsetMode (price | atr) — see below.
 #    targetOffsetPct widens the take-profit trigger *inside* the idea target (conservative exit):
-#      long → below target; short → above target. See trade-defaults §3 and protocols.hyperliquid.targetOffsetMode.
-#    See trade-defaults skill §3. These are never ATR-based.
+#      long → below target; short → above target. Mode: protocols.hyperliquid.targetOffsetMode.
+#    See trade-defaults skill §3.
 #
 # 2) PROXIMITY — entryProximityPct + entryProximityMode (price | atr)
 #    Gates whether an idea is "clear" (actionable) vs "unclear" during analysis /
@@ -56,8 +56,11 @@ universal:
   # Typical: 0.5–2. Not ATR-based.
   entryOffsetPct: 1
 
-  # PRICE % — widens pattern-failure / invalidation level in purpose text (§3 trade-defaults).
-  # Typical: 0.5–2. Not ATR-based.
+  # Invalidation / SL band beyond pattern-failure level (§3 trade-defaults).
+  # Mode: price | atr (default price). When atr, pct is % of one ATR bar (typical 15–50; default 25 if omitted).
+  # Example atr desk: invalidationOffsetMode: atr + invalidationOffsetPct: 25
+  invalidationOffsetMode: price
+  # PRICE % when mode is price (typical 0.5–2); ATR % when mode is atr (typical 15–50).
   invalidationOffsetPct: 1
 
   # When true, Build Trade sends useCustomGas on EVM protocols (gmx, uniswap). Usually false.

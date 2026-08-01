@@ -112,7 +112,8 @@ Edit **`trade-desk.yaml`** → `universal:` and per-protocol `protocols:` blocks
 
 | Field | Meaning |
 |-------|---------|
-| `entryOffsetPct` / `invalidationOffsetPct` | Perp limit bands (see §3) |
+| `entryOffsetPct` | Perp entry limit band — always **price %** (see §3) |
+| `invalidationOffsetPct` / `invalidationOffsetMode` | Perp invalidation / SL band — `price` (default) or `atr` (% of one ATR bar; default pct **25** when atr and omitted) |
 | `targetOffsetPct` | Hyperliquid only — TP trigger band **inside** idea target (see §3) |
 | `targetOffsetMode` | Hyperliquid only — `price` (% of target) or `atr` (% of one ATR bar) |
 | `takeProfitSource` | **Trend structure only** — `impulse_leg` (default; `measuredMove.targetPrice`, falls back to swing) or `swing` (nearer swing target) |
@@ -152,14 +153,18 @@ Read `entryOffsetMode` from `analysisSetup.setup` (`bounce` | `retest`).
 
 If `entryOffsetMode` is absent, treat as **bounce** — except when `analysisSetup.kind` is **`trend_structure`**, then always use **retest**.
 
-### invalidationOffsetPct
+### invalidationOffsetPct / invalidationOffsetMode
 
 On **Hyperliquid**, when the idea has an **invalidation** level, the effective level maps to **`stopLossTriggerPxHuman`** on bracket builds (L1 `normalTpsl`). On **GMX**, still informational in Purpose only (pattern-failure reference).
 
-| Side | Effective pattern-failure / SL trigger level |
-|------|----------------------------------------------|
-| Long | invalidation × (1 − pct/100) |
-| Short | invalidation × (1 + pct/100) |
+Configure in **`trade-desk.yaml` → `universal`**. Override per build via `invalidationOffsetPct` / `invalidationOffsetMode` on `build_trade_from_*` or the Build Trade form.
+
+| `invalidationOffsetMode` | `invalidationOffsetPct` meaning | Long effective SL | Short effective SL |
+|--------------------------|---------------------------------|-------------------|--------------------|
+| **`price`** (default) | % of invalidation price (typical 0.5–2; default **1**) | invalidation × (1 − pct/100) | invalidation × (1 + pct/100) |
+| **`atr`** | % of one ATR bar (typical 15–50; default **25** when omitted) | invalidation − (ATR × pct/100) | invalidation + (ATR × pct/100) |
+
+ATR comes from the analysis session (`atrAtLastBar` on the trade idea setup). When `invalidationOffsetMode: atr` but ATR is unavailable, the SDK falls back to **price** mode with a **price-scale** pct (omitted → **1**, not the atr default 25 applied as a price %).
 
 ### targetOffsetPct / targetOffsetMode (Hyperliquid bracket only)
 
