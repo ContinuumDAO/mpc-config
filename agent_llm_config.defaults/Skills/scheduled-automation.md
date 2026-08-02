@@ -50,6 +50,19 @@ When a scheduled turn should propose on-chain actions:
 
 Template: **`agent_llm_config.defaults/cron/trade_analysis_cron.example.md`** (mpc-config seed catalog).
 
+### Cron supervisor spawn (optional Pattern C)
+
+On **cron** turns the host may expose **`agent_spawn_sub_agent`** / **`agent_join_sub_agents`** (same Track D tools as interactive chat).
+
+| Role | Owns |
+|------|------|
+| **Parent `[Cron]` turn** | `fetch_ohlcv`, OHLCV session, selection prose, **`submit_trade_from_consensus`** |
+| **Leaf specialists** | Named `analyze_*` strands with `toolGroups` (typically `chart:analyze`); upsert **`tradeIdeas[]`** on the **parent** conversation; return compressed summaries |
+
+- Prefer spawn when the cron message lists **multiple** `analyze_*` families; stay single-loop for one primary analysis.
+- Specialists must **not** call submit/build/prepare_chart/apply_* (host-blocked on cron specialists).
+- Spawn is LLM-opt-in (host hints only) — not forced.
+
 - Each **`analyze_*`** step upserts a typed setup into **`conversation.tradeIdeas[]`** on the **`[Cron]`** thread (e.g. **`analyze_trend_structure`** → `trend_structure`, **`analyze_momentum`** → `momentum`, **`analyze_divergence`** → `divergence`, **`analyze_candlestick_patterns`** → `candlestick`, **`analyze_key_levels`** → `key_levels`, **`analyze_key_level_fibonacci`** → `key_level_fibonacci`, **`analyze_bollinger_bands`** → `bollinger_bands`, **`analyze_donchian_breakout`** → `donchian_breakout`, **`analyze_supertrend`** → `supertrend`, **`analyze_ichimoku`** → `ichimoku`, **`analyze_z_score`** → `z_score`, **`analyze_elliott_waves`** → `elliott_waves` — separate ideas from the same OHLCV session).
 - Optional fenced **`tradeConsensus`** YAML in the job **`message`** gates multi-analysis agreement (node injects a matrix hint). Valid `requiredSources` include `trend_structure`, `key_levels`, `key_level_fibonacci`, `elliott_waves`, `chart_pattern`, `momentum`, `candlestick`, `divergence`, `bollinger_bands`, `donchian_breakout`, `supertrend`, `ichimoku`, `z_score`, `moving_averages`, …
 - **Confirmation (prose):** structural primaries (pattern, trend, levels, fib, Bollinger, Donchian, Z-score, Elliott, …) should be supported by **`momentum` OR `candlestick`** with matching **long/short** side before **`submit_trade_from_consensus`**. The YAML gate runs all three types when using the default `[chart_pattern, momentum, candlestick]` template; OR logic is agent-evaluated in cron message prose (see **`trade_analysis_cron.example.md`**).

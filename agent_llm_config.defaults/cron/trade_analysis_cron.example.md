@@ -40,6 +40,20 @@ On each run, mpc-auth uses YAML fences **in the job message** when present; othe
 2. Append **one** **`tradeConsensus`** fence and **one** **`tradeBuild`** fence for your protocol.
 3. Remove every other protocol’s **`tradeBuild`** example from the pasted text.
 
+**Pattern C — spawn strands (multi-analyze; uses cron supervisor tools)**
+
+Use when the job runs **several** `analyze_*` families and you want pack-scoped leaf specialists instead of one fat tool loop. Host exposes `agent_spawn_sub_agent` / `agent_join_sub_agents` on cron turns.
+
+1. **Parent (cron supervisor):** load OHLCV source + execution protocol; **`fetch_ohlcv`** once; keep the session on this **`[Cron]`** conversation. Do **not** spawn before fetch.
+2. **Spawn 2–3 specialists** (leaves) with `toolGroups: ["chart:analyze"]` (add `defi:<protocol>:market-data` only if a strand must re-fetch). Example strands:
+   - Structure: `analyze_chart_patterns`, `analyze_trend_structure`, `analyze_key_levels`, `analyze_key_level_fibonacci`, `analyze_elliott_waves`
+   - Momentum / confirmation: `analyze_momentum`, `analyze_candlestick_patterns`, `analyze_divergence`
+   - Oscillators / channels: `analyze_bollinger_bands`, `analyze_donchian_breakout`, `analyze_supertrend`, `analyze_ichimoku`, `analyze_z_score`, `analyze_moving_averages`
+3. **`agent_join_sub_agents`** — specialists upsert **`tradeIdeas[]`** on the parent conversation; compress summaries return as tool results.
+4. **Parent only:** selection guidance → **`submit_trade_from_consensus`** when enabled. Specialists must **not** submit, build trades, or prepare/apply charts.
+
+Stay on Pattern A/B (single-loop) for jobs with **one** primary `analyze_*` or when you want maximum simplicity.
+
 #### Operator checklist
 
 - [ ] Symbol, interval, and lookback are explicit in step 1 (Elliott needs **≥200** bars when possible; **≥50** hard minimum)
