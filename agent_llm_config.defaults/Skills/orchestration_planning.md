@@ -8,6 +8,12 @@ tasks:
   - id: <stable-id>
     prompt: "<what the sub-agent should do>"
     mcpServers: ["<mcp-server-id>"]
+    toolGroups: ["keygen", "<pack-id>"]
+    skills: ["<optional-skill>"]
+    budget:
+      maxRounds: 6
+      maxWallClockMs: 90000
+      maxChildSpawns: 0
 prompts:
   subAgentReply: ""
   externalReply: ""
@@ -38,6 +44,9 @@ Rules:
 - Do not assume a specific domain (markets, DeFi, governance, etc.) unless the operator stated it; `tasks[].prompt` carries domain detail.
 - Domain-specific orchestration patterns (e.g. chart analysis vs plotting) live in **optional skills** — attach via `tasks[].skills` or load with `agent_load_skill` when the operator’s goal requires them.
 - Every task needs a unique `id`, non-empty `prompt`, and at least one `mcpServers` id from this node's MCP catalog (`continuum`, etc.).
+- Prefer **`tasks[].toolGroups`** Continuum pack ids (`chart:core`, `chart:analyze`, `defi:<protocol>:market-data`, `keygen`, …) so each `[Sub-agent]` runs a **slim specialist loop** with only those packs. The node always includes `keygen` so the sub-agent can post `mpc-task-result`.
+- **`tasks[].budget`** (optional): `maxRounds`, `maxWallClockMs`. Specialists are **leaves** — `maxChildSpawns` is forced to `0` (no nested sub-agents). Need more decomposition → compress back to Orchestrator or draft a **Plan follow-on**.
+- Compress for the supervisor: `mpc-task-result` `summary` should be a concise factual join payload (not a raw tool dump). Reference chart attachments via `charts[].attachmentId` when applicable.
 - Use **empty strings** for `prompts.subAgentReply` and `prompts.externalReply` unless the operator needs per-reply hooks.
 - Set **`prompts.orchestratorOnReply`** for automated synthesis when all tasks finish (node runs this once; keep instructions domain-neutral).
 - `synthesis.onPartial: true` (default if omitted) allows synthesis when tasks end `complete` or `failed`; `false` requires all `complete`.
