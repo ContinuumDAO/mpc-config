@@ -14,6 +14,16 @@ tasks:
       maxRounds: 6
       maxWallClockMs: 90000
       maxChildSpawns: 0
+  # Optional mid-level TA coordinator (depth-2): spawns analyze leaves, then compresses tradeIdeas[]
+  - id: ta-coordinator
+    role: coordinator
+    prompt: "Fetch OHLCV once; spawn analyze_* leaves; join; post mpc-task-result with tradeIdeas[]"
+    mcpServers: ["continuum", "<ohlcv-server>"]
+    toolGroups: ["keygen", "chart:core", "chart:analyze"]
+    budget:
+      maxRounds: 10
+      maxWallClockMs: 120000
+      maxChildSpawns: 3
 prompts:
   subAgentReply: ""
   externalReply: ""
@@ -45,8 +55,9 @@ Rules:
 - Domain-specific orchestration patterns (e.g. chart analysis vs plotting) live in **optional skills** — attach via `tasks[].skills` or load with `agent_load_skill` when the operator’s goal requires them.
 - Every task needs a unique `id`, non-empty `prompt`, and at least one `mcpServers` id from this node's MCP catalog (`continuum`, etc.).
 - Prefer **`tasks[].toolGroups`** Continuum pack ids (`chart:core`, `chart:analyze`, `defi:<protocol>:market-data`, `keygen`, …) so each `[Sub-agent]` runs a **slim specialist loop** with only those packs. The node always includes `keygen` so the sub-agent can post `mpc-task-result`.
-- **`tasks[].budget`** (optional): `maxRounds`, `maxWallClockMs`. Specialists are **leaves** — `maxChildSpawns` is forced to `0` (no nested sub-agents). Need more decomposition → compress back to Orchestrator or draft a **Plan follow-on**.
-- Compress for the supervisor: `mpc-task-result` `summary` should be a concise factual join payload (not a raw tool dump). Reference chart attachments via `charts[].attachmentId` when applicable.
+- **Default tasks are leaves** (`maxChildSpawns: 0`). Opt-in **depth-2 coordinator**: set `role: coordinator` and/or `budget.maxChildSpawns` **1–3** (capped at 3). That mid-level `[Sub-agent]` may `agent_spawn_sub_agent` analyze leaves (Track D); leaves cannot spawn. Prefer a coordinator when one symbol/session should run many `analyze_*` then return one joined `tradeIdeas[]`. Flat parallel analyze tasks remain valid without a coordinator.
+- **`tasks[].budget`** (optional): `maxRounds`, `maxWallClockMs`, and for coordinators `maxChildSpawns` (1–3). Need more decomposition than depth-2 → compress back to Orchestrator or draft a **Plan follow-on**.
+- Compress for the supervisor: `mpc-task-result` `summary` should be a concise factual join payload (not a raw tool dump). When analyses ran, include slim **`tradeIdeas[]`** with `analysisSetup` and `source.chartData` `{dataSource, interval, barCount}` (not raw OHLCV). Reference chart attachments via `charts[].attachmentId` when applicable. **Do not** build multiSign / Purpose in sub-agents — Orchestrator **Continue** does that.
 - Use **empty strings** for `prompts.subAgentReply` and `prompts.externalReply` unless the operator needs per-reply hooks.
 - Set **`prompts.orchestratorOnReply`** for automated synthesis when all tasks finish (node runs this once; keep instructions domain-neutral).
 - `synthesis.onPartial: true` (default if omitted) allows synthesis when tasks end `complete` or `failed`; `false` requires all `complete`.
@@ -64,6 +75,7 @@ When the operator wants to **act** on synthesis (gas, multiSign, schedule execut
 In that thread:
 
 - Answer questions and confirm execution parameters with the operator.
+- Trade ideas keep **`source.chartData`** / **`analysisSetup`**. Use **`agent_restore_trade_idea_chart`** (`tradeIdeaId` pre-build, or `purpose` after multiSign) to re-fetch OHLCV and re-apply overlays. After build, Purpose `ds=`/`iv=`/`n=` plus the multiSign request suffice.
 - Use **`agent_schedule_orchestration_cron`** (meta tool) for a **one-shot** `schedule.kind: at` job on **this** `conversationId` — never a separate cron conversation.
 - Do **not** copy bundled `auto-sign-and-broadcast` (`every` + `everyMs: 300000`). Cron `message` must be **non-interactive** (embed confirmed gas/fees); gather prefs in interactive chat first.
 - Cron execution must yield **one** `requestId` when multiple txs belong together: **`create_joined_multi_sign_request`** or single **`create_compose_multi_sign_request`** — not several separate multisign creates.
