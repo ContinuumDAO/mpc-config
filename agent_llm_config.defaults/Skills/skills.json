@@ -8,22 +8,22 @@
     {
       "name": "chart-ohlcv-sources",
       "filename": "chart-ohlcv-sources.md",
-      "initialLoad": true
+      "initialLoad": false
     },
     {
       "name": "chart-periods",
       "filename": "chart-periods.md",
-      "initialLoad": true
+      "initialLoad": false
     },
     {
       "name": "chart-defaults",
       "filename": "chart-defaults.md",
-      "initialLoad": true
+      "initialLoad": false
     },
     {
       "name": "chart-analysis-menu",
       "filename": "chart-analysis-menu.md",
-      "initialLoad": true
+      "initialLoad": false
     },
     {
       "name": "chart-analysis-trend",

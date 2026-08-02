@@ -7,9 +7,10 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 | **`skills.json`** | Manifest: `name`, `filename`, `initialLoad` per skill |
 | **`orchestration_planning.md`** | Plan-mode orchestration manifest drafting (`conversationPurpose: "plan"`) |
 | **`continuum-mcp-deferred-tools.md`** | Tool bundle discovery; **`load_defi_protocol`** vs **`agent_load_mcp_server`** |
-| **`chart-ohlcv-sources.md`** | OHLCV provider choice: DeFi protocols vs catalog MCP servers |
-| **`chart-periods.md`** | Default lookback by bar interval, newest-first trim, and source-specific fetch notes for **`prepare_chart`** |
-| **`chart-defaults.md`** | Default EMA(50) / RSI(14) / volume behavior, **`technical-indicators`** MCP load, operator override examples |
+| **`chart-ohlcv-sources.md`** | OHLCV provider choice: DeFi protocols vs catalog MCP servers (`initialLoad: false`; host auto-loads on chart intents) |
+| **`chart-periods.md`** | Default lookback by bar interval, newest-first trim, and source-specific fetch notes for **`prepare_chart`** (host auto-loads on chart intents) |
+| **`chart-defaults.md`** | Default EMA(50) / RSI(14) / volume behavior, **`technical-indicators`** MCP load, operator override examples (host auto-loads on chart intents) |
+| **`chart-analysis-menu.md`** | Analysis menu / picker guidance (host auto-loads on chart intents) |
 | **`execution-policy.md`** | MultiSign / on-chain execution policy: gas, one `requestId` per round, confirmation before broadcast |
 | **`scheduled-automation.md`** | Cron & webhook behavior: non-interactive runs, schedule kinds, conversation threading |
 | **`<name>.md`** / **`<name>.txt`** | Additional skill bodies (markdown or plain text) |
