@@ -2863,6 +2863,22 @@ Stored in the base MongoDB database collection **`LocalAgentEnvironmentVariables
 
 STDIO MCP servers with **`useUserFolder`: true** (default **foundry**) run with **`HOME`** set to **`MPC_AUTH_USER_FOLDER`** so tools persist files on the host (e.g. Foundry MCP workspace at **`user_folder/.mcp-foundry-workspace/`** on the VPS). The **foundry** MCP package expects Foundry at **`$HOME/.foundry/bin/`**; mpc-auth symlinks the image’s **`/usr/local/bin/{forge,cast,anvil}`** into **`user_folder/.foundry/bin/`** before connect (the image tools alone are not enough when **`HOME`** is redirected).
 
+Seeded layout (created on first native-tool / API use): **`skills/`** (workspace skills as `<name>/SKILL.md`), **`scripts/`** (+ `README.md` index), **`data/`** (`offloads/`, `artifacts/`), **`memory/`**. Operator catalog skills remain under **`agent_llm_config/Skills/`** (not this tree).
+
+#### Workspace file management APIs
+
+Paths are jailed to **`MPC_AUTH_USER_FOLDER`**. Writes require **management signature**. Protected prefixes (delete/write blocked): **`.foundry/bin`**, **`.mcp-runtime`**.
+
+| Endpoint | Auth | Role |
+|----------|------|------|
+| **`GET /listUserFolder?path=`** | read | List entries (`name`, `type`, `size`, `mtime`) |
+| **`GET /getUserFolderFile?path=`** | read | Read file (size-capped) |
+| **`POST /writeUserFolderFile`** | mgt sig | Create/overwrite file (`path`, `content`) |
+| **`POST /mkdirUserFolder`** | mgt sig | Create directory (`path`) |
+| **`POST /deleteUserFolderPath`** | mgt sig | Delete file/dir (`path`, optional `recursive`) |
+
+Node app: AI Agent → **Workspace** tab (not Skills).
+
 ### Agent MCP servers (node database + repository catalog)
 
 | Storage | Purpose |

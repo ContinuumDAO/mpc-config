@@ -18,3 +18,25 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 Skill **`name`** values must be lowercase (`a-z`, digits, hyphen, underscore) — they match the node API and manifest lookup.
 
 Add new defaults here (manifest entry + file), commit, then re-run **`process_config.sh`** on nodes — only **missing** files are installed. Existing nodes keep their runtime **`skills.json`** until you add skills via the UI or API.
+
+
+## Skill file format (required)
+
+Each skill is a directory:
+
+```
+Skills/<name>/SKILL.md
+```
+
+`SKILL.md` must start with YAML frontmatter:
+
+```md
+---
+name: skill-name
+description: What it does and when to use / skip it (routing signal).
+---
+
+# Skill body
+```
+
+At chat startup the agent sees **name + description only**; the body loads via `agent_load_skill`.

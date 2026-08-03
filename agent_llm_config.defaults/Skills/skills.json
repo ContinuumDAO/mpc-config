@@ -2,127 +2,132 @@
   "skills": [
     {
       "name": "orchestration_planning",
-      "filename": "orchestration_planning.md",
+      "filename": "orchestration_planning/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-ohlcv-sources",
-      "filename": "chart-ohlcv-sources.md",
+      "filename": "chart-ohlcv-sources/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-periods",
-      "filename": "chart-periods.md",
+      "filename": "chart-periods/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-defaults",
-      "filename": "chart-defaults.md",
+      "filename": "chart-defaults/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-menu",
-      "filename": "chart-analysis-menu.md",
+      "filename": "chart-analysis-menu/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-trend",
-      "filename": "chart-analysis-trend.md",
+      "filename": "chart-analysis-trend/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-levels",
-      "filename": "chart-analysis-levels.md",
+      "filename": "chart-analysis-levels/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-momentum",
-      "filename": "chart-analysis-momentum.md",
+      "filename": "chart-analysis-momentum/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-liquidity-depth",
-      "filename": "chart-analysis-liquidity-depth.md",
+      "filename": "chart-analysis-liquidity-depth/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-divergence",
-      "filename": "chart-analysis-divergence.md",
+      "filename": "chart-analysis-divergence/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-range",
-      "filename": "chart-analysis-range.md",
+      "filename": "chart-analysis-range/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-patterns",
-      "filename": "chart-analysis-patterns.md",
+      "filename": "chart-analysis-patterns/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-classic-patterns",
-      "filename": "chart-analysis-classic-patterns.md",
+      "filename": "chart-analysis-classic-patterns/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-time-series",
-      "filename": "chart-analysis-time-series.md",
+      "filename": "chart-analysis-time-series/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-bollinger",
-      "filename": "chart-analysis-bollinger.md",
+      "filename": "chart-analysis-bollinger/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-donchian",
-      "filename": "chart-analysis-donchian.md",
+      "filename": "chart-analysis-donchian/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-supertrend",
-      "filename": "chart-analysis-supertrend.md",
+      "filename": "chart-analysis-supertrend/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-ichimoku",
-      "filename": "chart-analysis-ichimoku.md",
+      "filename": "chart-analysis-ichimoku/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-z-score",
-      "filename": "chart-analysis-z-score.md",
+      "filename": "chart-analysis-z-score/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "chart-analysis-moving-averages",
-      "filename": "chart-analysis-moving-averages.md",
+      "filename": "chart-analysis-moving-averages/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "orchestration-chart-analysis",
-      "filename": "orchestration-chart-analysis.md",
+      "filename": "orchestration-chart-analysis/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "continuum-mcp-deferred-tools",
-      "filename": "continuum-mcp-deferred-tools.md",
+      "filename": "continuum-mcp-deferred-tools/SKILL.md",
       "initialLoad": true
     },
     {
       "name": "execution-policy",
-      "filename": "execution-policy.md",
+      "filename": "execution-policy/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "scheduled-automation",
-      "filename": "scheduled-automation.md",
+      "filename": "scheduled-automation/SKILL.md",
       "initialLoad": false
     },
     {
       "name": "trade-defaults",
-      "filename": "trade-defaults.md",
+      "filename": "trade-defaults/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "workspace-tooling",
+      "filename": "workspace-tooling/SKILL.md",
       "initialLoad": false
     }
   ]
