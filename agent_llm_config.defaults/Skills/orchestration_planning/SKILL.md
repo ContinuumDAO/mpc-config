@@ -78,15 +78,20 @@ When the operator **specifies a position size**, run (or schedule) a funding che
 Operators mark catalog MCPs **AI Ready** in Node settings. Plan turns receive the eligible id list.
 
 - **While drafting** (clarifying lookups / light research): if an AI Ready server would materially help, call **`agent_load_mcp_server`** for that `serverId` and use its tools. Do **not** load every AI Ready server.
-- **In the machine block**: put each needed AI Ready id in **`tasks[].mcpServers`** (plus **`continuum`** when using Continuum packs / DeFi / charts) so Execute specialists can use them.
+- **In the machine block**: put each needed AI Ready id in **`tasks[].mcpServers`**. Always include **`continuum`** on research/TA/trade-ideas leaves for **KeyGen messaging** (`send_key_gen_message` / `mpc-task-result`) — that is **not** a web-research source. Also list AI Ready search engines and dedicated research/data servers (see below). At Execute, the host auto-appends every AI Ready search + research/data id onto research leaves (still keep them explicit in the draft when known).
 - **Continuum DeFi** protocols: **`continuum__load_defi_protocol`**, not `agent_load_mcp_server`.
 - **Chart OHLCV source**: still ask the operator when choosing an optional catalog market-data MCP (CoinGecko/CMC/…); do not silently pick one for generic charts. Other research (news, protocol docs, AI Ready tools the operator enabled) may load without re-asking once AI Ready.
 
 ## Workstream rules (executed later by specialists)
 
-- **Market research** (news/web) for `trade` / `research` — use AI Ready MCPs / web tools when worthwhile; list them on task `mcpServers` for Execute. Research tasks are **leaves** (never `role: coordinator`). Dated claims need as-of dating; final `mpc-task-result` must include a **Sources** section (`- Title — https://…`).
+- **Market research** (news/web) for `trade` / `research` — use AI Ready MCPs / web tools when worthwhile; list them on task `mcpServers` for Execute. Research tasks are **leaves** (never `role: coordinator`). Dated claims need as-of dating; final `mpc-task-result` must include a **Sources** section (`- Title — https://…`). Host runs research leaves with the **~3 good sources** profile (stop searching once enough independent URLs, then summarize).
+  - **Prompt identity:** always include **legal/common name AND ticker** (e.g. `Apple (AAPL)`, `Ethereum (ETH)`), not ticker alone.
+  - **Equity / stock perps** (Hyperliquid HIP-3, etc.): say it is **synthetic/perp** exposure; label venue marks vs cash-equity prints; cover earnings, product cycle, sector/macro catalysts with as-of dating.
+  - **Crypto:** full name + ticker + venue/chain; disambiguate ticker collisions (e.g. COMP).
+  - Prefer `budget.maxRounds` **≥ 10** (host floors research leaves to ~9 if lower).
+  - **Research data sources (required in plan markdown when weak):** the host injects an inventory of native `agent_web_search` (Brave + `BRAVE_API_KEY`), AI Ready **search engines** (catalog today: DuckDuckGo, Brave Search MCP, Google Search; common/upcoming MCP ids: Exa, Tavily, Chrome, Firefox, Mullvad Browser, Bing, Kagi, Serper, Perplexity), and AI Ready **research/data** MCPs. Repository catalog examples that materially improve research (activate + AI Ready + Variables as needed): **Messari**, **Dune Analytics**, **Alpha Vantage**, **Finance News RSS**, **FMP / Financial Modeling Prep** (when available), CoinGecko/CMC, etc. If **none** or **only one** search engine is available — name it explicitly (e.g. **DuckDuckGo** when `AGENT_DEFAULT_SEARCH_MCP=duckduckgo`, or **Brave** when only native search works) — add an **Assumptions / Research data sources** warning that quality improves when the operator enables those dedicated financial/world-news MCPs (Node → AI Agent → MCP / Variables). Prefer listing every AI Ready search + research/data id on research `tasks[].mcpServers` **plus continuum** (KeyGen only). Operators may set `AGENT_WEB_SEARCH_PROVIDER=off` and/or `AGENT_DEFAULT_SEARCH_MCP=<serverId>` (e.g. `duckduckgo`, `exa`, `chrome`, `mullvad-browser`) via AI Agent → Variables.
 - **Technical analysis** only if a crypto/stock is named (ticker or common name, e.g. ETH, Apple). Skip TA otherwise. Use the agreed lookback + candle interval (~300 bars max).
-  - **Required shape (depth-2):** one TA task with `role: coordinator`, `toolGroups: ["keygen", "keygen_messaging", "chart:core", …]`, `budget.maxChildSpawns` 1–3, `budget.maxRounds` ~10–14. Coordinator fetches OHLCV **once**, then `agent_spawn_sub_agent` leaves with `toolGroups: ["chart:analyze"]` (one `analyze_*` family per child). Do **not** put all TA work in a single fat SlimSubLoop leaf with `chart:analyze`.
+  - **Required shape (depth-2):** one TA task with `role: coordinator`, `toolGroups: ["keygen", "keygen_messaging", "chart:core", …]`, `budget.maxChildSpawns` 1–3, `budget.maxRounds` ~10–14. Coordinator fetches OHLCV **once**, then `agent_spawn_sub_agent` leaves with `toolGroups: ["chart:analyze"]` (one `analyze_*` family per child). Do **not** put all TA work in a single fat SlimSubLoop leaf with `chart:analyze`. After chart prepare, continue to spawn/analyze — do not stop for an interactive analysis menu.
 - **Yield research** for `yield`: Continuum DeFi packs (Morpho, Aave, Lido, Ethena, Sky, …); require APY, liquidity, vault params from MCP returns.
 - **Portfolio** for `portfolio` (and as funding helper for trade/yield): balances on every configured `chainId` via host tool **`agent_get_balance`** (Foundry `cast`; no approval — native gas or ERC-20); positions (perps, Uniswap v4 LP, lending, Lido, …); prices via CoinGecko/CMC (**ask before** loading market-data MCP). Prefer `agent_get_balance` over loading the Foundry MCP for simple reads; read-only `cast call` / `cast balance` via `agent_bash` also skip approval.
 - **DAO** for `dao`: stub sections only.
@@ -99,6 +104,8 @@ Operators mark catalog MCPs **AI Ready** in Node settings. Plan turns receive th
 
 ## Machine block
 
+Research leaves: `mcpServers` must include **`continuum`** for KeyGen messaging (not search). Also list AI Ready search/research ids when known; the host auto-merges AI Ready search + research/data servers at Execute.
+
 Every plan ready for Execute must end with a valid:
 
 ```mpc-orchestrate v1
@@ -106,17 +113,20 @@ version: 1
 tasks:
   - id: <asset>-research
     prompt: |
-      Research … End with Sources (title + https links). No tradeIdeas.
+      Research <Legal Name> (<TICKER>) … (equity perps: note synthetic/venue vs cash tape).
+      Cover catalysts with as-of dating. ~3 good sources then summarize.
+      End with Sources (title + https links). No tradeIdeas.
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging"]
     budget:
-      maxRounds: 8
-      maxWallClockMs: 120000
+      maxRounds: 10
+      maxWallClockMs: 150000
       maxChildSpawns: 0
   - id: <asset>-ta
     role: coordinator
     prompt: |
       Fetch OHLCV once; spawn chart:analyze leaves (one analyze_* family each); join; post mpc-task-result.
+      Do not stop after prepare_chart for a menu — continue analyze spawn/join.
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging", "chart:core", "chart:analyze"]
     budget:

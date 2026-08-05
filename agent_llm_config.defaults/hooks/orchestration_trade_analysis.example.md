@@ -13,14 +13,15 @@ One mid-level coordinator fetches OHLCV, spawns analyze leaves (`agent_spawn_sub
 tasks:
   - id: eth-news-research
     prompt: |
-      Summarize recent ETH catalyst/news for the operator goal.
-      Macro/sentiment/catalysts only — no buy/sell price tips.
-      End with Sources (title + https links). No tradeIdeas. Prefer as-of dating for "today/this week".
+      Summarize recent Ethereum (ETH) catalyst/news for the operator goal.
+      Use legal/common name + ticker in searches. Macro/sentiment/catalysts only — no buy/sell price tips.
+      Gather ~3 good independent sources then summarize. End with Sources (title + https links). No tradeIdeas.
+      Prefer as-of dating for "today/this week".
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging"]
     budget:
-      maxRounds: 8
-      maxWallClockMs: 120000
+      maxRounds: 10
+      maxWallClockMs: 150000
       maxChildSpawns: 0
 
   - id: eth-ta
@@ -28,6 +29,7 @@ tasks:
     prompt: |
       Fetch OHLCV once for ETH (interval/lookback from operator goal) on this conversation.
       Spawn leaf specialists (chart:analyze) for patterns, trend, key levels as needed — one analyze_* family per child.
+      After prepare_chart, continue spawn/join (do not stop for an analysis menu).
       Join compress summaries; post mpc-task-result with slim summary + tradeIdeas[]
       (analysisSetup + source.chartData {dataSource, interval, barCount}). Do not build multiSign.
     mcpServers: ["hyperliquid", "continuum"]
