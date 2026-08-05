@@ -430,18 +430,22 @@ KeyGen message bodies support up to **16 384** UTF-8 bytes. Orchestration mani
 
 ## Plan mode (draft orchestration in agent chat)
 
-**Plan mode** is for **designing** a multi-task workflow in private agent chat before posting to KeyGen. It does **not** run sub-agents by itself.
+**Plan mode** is for **designing** a multi-workstream plan in private agent chat, then executing it on KeyGen. While drafting, the plan thread does **not** spawn sub-agents by itself.
+
+**Source of truth:** `user_folder/plans/<planId>.md` — YAML frontmatter (`planId`, `mode`, `status`, …) + human markdown body + trailing fenced **`mpc-orchestrate v1`** (machine tasks). Modes: **`trade`**, **`yield`**, **`research`**, **`portfolio`**, **`dao`** (stub), **`custom`**.
 
 ### Setup
 
 1. Set a **preferred KeyGen** (node app **Settings** or **`POST /postPreferredKeyGen`**) so **Execute in KeyGen** knows where to post.
 2. Start a **Plan** conversation:
-   - UI: **New plan** (sets `conversationPurpose: plan`), or
+   - UI: **New plan** (calls **`POST /agent/plan/start`** with `mode`, creates skeleton under `plans/`), or
+   - UI: starter chips (market / yield / conditions / DAO / portfolio / something else), or
    - UI: **Plan follow-on** — pick a prior **`[Orchestrator] …`** thread (see [Finding orchestrator threads](#finding-orchestrator-threads)), or
-   - API: **`POST /agent/plan/start`** with prior refs (rollup injected), or
+   - Telegram: **New plan** beside **New chat** (mode buttons + title; Mini App view/edit when paid ngrok is configured, else text fallback), or
+   - API: **`POST /agent/plan/start`** with `mode` / `title` and/or prior refs (rollup injected), or
    - API: **`POST /agent/chat`** with `"conversationPurpose": "plan"` and optional `"keyGenId"` override.
 
-The node loads the **`orchestration_planning`** skill each turn (bundled in **`agent_llm_config.defaults/Skills/`**, runtime path **`agent_llm_config/Skills/`**).
+The node loads the **`orchestration_planning`** skill each turn (bundled in **`agent_llm_config.defaults/Skills/`**, runtime path **`agent_llm_config/Skills/`**). When the operator agrees to run, the agent should call meta-tool **`agent_execute_plan`** (same path as UI **Execute**).
 
 ### Finding orchestrator threads
 
@@ -485,62 +489,33 @@ Then continue with **`POST /agent/chat`** on the returned **`conversationId`**.
 
 ### What to do in Plan chat
 
-1. Describe goals in plain language: *“Check TVL and legal wording for protocol X; use continuum MCP only.”*
-2. Ask the agent to produce or refine a **`mpc-orchestrate v1`** YAML block inside a markdown fence.
-3. Validate structure:
+1. Describe goals in plain language: *“Research ETH and draft trade suggestions with protocol risk.”*
+2. Have the agent write/update **`plans/<planId>.md`**: human sections (goals, workstreams, risks) plus a trailing **`mpc-orchestrate v1`** fence for machine tasks. Named protocols should include a lightweight protocol-risk workstream.
+3. Validate the trailing manifest:
    - Each **`tasks[]`** entry needs **`id`**, **`prompt`**, **`mcpServers`** (ids from your MCP catalog, e.g. `["continuum"]`).
    - **`prompts.subAgentReply`**, **`externalReply`**, **`orchestratorOnReply`** — use **`""`** to disable that reply hook.
    - Optional **`synthesis`** for a one-shot cron synthesis job.
-
-**Example manifest** (also in **`agent_llm_config.defaults/hooks/orchestration_manifest_example.md`**):
-
-````markdown
-```mpc-orchestrate v1
-version: 1
-tasks:
-  - id: check-tvl
-    prompt: "Use chain tools to summarize TVL and 24h volume for the protocol named in the plan."
-    mcpServers: ["continuum"]
-  - id: risk-scan
-    prompt: "List operational risks for deploying the described upgrade on this node."
-    mcpServers: ["continuum"]
-prompts:
-  subAgentReply: ""
-  externalReply: ""
-  orchestratorOnReply: "A reply was added. Update task status and note if synthesis should run early."
-synthesis:
-  at: "2026-06-10T18:00:00Z"
-  rescheduleOnReply: true
-  cronPrompt: |
-    Review synthesis and task results on the KeyGen thread (orchestration state below).
-    If the operator should act on prior recommendations, offer to build multiSign
-    proposal payloads via ctm_* multisign MCP tools (quote/simulate first).
-    Do not POST /multiSignRequest or broadcast without explicit operator confirmation.
-  onPartial: true
-```
-````
-
-4. When satisfied, **implement** (post to KeyGen):
-   - UI: **Execute in KeyGen** (plan threads only), optional title, or
+4. Review in UI **View plan** (or Telegram Mini App / text), then **execute**:
+   - UI: **Execute in KeyGen**, or agent meta-tool **`agent_execute_plan`**, or
    - API: **`POST /agent/plan/execute`**:
 
      ```json
      {
        "conversationId": "<plan-thread-uuid>",
-       "title": "Q2 protocol review",
+       "title": "ETH research plan",
        "keyGenId": ""
      }
      ```
 
    Resolution order for KeyGen: body `keyGenId` → conversation override → **preferred KeyGen**.
 
-The node posts **`@agent`** plus the fenced manifest as a **top-level KeyGen message** (as this node’s management identity). That starts **Execute / orchestration** below.
+**Execute behavior:** the node posts **`@agent`** plus the **human plan markdown** (machine fence stripped) as the KeyGen body, then **host-starts** orchestration from the derived manifest (avoids double-start if the fence were left in the body). Leaves get tool packs **`keygen` + `keygen_messaging`**. If a leaf/orchestrator does not call `send_key_gen_message`, the host posts **`mpc-task-result`** / synthesis. Conversation todos are seeded from workstreams/tasks. Full KeyGen Telegram inbox UI for plan status remains a follow-on; Telegram status bridge reports execute progress.
 
 ---
 
 ## Orchestrator mode (Execute on KeyGen)
 
-**Execute** runs when a **top-level** KeyGen message contains both **`@agent`** and a valid **`mpc-orchestrate v1`** block (from Plan **Execute**, manual paste, or API).
+**Execute** runs when the node starts orchestration for a top-level KeyGen message — either from Plan **Execute** / **`agent_execute_plan`** (host-start from the plan’s derived manifest) or when a manually posted body contains both **`@agent`** and a valid **`mpc-orchestrate v1`** block.
 
 ### What the node does
 
@@ -609,13 +584,12 @@ Use Plan mode when the manifest is large or iterative; use manual post for fixed
 ## End-to-end example: Plan → KeyGen → sub-agents
 
 1. **Preferred KeyGen** set to your operational keygen id.
-2. **New plan** thread: *“Prepare a two-task check before mainnet upgrade: (1) list ready sign requests, (2) verify no blocked requests.”*
-3. Agent outputs manifest with two tasks, both `mcpServers: ["continuum"]`, empty `subAgentReply`, synthesis at tomorrow 09:00 UTC.
-4. Click **Execute in KeyGen** → top-level message appears in the KeyGen UI.
-5. Watch **agent conversations**: `[Orchestrator] …`, `[Sub-agent] list-ready`, `[Sub-agent] check-blocked`.
-6. Sub-agents post **replies** under the top-level thread with **`mpc-task-result`** blocks.
-7. When all tasks are terminal, the node runs **`orchestratorOnReply`** once (synthesis on KeyGen). A failed task does not block this if **`onPartial`** is true (default). Optional cron runs **`cronPrompt`** at **`synthesis.at`** for a later follow-up (e.g. multiSign proposals).
-8. Optional **Plan follow-on**: select the **`[Orchestrator]`** thread → draft the next manifest from the injected rollup → **Execute in KeyGen** again.
+2. **New plan** (or Telegram **New plan** → mode) → pick a starter or describe the goal; agent writes `user_folder/plans/<planId>.md`.
+3. Refine in chat / **View plan**; ensure trailing **`mpc-orchestrate v1`** tasks have `mcpServers` allowlists.
+4. **Execute** (UI or **`agent_execute_plan`**) → KeyGen shows human plan markdown; node host-starts specialists.
+5. Watch **agent conversations**: `[Orchestrator] …`, `[Sub-agent] …` (messaging tools available via **`keygen_messaging`**).
+6. Task results / synthesis appear on KeyGen (leaf `send_key_gen_message` or host-post fallback).
+7. Optional **Plan follow-on**: select the **`[Orchestrator]`** thread → draft the next plan from the injected rollup → **Execute** again.
 
 ---
 

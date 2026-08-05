@@ -53,4 +53,4 @@ Use MCP **`send_key_gen_message`** with `replyTo` set to the top-level message i
 - When all tasks are terminal (`onPartial` controls failed vs complete-only), the node runs **`orchestratorOnReply`** once in the `[Orchestrator]` conversation (MCP `continuum`, including `send_key_gen_message` for synthesis).
 - If **`synthesis.at`** and **`synthesis.cronPrompt`** are both set, a one-shot cron runs that follow-up prompt in `[Orchestrator]` (uses MCP servers with **`initialLoad: true`** — include DeFi MCP ids there if the cron must call `ctm_*` multisign tools).
 
-**Plan mode:** draft manifests in agent chat with `conversationPurpose: "plan"` and the `orchestration_planning` skill. Use **`POST /agent/plan/execute`** (or UI **Execute in KeyGen**) to post to KeyGen.
+**Plan mode:** draft `user_folder/plans/<planId>.md` in agent chat with `conversationPurpose: "plan"` and the `orchestration_planning` skill (human body + trailing fence). Use **`POST /agent/plan/execute`**, UI **Execute**, or meta-tool **`agent_execute_plan`** — KeyGen gets the human markdown; the node host-starts tasks from the fence.

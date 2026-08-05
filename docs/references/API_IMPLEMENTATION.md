@@ -274,7 +274,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /telegramNgrok/registerWebhook`](#post-telegramngrok-registerwebhook) - Call Telegram **`setWebhook`** with active tunnel URL (**management signature**)
 - [`POST /agent/plan/start`](#post-agentplanstart) - Start a plan thread with optional prior-orchestration rollup injected (**read JWT**)
 - [`POST /agent/orchestration/continue`](#post-agentorchestrationcontinue) - Open the [Orchestrator] thread for interactive post-synthesis follow-up (**read JWT**)
-- [`POST /agent/plan/execute`](#post-agentplanexecute) - Post latest `mpc-orchestrate v1` manifest from a plan thread to KeyGen (**read JWT**)
+- [`POST /agent/plan/execute`](#post-agentplanexecute) - Post plan markdown to KeyGen and host-start derived orchestration (**read JWT**)
 - [`POST /agent/chat`](#post-agentchat) - Stream one assistant turn (LLM + MCP **tools/call** loop; **read JWT** on Browser HTTPS / loopback)
 - [`GET /agent/chat`](#get-agentchat) - Load persisted conversation history by `conversationId` (**read JWT** when JWT applies)
 - [`POST /agent/chat/cancel`](#post-agentchatcancel) - Cancel in-flight turn for `conversationId` (**read JWT**)
@@ -3310,7 +3310,7 @@ Bundled templates ship in **mpc-config** under **`agent_llm_config.defaults/hook
 
 **Webhook `type` presets:** `generic`, `github`, `gmail`, `proton`, `stripe`, `slack`, `telegram`. Presets affect signature verification and body formatting; all run the job **`prompt`** plus a bounded event excerpt. **Telegram** is bidirectional: after the agent turn, replies are sent via Bot API (`sendMessage`), splitting text longer than **4096 runes**.
 
-**KeyGen orchestration:** top-level messages with `@agent` and **`mpc-orchestrate v1`** spawn sub-agent turns per `tasks[]` (`mcpServers` allowlist). Sub-agents post **`mpc-task-result`** replies on KeyGen; when all tasks are terminal, **`orchestratorOnReply`** runs once (synthesis via `send_key_gen_message`). Same-node replies without `mpc-task-result` do not re-trigger hooks. **`synthesis.onPartial`** (default true) allows synthesis when tasks are `complete` or `failed`. **Plan → execute:** interactive chat with **`conversationPurpose: "plan"`**, optional **`POST /agent/plan/start`** (follow-on rollup from a prior run), then **`POST /agent/plan/execute`** (see below). Operator guide: **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**. See **`docs/references/API_KEYGEN_MESSAGING.md`** and bundled **`hooks/orchestration_manifest_example.md`**.
+**KeyGen orchestration:** top-level messages with `@agent` and **`mpc-orchestrate v1`** spawn sub-agent turns per `tasks[]` (`mcpServers` allowlist). Sub-agents post **`mpc-task-result`** replies on KeyGen; when all tasks are terminal, **`orchestratorOnReply`** runs once (synthesis via `send_key_gen_message`). Same-node replies without `mpc-task-result` do not re-trigger hooks. **`synthesis.onPartial`** (default true) allows synthesis when tasks are `complete` or `failed`. **Plan → execute:** interactive chat with **`conversationPurpose: "plan"`**, plan doc under **`user_folder/plans/`**, optional **`POST /agent/plan/start`** (`mode` or follow-on rollup), then **`POST /agent/plan/execute`** / meta-tool **`agent_execute_plan`** (KeyGen body = human plan markdown; host-starts tasks). Operator guide: **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**. See **`docs/references/API_KEYGEN_MESSAGING.md`** and bundled **`hooks/orchestration_manifest_example.md`**.
 
 <a id="get-listwebhooks"></a>
 #### `GET /listWebhooks`
@@ -3626,36 +3626,39 @@ https://<public-hook-host>/telegram/chart/<token>
 **Request body:**
 ```json
 {
+  "mode": "trade|yield|research|portfolio|dao|custom",
+  "title": "optional tab title",
   "priorOrchestratorConversationId": "<uuid of [Orchestrator] hook thread>",
   "priorTopLevelMessageId": "<KeyGen top-level message id>",
   "keyGenId": "optional override",
-  "title": "optional tab title (default Plan follow-on)"
+  "rollupChartMode": "optional refs"
 }
 ```
 
-At least one of **`priorOrchestratorConversationId`** or **`priorTopLevelMessageId`** is required. When both are sent, they must refer to the same orchestration record.
+Require **`mode`**, **`title`**, and/or at least one prior ref. When both prior ids are sent, they must refer to the same orchestration record.
 
-**Behavior:** Creates a **new** plan conversation (`conversationPurpose: "plan"`), sets **`keyGenId`** from the body override or the prior orchestration record, and appends one **user** message containing a capped **prior orchestration rollup**:
+**Behavior:** Creates a **new** plan conversation (`conversationPurpose: "plan"`), ensures a skeleton **`user_folder/plans/<planId>.md`**, and sets conversation meta (`planId`, `planPath`, `planMode`, `planStatus`).
 
-- Last **assistant** message from the orchestrator conversation (synthesis prose), truncated.
-- **`mpc-task-result`** summaries from KeyGen replies on the top-level thread.
-- Task statuses from **`agent_llm_config/hooks/orchestrations/{topLevelMessageId}.json`**.
+- **Blank plan:** `mode` / `title` only — no rollup message.
+- **Follow-on:** with prior refs — sets **`keyGenId`** from body or prior record, appends a capped **prior orchestration rollup** user message (synthesis excerpt + task-result summaries + statuses; ~24k runes).
 
-Total rollup size is capped (~24k runes) so follow-on Plan turns do not load full hook history into the LLM context. The **`orchestration_planning`** skill is loaded on subsequent **`POST /agent/chat`** turns (same as **New plan**).
+The **`orchestration_planning`** skill is loaded on subsequent **`POST /agent/chat`** turns.
 
 **Response data:**
 ```json
 {
   "conversationId": "<new plan uuid>",
-  "keyGenId": "<resolved>",
-  "priorTopLevelMessageId": "<canonical top-level id>",
-  "priorOrchestratorConversationId": "<from record>",
-  "priorInjected": true,
-  "injectedChars": 1234
+  "keyGenId": "<resolved or empty>",
+  "mode": "custom",
+  "planId": "<uuid>",
+  "planPath": "plans/<planId>.md",
+  "priorInjected": false
 }
 ```
 
-**Errors:** **400** (no prior reference, orchestration not found, mismatched ids, KeyGen not eligible), **403** when MCP chat disabled.
+Follow-on also returns **`priorTopLevelMessageId`**, **`priorOrchestratorConversationId`**, **`priorInjected`: true**, **`injectedChars`**, optional chart rollup fields.
+
+**Errors:** **400** (missing mode/title/prior, orchestration not found, mismatched ids, KeyGen not eligible), **403** when MCP chat disabled.
 
 <a id="post-agentorchestrationcontinue"></a>
 #### `POST /agent/orchestration/continue`
@@ -3693,11 +3696,11 @@ At least one of **`priorOrchestratorConversationId`** or **`priorTopLevelMessage
 }
 ```
 
-**Behavior:** Requires **`conversationPurpose: "plan"`** on the thread. Extracts the latest valid **`mpc-orchestrate v1`** fenced block from the conversation, resolves **`keyGenId`** (body override → conversation override → **`GET /getPreferredKeyGen`**), then **`POST /sendMessage`** as this node with `@agent` + manifest. Triggers KeyGen message hooks / orchestration.
+**Behavior:** Requires **`conversationPurpose: "plan"`**. Loads **`plans/<planId>.md`** (or recovers from chat), extracts a valid trailing **`mpc-orchestrate v1`** fence for host orchestration, resolves **`keyGenId`** (body → conversation → preferred), then **`POST /sendMessage`** with **`@agent`** + **human plan markdown** (machine fence stripped). The node **host-starts** derived tasks (does not rely on the KeyGen body fence to spawn). Seeds conversation todos; sets plan status to **`executing`**. Same path as meta-tool **`agent_execute_plan`**.
 
-**Response data:** `{ "messageId", "keyGenId" }`.
+**Response data:** `{ "messageId", "keyGenId", "planId", "planPath", "status" }`.
 
-**Errors:** **400** (not a plan thread, no manifest, invalid YAML, no resolvable KeyGen), **403** when MCP chat disabled.
+**Errors:** **400** (not a plan thread, no plan/manifest, invalid YAML, no resolvable KeyGen, already executing/complete), **403** when MCP chat disabled.
 
 <a id="post-agentchat"></a>
 #### `POST /agent/chat`
