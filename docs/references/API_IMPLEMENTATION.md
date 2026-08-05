@@ -154,7 +154,7 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on **`GET`** requests. **`POST`** is not JWT-gated on that listener; use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same **`GET`** rules when Browser HTTPS is configured.
 
-**JWT-protected agent paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, and **`GET /telegramNgrok/status`**.
+**JWT-protected agent paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, and **`GET /telegramNgrok/status`**.
 
 ## Quick Reference: All Endpoints
 
@@ -273,6 +273,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /telegramNgrok/setEnabled`](#post-telegramngrok-setenabled) - Enable or disable host ngrok sidecar (**management signature**; writes **`pending-telegram-ngrok.json`**)
 - [`POST /telegramNgrok/registerWebhook`](#post-telegramngrok-registerwebhook) - Call Telegram **`setWebhook`** with active tunnel URL (**management signature**)
 - [`POST /agent/plan/start`](#post-agentplanstart) - Start a plan thread with optional prior-orchestration rollup injected (**read JWT**)
+- [`POST /agent/plan/mode`](#post-agentplanmode) - Set plan mode and update plan frontmatter (**read JWT**)
 - [`POST /agent/orchestration/continue`](#post-agentorchestrationcontinue) - Open the [Orchestrator] thread for interactive post-synthesis follow-up (**read JWT**)
 - [`POST /agent/plan/execute`](#post-agentplanexecute) - Post plan markdown to KeyGen and host-start derived orchestration (**read JWT**)
 - [`POST /agent/chat`](#post-agentchat) - Stream one assistant turn (LLM + MCP **tools/call** loop; **read JWT** on Browser HTTPS / loopback)
@@ -3659,6 +3660,25 @@ The **`orchestration_planning`** skill is loaded on subsequent **`POST /agent/ch
 Follow-on also returns **`priorTopLevelMessageId`**, **`priorOrchestratorConversationId`**, **`priorInjected`: true**, **`injectedChars`**, optional chart rollup fields.
 
 **Errors:** **400** (missing mode/title/prior, orchestration not found, mismatched ids, KeyGen not eligible), **403** when MCP chat disabled.
+
+<a id="post-agentplanmode"></a>
+#### `POST /agent/plan/mode`
+
+**Auth:** Read JWT when applicable (same as **`POST /agent/chat`**).
+
+**Request body:**
+```json
+{
+  "conversationId": "<plan-thread-uuid>",
+  "mode": "trade|yield|research|portfolio|dao|custom"
+}
+```
+
+**Behavior:** Sets conversation **`planMode`**, updates the plan markdown frontmatter **`mode`** (and title when still “New plan”), and rewrites **placeholder** skeletons for the new mode. Used when the operator picks a plan starter chip (e.g. trade). **`POST /agent/chat`** may also send **`planMode`** to apply the same update on turn start.
+
+**Response data:** `{ "conversationId", "mode", "planId", "planPath" }`.
+
+**Errors:** **400** (missing fields / not a plan thread), **403** when MCP chat disabled.
 
 <a id="post-agentorchestrationcontinue"></a>
 #### `POST /agent/orchestration/continue`
