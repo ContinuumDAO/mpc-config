@@ -6,17 +6,41 @@ Embed **symbol, interval, lookback, and execution protocol** (`hyperliquid` | `a
 
 ### Pattern B — depth-2 TA coordinator (**required** for TA in plans)
 
-One mid-level coordinator fetches OHLCV, spawns analyze leaves (`agent_spawn_sub_agent` / join), then posts a single joined `tradeIdeas[]`. Pair with a news/research **leaf** and a trade-ideas **leaf** that `dependsOn` the TA task.
+One mid-level coordinator fetches OHLCV, spawns analyze leaves (`agent_spawn_sub_agent` / join), then posts a single joined `tradeIdeas[]`. Pair with **~3 research leaves** (sentiment / market-regime / macro — or allowed swaps) and a trade-ideas **leaf** that `dependsOn` the TA task plus every research leaf.
 
 ```yaml
 # mpc-orchestrate v1
 tasks:
-  - id: eth-news-research
+  - id: eth-research-sentiment
     prompt: |
-      Summarize recent Ethereum (ETH) catalyst/news for the operator goal.
-      Use legal/common name + ticker in searches. Macro/sentiment/catalysts only — no buy/sell price tips.
-      Gather ~3 good independent sources then summarize. End with Sources (title + https links). No tradeIdeas.
-      Prefer as-of dating for "today/this week".
+      Research sentiment & narrative for Ethereum (ETH).
+      News/social tone, crowd positioning, fear/greed, dominant narrative. As-of dating.
+      Use legal/common name + ticker. No buy/sell price tips. Gather ~3 good independent sources then summarize.
+      End with Sources (title + https links). No tradeIdeas.
+    mcpServers: ["continuum"]
+    toolGroups: ["keygen", "keygen_messaging"]
+    budget:
+      maxRounds: 10
+      maxWallClockMs: 150000
+      maxChildSpawns: 0
+
+  - id: eth-research-market-regime
+    prompt: |
+      Research broad market regime around Ethereum (ETH).
+      BTC/ETH beta, risk-on/off, majors vs alts; whether ETH is leading or lagging. Non-prescriptive.
+      Use legal/common name + ticker. ~3 good sources then summarize. Sources (title + https). No tradeIdeas.
+    mcpServers: ["continuum"]
+    toolGroups: ["keygen", "keygen_messaging"]
+    budget:
+      maxRounds: 10
+      maxWallClockMs: 150000
+      maxChildSpawns: 0
+
+  - id: eth-research-macro
+    prompt: |
+      Research macro backdrop for Ethereum (ETH) / crypto risk assets.
+      Rates/liquidity/USD, inflation, policy calendar, geopolitics; dated events with as-of framing.
+      Use legal/common name + ticker. ~3 good sources then summarize. Sources (title + https). No tradeIdeas.
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging"]
     budget:
@@ -41,10 +65,14 @@ tasks:
       maxChildSpawns: 3
 
   - id: eth-trade-ideas
-    dependsOn: ["eth-ta", "eth-news-research"]
+    dependsOn:
+      - eth-ta
+      - eth-research-sentiment
+      - eth-research-market-regime
+      - eth-research-macro
     prompt: |
       Ground directional setups ONLY in the eth-ta mpc-task-result (levels/structure).
-      Use eth-news-research only for non-prescriptive macro/sentiment context.
+      Use research leaves only for non-prescriptive sentiment / regime / macro context.
       Ignore pundit "buy/sell at $Y" tips from research — they must not set side/entry/stop.
       Include Sources (title + https links) for any external claims. Preserve as-of dating.
     mcpServers: ["continuum"]
@@ -55,7 +83,7 @@ tasks:
       maxChildSpawns: 0
 ```
 
-**Anti-patterns:** fat SlimSubLoop leaf with `chart:analyze` and no `role: coordinator`; marking trade-ideas or research as `role: coordinator`; starting trade-ideas without `dependsOn` on the TA task.
+**Anti-patterns:** one monolithic research task; fat SlimSubLoop leaf with `chart:analyze` and no `role: coordinator`; marking trade-ideas or research as `role: coordinator`; starting trade-ideas without `dependsOn` on the TA task.
 
 ### Pattern A — flat parallel analyze leaves (legacy; avoid for new plans)
 
