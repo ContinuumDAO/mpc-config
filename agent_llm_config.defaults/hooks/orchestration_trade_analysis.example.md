@@ -6,7 +6,7 @@ Embed **symbol, interval, lookback, and execution protocol** (`hyperliquid` | `a
 
 ### Pattern B — depth-2 TA coordinator (**required** for TA in plans)
 
-One mid-level coordinator fetches OHLCV, spawns analyze leaves (`agent_spawn_sub_agent` / join), then posts a single joined `tradeIdeas[]`. Pair with **~3 research leaves** (sentiment / market-regime / macro — or allowed swaps) and a trade-ideas **leaf** that `dependsOn` the TA task plus every research leaf.
+One mid-level coordinator fetches OHLCV, spawns analyze leaves (`agent_spawn_sub_agent` / join) in **waves of ≤6**, then posts a single joined `tradeIdeas[]`. Pair with **~3 research leaves** (sentiment / market-regime / macro — or allowed swaps) and a trade-ideas **leaf** that `dependsOn` the TA task only (research is best-effort).
 
 ```yaml
 # mpc-orchestrate v1
@@ -20,8 +20,8 @@ tasks:
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging"]
     budget:
-      maxRounds: 10
-      maxWallClockMs: 150000
+      maxRounds: 14
+      maxWallClockMs: 180000
       maxChildSpawns: 0
 
   - id: eth-research-market-regime
@@ -32,8 +32,8 @@ tasks:
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging"]
     budget:
-      maxRounds: 10
-      maxWallClockMs: 150000
+      maxRounds: 14
+      maxWallClockMs: 180000
       maxChildSpawns: 0
 
   - id: eth-research-macro
@@ -44,15 +44,16 @@ tasks:
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging"]
     budget:
-      maxRounds: 10
-      maxWallClockMs: 150000
+      maxRounds: 14
+      maxWallClockMs: 180000
       maxChildSpawns: 0
 
   - id: eth-ta
     role: coordinator
     prompt: |
       Fetch OHLCV once for ETH (interval/lookback from operator goal) on this conversation.
-      Spawn leaf specialists (chart:analyze) for patterns, trend, key levels as needed — one analyze_* family per child.
+      Spawn leaf specialists (chart:analyze) — one analyze_* family per child — in waves of ≤6;
+      join between waves until every planned family is covered.
       After prepare_chart, continue spawn/join (do not stop for an analysis menu).
       Join compress summaries; post mpc-task-result with slim summary + tradeIdeas[]
       (analysisSetup + source.chartData {dataSource, interval, barCount}). Do not build multiSign.
@@ -60,21 +61,20 @@ tasks:
     toolGroups: ["keygen", "keygen_messaging", "chart:core", "chart:analyze"]
     skills: ["chart-analysis-menu"]
     budget:
-      maxRounds: 14
-      maxWallClockMs: 180000
-      maxChildSpawns: 3
+      maxRounds: 20
+      maxWallClockMs: 240000
+      maxChildSpawns: 6
 
   - id: eth-trade-ideas
     dependsOn:
       - eth-ta
-      - eth-research-sentiment
-      - eth-research-market-regime
-      - eth-research-macro
     prompt: |
       Ground directional setups ONLY in the eth-ta mpc-task-result (levels/structure).
       Use research leaves only for non-prescriptive sentiment / regime / macro context.
       Ignore pundit "buy/sell at $Y" tips from research — they must not set side/entry/stop.
       Include Sources (title + https links) for any external claims. Preserve as-of dating.
+      If fewer than 3 decent research posts/sources landed, tell the operator to enable better
+      Research data sources in the MCP AI Ready list.
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging"]
     budget:

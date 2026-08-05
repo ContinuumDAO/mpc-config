@@ -93,10 +93,10 @@ Operators mark catalog MCPs **AI Ready** in Node settings. Plan turns receive th
   - **Prompt identity:** always include **legal/common name AND ticker** (e.g. `Apple (AAPL)`, `Ethereum (ETH)`), not ticker alone. Scope each leaf to its aspect only — no buy/sell tips, no `tradeIdeas`.
   - **Equity / stock perps** (Hyperliquid HIP-3, etc.): say it is **synthetic/perp** exposure; label venue marks vs cash-equity prints.
   - **Crypto:** full name + ticker + venue/chain; disambiguate ticker collisions (e.g. COMP).
-  - Prefer `budget.maxRounds` **≥ 10** per research leaf (host floors research leaves to ~9 if lower).
+  - Prefer `budget.maxRounds` **≥ 14** per research leaf (host floors research leaves to ~14 if lower). Tool-backed `agent_web_search` / `agent_fetch_url` (or AI Ready search/research MCP) is **obligatory** — URLs without those tool calls fail verification.
   - **Research data sources (required in plan markdown when weak):** the host injects an inventory of native `agent_web_search` (Brave + `BRAVE_API_KEY`), AI Ready **search engines** (catalog today: DuckDuckGo, Brave Search MCP, Google Search; common/upcoming MCP ids: Exa, Tavily, Chrome, Firefox, Mullvad Browser, Bing, Kagi, Serper, Perplexity), and AI Ready **research/data** MCPs. Repository catalog examples that materially improve research (activate + AI Ready + Variables as needed): **Messari**, **Dune Analytics**, **Alpha Vantage**, **Finance News RSS**, **FMP / Financial Modeling Prep** (when available), CoinGecko/CMC, etc. If **none** or **only one** search engine is available — name it explicitly (e.g. **DuckDuckGo** when `AGENT_DEFAULT_SEARCH_MCP=duckduckgo`, or **Brave** when only native search works) — add an **Assumptions / Research data sources** warning that quality improves when the operator enables those dedicated financial/world-news MCPs (Node → AI Agent → MCP / Variables). Prefer listing every AI Ready search + research/data id on research `tasks[].mcpServers` **plus continuum** (KeyGen only). Operators may set `AGENT_WEB_SEARCH_PROVIDER=off` and/or `AGENT_DEFAULT_SEARCH_MCP=<serverId>` (e.g. `duckduckgo`, `exa`, `chrome`, `mullvad-browser`) via AI Agent → Variables.
 - **Technical analysis** only if a crypto/stock is named (ticker or common name, e.g. ETH, Apple). Skip TA otherwise. Use the agreed lookback + candle interval (~300 bars max).
-  - **Required shape (depth-2):** one TA task with `role: coordinator`, `toolGroups: ["keygen", "keygen_messaging", "chart:core", …]`, `budget.maxChildSpawns` 1–3, `budget.maxRounds` ~10–14. Coordinator fetches OHLCV **once**, then `agent_spawn_sub_agent` leaves with `toolGroups: ["chart:analyze"]` (one `analyze_*` family per child). Do **not** put all TA work in a single fat SlimSubLoop leaf with `chart:analyze`. After chart prepare, continue to spawn/analyze — do not stop for an interactive analysis menu.
+  - **Required shape (depth-2):** one TA task with `role: coordinator`, `toolGroups: ["keygen", "keygen_messaging", "chart:core", …]`, `budget.maxChildSpawns` **6** (wave size; host allows up to 3 waves so every planned `analyze_*` family is covered), `budget.maxRounds` ~18–20. Coordinator fetches OHLCV **once**, then `agent_spawn_sub_agent` leaves with `toolGroups: ["chart:analyze"]` (one `analyze_*` family per child). Spawn **≤6 per wave**, `agent_join_sub_agents`, then next wave until all families are done. Do **not** put all TA work in a single fat SlimSubLoop leaf with `chart:analyze`. After chart prepare, continue to spawn/analyze — do not stop for an interactive analysis menu.
 - **Yield research** for `yield` / “Explore the best yield for stablecoins” — Continuum DeFi packs (Morpho, Aave, Lido, Ethena, Sky, …). Research/compare leaves are **leaves** (never `role: coordinator`). Prefer `budget.maxRounds` **≥ 10** per leaf. Do **not** author one monolithic yield task.
   - **Split into ~3 leaves** (mandatory default trio):
     1. **`yield-opportunity-scan`** — live APY / liquidity / TVL / vault or market params across configured packs; **numbers from MCP returns** (not blog APYs alone). Name stablecoin(s) and chains in scope.
@@ -127,8 +127,8 @@ Operators mark catalog MCPs **AI Ready** in Node settings. Plan turns receive th
 - **Protocol risk** (lightweight, same plan): when a venue/protocol is named for this phase, include a short `protocol-risk` workstream. If venue is deferred, omit or mark deferred.
 - **Trade ideas**: include in this plan only when venue (and optionally size) are specified or the operator explicitly wants ideas without a venue; otherwise defer to follow-on.
   - Trade-ideas tasks are **leaves** (`maxChildSpawns: 0`, **never** `role: coordinator`).
-  - Set `dependsOn: [<ta-task-id>, <asset>-research-sentiment, <asset>-research-market-regime, <asset>-research-macro]` (list every research leaf id used). Host starts trade-ideas **only after TA status is `complete`** (research deps must be terminal; failed research still unblocks once TA is complete).
-  - **Evidence:** primary = returned TA `mpc-task-result` (levels/structure/setups). Secondary = non-prescriptive research leaves (sentiment / market regime / macro — and any swaps). **Ignore** pundit tips (“X says buy ETH at $Y”). Always end with **Sources** (title + https links).
+  - Set `dependsOn: [<ta-task-id>]` only (research is best-effort). Host starts trade-ideas when TA is **`complete`** (skipped if TA failed); do not wait on research leaves. Evidence pack still includes any research siblings that already finished.
+  - **Evidence:** primary = returned TA `mpc-task-result` (levels/structure/setups). Secondary = non-prescriptive research leaves (sentiment / market regime / macro — and any swaps). **Ignore** pundit tips (“X says buy ETH at $Y”). Always end with **Sources** (title + https links). If fewer than 3 decent independent research posts/sources landed, the trade-ideas / synthesis report must tell the operator to enable better Research data sources in the **MCP AI Ready** list.
 - **Funding / size**: when size is in scope for this plan (see table above), use `agent_get_balance` across configured chains; warn on venue-chain shortfall if venue is set.
 
 ## Machine block
@@ -149,8 +149,8 @@ tasks:
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging"]
     budget:
-      maxRounds: 10
-      maxWallClockMs: 150000
+      maxRounds: 14
+      maxWallClockMs: 180000
       maxChildSpawns: 0
   - id: <asset>-research-market-regime
     prompt: |
@@ -160,8 +160,8 @@ tasks:
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging"]
     budget:
-      maxRounds: 10
-      maxWallClockMs: 150000
+      maxRounds: 14
+      maxWallClockMs: 180000
       maxChildSpawns: 0
   - id: <asset>-research-macro
     prompt: |
@@ -171,30 +171,27 @@ tasks:
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging"]
     budget:
-      maxRounds: 10
-      maxWallClockMs: 150000
+      maxRounds: 14
+      maxWallClockMs: 180000
       maxChildSpawns: 0
   - id: <asset>-ta
     role: coordinator
     prompt: |
-      Fetch OHLCV once; spawn chart:analyze leaves (one analyze_* family each); join; post mpc-task-result.
+      Fetch OHLCV once; spawn chart:analyze leaves (one analyze_* family each) in waves of ≤6; join between waves; cover all planned families; post mpc-task-result.
       Do not stop after prepare_chart for a menu — continue analyze spawn/join.
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging", "chart:core", "chart:analyze"]
     budget:
-      maxRounds: 14
-      maxWallClockMs: 180000
-      maxChildSpawns: 3
+      maxRounds: 20
+      maxWallClockMs: 240000
+      maxChildSpawns: 6
   - id: <asset>-trade-ideas
     dependsOn:
       - "<asset>-ta"
-      - "<asset>-research-sentiment"
-      - "<asset>-research-market-regime"
-      - "<asset>-research-macro"
     prompt: |
       Ground setups in TA mpc-task-result only.
       Research leaves = non-prescriptive sentiment / regime / macro context (ignore buy-at-$Y tips).
-      Sources with https links required.
+      Sources with https links required. If <3 decent research posts, tell operator to enable better MCP AI Ready research sources.
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging"]
     budget:
@@ -205,8 +202,9 @@ prompts:
   subAgentReply: ""
   externalReply: ""
   orchestratorOnReply: |
-    All tasks are terminal. Synthesize findings from the KeyGen thread.
+    All tasks are terminal. Synthesize findings from the KeyGen thread (thorough report OK; KeyGen body ~64KiB).
     Preserve as-of dating; Sources with https links for non-TA claims.
+    If research had <3 decent sources, advise enabling better MCP AI Ready research data sources.
     Post synthesis as a REPLY via send_key_gen_message.
 synthesis:
   at: ""
@@ -375,7 +373,7 @@ Rules:
 - Prefer `tasks[].toolGroups` Continuum pack ids; always include **`keygen_messaging`** so leaves can `send_key_gen_message` / `post_key_gen_chart_attachment`.
 - Default tasks are leaves (`maxChildSpawns: 0`). **`role: coordinator` is only for TA depth-2** (fetch once → spawn `chart:analyze` leaves). Never mark research, yield, or trade-ideas as coordinator.
 - **~3 aspect leaves** (never one catch-all): named-asset → sentiment / market-regime / macro; yield → opportunity-scan / risk-assessment / macro-stablecoin; general market conditions → sentiment / regime / macro; portfolio → wallet-inventory / protocol-performance / priced-rollup (or allowed swaps).
-- Optional `dependsOn: [taskId, …]`: host waits for those tasks. Trade-ideas **must** depend on the TA task (and should list every research leaf) and starts only when TA is **`complete`** (skipped if TA failed).
+- Optional `dependsOn: [taskId, …]`: host waits for those tasks. Trade-ideas **must** depend on the TA task (`dependsOn: [<ta-id>]`) and starts when TA is **`complete`** (skipped if TA failed). Research deps are best-effort and must not block trade-ideas.
 - Do **not** perform the operator's research/trade work inline in plan chat — only author/refine the plan (unless they explicitly ask for a small clarifying lookup while drafting).
 - If a **system** message says orchestration was already posted, report status — do **not** ask to Execute again unless drafting a **new** or **follow-on** plan.
 - **Follow-on plan:** may start with `--- prior orchestration rollup ---`. Write a **new** `plans/<id>.md` with `priorOrchestrationMessageId` (venue, size, execution). If trade ideas / size / venue were deferred, run the **`agent_get_balance`** multi-chain funding check here; warn if the venue chain cannot cover the size.
