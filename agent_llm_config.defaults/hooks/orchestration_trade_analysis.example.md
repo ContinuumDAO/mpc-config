@@ -4,45 +4,26 @@ Use with skills **`orchestration_planning`** and **`orchestration-chart-analysis
 
 Embed **symbol, interval, lookback, and execution protocol** (`hyperliquid` | `arcus` | `gmx` | `uniswap`) in each task prompt — sub-agents do not elicit mid-run. For **`uniswap`** builds, also name the OHLCV source in the prompt (HL/Arcus/GMX perp fetch or CoinGecko/CMC — see **`trade_analysis_cron.example.md`** protocol table).
 
-### Pattern A — flat parallel analyze leaves (still valid)
+### Pattern B — depth-2 TA coordinator (**required** for TA in plans)
 
-```yaml
-# mpc-orchestrate v1
-tasks:
-  - id: eth-pattern-analysis
-    prompt: |
-      Fetch OHLCV per operator goal. Run analyze_chart_patterns.
-      In mpc-task-result v1 include tradeIdeas[] with analysisSetup and source.chartData
-      {dataSource, interval, barCount}. Analysis only — no multiSign / Purpose.
-    mcpServers: ["hyperliquid", "continuum"]
-    toolGroups: ["keygen", "chart:core", "chart:analyze"]
-    skills: ["chart-analysis-classic-patterns", "chart-analysis-menu"]
-
-  - id: eth-trend-analysis
-    prompt: |
-      Same symbol/session. Run analyze_trend_structure.
-      Include tradeIdeas[] (trendStructureTradeSetup, analysisType trend_structure, chartData).
-    mcpServers: ["hyperliquid", "continuum"]
-    toolGroups: ["keygen", "chart:core", "chart:analyze"]
-    skills: ["chart-analysis-trend"]
-```
-
-### Pattern B — depth-2 TA coordinator (preferred for many analyzes on one session)
-
-One mid-level coordinator fetches OHLCV, spawns analyze leaves (`agent_spawn_sub_agent` / join), then posts a single joined `tradeIdeas[]`. Pair with a news/research **leaf** when needed.
+One mid-level coordinator fetches OHLCV, spawns analyze leaves (`agent_spawn_sub_agent` / join), then posts a single joined `tradeIdeas[]`. Pair with a news/research **leaf** and a trade-ideas **leaf** that `dependsOn` the TA task.
 
 ```yaml
 # mpc-orchestrate v1
 tasks:
   - id: eth-news-research
     prompt: |
-      Summarize recent ETH catalyst/news for the operator goal. No charts / no tradeIdeas required.
+      Summarize recent ETH catalyst/news for the operator goal.
+      Macro/sentiment/catalysts only — no buy/sell price tips.
+      End with Sources (title + https links). No tradeIdeas. Prefer as-of dating for "today/this week".
     mcpServers: ["continuum"]
-    toolGroups: ["keygen"]
+    toolGroups: ["keygen", "keygen_messaging"]
     budget:
+      maxRounds: 8
+      maxWallClockMs: 120000
       maxChildSpawns: 0
 
-  - id: eth-ta-coordinator
+  - id: eth-ta
     role: coordinator
     prompt: |
       Fetch OHLCV once for ETH (interval/lookback from operator goal) on this conversation.
@@ -50,13 +31,33 @@ tasks:
       Join compress summaries; post mpc-task-result with slim summary + tradeIdeas[]
       (analysisSetup + source.chartData {dataSource, interval, barCount}). Do not build multiSign.
     mcpServers: ["hyperliquid", "continuum"]
-    toolGroups: ["keygen", "chart:core", "chart:analyze"]
+    toolGroups: ["keygen", "keygen_messaging", "chart:core", "chart:analyze"]
     skills: ["chart-analysis-menu"]
+    budget:
+      maxRounds: 14
+      maxWallClockMs: 180000
+      maxChildSpawns: 3
+
+  - id: eth-trade-ideas
+    dependsOn: ["eth-ta", "eth-news-research"]
+    prompt: |
+      Ground directional setups ONLY in the eth-ta mpc-task-result (levels/structure).
+      Use eth-news-research only for non-prescriptive macro/sentiment context.
+      Ignore pundit "buy/sell at $Y" tips from research — they must not set side/entry/stop.
+      Include Sources (title + https links) for any external claims. Preserve as-of dating.
+    mcpServers: ["continuum"]
+    toolGroups: ["keygen", "keygen_messaging"]
     budget:
       maxRounds: 10
       maxWallClockMs: 120000
-      maxChildSpawns: 3
+      maxChildSpawns: 0
 ```
+
+**Anti-patterns:** fat SlimSubLoop leaf with `chart:analyze` and no `role: coordinator`; marking trade-ideas or research as `role: coordinator`; starting trade-ideas without `dependsOn` on the TA task.
+
+### Pattern A — flat parallel analyze leaves (legacy; avoid for new plans)
+
+Host may still run flat `chart:analyze` leaves, but planning should prefer Pattern B. If a fat TA leaf is authored, the node promotes it to a coordinator.
 
 Replace **`hyperliquid`** in `mcpServers` with **`gmx`** or **`arcus`** when the operator goal is GMX or Arcus execution (load protocol + explicit `chainId` on fetch — Arcus **4663**). For Uniswap spot goals, keep an OHLCV-capable server in `mcpServers` for analysis tasks and load **uniswap** only on the orchestrator Continue / build step.
 
@@ -64,7 +65,7 @@ Replace **`hyperliquid`** in `mcpServers` with **`gmx`** or **`arcus`** when the
 
 ```yaml
 # mpc-task-result v1
-taskId: eth-ta-coordinator
+taskId: eth-ta
 status: complete
 summary: Joined TA — falling wedge + bullish trend retest; see tradeIdeas
 tradeIdeas:
@@ -86,28 +87,6 @@ tradeIdeas:
     analysisSetup:
       kind: chart_pattern
       setup: { ... chartPatternTradeSetup fields ... }
-charts: []
-```
-
-Trend idea example (truncated):
-
-```yaml
-# mpc-task-result v1
-taskId: eth-trend-analysis
-status: complete
-summary: Bullish HH — support trend retest long clear
-tradeIdeas:
-  - id: "<uuid>"
-    source:
-      analysisType: trend_structure
-      toolName: analyze_trend_structure
-      chartData: { dataSource: hl, interval: 4h, barCount: 181 }
-    status: clear
-    side: long
-    symbol: ETH
-    analysisSetup:
-      kind: trend_structure
-      setup: { setupPurposeCode: trend-ret, trendLineNumber: 1, primaryTrendKind: support, ... }
 charts: []
 ```
 

@@ -73,15 +73,28 @@ When the operator **specifies a position size**, run (or schedule) a funding che
 
 **Size without venue:** still inventory the asset across all configured chains; skip the venue-chain shortfall warning until a venue is chosen (follow-on or later clarification).
 
+## AI Ready MCP servers (research + execute)
+
+Operators mark catalog MCPs **AI Ready** in Node settings. Plan turns receive the eligible id list.
+
+- **While drafting** (clarifying lookups / light research): if an AI Ready server would materially help, call **`agent_load_mcp_server`** for that `serverId` and use its tools. Do **not** load every AI Ready server.
+- **In the machine block**: put each needed AI Ready id in **`tasks[].mcpServers`** (plus **`continuum`** when using Continuum packs / DeFi / charts) so Execute specialists can use them.
+- **Continuum DeFi** protocols: **`continuum__load_defi_protocol`**, not `agent_load_mcp_server`.
+- **Chart OHLCV source**: still ask the operator when choosing an optional catalog market-data MCP (CoinGecko/CMC/…); do not silently pick one for generic charts. Other research (news, protocol docs, AI Ready tools the operator enabled) may load without re-asking once AI Ready.
+
 ## Workstream rules (executed later by specialists)
 
-- **Market research** (news/web) for `trade` / `research`.
-- **Technical analysis (`chart:analyze`)** only if a crypto/stock is named (ticker or common name, e.g. ETH, Apple). Skip TA otherwise. Use the agreed lookback + candle interval (~300 bars max).
+- **Market research** (news/web) for `trade` / `research` — use AI Ready MCPs / web tools when worthwhile; list them on task `mcpServers` for Execute. Research tasks are **leaves** (never `role: coordinator`). Dated claims need as-of dating; final `mpc-task-result` must include a **Sources** section (`- Title — https://…`).
+- **Technical analysis** only if a crypto/stock is named (ticker or common name, e.g. ETH, Apple). Skip TA otherwise. Use the agreed lookback + candle interval (~300 bars max).
+  - **Required shape (depth-2):** one TA task with `role: coordinator`, `toolGroups: ["keygen", "keygen_messaging", "chart:core", …]`, `budget.maxChildSpawns` 1–3, `budget.maxRounds` ~10–14. Coordinator fetches OHLCV **once**, then `agent_spawn_sub_agent` leaves with `toolGroups: ["chart:analyze"]` (one `analyze_*` family per child). Do **not** put all TA work in a single fat SlimSubLoop leaf with `chart:analyze`.
 - **Yield research** for `yield`: Continuum DeFi packs (Morpho, Aave, Lido, Ethena, Sky, …); require APY, liquidity, vault params from MCP returns.
 - **Portfolio** for `portfolio` (and as funding helper for trade/yield): balances on every configured `chainId` via host tool **`agent_get_balance`** (Foundry `cast`; no approval — native gas or ERC-20); positions (perps, Uniswap v4 LP, lending, Lido, …); prices via CoinGecko/CMC (**ask before** loading market-data MCP). Prefer `agent_get_balance` over loading the Foundry MCP for simple reads; read-only `cast call` / `cast balance` via `agent_bash` also skip approval.
 - **DAO** for `dao`: stub sections only.
 - **Protocol risk** (lightweight, same plan): when a venue/protocol is named for this phase, include a short `protocol-risk` workstream. If venue is deferred, omit or mark deferred.
 - **Trade ideas**: include in this plan only when venue (and optionally size) are specified or the operator explicitly wants ideas without a venue; otherwise defer to follow-on.
+  - Trade-ideas tasks are **leaves** (`maxChildSpawns: 0`, **never** `role: coordinator`).
+  - Set `dependsOn: [<ta-task-id>]` (and optionally the research task id). Host starts trade-ideas **only after TA status is `complete`**.
+  - **Evidence:** primary = returned TA `mpc-task-result` (levels/structure/setups). Secondary = non-prescriptive research (macro/sentiment/catalysts). **Ignore** pundit tips (“X says buy ETH at $Y”). Always end with **Sources** (title + https links).
 - **Funding / size**: when size is in scope for this plan (see table above), use `agent_get_balance` across configured chains; warn on venue-chain shortfall if venue is set.
 
 ## Machine block
@@ -91,18 +104,42 @@ Every plan ready for Execute must end with a valid:
 ```mpc-orchestrate v1
 version: 1
 tasks:
-  - id: <stable-id>
-    prompt: "<what the sub-agent should do>"
+  - id: <asset>-research
+    prompt: |
+      Research … End with Sources (title + https links). No tradeIdeas.
     mcpServers: ["continuum"]
-    toolGroups: ["keygen", "keygen_messaging", "<pack-id>"]
+    toolGroups: ["keygen", "keygen_messaging"]
     budget:
       maxRounds: 8
       maxWallClockMs: 120000
+      maxChildSpawns: 0
+  - id: <asset>-ta
+    role: coordinator
+    prompt: |
+      Fetch OHLCV once; spawn chart:analyze leaves (one analyze_* family each); join; post mpc-task-result.
+    mcpServers: ["continuum"]
+    toolGroups: ["keygen", "keygen_messaging", "chart:core", "chart:analyze"]
+    budget:
+      maxRounds: 14
+      maxWallClockMs: 180000
+      maxChildSpawns: 3
+  - id: <asset>-trade-ideas
+    dependsOn: ["<asset>-ta", "<asset>-research"]
+    prompt: |
+      Ground setups in TA mpc-task-result only. Research = non-prescriptive context (ignore buy-at-$Y tips).
+      Sources with https links required.
+    mcpServers: ["continuum"]
+    toolGroups: ["keygen", "keygen_messaging"]
+    budget:
+      maxRounds: 10
+      maxWallClockMs: 120000
+      maxChildSpawns: 0
 prompts:
   subAgentReply: ""
   externalReply: ""
   orchestratorOnReply: |
     All tasks are terminal. Synthesize findings from the KeyGen thread.
+    Preserve as-of dating; Sources with https links for non-TA claims.
     Post synthesis as a REPLY via send_key_gen_message.
 synthesis:
   at: ""
@@ -114,7 +151,8 @@ synthesis:
 Rules:
 
 - Prefer `tasks[].toolGroups` Continuum pack ids; always include **`keygen_messaging`** so leaves can `send_key_gen_message` / `post_key_gen_chart_attachment`.
-- Default tasks are leaves (`maxChildSpawns: 0`). Opt-in coordinator with `role: coordinator` and `budget.maxChildSpawns` 1–3 when many `analyze_*` leaves should join into one `tradeIdeas[]`.
+- Default tasks are leaves (`maxChildSpawns: 0`). **`role: coordinator` is only for TA depth-2** (fetch once → spawn `chart:analyze` leaves). Never mark research or trade-ideas as coordinator.
+- Optional `dependsOn: [taskId, …]`: host waits for those tasks. Trade-ideas **must** depend on the TA task and starts only when TA is **`complete`** (skipped if TA failed).
 - Do **not** perform the operator's research/trade work inline in plan chat — only author/refine the plan (unless they explicitly ask for a small clarifying lookup while drafting).
 - If a **system** message says orchestration was already posted, report status — do **not** ask to Execute again unless drafting a **new** or **follow-on** plan.
 - **Follow-on plan:** may start with `--- prior orchestration rollup ---`. Write a **new** `plans/<id>.md` with `priorOrchestrationMessageId` (venue, size, execution). If trade ideas / size / venue were deferred, run the **`agent_get_balance`** multi-chain funding check here; warn if the venue chain cannot cover the size.
