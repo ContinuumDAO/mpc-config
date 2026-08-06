@@ -54,7 +54,7 @@ modes:
       momentumWith: [rsi, macd]
 
     systemPrefixExtra: |
-      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period (months/days/hours) and candle interval (e.g. 4h, 15m) — prefer a window that yields ≥220 bars so SMA/EMA(200) can run (e.g. ≥37d @ 4h or ≥10d @ 1h); keep candle count sensible (~300 max for the source; shorten lookback or widen interval if over), (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities and synthetic stock perps; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets.
+      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period (months/days/hours) and candle interval (e.g. 4h, 15m) — prefer a window with bars ≥ longest MA period in policy.ta.requiredToolMinBars (default slow 200; aim ~220) so moving averages can run (e.g. ≥37d @ 4h or ≥10d @ 1h); keep candle count sensible (~300 max for the source; shorten lookback or widen interval if over), (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities and synthetic stock perps; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets.
     workstreams:
       - idSuffix: research-sentiment
         label: "**research-sentiment** — narrative / positioning for the named asset"
@@ -225,6 +225,12 @@ policy:
     disableSoftSuccessToolGroupPrefixes: ["chart:analyze", "chart:core"]
     blockedDependentLastError: "skipped: TA did not complete"
     incompleteAnalyzeMessage: "TA must spawn chart:analyze leaves (or run analyze_*) after OHLCV; fetch/prepare_chart alone is not enough for status: complete"
+    # Spawn enqueue gate: reject when session bars < need (avoids burning child budget).
+    # Period-based tools: need = max(periods) — e.g. MA warm-up equals the longest MA.
+    # Optional minBars overrides max(periods) when set > 0.
+    requiredToolMinBars:
+      analyze_moving_averages:
+        periods: [50, 200] # fastPeriod, slowPeriod (chart-defaults)
     # Family-header soft-accept list lives under modes.trade.analyzeEvidence (near top of trade).
     # Remaining evidence knobs (tool/summary needles, denies) stay here as shared host policy.
     analyzeEvidence:
@@ -281,7 +287,7 @@ contracts:
   taCoordinatorHint: |
     KeyGen TA coordinator (depth-2): you are a mid-level [Sub-agent]. Fetch OHLCV on this conversation once, then agent_spawn_sub_agent leaves with toolGroups:["chart:analyze"] and requiredTool set to the exact analyze_* name for that family (e.g. requiredTool=analyze_trend_structure, analyze_key_levels, analyze_momentum, analyze_range_volatility, analyze_moving_averages, analyze_bollinger_bands, analyze_chart_patterns, analyze_candlestick_patterns). One family per child.
     OHLCV stays on this conversation — the host binds it into each leaf's requiredTool call; leaves must not fetch.
-    Moving averages: analyze_moving_averages needs ≥200 bars. If the bound session has fewer bars, re-fetch with a longer lookback on this conversation first (e.g. ≥34d @ 4h), then spawn MA — the host rejects MA spawns below 200 bars so they do not burn child budget. Aim to complete MA when lookback allows.
+    Moving averages: bars needed = longest MA period (policy.ta.requiredToolMinBars.analyze_moving_averages.periods → max; default 50/200 → 200). If the bound session is shorter, re-fetch with a longer lookback on this conversation first (e.g. ≥34d @ 4h), then spawn MA — the host rejects short-bar MA spawns so they do not burn child budget. Aim to complete MA when lookback allows.
     After prepare_chart / chart UI, do NOT stop for an analysis catalog/menu — continue spawning analyze_* leaves and join.
     Prefer wording analyze_* / chart:analyze (not the phrase "analysis tools") in prompts and summaries.
     Wave fan-out (async): call agent_spawn_sub_agent for each family in the wave (up to budget.maxChildSpawns, max 6) without waiting between spawns — each returns status:started immediately and runs in parallel.
