@@ -239,6 +239,9 @@ policy:
       tradeIdeasKey: tradeideas
       denyNeedles: ["no analyze", "analyze_* families could be", "spawn/join wave did not", "fan-out did not run"]
       joinedChartAnalyze: true
+  synthesis:
+    highConfidenceMin: 0.5
+    minOverlayConfidence: 0.5
   verify:
     severity: harsh
     maxIters: 1
@@ -277,9 +280,9 @@ policy:
           spec: "Claims about 'today', 'this week', 'upcoming', or catalysts must match as-of dating in evidence; past events must not be framed as future."
       synthesis:
         - name: rollup_grounded
-          spec: "Rollup cites mpc-task-result evidence; does not invent levels, prices, or completed actions."
+          spec: "Rollup cites host evidence pack (KeyGen mpc-task-result) and host trade ideas / orch state tradeIdeas as authoritative. Levels, prices, confidences, and completed tasks grounded there are NOT fabricated. Fail fabrication only when claims contradict that pack or invent specifics absent from pack + host trade ideas."
         - name: sources
-          spec: "Non-TA claims include Sources with concrete https URLs."
+          spec: "Non-TA claims include Sources with concrete https URLs (may come from host evidence pack research leaves)."
         - name: temporal_claims
           spec: "Dated/upcoming framing matches evidence; past events are not framed as future; prefer as-of dating."
 
@@ -290,6 +293,7 @@ contracts:
     Moving averages: bars needed = longest MA period (policy.ta.requiredToolMinBars.analyze_moving_averages.periods → max; default 50/200 → 200). If the bound session is shorter, re-fetch with a longer lookback on this conversation first (e.g. ≥34d @ 4h), then spawn MA — the host rejects short-bar MA spawns so they do not burn child budget. Aim to complete MA when lookback allows.
     After prepare_chart / chart UI, do NOT stop for an analysis catalog/menu — continue spawning analyze_* leaves and join.
     Prefer wording analyze_* / chart:analyze (not the phrase "analysis tools") in prompts and summaries.
+    analyze_range_volatility: do NOT pass lookback / lookbackDays — the bound OHLCV window is the series; optional knob is atrPeriod (2–50) only.
     Wave fan-out (async): call agent_spawn_sub_agent for each family in the wave (up to budget.maxChildSpawns, max 6) without waiting between spawns — each returns status:started immediately and runs in parallel.
     Then call agent_join_sub_agents once to wait and collect results. Lifetime child budget is wave size × maxCoordinatorWaves (host-enforced, typically 18 when wave=6) — do not stop after the first 6 spawns when families remain; spawn the next wave and join again until every planned family is covered.
     Do not stop after the first wave when families remain — every spawn wave needs its own join.
@@ -300,9 +304,11 @@ contracts:
     Finish by posting mpc-task-result v1 with a slim summary and tradeIdeas[] that include analysisSetup and source.chartData {dataSource, interval, barCount}. Do not nest another mpc-task-result fence inside summary — one top-level fence via send_key_gen_message only. Do not build multiSign / Purpose / requestId — Orchestrator Continue does that. Specialists cannot spawn children.
   synthesisEvidence: |
     --- synthesis rules ---
-    Primary evidence is the host evidence pack above (KeyGen mpc-task-result bodies). Treat task coverage from that pack — do not claim a leaf failed/missing when its result is present with status complete.
+    Primary evidence is the host evidence pack above (KeyGen mpc-task-result bodies) plus --- host trade ideas (authoritative) --- and --- host HC trade decision assist ---. Treat task coverage from that pack — do not claim a leaf failed/missing when its result is present with status complete.
     get_key_gen_message_thread is optional secondary context only (may be truncated/offloaded).
     Preserve as-of dating (temporal_claims). Sources with https links for any non-TA claims. Do not invent levels or prices.
+    Echo --- plan inputs --- (symbol, dataSource, interval, lookback, venue, size) near the top of the report.
+    Focus on HIGH-CONFIDENCE trade ideas (see host HC assist). State agreement vs contradiction and extent. If supportive, pick exactly ONE trade and annotate with peer HC entry/target/invalidation notes; if contradict or no HC ideas, WATCH — do not force a trade. Favour TA over research for the trade call; research is non-prescriptive context.
     Thorough final reports are fine (KeyGen body limit ~64KiB); prefer completeness over aggressive truncation.
     If research coverage had fewer than 3 decent independent posts/sources, include operator guidance to enable better Research data sources in the MCP AI Ready list.
   researchEvidence: |
@@ -327,7 +333,18 @@ contracts:
 
 synthesis:
   defaultOrchestratorOnReply: |
-    All orchestration tasks are terminal (see orchestration state below). Primary evidence is the host evidence pack injected below (KeyGen mpc-task-result bodies) — treat coverage from that pack; do not claim a leaf failed/missing when its result is present with status complete. get_key_gen_message_thread is optional secondary context only (may be truncated/offloaded). Synthesize findings for the group: factual summary, trade-offs, and open questions. Thorough reports are welcome — do not artificially shorten; stay within the KeyGen message body limit (~64KiB). Do not assume the operator's goals, risk posture, or domain. If research leaves produced fewer than 3 decent independent sources/posts, tell the operator to enable better Research data sources in the MCP AI Ready list (Node → AI Agent → MCP / Variables). Post the synthesis as a KeyGen REPLY to the top-level orchestration message via send_key_gen_message (human-readable prose; a short TL;DR at the top is optional). Do not post task dispatches, progress-only updates, or mpc-orchestrate-task blocks.
+    All orchestration tasks are terminal (see orchestration state below). Primary evidence is the host evidence pack, host trade ideas block, and HC decision assist injected below — treat coverage from those; do not claim a leaf failed/missing when its result is present with status complete. get_key_gen_message_thread is optional secondary context only (may be truncated/offloaded).
+
+    Structure the KeyGen synthesis as:
+    1) Plan inputs — echo symbol, asset-class framing, data source, interval, lookback/bars, venue/chain, size/constraints from --- plan inputs --- (do not invent).
+    2) TL;DR — WATCH vs one chosen trade; TA-first for the trade call.
+    3) High-confidence ideas table — technique, side, status, confidence, entry/target/invalidation, Trade Ratio (from host trade ideas; do not collapse to a single low key_levels prose score when other techniques list higher confidence).
+    4) Agreement vs contradiction among HC ideas (extent).
+    5) If supportive: pick exactly one trade (prefer host suggestedPickId); add peer HC level notes. If contradict or no HC: WATCH, no forced trade.
+    6) Research context (non-prescriptive) + Sources https lines + gaps/funding.
+    Host attaches the candlestick chart (and trade_position overlay when a clear HC pick exists).
+
+    Thorough reports welcome (~64KiB KeyGen limit). Post as a KeyGen REPLY via send_key_gen_message. Do not post task dispatches, progress-only updates, or mpc-orchestrate-task blocks.
 
 todoLabels:
   synthesize: Synthesize findings
