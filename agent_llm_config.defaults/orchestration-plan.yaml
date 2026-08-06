@@ -54,7 +54,7 @@ modes:
       momentumWith: [rsi, macd]
 
     systemPrefixExtra: |
-      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period (months/days/hours) and candle interval (e.g. 4h, 15m) — prefer a window with bars ≥ longest MA period in policy.ta.requiredToolMinBars (default slow 200; aim ~220) so moving averages can run (e.g. ≥37d @ 4h or ≥10d @ 1h); keep candle count sensible (~300 max for the source; shorten lookback or widen interval if over), (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities and synthetic stock perps; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets.
+      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period (months/days/hours) and candle interval (e.g. 4h, 15m) — prefer a window with bars ≥ longest MA period in policy.ta.requiredToolMinBars (default slow 200; aim ~220) so moving averages can run (e.g. ≥37d @ 4h or ≥10d @ 1h); keep candle count sensible (~300 max for the source; shorten lookback or widen interval if over), (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities, synthetic stock perps, and crypto; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets.
     workstreams:
       - idSuffix: research-sentiment
         label: "**research-sentiment** — narrative / positioning for the named asset"
@@ -66,8 +66,8 @@ modes:
         label: "**research-macro** — rates, liquidity, policy calendar"
         always: true
       - idSuffix: research-financial-performance
-        label: "**research-financial-performance** — *(stocks / synthetic stocks only)* latest results vs expectations"
-        when: [cash_equity, synthetic_stock]
+        label: "**research-financial-performance** — *(stocks / synthetic stocks / crypto; not ETFs)* latest results vs expectations"
+        when: [cash_equity, synthetic_stock, crypto]
       - idSuffix: research-core-business
         label: "**research-core-business** — *(stocks + crypto; not ETFs)* recent deliveries and near-term roadmap"
         when: [cash_equity, synthetic_stock, crypto]
@@ -297,7 +297,7 @@ contracts:
     OHLCV fetch + prepare_chart alone must post status:failed (or keep working) — host rejects complete without analyze fan-out + joins.
     Leaves upsert tradeIdeas on this conversation; summarize from joined compress / tradeIdeasMenu (not guesses).
     If send_key_gen_message aborts/times out: call get_key_gen_message_thread once; if your mpc-task-result landed, stop (success).
-    Finish by posting mpc-task-result v1 with a slim summary and tradeIdeas[] that include analysisSetup and source.chartData {dataSource, interval, barCount}. Do not build multiSign / Purpose / requestId — Orchestrator Continue does that. Specialists cannot spawn children.
+    Finish by posting mpc-task-result v1 with a slim summary and tradeIdeas[] that include analysisSetup and source.chartData {dataSource, interval, barCount}. Do not nest another mpc-task-result fence inside summary — one top-level fence via send_key_gen_message only. Do not build multiSign / Purpose / requestId — Orchestrator Continue does that. Specialists cannot spawn children.
   synthesisEvidence: |
     --- synthesis rules ---
     Primary evidence is the host evidence pack above (KeyGen mpc-task-result bodies). Treat task coverage from that pack — do not claim a leaf failed/missing when its result is present with status complete.
