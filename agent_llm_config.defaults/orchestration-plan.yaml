@@ -72,7 +72,7 @@ modes:
         label: "**research-core-business** — *(stocks + crypto; not ETFs)* recent deliveries and near-term roadmap"
         when: [cash_equity, synthetic_stock, crypto]
       - idSuffix: technical-analysis
-        label: "**technical-analysis** — depth-2 TA coordinator (fetch_ohlcv once, then spawn chart:analyze leaves with requiredTool=analyze_*); avoid the phrase "analysis tools" in the task prompt"
+        label: "**technical-analysis** — depth-2 TA coordinator (fetch_ohlcv once, then spawn chart:analyze leaves with requiredTool=analyze_*); avoid the phrase 'analysis tools' in the task prompt"
         always: true
       - idSuffix: trade-ideas
         label: "**trade-ideas** — depends on TA (+ research leaves); venue/size may be follow-on"
@@ -214,9 +214,17 @@ policy:
     defaultMaxChildSpawns: 6
     defaultMaxRounds: 20
     maxCoordinatorWaves: 3
+    # requiredTool chart:analyze leaf budget (hard-fail still on when soft-success disabled).
+    analyzeLeafMaxRounds: 12
     requireAnalyzeEvidence: true
+    # Host refuses TA complete until spawn waves have matching joins (LastToolsRun coverage).
+    requireJoinBeforeComplete: true
+    # Leaf todo/run succeeds when requiredTool already produced analyze evidence (even if later rounds err).
+    completeOnRequiredToolEvidence: true
     softAcceptVerifyWhenEvidence: true
     disableSoftSuccessToolGroupPrefixes: ["chart:analyze", "chart:core"]
+    blockedDependentLastError: "skipped: TA did not complete"
+    incompleteAnalyzeMessage: "TA must spawn chart:analyze leaves (or run analyze_*) after OHLCV; fetch/prepare_chart alone is not enough for status: complete"
     # Family-header soft-accept list lives under modes.trade.analyzeEvidence (near top of trade).
     # Remaining evidence knobs (tool/summary needles, denies) stay here as shared host policy.
     analyzeEvidence:
@@ -242,7 +250,7 @@ policy:
         # - name: sources_on_topic
         #   spec: "Most https Sources should be about the instrument/topic in the task goal; a minority of sector/macro context links is OK. Fail when the Sources list is dominated by clearly unrelated tickers/companies with no explained link to the goal."
         - name: temporal_claims
-          spec: "Claims about \"today\", \"this week\", \"upcoming\", or catalysts must match as-of dating in evidence; past events must not be framed as future."
+          spec: "Claims about 'today', 'this week', 'upcoming', or catalysts must match as-of dating in evidence; past events must not be framed as future."
         - name: unknowns
           spec: "Brief Unknowns/gaps when coverage is thin (including rate-limited backends)."
       chartTA:
@@ -260,7 +268,7 @@ policy:
         - name: sources
           spec: "Sources section includes concrete https URLs for every external claim (title + URL lines)."
         - name: temporal_claims
-          spec: "Claims about \"today\", \"this week\", \"upcoming\", or catalysts must match as-of dating in evidence; past events must not be framed as future."
+          spec: "Claims about 'today', 'this week', 'upcoming', or catalysts must match as-of dating in evidence; past events must not be framed as future."
       synthesis:
         - name: rollup_grounded
           spec: "Rollup cites mpc-task-result evidence; does not invent levels, prices, or completed actions."
@@ -270,6 +278,26 @@ policy:
           spec: "Dated/upcoming framing matches evidence; past events are not framed as future; prefer as-of dating."
 
 contracts:
+  taCoordinatorHint: |
+    KeyGen TA coordinator (depth-2): you are a mid-level [Sub-agent]. Fetch OHLCV on this conversation once, then agent_spawn_sub_agent leaves with toolGroups:["chart:analyze"] and requiredTool set to the exact analyze_* name for that family (e.g. requiredTool=analyze_trend_structure, analyze_key_levels, analyze_momentum, analyze_range_volatility, analyze_moving_averages, analyze_bollinger_bands, analyze_chart_patterns, analyze_candlestick_patterns). One family per child.
+    OHLCV stays on this conversation — the host binds it into each leaf's requiredTool call; leaves must not fetch.
+    After prepare_chart / chart UI, do NOT stop for an analysis catalog/menu — continue spawning analyze_* leaves and join.
+    Prefer wording analyze_* / chart:analyze (not the phrase "analysis tools") in prompts and summaries.
+    Wave fan-out (async): call agent_spawn_sub_agent for each family in the wave (up to budget.maxChildSpawns, max 6) without waiting between spawns — each returns status:started immediately and runs in parallel.
+    Then call agent_join_sub_agents once to wait and collect results. If more analyze_* families remain, spawn the next wave the same way and join again until every planned family is covered.
+    Do not stop after the first wave when families remain — every spawn wave needs its own join.
+    HARD RULE: do NOT post mpc-task-result status:complete until every chart:analyze spawn wave has been joined.
+    OHLCV fetch + prepare_chart alone must post status:failed (or keep working) — host rejects complete without analyze fan-out + joins.
+    Leaves upsert tradeIdeas on this conversation; summarize from joined compress / tradeIdeasMenu (not guesses).
+    If send_key_gen_message aborts/times out: call get_key_gen_message_thread once; if your mpc-task-result landed, stop (success).
+    Finish by posting mpc-task-result v1 with a slim summary and tradeIdeas[] that include analysisSetup and source.chartData {dataSource, interval, barCount}. Do not build multiSign / Purpose / requestId — Orchestrator Continue does that. Specialists cannot spawn children.
+  synthesisEvidence: |
+    --- synthesis rules ---
+    Primary evidence is the host evidence pack above (KeyGen mpc-task-result bodies). Treat task coverage from that pack — do not claim a leaf failed/missing when its result is present with status complete.
+    get_key_gen_message_thread is optional secondary context only (may be truncated/offloaded).
+    Preserve as-of dating (temporal_claims). Sources with https links for any non-TA claims. Do not invent levels or prices.
+    Thorough final reports are fine (KeyGen body limit ~64KiB); prefer completeness over aggressive truncation.
+    If research coverage had fewer than 3 decent independent posts/sources, include operator guidance to enable better Research data sources in the MCP AI Ready list.
   researchEvidence: |
     --- research leaf rules (required) ---
     Search with legal/common name AND ticker (e.g. "Apple AAPL", "Ethereum ETH") — not ticker alone when ambiguous.
@@ -292,7 +320,7 @@ contracts:
 
 synthesis:
   defaultOrchestratorOnReply: |
-    All orchestration tasks are terminal (see orchestration state below). Read the KeyGen thread with get_key_gen_message_thread for mpc-task-result replies. Synthesize findings for the group: factual summary, trade-offs, and open questions. Thorough reports are welcome — do not artificially shorten; stay within the KeyGen message body limit (~64KiB). Do not assume the operator's goals, risk posture, or domain. If research leaves produced fewer than 3 decent independent sources/posts, tell the operator to enable better Research data sources in the MCP AI Ready list (Node → AI Agent → MCP / Variables). Post the synthesis as a KeyGen REPLY to the top-level orchestration message via send_key_gen_message (human-readable prose; a short TL;DR at the top is optional). Do not post task dispatches, progress-only updates, or mpc-orchestrate-task blocks.
+    All orchestration tasks are terminal (see orchestration state below). Primary evidence is the host evidence pack injected below (KeyGen mpc-task-result bodies) — treat coverage from that pack; do not claim a leaf failed/missing when its result is present with status complete. get_key_gen_message_thread is optional secondary context only (may be truncated/offloaded). Synthesize findings for the group: factual summary, trade-offs, and open questions. Thorough reports are welcome — do not artificially shorten; stay within the KeyGen message body limit (~64KiB). Do not assume the operator's goals, risk posture, or domain. If research leaves produced fewer than 3 decent independent sources/posts, tell the operator to enable better Research data sources in the MCP AI Ready list (Node → AI Agent → MCP / Variables). Post the synthesis as a KeyGen REPLY to the top-level orchestration message via send_key_gen_message (human-readable prose; a short TL;DR at the top is optional). Do not post task dispatches, progress-only updates, or mpc-orchestrate-task blocks.
 
 todoLabels:
   synthesize: Synthesize findings
