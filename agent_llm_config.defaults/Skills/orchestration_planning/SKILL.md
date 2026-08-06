@@ -85,14 +85,22 @@ Operators mark catalog MCPs **AI Ready** in Node settings. Plan turns receive th
 ## Workstream rules (executed later by specialists)
 
 - **Market research** (news/web) for `trade` / named-asset research — use AI Ready MCPs / web tools when worthwhile; list them on task `mcpServers` for Execute. Research tasks are **leaves** (never `role: coordinator`). Dated claims need as-of dating; final `mpc-task-result` must include a **Sources** section (`- Title — https://…`). Host runs each research leaf with the **~3 good sources** profile (stop searching once enough independent URLs, then summarize).
-  - **Split into ~3 research leaves** (mandatory for “Research the market for an asset” / `mode: trade` with a named asset). Do **not** author one monolithic research task. Default trio (parallel leaves, distinct prompts):
+  - **Split into research leaves** (mandatory for “Research the market for an asset” / `mode: trade` with a named asset). Do **not** author one monolithic research task. Always include the **default trio** (parallel leaves, distinct prompts), then **add** the conditional leaves below when they apply (do **not** drop a default leaf to “keep three”):
     1. **`<asset>-research-sentiment`** — sentiment & narrative (news/social tone, crowd positioning, fear/greed, dominant narrative; as-of dating; no price targets).
     2. **`<asset>-research-market-regime`** — broad market regime (crypto: BTC/ETH beta, risk-on/off, majors vs alts; equities: SPX/NQ/sector tape and whether the name leads or lags).
     3. **`<asset>-research-macro`** — macro backdrop (rates/liquidity/USD, inflation, policy calendar, geopolitics relevant to the asset class; dated events with as-of framing).
-  - **Allowed swaps** (keep ~3 leaves): replace one default with **asset catalysts** (earnings, product, unlocks, upgrades, listings), **protocol/on-chain fundamentals** (crypto/DeFi; Messari/Dune-style), **sector/peers**, or **venue/flow microstructure** (OI/funding/liquidations — descriptive only). Prefer asset catalysts over a vague catch-all when the name has a busy news cycle.
+    4. **`<asset>-research-financial-performance`** *(stocks / synthetic stocks only)* — latest financial results (earnings, revenue, margins, guidance, cash/balance highlights as reported) and **interpretation vs expectations** (consensus / prior guidance / Street vs print; beat/miss/inline with magnitudes when available). As-of dating; no price targets or buy/sell tips. **Include** for cash equities and equity-like synthetics (e.g. Hyperliquid HIP-3 stock perps such as `xyz:SPCX`). **Omit** for pure crypto tokens, ETFs, index funds, commodity baskets, and similar pass-through vehicles.
+    5. **`<asset>-research-core-business`** *(stocks and crypto; not ETFs)* — what products/services (or protocol features / major ship milestones) have **recently been delivered**, and what is **expected in the near future** (roadmap, launches, unlocks/upgrades for crypto; product/pipeline for equities). As-of dating; descriptive only — no trade tips. **Include** for single-name stocks/synthetics and crypto tokens/protocols. **Omit** for ETFs, index products, and similar baskets where “core business” is the underlying index, not an operating company.
+  - **Asset-class checklist (named asset):**
+    | Asset kind | Research leaves |
+    |------------|-----------------|
+    | Cash equity / synthetic stock perp | trio + financial-performance + core-business |
+    | Crypto token / protocol | trio + core-business |
+    | ETF / index / similar basket | trio only |
+  - **Allowed swaps** (among the default trio only — do **not** swap away financial-performance or core-business when they apply): replace one of sentiment / market-regime / macro with **asset catalysts** (earnings calendar color, unlocks, listings — keep distinct from the dedicated financial-performance / core-business leaves), **protocol/on-chain fundamentals** (crypto/DeFi; Messari/Dune-style), **sector/peers**, or **venue/flow microstructure** (OI/funding/liquidations — descriptive only). Prefer asset catalysts over a vague catch-all when the name has a busy news cycle.
   - **Prompt identity:** always include **legal/common name AND ticker** (e.g. `Apple (AAPL)`, `Ethereum (ETH)`), not ticker alone. Scope each leaf to its aspect only — no buy/sell tips, no `tradeIdeas`.
-  - **Equity / stock perps** (Hyperliquid HIP-3, etc.): say it is **synthetic/perp** exposure; label venue marks vs cash-equity prints.
-  - **Crypto:** full name + ticker + venue/chain; disambiguate ticker collisions (e.g. COMP).
+  - **Equity / stock perps** (Hyperliquid HIP-3, etc.): say it is **synthetic/perp** exposure; label venue marks vs cash-equity prints. Still run **financial-performance** and **core-business** against the **underlying company** (not the perp microstructure).
+  - **Crypto:** full name + ticker + venue/chain; disambiguate ticker collisions (e.g. COMP). Include **core-business**; omit **financial-performance** unless the asset is an equity synthetic.
   - Prefer `budget.maxRounds` **≥ 14** per research leaf (host floors research leaves to ~14 if lower). Tool evidence is **important** (`agent_web_search` / `agent_fetch_url` / AI Ready search or research-data MCP). Research-data MCP returns count toward the ~3-post bar even without https links. Once ~3 posts land, the host freezes further search tools so leaves summarize instead of thrashing rounds.
   - **Research data sources (required in plan markdown when weak):** the host injects an inventory of native `agent_web_search` (Brave + `BRAVE_API_KEY`), AI Ready **search engines** (catalog today: DuckDuckGo, Brave Search MCP, Google Search; common/upcoming MCP ids: Exa, Tavily, Chrome, Firefox, Mullvad Browser, Bing, Kagi, Serper, Perplexity), and AI Ready **research/data** MCPs. Repository catalog examples that materially improve research (activate + AI Ready + Variables as needed): **Messari**, **Dune Analytics**, **Alpha Vantage**, **Finance News RSS**, **FMP / Financial Modeling Prep** (when available), CoinGecko/CMC, etc. If **none** or **only one** search engine is available — name it explicitly (e.g. **DuckDuckGo** when `AGENT_DEFAULT_SEARCH_MCP=duckduckgo`, or **Brave** when only native search works) — add an **Assumptions / Research data sources** warning that quality improves when the operator enables those dedicated financial/world-news MCPs (Node → AI Agent → MCP / Variables). Prefer listing every AI Ready search + research/data id on research `tasks[].mcpServers` **plus continuum** (KeyGen only). Operators may set `AGENT_WEB_SEARCH_PROVIDER=off` and/or `AGENT_DEFAULT_SEARCH_MCP=<serverId>` (e.g. `duckduckgo`, `exa`, `chrome`, `mullvad-browser`) via AI Agent → Variables.
 - **Technical analysis** only if a crypto/stock is named (ticker or common name, e.g. ETH, Apple). Skip TA otherwise. Use the agreed lookback + candle interval (~300 bars max).
@@ -128,14 +136,16 @@ Operators mark catalog MCPs **AI Ready** in Node settings. Plan turns receive th
 - **Trade ideas**: include in this plan only when venue (and optionally size) are specified or the operator explicitly wants ideas without a venue; otherwise defer to follow-on.
   - Trade-ideas tasks are **leaves** (`maxChildSpawns: 0`, **never** `role: coordinator`).
   - Set `dependsOn: [<ta-task-id>]` only (research is best-effort). Host starts trade-ideas when TA is **`complete`** (skipped if TA failed); do not wait on research leaves. Evidence pack still includes any research siblings that already finished.
-  - **Evidence:** primary = returned TA `mpc-task-result` (levels/structure/setups). Secondary = non-prescriptive research leaves (sentiment / market regime / macro — and any swaps). **Ignore** pundit tips (“X says buy ETH at $Y”). Always end with **Sources** (title + https links). If fewer than 3 decent independent research posts/sources landed, the trade-ideas / synthesis report must tell the operator to enable better Research data sources in the **MCP AI Ready** list.
+  - **Evidence:** primary = returned TA `mpc-task-result` (levels/structure/setups). Secondary = non-prescriptive research leaves (sentiment / market regime / macro / financial-performance / core-business — and any swaps). **Ignore** pundit tips (“X says buy ETH at $Y”). Always end with **Sources** (title + https links). If fewer than 3 decent independent research posts/sources landed, the trade-ideas / synthesis report must tell the operator to enable better Research data sources in the **MCP AI Ready** list.
 - **Funding / size**: when size is in scope for this plan (see table above), use `agent_get_balance` across configured chains; warn on venue-chain shortfall if venue is set.
 
 ## Machine block
 
-Research / portfolio leaves: `mcpServers` must include **`continuum`** for KeyGen messaging (not search). Also list AI Ready search/research ids when known; the host auto-merges AI Ready search + research/data servers at Execute onto research-shaped leaves. For named-asset, yield, general market-conditions, and portfolio plans, author **~3** aspect leaves — never one catch-all task.
+Research / portfolio leaves: `mcpServers` must include **`continuum`** for KeyGen messaging (not search). Also list AI Ready search/research ids when known; the host auto-merges AI Ready search + research/data servers at Execute onto research-shaped leaves. For named-asset plans, author the **default trio plus applicable conditionals** (not one catch-all). Yield / general market-conditions / portfolio stay at **~3** aspect leaves.
 
 ### Example A — named asset (`mode: trade`)
+
+Stock / synthetic-stock example (all five research leaves). For **crypto**, omit `research-financial-performance`. For **ETFs / index baskets**, omit both `research-financial-performance` and `research-core-business`.
 
 ```mpc-orchestrate v1
 version: 1
@@ -174,6 +184,31 @@ tasks:
       maxRounds: 14
       maxWallClockMs: 180000
       maxChildSpawns: 0
+  - id: <asset>-research-financial-performance
+    prompt: |
+      Research latest financial performance for <Legal Name> (<TICKER>) (stock / synthetic stock underlying).
+      Latest results: revenue, earnings/EPS, margins, guidance, notable balance-sheet/cash items as reported.
+      Interpret vs expectations (consensus, prior guidance, Street vs print); note beat/miss/inline with magnitudes when available.
+      Equity perps: analyze the underlying company filings/results, not venue funding. As-of dating. No price targets.
+      ~3 good sources then summarize. Sources (title + https). No tradeIdeas.
+    mcpServers: ["continuum"]
+    toolGroups: ["keygen", "keygen_messaging"]
+    budget:
+      maxRounds: 14
+      maxWallClockMs: 180000
+      maxChildSpawns: 0
+  - id: <asset>-research-core-business
+    prompt: |
+      Research core business developments for <Legal Name> (<TICKER>).
+      What products/services (or protocol features / major milestones) were recently delivered, and what is expected near-term
+      (roadmap, launches, upgrades/unlocks for crypto; product/pipeline for equities). As-of dating. Descriptive only.
+      Equity perps: cover the underlying company. ~3 good sources then summarize. Sources (title + https). No tradeIdeas.
+    mcpServers: ["continuum"]
+    toolGroups: ["keygen", "keygen_messaging"]
+    budget:
+      maxRounds: 14
+      maxWallClockMs: 180000
+      maxChildSpawns: 0
   - id: <asset>-ta
     role: coordinator
     prompt: |
@@ -190,7 +225,7 @@ tasks:
       - "<asset>-ta"
     prompt: |
       Ground setups in TA mpc-task-result only.
-      Research leaves = non-prescriptive sentiment / regime / macro context (ignore buy-at-$Y tips).
+      Research leaves = non-prescriptive sentiment / regime / macro / financial-performance / core-business context (ignore buy-at-$Y tips).
       Sources with https links required. If <3 decent research posts, tell operator to enable better MCP AI Ready research sources.
     mcpServers: ["continuum"]
     toolGroups: ["keygen", "keygen_messaging"]
@@ -372,7 +407,7 @@ Rules:
 
 - Prefer `tasks[].toolGroups` Continuum pack ids; always include **`keygen_messaging`** so leaves can `send_key_gen_message` / `post_key_gen_chart_attachment`.
 - Default tasks are leaves (`maxChildSpawns: 0`). **`role: coordinator` is only for TA depth-2** (fetch once → spawn `chart:analyze` leaves). Never mark research, yield, or trade-ideas as coordinator.
-- **~3 aspect leaves** (never one catch-all): named-asset → sentiment / market-regime / macro; yield → opportunity-scan / risk-assessment / macro-stablecoin; general market conditions → sentiment / regime / macro; portfolio → wallet-inventory / protocol-performance / priced-rollup (or allowed swaps).
+- **Aspect leaves** (never one catch-all): named-asset → sentiment / market-regime / macro **+** financial-performance (stocks/synthetics) **+** core-business (stocks + crypto; not ETFs); yield → opportunity-scan / risk-assessment / macro-stablecoin; general market conditions → sentiment / regime / macro; portfolio → wallet-inventory / protocol-performance / priced-rollup (or allowed swaps among those sets).
 - Optional `dependsOn: [taskId, …]`: host waits for those tasks. Trade-ideas **must** depend on the TA task (`dependsOn: [<ta-id>]`) and starts when TA is **`complete`** (skipped if TA failed). Research deps are best-effort and must not block trade-ideas.
 - Do **not** perform the operator's research/trade work inline in plan chat — only author/refine the plan (unless they explicitly ask for a small clarifying lookup while drafting).
 - If a **system** message says orchestration was already posted, report status — do **not** ask to Execute again unless drafting a **new** or **follow-on** plan.

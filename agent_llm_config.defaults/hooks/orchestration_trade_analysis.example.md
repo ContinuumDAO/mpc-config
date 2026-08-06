@@ -6,7 +6,7 @@ Embed **symbol, interval, lookback, and execution protocol** (`hyperliquid` | `a
 
 ### Pattern B — depth-2 TA coordinator (**required** for TA in plans)
 
-One mid-level coordinator fetches OHLCV, spawns analyze leaves (`agent_spawn_sub_agent` / join) in **waves of ≤6**, then posts a single joined `tradeIdeas[]`. Pair with **~3 research leaves** (sentiment / market-regime / macro — or allowed swaps) and a trade-ideas **leaf** that `dependsOn` the TA task only (research is best-effort).
+One mid-level coordinator fetches OHLCV, spawns analyze leaves (`agent_spawn_sub_agent` / join) in **waves of ≤6**, then posts a single joined `tradeIdeas[]`. Pair with research leaves (default **sentiment / market-regime / macro**, plus **core-business** for crypto/stocks and **financial-performance** for stocks/synthetics only — omit both extras for ETFs) and a trade-ideas **leaf** that `dependsOn` the TA task only (research is best-effort).
 
 ```yaml
 # mpc-orchestrate v1
@@ -48,6 +48,19 @@ tasks:
       maxWallClockMs: 180000
       maxChildSpawns: 0
 
+  # Crypto: include core-business; omit financial-performance (stocks/synthetics only).
+  - id: eth-research-core-business
+    prompt: |
+      Research core business / protocol developments for Ethereum (ETH).
+      What was recently delivered (upgrades, features, ecosystem milestones) and what is expected near-term.
+      As-of dating. Descriptive only — no trade tips. ~3 good sources then summarize. Sources (title + https). No tradeIdeas.
+    mcpServers: ["continuum"]
+    toolGroups: ["keygen", "keygen_messaging"]
+    budget:
+      maxRounds: 14
+      maxWallClockMs: 180000
+      maxChildSpawns: 0
+
   - id: eth-ta
     role: coordinator
     prompt: |
@@ -70,7 +83,7 @@ tasks:
       - eth-ta
     prompt: |
       Ground directional setups ONLY in the eth-ta mpc-task-result (levels/structure).
-      Use research leaves only for non-prescriptive sentiment / regime / macro context.
+      Use research leaves only for non-prescriptive sentiment / regime / macro / core-business context.
       Ignore pundit "buy/sell at $Y" tips from research — they must not set side/entry/stop.
       Include Sources (title + https links) for any external claims. Preserve as-of dating.
       If fewer than 3 decent research posts/sources landed, tell the operator to enable better
