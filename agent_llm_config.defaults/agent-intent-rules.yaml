@@ -1,0 +1,49 @@
+# Host policy: free-text intent → Continuum pack boost + optional system hint.
+# Never short-circuits the LLM. Structured UI / Telegram callbacks stay hardwired in code.
+# Orchestration hook turns ignore rules whose modes omit "hook".
+version: 1
+
+rules:
+  - id: chart_analysis_catalog
+    match:
+      anySubstring:
+        - analysis options
+        - what analysis
+        - list analysis
+        - show analysis
+        - analysis menu
+        - analysis catalog
+    boostGroups: [chart:analyze, chart:core]
+    hint: >-
+      Operator asked for the analysis catalog; prefer list_chart_analysis_options when OHLCV is
+      bound in this conversation, then run analyze_* tools or wait for a menu pick.
+    modes: [interactive, cron]
+
+  - id: chart_customization_catalog
+    match:
+      anySubstring:
+        - customization options
+        - indicator options
+        - supported indicators
+        - which indicators
+        - list indicators
+    boostGroups: [chart:core]
+    hint: >-
+      Operator asked for chart customization/indicator options; prefer list_chart_customization_options
+      then apply_chart_drawings on the existing prepareReplay.
+    modes: [interactive, cron]
+
+  - id: chart_customization_simple
+    match:
+      anySubstring:
+        - add macd
+        - add rsi
+        - add ema
+        - remove macd
+        - remove rsi
+        - remove ema
+    boostGroups: [chart:core]
+    hint: >-
+      Operator asked to add/remove a common indicator; use apply_chart_drawings on the bound chart session
+      (do not prepare a fresh chart unless none exists).
+    modes: [interactive, cron]

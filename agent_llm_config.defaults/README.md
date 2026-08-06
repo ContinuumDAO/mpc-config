@@ -12,14 +12,15 @@ Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent
 | **`MCP_servers.json`** | Not copied to active storage | **Repository catalog** of optional MCP servers. Use **Add from repository** in the UI or `POST /addMcpServerFromCatalog` to activate on this node. See **MCP catalog secrets** below. |
 | **`trade-desk.yaml`** | Same name | Trade prefill desk defaults (offsets, sizing, LLM fallback). Host-parsed YAML; edit via UI **Host YAML configs** or reset-from-defaults. |
 | **`orchestration-plan.yaml`** | Same name | Plan modes, skeletons, task-class matchers, budgets, verify/soft-accept, contracts. Host-parsed YAML — product policy changes without rebuilding mpc-auth after the loader ships. |
+| **`agent-intent-rules.yaml`** | Same name | Free-text intent → Continuum pack boost + optional system hint (never short-circuits the LLM). Host-parsed YAML; seeds no-degrade policy affinity pins. |
 | **`Skills/`** | Same path | Agent skills: **`skills.json`** manifest plus **`.md`** / **`.txt`** bodies. |
 
-### Host YAML configs (`trade-desk.yaml`, `orchestration-plan.yaml`)
+### Host YAML configs (`trade-desk.yaml`, `orchestration-plan.yaml`, `agent-intent-rules.yaml`)
 
-These are **not** agent Skills. mpc-auth loads them at plan/trade time (mtime-aware cache). Ops model:
+These are **not** agent Skills. mpc-auth loads them at plan/trade/turn time (mtime-aware cache). Ops model:
 
 1. **One-time:** upgrade mpc-auth so the node understands the YAML schema + management APIs.
-2. **Ongoing:** edit the file under **`agent_llm_config.defaults/`**, `git pull` on the node, then **reset-from-defaults** in the UI (or `POST /resetOrchestrationPlanFromDefaults` / `/resetTradeDeskFromDefaults`) to overwrite the runtime copy. Or edit runtime YAML via upsert APIs / UI editor.
+2. **Ongoing:** edit the file under **`agent_llm_config.defaults/`**, `git pull` on the node, then **reset-from-defaults** in the UI (or `POST /resetOrchestrationPlanFromDefaults` / `/resetTradeDeskFromDefaults` / `/resetAgentIntentRulesFromDefaults`) to overwrite the runtime copy. Or edit runtime YAML via upsert APIs / UI editor.
 
 If YAML is missing or invalid, the node falls back to an embedded last-known-good copy and logs a warning.
 | **`cron/jobs.json`** | Not copied to runtime | **Repository catalog** of cron job templates. Use **Available from repository** in the UI or `POST /addCronJobFromCatalog`. Active jobs live in **`agent_llm_config/cron/jobs.json`**. |

@@ -15,6 +15,7 @@ If you run **`process_config.sh` with `sudo`**, the script creates **`agent_llm_
 | *(no `MCP_servers.json` here)* | Optional MCP catalog is **`agent_llm_config.defaults/MCP_servers.json`** on the host mount only — activate via **`POST /addMcpServerFromCatalog`**. Custom/active servers: **`POST /addMcpServer`** → MongoDB. |
 | **`trade-desk.yaml`** | Trade prefill defaults (host YAML). APIs: **`GET /getTradeDeskConfig`**, **`POST /upsertTradeDeskConfig`**, **`POST /resetTradeDeskFromDefaults`**. |
 | **`orchestration-plan.yaml`** | Plan modes + execution policy (host YAML). APIs: **`GET /getOrchestrationPlanConfig`**, **`POST /upsertOrchestrationPlanConfig`**, **`POST /resetOrchestrationPlanFromDefaults`**. After the mpc-auth loader upgrade, change leaves/matchers/budgets/verify text here — no binary rebuild. |
+| **`agent-intent-rules.yaml`** | Free-text intent → pack boost + hints (host YAML; never short-circuits the LLM). APIs: **`GET /getAgentIntentRulesConfig`**, **`POST /upsertAgentIntentRulesConfig`**, **`POST /resetAgentIntentRulesFromDefaults`**. |
 | **`Skills/`** | Agent skills manifest (**`skills.json`**) and **`.md`** / **`.txt`** bodies. |
 | **`cron/jobs.json`** | Cron job manifest; mpc-auth assigns **`id`**, **`conversationId`**, **`nextRunAt`**. Run logs: **`cron/runs/{jobId}.jsonl`**. |
 | **`hooks/`** | KeyGen hooks + inbound webhooks; run logs **`hooks/runs/{webhookId}.jsonl`**. |

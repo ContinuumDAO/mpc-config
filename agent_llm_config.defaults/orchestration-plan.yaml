@@ -72,7 +72,7 @@ modes:
         label: "**research-core-business** — *(stocks + crypto; not ETFs)* recent deliveries and near-term roadmap"
         when: [cash_equity, synthetic_stock, crypto]
       - idSuffix: technical-analysis
-        label: "**technical-analysis** — depth-2 TA coordinator if a ticker/name is specified"
+        label: "**technical-analysis** — depth-2 TA coordinator (fetch_ohlcv once, then spawn chart:analyze leaves with requiredTool=analyze_*); avoid the phrase "analysis tools" in the task prompt"
         always: true
       - idSuffix: trade-ideas
         label: "**trade-ideas** — depends on TA (+ research leaves); venue/size may be follow-on"
