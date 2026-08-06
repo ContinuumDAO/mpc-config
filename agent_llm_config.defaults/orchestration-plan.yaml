@@ -13,6 +13,46 @@ modes:
   trade:
     starterPrompt: |
       Research the market for an asset and draft a plan with trade suggestions. Clarify asset, OHLCV data source, lookback period and candle size (~300 candles max), whether they want to name an execution venue now (else defer venue/trade ideas to follow-on), and optional trade size (also deferrable to follow-on). When size is set with trade ideas in this plan, check balances via agent_get_balance on all configured chains; warn if a named venue's chain cannot cover the size. If trade ideas are follow-on, defer the funding check there.
+
+    # Soft-accept TA write-ups that name analysis families without raw tool names.
+    # familyHeaders: substring match (case-insensitive) against the task summary.
+    # Pick any subset from the Continuum chart:analyze catalog (tool → typical wording):
+    #
+    #   Structure / levels
+    #     analyze_trend_structure       → trend structure
+    #     analyze_key_levels            → key levels
+    #     analyze_key_level_fibonacci   → fibonacci   (also: key level fib)
+    #     analyze_elliott_waves         → elliott     (also: elliott wave)
+    #     analyze_chart_patterns        → chart patterns
+    #
+    #   Momentum / candles
+    #     analyze_momentum              → momentum    (also counted via momentumNeeds + momentumWith)
+    #     analyze_divergence            → divergence
+    #     analyze_candlestick_patterns  → candlestick
+    #
+    #   Oscillators / channels / MAs
+    #     analyze_bollinger_bands       → bollinger
+    #     analyze_donchian_breakout     → donchian
+    #     analyze_supertrend            → supertrend
+    #     analyze_ichimoku              → ichimoku
+    #     analyze_z_score               → z-score     (also: z score)
+    #     analyze_moving_averages       → moving averages
+    #     analyze_range_volatility      → range volatility
+    #
+    #   Other (usually not a trade-idea family)
+    #     analyze_liquidity_depth       → liquidity depth
+    #
+    # Example full pick-list (copy needles you want into familyHeaders):
+    #   [trend structure, key levels, fibonacci, elliott, chart patterns,
+    #    momentum, divergence, candlestick, bollinger, donchian, supertrend,
+    #    ichimoku, z-score, moving averages, range volatility, liquidity depth]
+    analyzeEvidence:
+      familyHeaderMinHits: 2
+      familyHeaders: [trend structure, key levels, moving averages, bollinger, chart patterns, candlestick]
+      # Momentum is special-cased: summary must contain a momentumNeeds term AND one of momentumWith.
+      momentumNeeds: [momentum]
+      momentumWith: [rsi, macd]
+
     systemPrefixExtra: |
       Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period (months/days/hours) and candle interval (e.g. 4h, 15m) — keep candle count sensible (~300 max for the source; shorten lookback or widen interval if over), (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities and synthetic stock perps; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets.
     workstreams:
@@ -177,14 +217,12 @@ policy:
     requireAnalyzeEvidence: true
     softAcceptVerifyWhenEvidence: true
     disableSoftSuccessToolGroupPrefixes: ["chart:analyze", "chart:core"]
+    # Family-header soft-accept list lives under modes.trade.analyzeEvidence (near top of trade).
+    # Remaining evidence knobs (tool/summary needles, denies) stay here as shared host policy.
     analyzeEvidence:
       toolNameNeedles: [analyze_, agent_spawn_sub_agent]
       summaryNeedles: [analyze_]
       tradeIdeasKey: tradeideas
-      familyHeaderMinHits: 2
-      familyHeaders: [trend structure, key levels, moving averages, bollinger, chart patterns, candlestick]
-      momentumNeeds: [momentum]
-      momentumWith: [rsi, macd]
       denyNeedles: ["no analyze", "analyze_* families could be", "spawn/join wave did not", "fan-out did not run"]
       joinedChartAnalyze: true
   verify:
@@ -195,9 +233,14 @@ policy:
     classes:
       research:
         - name: tool_backed_research
-          spec: "Tool evidence is important: prefer agent_web_search, agent_fetch_url, or AI Ready search/research-data MCP tools. Research-data MCP outputs (Messari/Dune/etc.) count even without https links. Do not fail solely because Sources lack URLs when host evidence shows research-data tools returned payloads. Fabricated URLs with zero tools should fail."
+          spec: "Tool evidence is important but host usedWebSearch flags are often incomplete for spawned specialists. Prefer agent_web_search, agent_fetch_url, or AI Ready search/research-data MCP tools. Research-data MCP outputs (Messari/Dune/etc.) count even without https links. When host evidence sourceURLCount >= 3, pass tool_backed_research — do not treat missing tool flags as fabricated Sources. Fail fabrication only when URLs look invented AND sourceURLCount is 0 AND no research-data tools ran."
         - name: sources
           spec: "Aim for ~3 independent posts/sources: https Sources lines and/or distinct research-data MCP returns. API rate/quota limits do not count as a source and must not by themselves fail the task. If fewer than 3 decent posts were found, the summary must tell the operator to enable better Research data sources in the MCP AI Ready list."
+        # Follow-up (not enabled): relevance / on-topic check for Sources vs the leaf goal
+        # (e.g. NVIDIA links for an SPCX regime leaf). Needs a clearer rubric + likely an
+        # extra LLM pass — ship separately from existence/fabrication gates.
+        # - name: sources_on_topic
+        #   spec: "Most https Sources should be about the instrument/topic in the task goal; a minority of sector/macro context links is OK. Fail when the Sources list is dominated by clearly unrelated tickers/companies with no explained link to the goal."
         - name: temporal_claims
           spec: "Claims about \"today\", \"this week\", \"upcoming\", or catalysts must match as-of dating in evidence; past events must not be framed as future."
         - name: unknowns
@@ -234,7 +277,7 @@ contracts:
     Crypto: full name + ticker + venue/chain; disambiguate ticker collisions.
     Gather about 3 good independent posts that answer the goal, then STOP tools and write findings. The 3-post rule is mandatory.
     Posts may be https Sources and/or successful AI Ready research-data MCP returns (Messari/Dune/etc. count even without citation links).
-    Tool evidence is important: prefer agent_web_search, agent_fetch_url, or AI Ready search/research-data tools — do not invent URLs. Once you have ~3 posts, stop searching immediately and summarize (host disables further search tools).
+    Tool evidence is important: prefer agent_web_search, agent_fetch_url, or AI Ready search/research-data tools — do not invent URLs. Host may still accept ~3 real https Sources even when tool flags were not persisted. Once you have ~3 posts, stop searching immediately and summarize (host disables further search tools).
     API rate/quota limits on a search or research/data tool are NOT automatic task failure — that backend simply cannot contribute a source. Skip it and keep gathering until you have 3 good posts, then post status: complete. Do not mark failed solely because a backend was rate-limited.
     If you cannot gather 3 good independent posts/sources, say so in the summary and include this operator guidance: enable better Research data sources in the MCP AI Ready list (Node → AI Agent → MCP / Variables) to improve research quality.
     End mpc-task-result with Sources: lines "- Title — https://…" when you have URLs. Note any rate-limited backends briefly. No tradeIdeas. No buy/sell price tips.
