@@ -10,7 +10,18 @@ Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent
 |------|--------------|---------|
 | **`MCP_default_servers.json`** | Same name (legacy seed) | Default **active** servers seeded on first DB migration: **continuum** (`initialLoad: true`), **coinmarketcap-public** / **coinbase-public** (`initialLoad: false`). |
 | **`MCP_servers.json`** | Not copied to active storage | **Repository catalog** of optional MCP servers. Use **Add from repository** in the UI or `POST /addMcpServerFromCatalog` to activate on this node. See **MCP catalog secrets** below. |
+| **`trade-desk.yaml`** | Same name | Trade prefill desk defaults (offsets, sizing, LLM fallback). Host-parsed YAML; edit via UI **Host YAML configs** or reset-from-defaults. |
+| **`orchestration-plan.yaml`** | Same name | Plan modes, skeletons, task-class matchers, budgets, verify/soft-accept, contracts. Host-parsed YAML — product policy changes without rebuilding mpc-auth after the loader ships. |
 | **`Skills/`** | Same path | Agent skills: **`skills.json`** manifest plus **`.md`** / **`.txt`** bodies. |
+
+### Host YAML configs (`trade-desk.yaml`, `orchestration-plan.yaml`)
+
+These are **not** agent Skills. mpc-auth loads them at plan/trade time (mtime-aware cache). Ops model:
+
+1. **One-time:** upgrade mpc-auth so the node understands the YAML schema + management APIs.
+2. **Ongoing:** edit the file under **`agent_llm_config.defaults/`**, `git pull` on the node, then **reset-from-defaults** in the UI (or `POST /resetOrchestrationPlanFromDefaults` / `/resetTradeDeskFromDefaults`) to overwrite the runtime copy. Or edit runtime YAML via upsert APIs / UI editor.
+
+If YAML is missing or invalid, the node falls back to an embedded last-known-good copy and logs a warning.
 | **`cron/jobs.json`** | Not copied to runtime | **Repository catalog** of cron job templates. Use **Available from repository** in the UI or `POST /addCronJobFromCatalog`. Active jobs live in **`agent_llm_config/cron/jobs.json`**. |
 | **`hooks/message_hook.json`**, **`hooks/message_hook_*.md`** | Same path | KeyGen `@agent` message hooks (copied once if missing). |
 | **`hooks/webhooks.json`** | Not copied to runtime | **Repository catalog** of inbound webhook templates. Use **Available from repository** in the UI or `POST /addWebhookFromCatalog`. Active jobs live in MongoDB **`LocalAgentWebhooks`**. |

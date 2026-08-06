@@ -1,0 +1,316 @@
+# Host-enforced plan / orchestration recipe (trade-desk pattern).
+# Runtime: agent_llm_config/orchestration-plan.yaml (seeded once; reset via API).
+# After mpc-auth loads this file, product changes ship via git pull + reset — no binary rebuild.
+version: 1
+
+assetClasses:
+  - cash_equity
+  - synthetic_stock
+  - crypto
+  - etf_or_basket
+
+modes:
+  trade:
+    starterPrompt: |
+      Research the market for an asset and draft a plan with trade suggestions. Clarify asset, OHLCV data source, lookback period and candle size (~300 candles max), whether they want to name an execution venue now (else defer venue/trade ideas to follow-on), and optional trade size (also deferrable to follow-on). When size is set with trade ideas in this plan, check balances via agent_get_balance on all configured chains; warn if a named venue's chain cannot cover the size. If trade ideas are follow-on, defer the funding check there.
+    systemPrefixExtra: |
+      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period (months/days/hours) and candle interval (e.g. 4h, 15m) — keep candle count sensible (~300 max for the source; shorten lookback or widen interval if over), (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities and synthetic stock perps; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets.
+    workstreams:
+      - idSuffix: research-sentiment
+        label: "**research-sentiment** — narrative / positioning for the named asset"
+        always: true
+      - idSuffix: research-market-regime
+        label: "**research-market-regime** — broad market / sector tape around the asset"
+        always: true
+      - idSuffix: research-macro
+        label: "**research-macro** — rates, liquidity, policy calendar"
+        always: true
+      - idSuffix: research-financial-performance
+        label: "**research-financial-performance** — *(stocks / synthetic stocks only)* latest results vs expectations"
+        when: [cash_equity, synthetic_stock]
+      - idSuffix: research-core-business
+        label: "**research-core-business** — *(stocks + crypto; not ETFs)* recent deliveries and near-term roadmap"
+        when: [cash_equity, synthetic_stock, crypto]
+      - idSuffix: technical-analysis
+        label: "**technical-analysis** — depth-2 TA coordinator if a ticker/name is specified"
+        always: true
+      - idSuffix: trade-ideas
+        label: "**trade-ideas** — depends on TA (+ research leaves); venue/size may be follow-on"
+        always: true
+
+  yield:
+    starterPrompt: |
+      Explore the best yield opportunities for stablecoins (USDC/USDT) and ETH staking using protocols available from this wallet.
+    systemPrefixExtra: |
+      Current mode: yield.
+    workstreams:
+      - idSuffix: yield-opportunity-scan
+        label: "**yield-opportunity-scan** — live APY/liquidity from Continuum DeFi packs"
+        always: true
+      - idSuffix: yield-risk-assessment
+        label: "**yield-risk-assessment** — depeg/oracle/protocol/exit risk"
+        always: true
+      - idSuffix: yield-macro-stablecoin
+        label: "**yield-macro-stablecoin** — rates, peg health, regulatory backdrop"
+        always: true
+
+  research:
+    starterPrompt: |
+      Assess general market conditions in a particular market. Ask which market/sector if not specified.
+    systemPrefixExtra: |
+      Current mode: research. Prefer AI Ready MCPs / web tools that help assess the market; put them on task mcpServers for Execute.
+    workstreams:
+      - idSuffix: market-research-sentiment
+        label: "**market-research-sentiment** — sentiment & narrative for the scoped market"
+        always: true
+      - idSuffix: market-research-regime
+        label: "**market-research-regime** — regime & breadth"
+        always: true
+      - idSuffix: market-research-macro
+        label: "**market-research-macro** — macro & policy calendar"
+        always: true
+      - idSuffix: technical-analysis
+        label: "**technical-analysis** — only if a specific asset is also named"
+        always: true
+
+  portfolio:
+    starterPrompt: |
+      Assess my portfolio: KeyGen balances on every configured chain, protocol positions with live performance where tools allow (perps uPnL/entry/mark/liq, staking/vault equity, lending rates), and a priced USD rollup.
+    systemPrefixExtra: |
+      Current mode: portfolio.
+    workstreams:
+      - idSuffix: portfolio-wallet-inventory
+        label: "**portfolio-wallet-inventory** — KeyGen balances on every configured chainId (`agent_get_balance`)"
+        always: true
+      - idSuffix: portfolio-protocol-performance
+        label: "**portfolio-protocol-performance** — perps uPnL/entry/mark/liq, staking/vault equity, lending rates (note tool gaps)"
+        always: true
+      - idSuffix: portfolio-priced-rollup
+        label: "**portfolio-priced-rollup** — CoinGecko/CMC USD snapshot (load MCP with operator consent)"
+        always: true
+
+  dao:
+    starterPrompt: |
+      Check the latest ContinuumDAO proposals and draft a plan with voting recommendations. DAO tooling is stubbed — outline steps and mark execution workstreams as deferred/follow-on.
+    systemPrefixExtra: |
+      Current mode: dao (stub — mark execution deferred).
+    workstreams:
+      - idSuffix: dao-proposals
+        label: "**dao-proposals** — *(stub / deferred)* list latest ContinuumDAO proposals"
+        always: true
+      - idSuffix: vote-recommendations
+        label: "**vote-recommendations** — *(stub / deferred)* summarize and recommend votes"
+        always: true
+    workstreamsFooter: |
+      > DAO decision assessment details are the subject of a follow-on implementation plan.
+
+  custom:
+    starterPrompt: |
+      Help me design a multi-workstream plan for my goal. Ask clarifying questions if needed.
+    systemPrefixExtra: |
+      Current mode: custom. On a new empty plan, offer starter options: market research, stablecoin yield, market conditions, ContinuumDAO proposals (stub), portfolio assessment, or something else.
+    workstreams:
+      - idSuffix: research
+        label: "**research** — gather facts for the operator goal"
+        always: true
+      - idSuffix: delivery
+        label: "**delivery** — synthesize findings for the KeyGen group"
+        always: true
+
+baseSystemPrefix: |
+  Plan thread: author and refine the conversation's markdown plan under user_folder/plans/<planId>.md (use the existing planId/planPath for this thread — do not create a second slug file). Set frontmatter mode to match this thread. The file must be human-readable: YAML frontmatter, Goal/Assumptions/Workstreams/Risks description of what will run, and a trailing mpc-orchestrate v1 fence for machines. Primary deliverable is that plan file via agent_write_file/agent_edit_file — not inline operator work. When the operator agrees to run the plan, call agent_execute_plan (or they use Execute plan in the UI). If a system message says orchestration was already posted to KeyGen, report status — do not ask to Execute again unless drafting a new/follow-on plan. Use AI Ready MCP servers when research warrants it (agent_load_mcp_server while drafting; list ids on tasks[].mcpServers for Execute).
+
+placeholderTask:
+  id: placeholder-research
+  prompt: |
+    Replace this placeholder with real workstreams from the plan body.
+    Use legal/common name + ticker; ~3 good sources then summarize.
+    Post mpc-task-result v1 when finished.
+  mcpServers: [continuum]
+  toolGroups: [keygen, keygen_messaging]
+  budget:
+    maxRounds: 14
+    maxWallClockMs: 180000
+
+taskClasses:
+  tradeIdeas:
+    match:
+      idContains: [trade-idea, trade_idea, tradeideas]
+      idContainsAll: [[trade, idea]]
+      excludeIdContains: [ta, chart, analyze]
+      promptContains: [consolidate the eth, consolidate the, concrete trade suggestions, trade suggestions scoped, directional synthesis]
+    role: leaf
+    forceMaxChildSpawns: 0
+    dependsOn:
+      autoWireFirstClass: ta
+      requireDepStatus: complete
+      onDepFailed: failSelf
+  ta:
+    match:
+      idSuffixes: ["-ta", "_ta"]
+      idContains: ["-ta", "ta-", technical, "chart-"]
+      idExactSuffixes: [ta]
+      toolGroupPrefixes: ["chart:analyze"]
+      promptContains: [technical analysis, fetch ohlcv, analyze_chart, "chart:analyze", spawn leaf specialists, "analyze_* family"]
+    role: coordinator
+    defaultMaxChildSpawns: 6
+    defaultMaxRounds: 20
+  research:
+    match:
+      idContains: [research, news]
+      promptContains: ["web/news", market research, catalyst, summarize recent, research the current, news sources]
+    role: leaf
+    forceMaxChildSpawns: 0
+
+policy:
+  research:
+    minSources: 3
+    maxRoundsFloor: 14
+    mergeAiReadySearchAndData: true
+    softAccept:
+      apiLimitWithMinSources: true
+      minPostsSoftAcceptVerify: true
+  ta:
+    defaultMaxChildSpawns: 6
+    defaultMaxRounds: 20
+    maxCoordinatorWaves: 3
+    requireAnalyzeEvidence: true
+    softAcceptVerifyWhenEvidence: true
+    disableSoftSuccessToolGroupPrefixes: ["chart:analyze", "chart:core"]
+    analyzeEvidence:
+      toolNameNeedles: [analyze_, agent_spawn_sub_agent]
+      summaryNeedles: [analyze_]
+      tradeIdeasKey: tradeideas
+      familyHeaderMinHits: 2
+      familyHeaders: [trend structure, key levels, moving averages, bollinger, chart patterns, candlestick]
+      momentumNeeds: [momentum]
+      momentumWith: [rsi, macd]
+      denyNeedles: ["no analyze", "analyze_* families could be", "spawn/join wave did not", "fan-out did not run"]
+      joinedChartAnalyze: true
+  verify:
+    severity: harsh
+    maxIters: 1
+    includeEvidenceBound: true
+    factCheckClasses: [research, tradeIdea, synthesis]
+    classes:
+      research:
+        - name: tool_backed_research
+          spec: "Tool evidence is important: prefer agent_web_search, agent_fetch_url, or AI Ready search/research-data MCP tools. Research-data MCP outputs (Messari/Dune/etc.) count even without https links. Do not fail solely because Sources lack URLs when host evidence shows research-data tools returned payloads. Fabricated URLs with zero tools should fail."
+        - name: sources
+          spec: "Aim for ~3 independent posts/sources: https Sources lines and/or distinct research-data MCP returns. API rate/quota limits do not count as a source and must not by themselves fail the task. If fewer than 3 decent posts were found, the summary must tell the operator to enable better Research data sources in the MCP AI Ready list."
+        - name: temporal_claims
+          spec: "Claims about \"today\", \"this week\", \"upcoming\", or catalysts must match as-of dating in evidence; past events must not be framed as future."
+        - name: unknowns
+          spec: "Brief Unknowns/gaps when coverage is thin (including rate-limited backends)."
+      chartTA:
+        - name: analyze_fanout
+          spec: "Depth-2 TA must spawn chart:analyze leaves (or run analyze_* families) after OHLCV — posting complete after fetch/prepare_chart alone without analyze fan-out fails."
+        - name: chart_grounded
+          spec: "Levels/setups grounded in fetched OHLCV; record chartDataSource/interval/barCount when available."
+      tradeIdea:
+        - name: setup_fields
+          spec: "Trade idea includes entry, stop loss, and take profit consistent with TA analysis evidence."
+        - name: ta_grounded
+          spec: "Directional setups are grounded in TA task evidence, not invented and not taken from pundit buy/sell price tips."
+        - name: research_non_prescriptive
+          spec: "Research is used only as non-prescriptive macro/sentiment/catalyst context."
+        - name: sources
+          spec: "Sources section includes concrete https URLs for every external claim (title + URL lines)."
+        - name: temporal_claims
+          spec: "Claims about \"today\", \"this week\", \"upcoming\", or catalysts must match as-of dating in evidence; past events must not be framed as future."
+      synthesis:
+        - name: rollup_grounded
+          spec: "Rollup cites mpc-task-result evidence; does not invent levels, prices, or completed actions."
+        - name: sources
+          spec: "Non-TA claims include Sources with concrete https URLs."
+        - name: temporal_claims
+          spec: "Dated/upcoming framing matches evidence; past events are not framed as future; prefer as-of dating."
+
+contracts:
+  researchEvidence: |
+    --- research leaf rules (required) ---
+    Search with legal/common name AND ticker (e.g. "Apple AAPL", "Ethereum ETH") — not ticker alone when ambiguous.
+    Equity / stock perps (Hyperliquid HIP-3, etc.): synthetic/perp exposure — label venue marks vs cash-equity prints; cover earnings, product cycle, sector/macro catalysts with as-of dating.
+    Crypto: full name + ticker + venue/chain; disambiguate ticker collisions.
+    Gather about 3 good independent posts that answer the goal, then STOP tools and write findings. The 3-post rule is mandatory.
+    Posts may be https Sources and/or successful AI Ready research-data MCP returns (Messari/Dune/etc. count even without citation links).
+    Tool evidence is important: prefer agent_web_search, agent_fetch_url, or AI Ready search/research-data tools — do not invent URLs. Once you have ~3 posts, stop searching immediately and summarize (host disables further search tools).
+    API rate/quota limits on a search or research/data tool are NOT automatic task failure — that backend simply cannot contribute a source. Skip it and keep gathering until you have 3 good posts, then post status: complete. Do not mark failed solely because a backend was rate-limited.
+    If you cannot gather 3 good independent posts/sources, say so in the summary and include this operator guidance: enable better Research data sources in the MCP AI Ready list (Node → AI Agent → MCP / Variables) to improve research quality.
+    End mpc-task-result with Sources: lines "- Title — https://…" when you have URLs. Note any rate-limited backends briefly. No tradeIdeas. No buy/sell price tips.
+  tradeIdeasEvidence: |
+    --- trade-ideas evidence rules (required) ---
+    Primary evidence: the TA mpc-task-result in the evidence pack (levels, structure, setups).
+    Secondary: completed research siblings for non-prescriptive macro/sentiment/catalyst context only (research is best-effort; do not wait on missing research).
+    Ignore pundit tips ("buy/sell at $Y", influencer targets) — they must not set side/entry/stop.
+    Always end mpc-task-result / summary with Sources: lines "- Title — https://…".
+    Preserve as-of dating for temporal claims; do not frame past events as upcoming.
+    If the evidence pack has fewer than 3 decent independent research posts/sources, include this operator feedback in the summary: enable better Research data sources in the MCP AI Ready list (Node → AI Agent → MCP / Variables) — e.g. Messari, Dune, Alpha Vantage, Finance News RSS, FMP, Exa/Tavily — to improve research quality.
+
+synthesis:
+  defaultOrchestratorOnReply: |
+    All orchestration tasks are terminal (see orchestration state below). Read the KeyGen thread with get_key_gen_message_thread for mpc-task-result replies. Synthesize findings for the group: factual summary, trade-offs, and open questions. Thorough reports are welcome — do not artificially shorten; stay within the KeyGen message body limit (~64KiB). Do not assume the operator's goals, risk posture, or domain. If research leaves produced fewer than 3 decent independent sources/posts, tell the operator to enable better Research data sources in the MCP AI Ready list (Node → AI Agent → MCP / Variables). Post the synthesis as a KeyGen REPLY to the top-level orchestration message via send_key_gen_message (human-readable prose; a short TL;DR at the top is optional). Do not post task dispatches, progress-only updates, or mpc-orchestrate-task blocks.
+
+todoLabels:
+  synthesize: Synthesize findings
+  taIdSuffixes: ["-ta", "_ta"]
+  taExact: [ta]
+  tradeIdeaContains: [trade-idea, trade_idea, tradeideas]
+  researchPrefix: "Research: "
+
+mcpClassification:
+  knownSearchEngineIDs:
+    - duckduckgo
+    - brave-search
+    - google-search
+    - exa
+    - tavily
+    - chrome
+    - firefox
+    - mullvad-browser
+    - bing
+    - kagi
+    - serper
+    - perplexity
+  knownResearchDataIDs:
+    - messari
+    - dune
+    - alphavantage
+    - finance-news
+    - fmp
+    - financial-modeling-prep
+    - coingecko
+    - coingecko-pro
+    - coinmarketcap
+    - coinmarketcap-public
+    - altfins
+    - whale-tracker
+    - binance
+  searchNeedles:
+    - duckduck
+    - brave-search
+    - google-search
+    - tavily
+    - exa
+    - serp
+    - bing search
+    - web_search
+    - web search
+    - perplexity
+    - kagi
+  researchDataNeedles:
+    - messari
+    - dune
+    - alpha vantage
+    - alphavantage
+    - finance news
+    - finance-news
+    - fmp
+    - financial modeling
+    - coingecko
+    - coinmarketcap
+    - altfins
+    - whale
+    - fundamentals
+    - on-chain analytics
+    - rss

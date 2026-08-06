@@ -106,6 +106,7 @@ DEFAULT_USER_FOLDER_DIR="user_folder"
 DEFAULT_USER_FOLDER_CONTAINER_PATH="/app/user_folder"
 DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME="MCP_default_servers.json"
 DEFAULT_TRADE_DESK_BASENAME="trade-desk.yaml"
+DEFAULT_ORCHESTRATION_PLAN_BASENAME="orchestration-plan.yaml"
 DEFAULT_CRON_TRADE_REL="cron/trade-cron.yaml"
 DEFAULT_AGENT_CRON_JOBS_REL="cron/jobs.json"
 DEFAULT_AGENT_HOOKS_REL="hooks"
@@ -167,6 +168,22 @@ _seed_trade_desk_yaml() {
     fi
     if cp "$src" "$dest" 2>/dev/null; then
         print_success "agent_llm_config: installed ${DEFAULT_TRADE_DESK_BASENAME}"
+    fi
+}
+
+# Copy orchestration-plan.yaml into agent_llm_config/ (once) for plan modes / execution policy.
+_seed_orchestration_plan_yaml() {
+    local cfg_parent="$1"
+    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/${DEFAULT_ORCHESTRATION_PLAN_BASENAME}"
+    local dest="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_ORCHESTRATION_PLAN_BASENAME}"
+    if [ ! -f "$src" ]; then
+        return 0
+    fi
+    if [ -f "$dest" ]; then
+        return 0
+    fi
+    if cp "$src" "$dest" 2>/dev/null; then
+        print_success "agent_llm_config: installed ${DEFAULT_ORCHESTRATION_PLAN_BASENAME}"
     fi
 }
 
@@ -7378,6 +7395,7 @@ main() {
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
         _seed_agent_mcp_default_servers_file "${_cfg_parent}" || true
         _seed_trade_desk_yaml "${_cfg_parent}" || true
+        _seed_orchestration_plan_yaml "${_cfg_parent}" || true
         _seed_cron_trade_yaml "${_cfg_parent}" || true
         _seed_agent_llm_runtime_readme "${_cfg_parent}" || true
         _seed_agent_skills_catalog "${_cfg_parent}" || true
