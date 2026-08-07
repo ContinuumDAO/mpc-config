@@ -54,7 +54,7 @@ modes:
       momentumWith: [rsi, macd]
 
     systemPrefixExtra: |
-      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period (months/days/hours) and candle interval (e.g. 4h, 15m) — prefer a window with bars ≥ longest MA period in policy.ta.requiredToolMinBars (default slow 200; aim ~220) so moving averages can run (e.g. ≥37d @ 4h or ≥10d @ 1h); keep candle count sensible (~300 max for the source; shorten lookback or widen interval if over), (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities, synthetic stock perps, and crypto; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets. TA fan-out tools come only from policy.ta.analyzeTools in orchestration-plan.yaml — if that list is empty, omit technical-analysis and trade-ideas workstreams (do not invent analyze_* families).
+      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period (months/days/hours) and candle interval (e.g. 4h, 15m) — prefer a window with bars ≥ longest MA period in policy.ta.requiredToolMinBars (default slow 200; aim ~220) so moving averages can run (e.g. ≥37d @ 4h or ≥10d @ 1h); keep candle count sensible (~300 max for the source; shorten lookback or widen interval if over), (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities, synthetic stock perps, and crypto; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets. For each research leaf, evaluate AI Ready MCPs (see host inventory) and put only topic-relevant ids on that task's mcpServers with continuum — e.g. finance-news/brave-search for sentiment; fundamentals MCPs for financial-performance; do not dump all AI Ready servers on every leaf. TA fan-out tools come only from policy.ta.analyzeTools in orchestration-plan.yaml — if that list is empty, omit technical-analysis and trade-ideas workstreams (do not invent analyze_* families).
     workstreams:
       - idSuffix: research-sentiment
         label: "**research-sentiment** — narrative / positioning for the named asset"
@@ -100,7 +100,7 @@ modes:
     starterPrompt: |
       Assess general market conditions in a particular market. FIRST: confirm a working search path (agent_web_search, or AGENT_DEFAULT_SEARCH_MCP → AI Ready search MCP). If the host gate is BLOCKED, ask the operator to fix Variables/MCP before scoping the market. Then ask which market/sector if not specified.
     systemPrefixExtra: |
-      Current mode: research. Prefer AI Ready MCPs / web tools that help assess the market; put them on task mcpServers for Execute.
+      Current mode: research. Evaluate AI Ready MCPs against each workstream topic and list only relevant ids on that task's mcpServers (always continuum); do not force every AI Ready server onto every leaf.
     workstreams:
       - idSuffix: market-research-sentiment
         label: "**market-research-sentiment** — sentiment & narrative for the scoped market"
@@ -161,7 +161,7 @@ modes:
         always: true
 
 baseSystemPrefix: |
-  Plan thread: author and refine the conversation's markdown plan under user_folder/plans/<planId>.md (use the existing planId/planPath for this thread — do not create a second slug file). Set frontmatter mode to match this thread. The file must be human-readable: YAML frontmatter, Goal/Assumptions/Workstreams/Risks description of what will run, and a trailing mpc-orchestrate v1 fence for machines. Primary deliverable is that plan file via agent_write_file/agent_edit_file — not inline operator work. When the operator agrees to run the plan, call agent_execute_plan (or they use Execute plan in the UI). If a system message says orchestration was already posted to KeyGen, report status — do not ask to Execute again unless drafting a new/follow-on plan. Use AI Ready MCP servers when research warrants it (agent_load_mcp_server while drafting; list ids on tasks[].mcpServers for Execute).
+  Plan thread: author and refine the conversation's markdown plan under user_folder/plans/<planId>.md (use the existing planId/planPath for this thread — do not create a second slug file). Set frontmatter mode to match this thread. The file must be human-readable: YAML frontmatter, Goal/Assumptions/Workstreams/Risks description of what will run, and a trailing mpc-orchestrate v1 fence for machines. Primary deliverable is that plan file via agent_write_file/agent_edit_file — not inline operator work. When the operator agrees to run the plan, call agent_execute_plan (or they use Execute plan in the UI). If a system message says orchestration was already posted to KeyGen, report status — do not ask to Execute again unless drafting a new/follow-on plan. For research tasks: evaluate each AI Ready MCP against that workstream's topic and list only relevant server ids on tasks[].mcpServers (always include continuum for KeyGen). Do not copy every AI Ready server onto every research leaf — host Execute does not force-append them.
 
 placeholderTask:
   id: placeholder-research
@@ -209,6 +209,8 @@ policy:
   research:
     minSources: 3
     maxRoundsFloor: 14
+    # When true: Execute research leaves also receive AGENT_DEFAULT_SEARCH_MCP if set.
+    # Plan agent still selects topic-relevant AI Ready ids into tasks[].mcpServers — host does not force-all.
     mergeAiReadySearchAndData: true
     softAccept:
       apiLimitWithMinSources: true
@@ -311,8 +313,9 @@ contracts:
     analyze_range_volatility: do NOT pass lookback / lookbackDays — the bound OHLCV window is the series; optional knob is atrPeriod (2–50) only. For trend/key_levels swing lookback, use 2–20 only (never copy lookbackDays).
     Wave fan-out (async): call agent_spawn_sub_agent for each family in the wave (up to budget.maxChildSpawns, max 6) without waiting between spawns — each returns status:started immediately and runs in parallel.
     Then call agent_join_sub_agents once to wait and collect results. Lifetime child budget is wave size × maxCoordinatorWaves (host-enforced, typically 18 when wave=6) — do not stop after the first 6 spawns when families remain; spawn the next wave and join again until every analyzeTools entry is covered.
+    After each join the host lists any remaining analyzeTools — treat that as a mandatory next wave (budget remaining is wave×waves, not "exhausted at 6").
     Do not stop after the first wave when families remain — every spawn wave needs its own join.
-    HARD RULE: do NOT post mpc-task-result status:complete until every chart:analyze spawn wave has been joined and every analyzeTools entry was spawned.
+    HARD RULE: do NOT post mpc-task-result status:complete until every chart:analyze spawn wave has been joined and every analyzeTools entry was spawned. The host refuses status:complete while any analyzeTools entry is missing.
     OHLCV fetch + prepare_chart alone must post status:failed (or keep working) — host rejects complete without analyze fan-out + joins.
     Leaves upsert tradeIdeas on this conversation; summarize from joined compress / tradeIdeasMenu (not guesses).
     If send_key_gen_message aborts/times out: call get_key_gen_message_thread once; if your mpc-task-result landed, stop (success).
