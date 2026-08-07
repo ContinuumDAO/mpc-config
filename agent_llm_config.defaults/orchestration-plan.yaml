@@ -12,7 +12,7 @@ assetClasses:
 modes:
   trade:
     starterPrompt: |
-      Research the market for an asset and draft a plan with trade suggestions. Clarify asset, OHLCV data source, lookback period and candle size (~300 candles max), whether they want to name an execution venue now (else defer venue/trade ideas to follow-on), and optional trade size (also deferrable to follow-on). When size is set with trade ideas in this plan, check balances via agent_get_balance on all configured chains; warn if a named venue's chain cannot cover the size. If trade ideas are follow-on, defer the funding check there.
+      Research the market for an asset and draft a plan with trade suggestions. FIRST (before asset/TA clarifications): confirm a working search path — either native agent_web_search works, or AGENT_DEFAULT_SEARCH_MCP is set to an AI Ready web-search/browser MCP that works. If the host search-path gate says BLOCKED, ask the operator to fix Node → AI Agent → Variables/MCP and stop; do not invent Sources. Then clarify asset, OHLCV data source, lookback period and candle size (~300 candles max), whether they want to name an execution venue now (else defer venue/trade ideas to follow-on), and optional trade size (also deferrable to follow-on). When size is set with trade ideas in this plan, check balances via agent_get_balance on all configured chains; warn if a named venue's chain cannot cover the size. If trade ideas are follow-on, defer the funding check there.
 
     # Soft-accept TA write-ups that name analysis families without raw tool names.
     # familyHeaders: substring match (case-insensitive) against the task summary.
@@ -54,7 +54,7 @@ modes:
       momentumWith: [rsi, macd]
 
     systemPrefixExtra: |
-      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period (months/days/hours) and candle interval (e.g. 4h, 15m) — prefer a window with bars ≥ longest MA period in policy.ta.requiredToolMinBars (default slow 200; aim ~220) so moving averages can run (e.g. ≥37d @ 4h or ≥10d @ 1h); keep candle count sensible (~300 max for the source; shorten lookback or widen interval if over), (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities, synthetic stock perps, and crypto; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets.
+      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period (months/days/hours) and candle interval (e.g. 4h, 15m) — prefer a window with bars ≥ longest MA period in policy.ta.requiredToolMinBars (default slow 200; aim ~220) so moving averages can run (e.g. ≥37d @ 4h or ≥10d @ 1h); keep candle count sensible (~300 max for the source; shorten lookback or widen interval if over), (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities, synthetic stock perps, and crypto; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets. TA fan-out tools come only from policy.ta.analyzeTools in orchestration-plan.yaml — if that list is empty, omit technical-analysis and trade-ideas workstreams (do not invent analyze_* families).
     workstreams:
       - idSuffix: research-sentiment
         label: "**research-sentiment** — narrative / positioning for the named asset"
@@ -72,11 +72,13 @@ modes:
         label: "**research-core-business** — *(stocks + crypto; not ETFs)* recent deliveries and near-term roadmap"
         when: [cash_equity, synthetic_stock, crypto]
       - idSuffix: technical-analysis
-        label: "**technical-analysis** — depth-2 TA coordinator (fetch_ohlcv once, then spawn chart:analyze leaves with requiredTool=analyze_*); avoid the phrase 'analysis tools' in the task prompt"
+        label: "**technical-analysis** — depth-2 TA coordinator (fetch_ohlcv once, then spawn chart:analyze leaves for every tool in policy.ta.analyzeTools); avoid the phrase 'analysis tools' in the task prompt"
         always: true
+        requiresAnalyzeTools: true
       - idSuffix: trade-ideas
         label: "**trade-ideas** — depends on TA (+ research leaves); venue/size may be follow-on"
         always: true
+        requiresAnalyzeTools: true
 
   yield:
     starterPrompt: |
@@ -96,7 +98,7 @@ modes:
 
   research:
     starterPrompt: |
-      Assess general market conditions in a particular market. Ask which market/sector if not specified.
+      Assess general market conditions in a particular market. FIRST: confirm a working search path (agent_web_search, or AGENT_DEFAULT_SEARCH_MCP → AI Ready search MCP). If the host gate is BLOCKED, ask the operator to fix Variables/MCP before scoping the market. Then ask which market/sector if not specified.
     systemPrefixExtra: |
       Current mode: research. Prefer AI Ready MCPs / web tools that help assess the market; put them on task mcpServers for Execute.
     workstreams:
@@ -110,8 +112,9 @@ modes:
         label: "**market-research-macro** — macro & policy calendar"
         always: true
       - idSuffix: technical-analysis
-        label: "**technical-analysis** — only if a specific asset is also named"
+        label: "**technical-analysis** — only if a specific asset is also named and policy.ta.analyzeTools is non-empty"
         always: true
+        requiresAnalyzeTools: true
 
   portfolio:
     starterPrompt: |
@@ -225,6 +228,17 @@ policy:
     disableSoftSuccessToolGroupPrefixes: ["chart:analyze", "chart:core"]
     blockedDependentLastError: "skipped: TA did not complete"
     incompleteAnalyzeMessage: "TA must spawn chart:analyze leaves (or run analyze_*) after OHLCV; fetch/prepare_chart alone is not enough for status: complete"
+    # Authoritative fan-out list (requiredTool per leaf). Empty → skip TA (skeleton + execute strip).
+    # Edit here only — mpc-auth does not invent a default analyze set.
+    analyzeTools:
+      - analyze_trend_structure
+      - analyze_key_levels
+      - analyze_momentum
+      - analyze_range_volatility
+      - analyze_moving_averages
+      - analyze_bollinger_bands
+      - analyze_chart_patterns
+      - analyze_candlestick_patterns
     # Spawn enqueue gate: reject when session bars < need (avoids burning child budget).
     # Period-based tools: need = max(periods) — e.g. MA warm-up equals the longest MA.
     # Optional minBars overrides max(periods) when set > 0.
@@ -288,16 +302,17 @@ policy:
 
 contracts:
   taCoordinatorHint: |
-    KeyGen TA coordinator (depth-2): you are a mid-level [Sub-agent]. Fetch OHLCV on this conversation once, then agent_spawn_sub_agent leaves with toolGroups:["chart:analyze"] and requiredTool set to the exact analyze_* name for that family (e.g. requiredTool=analyze_trend_structure, analyze_key_levels, analyze_momentum, analyze_range_volatility, analyze_moving_averages, analyze_bollinger_bands, analyze_chart_patterns, analyze_candlestick_patterns). One family per child.
+    KeyGen TA coordinator (depth-2): you are a mid-level [Sub-agent]. Fetch OHLCV on this conversation once, then agent_spawn_sub_agent leaves with toolGroups:["chart:analyze"] and requiredTool set to each analyze_* name from the host-injected analyzeTools list (orchestration-plan.yaml policy.ta.analyzeTools). One family per child. Spawn every listed tool; do not invent extras unless the operator asked; do not skip listed tools.
+    If the host-injected analyzeTools list is empty, do not run TA fan-out — post status:failed noting policy.ta.analyzeTools is empty.
     OHLCV stays on this conversation — the host binds it into each leaf's requiredTool call; leaves must not fetch.
     Moving averages: bars needed = longest MA period (policy.ta.requiredToolMinBars.analyze_moving_averages.periods → max; default 50/200 → 200). If the bound session is shorter, re-fetch with a longer lookback on this conversation first (e.g. ≥34d @ 4h), then spawn MA — the host rejects short-bar MA spawns so they do not burn child budget. Aim to complete MA when lookback allows.
     After prepare_chart / chart UI, do NOT stop for an analysis catalog/menu — continue spawning analyze_* leaves and join.
     Prefer wording analyze_* / chart:analyze (not the phrase "analysis tools") in prompts and summaries.
-    analyze_range_volatility: do NOT pass lookback / lookbackDays — the bound OHLCV window is the series; optional knob is atrPeriod (2–50) only.
+    analyze_range_volatility: do NOT pass lookback / lookbackDays — the bound OHLCV window is the series; optional knob is atrPeriod (2–50) only. For trend/key_levels swing lookback, use 2–20 only (never copy lookbackDays).
     Wave fan-out (async): call agent_spawn_sub_agent for each family in the wave (up to budget.maxChildSpawns, max 6) without waiting between spawns — each returns status:started immediately and runs in parallel.
-    Then call agent_join_sub_agents once to wait and collect results. Lifetime child budget is wave size × maxCoordinatorWaves (host-enforced, typically 18 when wave=6) — do not stop after the first 6 spawns when families remain; spawn the next wave and join again until every planned family is covered.
+    Then call agent_join_sub_agents once to wait and collect results. Lifetime child budget is wave size × maxCoordinatorWaves (host-enforced, typically 18 when wave=6) — do not stop after the first 6 spawns when families remain; spawn the next wave and join again until every analyzeTools entry is covered.
     Do not stop after the first wave when families remain — every spawn wave needs its own join.
-    HARD RULE: do NOT post mpc-task-result status:complete until every chart:analyze spawn wave has been joined.
+    HARD RULE: do NOT post mpc-task-result status:complete until every chart:analyze spawn wave has been joined and every analyzeTools entry was spawned.
     OHLCV fetch + prepare_chart alone must post status:failed (or keep working) — host rejects complete without analyze fan-out + joins.
     Leaves upsert tradeIdeas on this conversation; summarize from joined compress / tradeIdeasMenu (not guesses).
     If send_key_gen_message aborts/times out: call get_key_gen_message_thread once; if your mpc-task-result landed, stop (success).
