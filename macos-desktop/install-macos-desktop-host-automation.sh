@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Install macOS host automation for Docker Desktop (pending-update.json + pending-vpn.json watcher + launchd).
+# Install macOS host automation for Docker Desktop
+# (pending-update.json + pending-vpn.json + pending-telegram-ngrok.json watcher + launchd).
 #
 # Usage:
 #   bash macos-desktop/install-macos-desktop-host-automation.sh --repo-dir ~/mpc-config
@@ -16,7 +17,7 @@ Usage:
   bash macos-desktop/install-macos-desktop-host-automation.sh --repo-dir PATH
 
 Installs libexec copies, repo-local mpc-auth-docker.env, /var/lib/mpc-auth-docker,
-starts the pending-update + pending-vpn watcher, and loads the launchd LaunchAgent.
+starts the pending-update + pending-vpn + pending-telegram-ngrok watcher, and loads the launchd LaunchAgent.
 EOF
 }
 
@@ -118,6 +119,26 @@ if [[ -f "${SYSTEMD_ROOT}/mpc-auth-apply-pending-vpn.sh" ]]; then
 		"${LIBEXEC}/mpc-auth-apply-pending-vpn.sh"
 fi
 
+if [[ -f "${SYSTEMD_ROOT}/mpc-auth-apply-pending-telegram-ngrok.sh" ]]; then
+	for f in mpc-auth-apply-pending-telegram-ngrok.sh mpc-auth-telegram-ngrok-enable.sh mpc-auth-telegram-ngrok-disable.sh; do
+		if [[ ! -f "${SYSTEMD_ROOT}/${f}" ]]; then
+			echo "error: missing ${SYSTEMD_ROOT}/${f}" >&2
+			exit 1
+		fi
+	done
+	install -m 0755 \
+		"${SYSTEMD_ROOT}/mpc-auth-apply-pending-telegram-ngrok.sh" \
+		"${SYSTEMD_ROOT}/mpc-auth-telegram-ngrok-enable.sh" \
+		"${SYSTEMD_ROOT}/mpc-auth-telegram-ngrok-disable.sh" \
+		"$LIBEXEC/"
+	sed_inplace 's|LIBEXEC="/usr/local/libexec/mpc-auth"|LIBEXEC="'"${LIBEXEC}"'"|' \
+		"${LIBEXEC}/mpc-auth-apply-pending-telegram-ngrok.sh"
+	for f in mpc-auth-apply-pending-telegram-ngrok.sh mpc-auth-telegram-ngrok-enable.sh mpc-auth-telegram-ngrok-disable.sh; do
+		sed_inplace 's|^set -euo pipefail|set -euo pipefail\nif [[ -n "${MPC_AUTH_MACOS_ENV_FILE:-}" \&\& -r "${MPC_AUTH_MACOS_ENV_FILE}" ]]; then\n\t# shellcheck source=/dev/null\n\t. "${MPC_AUTH_MACOS_ENV_FILE}"\nelif [[ -n "${MPC_AUTH_WSL_ENV_FILE:-}" \&\& -r "${MPC_AUTH_WSL_ENV_FILE}" ]]; then\n\t# shellcheck source=/dev/null\n\t. "${MPC_AUTH_WSL_ENV_FILE}"\nfi|' \
+			"${LIBEXEC}/${f}"
+	done
+fi
+
 install -m 0755 "${MACOS_ROOT}/mpc-auth-vpn-enable-macos.sh" "${LIBEXEC}/mpc-auth-vpn-enable.sh"
 install -m 0755 "${MACOS_ROOT}/mpc-auth-vpn-disable-macos.sh" "${LIBEXEC}/mpc-auth-vpn-disable.sh"
 
@@ -150,3 +171,4 @@ log "  status: ${MACOS_ROOT}/status-watcher.sh"
 log "  log:    ${MACOS_ROOT}/watcher.log"
 log "  manual: ${LIBEXEC}/mpc-auth-docker-restart.sh"
 log "  VPN:    pending-vpn.json → ${LIBEXEC}/mpc-auth-apply-pending-vpn.sh"
+log "  ngrok:  pending-telegram-ngrok.json → ${LIBEXEC}/mpc-auth-apply-pending-telegram-ngrok.sh"

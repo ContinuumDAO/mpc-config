@@ -547,5 +547,6 @@ Next steps:
   2. Back up ${REPO_DIR}/bootstrap_key/ if PublicMgtKey was auto-generated
   3. Host restart automation: WSL pending-update watcher (see ~/mpc-config/wsl-desktop/status-watcher.sh). A Windows logon task is registered by the Docker extension after install.
   4. VPN: enable from the node app VPN panel; host applies via pending-vpn.json + the same WSL watcher (UDP 51820 must reach WSL for remote clients).
+  5. Telegram ngrok: enable from the node app AI Agent webhooks panel; host starts sidecar mpc-auth-telegram-ngrok via pending-telegram-ngrok.json + the same watcher.
 
 EOF

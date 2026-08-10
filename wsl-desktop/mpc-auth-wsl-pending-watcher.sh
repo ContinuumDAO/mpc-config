@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Long-running WSL host watcher: pending-update.json + pending-vpn.json (Windows Docker Desktop; no WSL systemd).
+# Long-running WSL host watcher: pending-update.json + pending-vpn.json + pending-telegram-ngrok.json
+# (Windows Docker Desktop; no WSL systemd).
 
 set -euo pipefail
 
@@ -10,6 +11,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 POLL_SECS="${CONTINUUM_WATCHER_POLL_SECS:-2}"
 pending="$(wsl_desktop_pending_file)"
 vpn_pending="$(wsl_desktop_vpn_pending_file)"
+ngrok_pending="$(wsl_desktop_telegram_ngrok_pending_file)"
 pending_dir="$(dirname "$pending")"
 logfile="$(wsl_desktop_logfile)"
 
@@ -31,6 +33,18 @@ apply_vpn_once() {
 	fi
 }
 
+apply_telegram_ngrok_once() {
+	if [[ ! -f "$ngrok_pending" ]]; then
+		return 0
+	fi
+	log "pending Telegram ngrok change detected — applying via mpc-auth-apply-pending-telegram-ngrok.sh"
+	if wsl_desktop_apply_pending_telegram_ngrok; then
+		log "Telegram ngrok apply finished OK"
+	else
+		log "Telegram ngrok apply failed (see above)"
+	fi
+}
+
 apply_once() {
 	if [[ ! -f "$pending" ]]; then
 		return 0
@@ -43,7 +57,7 @@ apply_once() {
 	fi
 }
 
-log "Continuum mpc-auth WSL pending watcher started (poll=${POLL_SECS}s, update=${pending}, vpn=${vpn_pending})"
+log "Continuum mpc-auth WSL pending watcher started (poll=${POLL_SECS}s, update=${pending}, vpn=${vpn_pending}, telegram-ngrok=${ngrok_pending})"
 
 if command -v inotifywait >/dev/null 2>&1; then
 	log "using inotifywait on ${pending_dir}"
@@ -51,12 +65,14 @@ if command -v inotifywait >/dev/null 2>&1; then
 		inotifywait -q -e close_write,moved_to,create "${pending_dir}" 2>/dev/null || sleep "$POLL_SECS"
 		apply_once
 		apply_vpn_once
+		apply_telegram_ngrok_once
 	done
 else
 	log "inotifywait not found — polling every ${POLL_SECS}s (optional: sudo apt install inotify-tools)"
 	while true; do
 		apply_once
 		apply_vpn_once
+		apply_telegram_ngrok_once
 		sleep "$POLL_SECS"
 	done
 fi

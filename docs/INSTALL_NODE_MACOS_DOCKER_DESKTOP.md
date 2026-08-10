@@ -46,7 +46,7 @@ bash /tmp/continuum-desktop-orchestrate.sh --profile macos --node-mgt-key "0x…
 
 1. Attach at [mpa.continuumdao.org](https://mpa.continuumdao.org).
 2. Back up `~/mpc-config/bootstrap_key/` if a new PublicMgtKey was generated.
-3. Maintenance **Restart node service** uses the macOS pending-update watcher:
+3. Maintenance **Restart node service** uses the macOS pending watcher (also applies VPN and Telegram ngrok pending files):
 
    ```bash
    ~/mpc-config/macos-desktop/status-watcher.sh
@@ -55,6 +55,8 @@ bash /tmp/continuum-desktop-orchestrate.sh --profile macos --node-mgt-key "0x…
    ```
 
 4. **VPN** (node app → VPN panel): allow **UDP 51820** in macOS firewall for WireGuard.
+
+5. **Telegram ngrok** (node app → AI Agent → Webhooks): after Variables include `NGROK_AUTHTOKEN`, enable from the panel; the watcher starts sidecar **`mpc-auth-telegram-ngrok`** (fifth container alongside mongo, mpc-auth, continuum-mcp, continuumdao-node-app). Manual fallback: [`TELEGRAM_WEBHOOK_NGROK.md`](./TELEGRAM_WEBHOOK_NGROK.md).
 
 Host **reboot** from Maintenance is not available on macOS local nodes (use Restart node service).
 

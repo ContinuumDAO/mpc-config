@@ -517,5 +517,6 @@ Next steps:
   2. Back up ${REPO_DIR}/bootstrap_key/ if PublicMgtKey was auto-generated
   3. Host restart automation: macos-desktop pending watcher (see ~/mpc-config/macos-desktop/status-watcher.sh). LaunchAgent: com.continuumdao.mpc-auth-watcher.
   4. VPN: enable from the node app VPN panel; host applies via pending-vpn.json + the same watcher (allow UDP 51820 in macOS firewall).
+  5. Telegram ngrok: enable from the node app AI Agent webhooks panel; host starts sidecar mpc-auth-telegram-ngrok via pending-telegram-ngrok.json + the same watcher.
 
 EOF

@@ -79,11 +79,15 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 | **`mpc-auth-apply-pending-reboot.sh`** | Claims **`pending-reboot.json`**, archives to **`applied/`**, runs **`systemctl reboot`** (with inhibitor bypass when supported). |
 | **`mpc-auth-vpn-pending.path`** | Watches **`/var/lib/mpc-auth-docker/pending-vpn.json`**; starts apply service when mpc-auth writes the file (after **`POST /vpn/setEnabled`**). |
 | **`mpc-auth-vpn-pending.service`** | Oneshot: runs **`mpc-auth-apply-pending-vpn.sh`** → **`mpc-auth-vpn-enable.sh`** or **`mpc-auth-vpn-disable.sh`**. |
+| **`mpc-auth-telegram-ngrok-pending.path`** | Watches **`/var/lib/mpc-auth-docker/pending-telegram-ngrok.json`**; starts apply service when mpc-auth writes the file (after **`POST /telegramNgrok/setEnabled`**). |
+| **`mpc-auth-telegram-ngrok-pending.service`** | Oneshot: runs **`mpc-auth-apply-pending-telegram-ngrok.sh`** → **`mpc-auth-telegram-ngrok-enable.sh`** or **`mpc-auth-telegram-ngrok-disable.sh`** (Docker sidecar **`mpc-auth-telegram-ngrok`**). |
 | **`mpc-auth-wireguard-wg0.service`** | **`wg-quick up/down wg0`** — WireGuard server interface. |
 | **`mpc-auth-vpn-mgmt-proxy.service`** | **`socat`** on **`10.8.0.1:8080`** → **`127.0.0.1:8080`** so VPN clients reach the management API. |
 | **`mpc-auth-shadowsocks.service`** | **`ssserver`** for optional WireGuard transport obfuscation (**`/var/lib/mpc-auth-docker/shadowsocks/ssserver.json`**). |
 
-**Compose:** **`docker-compose.relay.yml`** and **`docker-compose.client.yml`** both set **`MPC_AUTH_VPN_PENDING_FILE`** / **`MPC_AUTH_VPN_STATE_FILE`** and bind-mount **`/var/lib/mpc-auth-docker`**. **`process_config.sh`** copies the relay or client template to **`docker-compose.yml`** and can patch older compose files via **`apply_docker_compose_vpn_env`**.
+**Compose:** **`docker-compose.relay.yml`** and **`docker-compose.client.yml`** both set **`MPC_AUTH_VPN_PENDING_FILE`** / **`MPC_AUTH_VPN_STATE_FILE`** / **`MPC_AUTH_TELEGRAM_NGROK_*`** and bind-mount **`/var/lib/mpc-auth-docker`**. **`process_config.sh`** copies the relay or client template to **`docker-compose.yml`** and can patch older compose files via **`apply_docker_compose_vpn_env`**.
+
+**Docker Desktop (Windows / macOS):** systemd path units are skipped. The Continuum Desktop installers copy the same apply/enable/disable scripts into **`wsl-desktop/libexec`** or **`macos-desktop/libexec`** and the pending watcher applies **`pending-update.json`**, **`pending-vpn.json`**, and **`pending-telegram-ngrok.json`**. See **`docs/TELEGRAM_WEBHOOK_NGROK.md`** and the Desktop install guides.
 
 **Host packages (VPS / Linux Docker Desktop):** **`wireguard`** and **`socat`** must be installed on the host (`wg-quick`, `socat`). Fresh installs via **`scripts/install-node-debian-ubuntu.sh`** include them; **`install-mpc-auth-docker-systemd.sh`** also runs **`apt install wireguard socat`** when missing (e.g. after **`git pull`** + **`process_config.sh`** on an older node). **Shadowsocks obfuscation** optionally installs **`shadowsocks-rust`** via **`ensure_shadowsocks_host_packages`** (warn-only — VPN works without it).
 

@@ -152,6 +152,25 @@ Expect **`local: 200`**.
 
 ## Part 4 — Start ngrok (Agent Endpoint)
 
+### Automated sidecar (preferred on Docker nodes)
+
+On VPS/Linux with **`install-mpc-auth-docker-systemd.sh`**, or on **Windows/macOS Docker Desktop** after the Continuum install (WSL / macOS pending watcher), the node app **Webhooks** panel can enable a host-managed ngrok sidecar:
+
+1. Set Variables: **`NGROK_AUTHTOKEN`**, **`TELEGRAM_BOT_TOKEN`**, and the webhook secret.
+2. Enable Telegram ngrok for the webhook (panel → **`POST /telegramNgrok/setEnabled`**).
+3. Host automation consumes **`/var/lib/mpc-auth-docker/pending-telegram-ngrok.json`** and runs **`docker run --network container:<app> … ngrok/ngrok http 18090`** as container **`mpc-auth-telegram-ngrok`**.
+4. Confirm with **`GET /telegramNgrok/status`**, then register the webhook (**`POST /telegramNgrok/registerWebhook`** or the panel action).
+
+| Host | Who watches the pending file |
+|------|------------------------------|
+| VPS / Linux systemd | **`mpc-auth-telegram-ngrok-pending.path`** |
+| Windows Docker Desktop (WSL) | **`wsl-desktop`** pending watcher |
+| macOS Docker Desktop | **`macos-desktop`** pending watcher + launchd |
+
+If automation is not installed, use the manual steps below.
+
+### Manual start
+
 Replace **only the host** in the inbound URL with your ngrok HTTPS host. The path **`/hooks/inbound/<webhook-id>`** stays exactly as shown in the Node UI.
 
 ### A. Docker — run ngrok on the `app` container network (recommended)

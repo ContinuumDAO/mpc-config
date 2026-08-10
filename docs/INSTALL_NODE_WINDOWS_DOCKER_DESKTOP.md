@@ -108,7 +108,7 @@ The extension install path may run `sudo` steps inside WSL. Configure **password
 In WSL, **as your regular user** (not root), install the extension image so Docker Desktop can load it:
 
 ```bash
-docker extension install continuumdao/continuum-node-installer:0.1.18
+docker extension install continuumdao/continuum-node-installer:0.1.17
 ```
 
 Ensure Docker Desktop is running before you run this command.
@@ -175,7 +175,7 @@ Follow **[PORT_FORWARDING_HOME_NETWORK.md](./PORT_FORWARDING_HOME_NETWORK.md)** 
 
 Complete router setup before or immediately after install so discovery and MQTT work for remote peers.
 
-3. Click **Install** in the extension and wait for the progress log to finish. The stack (mongo, mpc-auth, continuum-mcp, continuumdao-node-app) appears under **Docker Desktop → Containers**.
+3. Click **Install** in the extension and wait for the progress log to finish. The stack (mongo, mpc-auth, continuum-mcp, continuumdao-node-app) appears under **Docker Desktop → Containers**. Enabling Telegram webhooks with ngrok later adds a fifth container (`mpc-auth-telegram-ngrok`) via the WSL pending watcher — see [`TELEGRAM_WEBHOOK_NGROK.md`](./TELEGRAM_WEBHOOK_NGROK.md).
 
 ---
 
@@ -199,7 +199,8 @@ Back up **`~/mpc-config/bootstrap_key/`** in WSL if the install generated new ke
 ## Windows-specific maintenance (optional)
 
 - **Config and compose**: `~/mpc-config` in WSL (`docker compose` commands run from that directory).
-- **Auto-restart watcher**: after extension install, a Windows logon task may run `~/mpc-config/wsl-desktop/start-watcher.sh`. Status: `~/mpc-config/wsl-desktop/status-watcher.sh`.
+- **Pending watcher**: after extension install, a Windows logon task may run `~/mpc-config/wsl-desktop/start-watcher.sh`. It applies **pending-update.json**, **pending-vpn.json**, and **pending-telegram-ngrok.json**. Status: `~/mpc-config/wsl-desktop/status-watcher.sh`.
+- **Telegram ngrok**: from the node app AI Agent → Webhooks panel (after Variables include `NGROK_AUTHTOKEN`); the watcher starts sidecar **`mpc-auth-telegram-ngrok`** on the `app` network. Manual fallback: [`TELEGRAM_WEBHOOK_NGROK.md`](./TELEGRAM_WEBHOOK_NGROK.md).
 - **Manual restart**: `cd ~/mpc-config && docker compose restart app`
 
 Details: [`docker-extension/README.md`](../docker-extension/README.md).

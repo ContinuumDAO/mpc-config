@@ -3422,11 +3422,15 @@ Same body as activate; sets **`enabled: false`**.
 **Errors:** **500** when the bundled file is missing from the node image or bind mount.
 
 <a id="telegram-ngrok-sidecar-automation"></a>
-#### Telegram ngrok sidecar (host systemd)
+#### Telegram ngrok sidecar (host automation)
 
-For **`telegram`** webhooks on Docker nodes, Telegram requires a **public HTTPS** URL to hook port **`18090`**. The continuumdao-node-app **Webhooks** panel can enable a host-managed **ngrok sidecar** that shares the **`app`** container network namespace (no SSH after one-time **`install-mpc-auth-docker-systemd.sh`**).
+For **`telegram`** webhooks on Docker nodes, Telegram requires a **public HTTPS** URL to hook port **`18090`**. The continuumdao-node-app **Webhooks** panel can enable a host-managed **ngrok sidecar** that shares the **`app`** container network namespace (no SSH after host automation is installed).
 
-Requires **`MPC_AUTH_TELEGRAM_NGROK_PENDING_FILE`** / **`MPC_AUTH_TELEGRAM_NGROK_STATE_FILE`** in **`docker-compose.relay.yml`** / **`docker-compose.client.yml`** (bind-mounted **`/var/lib/mpc-auth-docker`**) plus **`mpc-auth-telegram-ngrok-pending.path`** on the Docker host. See **`systemd/README.md`**.
+Requires **`MPC_AUTH_TELEGRAM_NGROK_PENDING_FILE`** / **`MPC_AUTH_TELEGRAM_NGROK_STATE_FILE`** in **`docker-compose.relay.yml`** / **`docker-compose.client.yml`** (bind-mounted **`/var/lib/mpc-auth-docker`**) plus a host consumer of **`pending-telegram-ngrok.json`**:
+
+- **VPS / Linux systemd:** **`mpc-auth-telegram-ngrok-pending.path`** (via **`install-mpc-auth-docker-systemd.sh`**) — see **`systemd/README.md`**.
+- **Windows Docker Desktop (WSL):** **`wsl-desktop`** pending watcher (installed by the Continuum Node extension / **`install-node-docker-desktop.sh`**).
+- **macOS Docker Desktop:** **`macos-desktop`** pending watcher + launchd (installed by the extension / **`install-node-macos-docker-desktop.sh`**).
 
 **Variables (prerequisites before enable):**
 
