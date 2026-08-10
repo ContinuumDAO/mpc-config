@@ -1214,7 +1214,8 @@ OpenSSL Error[0]: error:80000002:system library::No such file or directory
 - **[docs/references/AI_AGENT_NEW_SESSION.md](docs/references/AI_AGENT_NEW_SESSION.md)** – Agent session bootstrap: **`.env`**, symlinks, **`GET /health`**, **`KEYGEN_ID`**.
 - **[docs/references/API_IMPLEMENTATION.md](docs/references/API_IMPLEMENTATION.md)** – Full API reference (endpoints, request/response formats, Swagger).
 - **[docs/references/ED25519_MANAGEMENT_KEY_SIGNING.md](docs/references/ED25519_MANAGEMENT_KEY_SIGNING.md)** – Ed25519 management signing for agents (allow-list, nonces, tools).
-- **[docs/CONFIGURING_ED25519_KEYS.md](docs/CONFIGURING_ED25519_KEYS.md)** – Node owner: creating keys, **`PublicMgtKey`**, **`addManagementKey`**, private key storage.
+- **[docs/CONFIGURING_ED25519_KEYS.md](docs/CONFIGURING_ED25519_KEYS.md)** – Technical lifecycle: bootstrap + added Ed25519 management keys, preferred signer. User guides: [Install](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Install), [Default Ed25519 signer](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/DefaultEd25519Signer), [Configure AI harness](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AIHarness/Configure).
+- **[docs/AGENT_ED25519_SETUP.md](docs/AGENT_ED25519_SETUP.md)** – Stub pointing at the published user pages and **`CONFIGURING_ED25519_KEYS.md`**.
 - **[docs/internal/README.md](docs/internal/README.md)** – Index of internal operator notes ( **`process_config.sh`**, Browser HTTPS, firewall).
 - **[docs/internal/MULTI_SIGNREQUEST_DESIGN.md](docs/internal/MULTI_SIGNREQUEST_DESIGN.md)** – Batch **`multiSignRequest`** design detail (signing flow).
 

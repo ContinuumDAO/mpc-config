@@ -1,12 +1,12 @@
 # References Index
 
-This directory contains reference docs for node APIs, agent workflows, and local schemas. The bundled **Open Claw** skill (**mpa-wallet**) that ties these together is **[`../skill/SKILL.md`](../skill/SKILL.md)**; session bootstrap is **[`./AI_AGENT_NEW_SESSION.md`](./AI_AGENT_NEW_SESSION.md)**.
+This directory contains reference docs for node APIs, agent workflows, and local schemas. The built-in node AI harness is documented for users at [docs.continuumdao.org — AI harness](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AIHarness/Overview). The bundled skill (**mpa-wallet**) is **[`../skill/SKILL.md`](../skill/SKILL.md)**; session bootstrap is **[`./AI_AGENT_NEW_SESSION.md`](./AI_AGENT_NEW_SESSION.md)**.
 
 ## Markdown Documents
 
 | File | Description |
 |------|-------------|
-| `../CONFIGURING_ED25519_KEYS.md` | Node owner: Ed25519 **`PublicMgtKey`**, **`addManagementKey`**, private key storage (operational signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`). |
+| `../CONFIGURING_ED25519_KEYS.md` | Technical lifecycle: bootstrap + added Ed25519 management keys, on-disk paths, preferred signer. User UI: [Default Ed25519 signer](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/DefaultEd25519Signer). Operational signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`. |
 | `./ED25519_MANAGEMENT_KEY_SIGNING.md` | Ed25519 management API signing for agents (allow-list, nonces, KeyGen `ClientKeys`). |
 | `./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md` | Authoritative guide for **`multiSignRequest`** payloads: recipes, compose + Foundry helpers, **`multiSignJoin`**, **`messageToSign`** rules. |
 | `./AI_AGENT_FORGE_SIGNREQUEST.md` | Foundry broadcast JSON → **`bodyForSign`** / **`messageToSign`** (same envelope as compose). |

@@ -1,6 +1,6 @@
 # Ed25519 management signing (operational guide)
 
-This document is for an **AI agent** or script that already has access to an **Ed25519 management private key** and calls the **management API** on an mpc-auth node. It does **not** cover generating keys, **`PublicMgtKey`** in config, or operator onboarding—see **`../CONFIGURING_ED25519_KEYS.md`** and **`./API_IMPLEMENTATION.md`**.
+This document is for an **AI agent** or script that already has access to an **Ed25519 management private key** and calls the **management API** on an mpc-auth node. It does **not** cover generating keys, **`PublicMgtKey`** in config, or operator onboarding—see **`../CONFIGURING_ED25519_KEYS.md`** (bootstrap / `added_keys` / preferred signer lifecycle) and **`./API_IMPLEMENTATION.md`**. User-facing default signer UI: [Default Ed25519 signer](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/DefaultEd25519Signer).
 
 ---
 

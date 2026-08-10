@@ -1,103 +1,119 @@
-# Configuring Ed25519 management keys (node owner guide)
+# Ed25519 management keys (technical lifecycle)
 
-This guide is for **operators and node owners** who want mpc-auth to accept **Ed25519** management authentication (so agents or scripts can call the management API **without an Ethereum wallet / EIP-191 signing**). It covers **creating keys**, **putting the public key on the node**, **adding more allowed keys**, and **where to store private key material**.
+Lifecycle of **Ed25519 management keys** on an mpc-auth node used by the built-in AI agent (continuum-mcp) and other management-signed clients.
 
-**Day-to-day API signing** (nonces, `clientSig`, `messageToSign`, `getAllowedEd25519MgtKeys`, tools): use **[references/ED25519_MANAGEMENT_KEY_SIGNING.md](./references/ED25519_MANAGEMENT_KEY_SIGNING.md)** — not this document.
+**User guides (docs.continuumdao.org):**
 
-**Full REST details** (exact bodies, `POST /addManagementKey`, etc.): **[references/API_IMPLEMENTATION.md](./references/API_IMPLEMENTATION.md)**.
+- [Default Ed25519 signer](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/DefaultEd25519Signer)
+- [Configure the AI harness](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AIHarness/Configure)
+- [AI harness overview](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AIHarness/Overview)
 
-**Agent environment** (`AUTH_KEY_PATH`, `$MPA_PATH/.env`): **[skill/SKILL.md](./skill/SKILL.md)** **Environment**.
+**Not this document:**
 
----
-
-## What the node stores vs what you keep secret
-
-- The node configuration holds **only Ed25519 public keys** (e.g. bootstrap **`PublicMgtKey`** as **64 lowercase hex** = 32-byte public key, no `0x` prefix).
-- **Private keys never go on the node.** You keep the private key where signing happens (your workstation, or the agent host’s **`~/.ssh/mpc_auth_ed25519`** / **`AUTH_KEY_PATH`**).
-- After bootstrap, you can add more public keys with **`POST /addManagementKey`** (each request signed by an already-allowed Ed25519 key). See **API_IMPLEMENTATION.md** (`POST /addManagementKey`, `GET /getAllowedEd25519MgtKeys`).
+- Per-request signing recipes (nonces, `clientSig`, `messageToSign`) → [references/ED25519_MANAGEMENT_KEY_SIGNING.md](./references/ED25519_MANAGEMENT_KEY_SIGNING.md)
+- Full REST bodies → [references/API_IMPLEMENTATION.md](./references/API_IMPLEMENTATION.md)
 
 ---
 
-## 1. Create or obtain an Ed25519 keypair
+## Concepts
 
-You may use any tool that produces a standard **Ed25519** private key and lets you derive the **raw 32-byte public key** as **64 hex** for **`PublicMgtKey`**.
+| Concept | What it is |
+|---------|------------|
+| **Bootstrap key** | First allowed Ed25519 management public key in `configs.yaml` as **`PublicMgtKey`** (64 hex). Private seed on disk: `bootstrap_key/ed25519_private.hex`. |
+| **Added (extra) keys** | Additional allow-list keys from **`POST /addManagementKey`**. Public rows in Mongo **`ExtraPublicMgtKeys`**; private PEM under `added_keys/added_key_<N>`. |
+| **Preferred / default signer** | One active public key pointer (Mongo) that automation should use first: **`GET /getPreferredSigner`**, **`POST /setPreferredSigner`**. |
+| **Management vs MPC** | Management Ed25519 authenticates this node’s HTTP API and **may** live on disk for the built-in agent. The **MPC / KeyGen wallet** never exists as a full on-chain private key on the node (threshold shares only). |
 
-Common options:
-
-- **`ssh-keygen -t ed25519`** — produces OpenSSH public/private files. The **`.pub` line is not** the hex mpc-auth stores; convert with **`$MPA_PATH/tools/openssh_ed25519_to_hex.py`** (stdlib-only) on the `.pub` file or pasted line.
-- **`openssl genpkey -algorithm ED25519`** — PEM private key; derive **64 hex** with **`$MPA_PATH/tools/ed25519_private_to_pubkey_hex.py`** (needs **`cryptography`** in **`$MPA_PATH/.venv`** — see **SKILL.md** **Python dependencies**).
-- **continuumdao-node-app → Info** — if the app offers **Create new key pair**, you can copy the **public key (64 hex)** into config and save the **private** PEM to a secure path (the node never sees the private key).
-
-**OpenSSH `.pub` → 64 hex:**
-
-```bash
-python3 "$MPA_PATH/tools/openssh_ed25519_to_hex.py" ~/.ssh/id_ed25519.pub
-```
+List allowed keys: **`GET /getAllowedEd25519MgtKeys`**, **`GET /getPublicMgtKey`**, **`GET /hasPublicMgtKey`**.
 
 ---
 
-## 2. Configure the node (mpc-auth)
+## Bootstrap key
 
-Set **`PublicMgtKey`** in **`configs.yaml`** or via environment:
+### Created when
 
-```yaml
-PublicMgtKey: "<64-hex-public-key>"
-```
+- **`process_config.sh`** always runs **`tools/bootstrap_key_provision.py`**.
+- If **`PublicMgtKey`** is empty → write seed, set **`PublicMgtKey`**, set **`DeterministicNodeKey: true`**.
+- If **`PublicMgtKey`** is already set (reinstall / restore) → verify `bootstrap_key/ed25519_private.hex` matches and set **`DeterministicNodeKey: true`** when valid.
 
-```bash
-export PublicMgtKey="<64-hex-public-key>"
-```
+### Stored
 
-Restart mpc-auth. Confirm Ed25519 is active:
+| Item | Location |
+|------|----------|
+| Private seed (32-byte hex, `0600`) | Host: `./bootstrap_key/ed25519_private.hex` next to `configs.yaml` · Container: `/app/bootstrap_key/ed25519_private.hex` |
+| Public key | `configs.yaml` → **`PublicMgtKey`** (64 lowercase hex) |
+| Deterministic node identity | **`DeterministicNodeKey: true`** (with matching seed + public key → stable P-256 **`nodeKey`** on fresh Mongo) |
 
-```bash
-curl "http://<host>:<ManagementAPIsPort>/hasPublicMgtKey"
-# Expect data: true (envelope may use Code/Data or code/data per build)
-```
+**Docker mounts (mpc-config compose):** `./bootstrap_key` → `/app/bootstrap_key` (writable on `app`; typically read-only on `continuum-mcp`).
 
-**List allowed keys:** The value you set as **`PublicMgtKey`** is the **bootstrap** management key—the first Ed25519 public key the node trusts from config. Keys added later via **`POST /addManagementKey`** are separate entries. To see every allowed **64-hex** public key with a short **label**, call **`GET /getAllowedEd25519MgtKeys`**. The API marks the bootstrap key explicitly (typically **`label`** such as **`Bootstrap (config)`**), so you can tell which **`publicKey`** came from **`PublicMgtKey`** versus **Added key …** for keys registered through the API.
+### API (see API_IMPLEMENTATION)
 
-```bash
-curl "http://<host>:<ManagementAPIsPort>/getAllowedEd25519MgtKeys"
-```
+- **`POST /postBootstrapKey`** — write seed file when absent (management-signed)
+- **`POST /fetchBootstrapKey`** — return seed for offline backup (HTTPS or loopback; eligibility gates apply)
+- **`POST /removeBootstrapKey`** — delete seed file (management-signed)
 
-Interactive installs may use **`process_config.sh`** in this repo to normalize **`PublicMgtKey`** from OpenSSH or base64 when prompted.
+### Used for
 
----
-
-## 3. Add another public key (e.g. dedicated agent key)
-
-After **`PublicMgtKey`** is set, you can register additional **64-hex** public keys with **`POST /addManagementKey`**. The request must be **signed with an already-allowed** Ed25519 private key (the bootstrap key or a previously added key). Exact JSON, nonce, and signature layout: **API_IMPLEMENTATION.md** (`POST /addManagementKey`, `GET /getPublicMgtKeyNonce`).
-
-This lets you rotate or separate **human** vs **automation** keys without editing node config again.
+- Management allow-list auth (label typically **Bootstrap (config)**)
+- Deterministic **`nodeKey`** and encrypted DB backup eligibility
+- Agent / continuum-mcp signing when preferred signer points here or fallback resolves to bootstrap
 
 ---
 
-## 4. Where to put the private key for an agent
+## Extra (added) keys
 
-Agents read a **management** private key from disk (OpenSSH or PEM):
+### Created when
 
-- Default path: **`~/.ssh/mpc_auth_ed25519`** if **`AUTH_KEY_PATH`** is unset.
-- Or set **`AUTH_KEY_PATH`** to a **directory** and **`AUTH_KEY_FILENAME`** (default **`mpc_auth_ed25519`**) — see **SKILL.md** **Environment**.
-- Prefer **`chmod 600`** on the key file and a dedicated user or service account if you run the agent as a service.
+**`POST /addManagementKey`** — the node **generates** the keypair. Clients do **not** supply `newPublicKey`. Authorize with an already-allowed Ed25519 key or Ethereum **`NodeMgtKey`** (EIP-191). Exact body: **API_IMPLEMENTATION.md**.
 
-Load **`MPC_AUTH_URL`**, **`MANAGEMENT_PORT`**, and optionally **`MPA_PATH`** from **`$MPA_PATH/.env`** (or your process manager) so the same **`mpc-config`** tree can live anywhere on disk.
+### Stored
 
-**Verify** the file matches an allowed public key: **`ed25519_private_to_pubkey_hex.py`** vs **`getAllowedEd25519MgtKeys`** — summarized in **ED25519_MANAGEMENT_KEY_SIGNING.md** §2.
+| Item | Location |
+|------|----------|
+| Public key + label | Mongo **`ExtraPublicMgtKeys`** (“Added key N”) |
+| Private key (PKCS#8 PEM, `0600`) | Host: `./added_keys/added_key_<N>` · Container: `/app/added_keys/added_key_<N>` |
+| Public hex file | `added_key_<N>.pub` |
+
+**Docker:** `./added_keys` bind-mounted for `app` and `continuum-mcp`.
+
+### Removed when
+
+**`POST /removeManagementKey`** — soft-removes the Mongo row and deletes local files. **Cannot** remove the bootstrap **`PublicMgtKey`**.
+
+### Used for
+
+- Same management auth as bootstrap (per-key nonces via **`GET /getPublicMgtKeyNonce?publicKey=`**)
+- Preferred signer may point at an added key
 
 ---
 
-## 5. Key management practices
+## How keys are selected for agent signing
 
-- **Backup** the private key in an offline or secure store; loss means you cannot sign management **`POST`**s until another allowed key or operator recovery path exists.
-- **Do not** commit private keys, put them in the frontend, or paste them into node config.
-- **Restrict** who can reach **`ManagementAPIsPort`** (firewall, TLS reverse proxy, bind to loopback when only local agents should connect).
-- **Rotation:** add a new public key with **`POST /addManagementKey`**, switch automation to the new private key, then plan deprecation of the old key with your security policy.
+Built-in harness (continuum-mcp) resolution order:
+
+1. **`GET /getPreferredSigner`** — if `publicKeyHex` is set, that key is still in the active allow-list, and a matching local private key is readable under `/app/bootstrap_key` or `/app/added_keys` → use it.
+2. Else → first allowed key with usable local private material.
+3. Else → fail.
+
+Operators set preferred via **`POST /setPreferredSigner`** or the node app (**Node → Ed25519 Management Keys**, Agent chat). User-facing steps: [Default Ed25519 signer](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/DefaultEd25519Signer).
 
 ---
 
-## 6. Relationship to MPC / KeyGen (short)
+## Operator tools
 
-**Management** Ed25519 keys authenticate **this node’s HTTP API**. They are **not** the MPC wallet key. For **KeyGen**, you may register a **client** public key (`clientPk` / **`ClientKeys`**) as required by the app — that is separate from **`PublicMgtKey`**, though operators often use the **same** Ed25519 identity for simplicity. Operational details: **ED25519_MANAGEMENT_KEY_SIGNING.md** §5 and **API_KEYGEN_MESSAGING.md**.
+| Tool | Purpose |
+|------|---------|
+| `$MPA_PATH/tools/openssh_ed25519_to_hex.py` | OpenSSH `.pub` / line → 64 hex public key |
+| `$MPA_PATH/tools/ed25519_private_to_pubkey_hex.py` | Private PEM / OpenSSH / seed hex → 64 hex public (`cryptography` in `$MPA_PATH/.venv`) |
+| `$MPA_PATH/tools/sign-clipboard` | Human clipboard signing helper |
+| `$MPA_PATH/tools/check_ed25519_mgt_keygen.py` | Match private key against allow-list and KeyGen `ClientKeys` |
 
-For **groups, KeyGen, threshold signing, and workflows**, see **[references/instructions.md](./references/instructions.md)** and **[skill/SKILL.md](./skill/SKILL.md)**.
+See [ED25519_MANAGEMENT_KEY_SIGNING.md](./references/ED25519_MANAGEMENT_KEY_SIGNING.md) § Tools.
+
+---
+
+## Security notes
+
+- Protect on-disk **management** material (`bootstrap_key/`, `added_keys/`); do not commit seeds; restrict who can reach **`ManagementAPIsPort`**.
+- Protecting management keys is separate from MPC: the node still never reconstructs or stores a full on-chain wallet private key.
+- **External / script agents** that keep private keys off-node (e.g. `AUTH_KEY_PATH` / `~/.ssh/mpc_auth_ed25519`) still authenticate only if the matching public key is on the allow-list — see [ED25519_MANAGEMENT_KEY_SIGNING.md](./references/ED25519_MANAGEMENT_KEY_SIGNING.md) and [skill/SKILL.md](./skill/SKILL.md).
