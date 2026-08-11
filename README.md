@@ -8,7 +8,7 @@ This repository contains the configuration files and setup scripts needed to dep
 - **`configs-original.yaml`** - Pristine copy of the default `configs.yaml` from this repo; use `cp configs-original.yaml configs.yaml` to revert if something goes wrong. **`process_config.sh` copies it to `configs.yaml` automatically** if `configs.yaml` is missing.
 - **`process_config.sh`** - Configuration validator and certificate generator; **generates `docker-compose.yml`** (not committed) from **`docker-compose.relay.yml`** (relay / first node) or **`docker-compose.client.yml`** (other nodes)
 - **`scripts/provision-node.sh`** - Non-interactive helper for a **fresh** `configs.yaml`: copies `configs-original.yaml`, sets management keys and a two-node **`nodeAddresses`** layout, then runs **`process_config.sh`**. Stable **`nodeKey`** requires **`DeterministicNodeKey: true`** and **`bootstrap_key/ed25519_private.hex`** (**`tools/bootstrap_key_provision.py`**). For reinstalls see **Automated provisioning** pattern **2**.
-- **`scripts/install-node-debian-ubuntu.sh`** - **One-shot VPS install** (Ubuntu/Debian, run as root): apt packages, **`mpcnode`** user, clone repo, **`provision-node.sh`**, **`docker compose up -d`**. See **One-shot VPS install** below.
+- **`scripts/install-node-debian-ubuntu.sh`** - **One-shot VPS install** (Ubuntu/Debian, run as root): apt packages, **`mpcnode`** user, clone repo, **`provision-node.sh`**, **`docker compose up -d`**. **Preferred path for AI agents creating a node** — see **[`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md)** and **[`AGENTS.md`](AGENTS.md)**.
 - **`scripts/install-node-docker-desktop.sh`** - **Docker Desktop local install** (Windows/macOS): provision + compose via Desktop engine; no apt docker, UFW, or systemd. See **Docker Desktop (Windows local)** and **`docker-extension/README.md`**.
 - **`scripts/desktop-local-orchestrate.sh`** - **Desktop clone + install**: git clone to **`~/mpc-config`**, then `install-node-docker-desktop.sh` (used by the Docker extension and manual WSL).
 - **`tools/provision-command.js`** - Reference module for the MPA frontend to build curl/SSH one-liner commands (wallet or manual Ethereum address + VPS IP).
@@ -17,6 +17,8 @@ This repository contains the configuration files and setup scripts needed to dep
 - **`webTLS/config/certs`** - certs to allow TLS 1.3 encryption to the browser
 
 ## One-shot VPS install
+
+> **AI agents:** to **create / install a node**, use this section (or **[`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md)** / **[`AGENTS.md`](AGENTS.md)**). Script: **`scripts/install-node-debian-ubuntu.sh`**.
 
 For a **rented Ubuntu/Debian VPS**, run one command **as root on the server** (or pipe it over SSH from your PC). The MPA frontend at [https://mpa.continuumdao.org](https://mpa.continuumdao.org) can generate this command using your connected wallet address or a manually entered Ethereum address — **no wallet signing is required at install time**.
 

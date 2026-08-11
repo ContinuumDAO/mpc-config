@@ -95,6 +95,8 @@ The last path segment is **`{webhookId}`** — unique per node; keep it for `set
 |----------|--------|
 | **`TELEGRAM_BOT_TOKEN`** | Bot token from @BotFather |
 | **`WEBHOOK_SECRET_TELEGRAM_UPDATES`** | Long random string (**not** the bot token) |
+| **`NGROK_AUTHTOKEN`** | Authtoken from the [ngrok dashboard](https://dashboard.ngrok.com/get-started/your-authtoken) (needed for the automated sidecar) |
+| **`NGROK_PAID_PLAN`** | Set to **`true`** when you have a **paid** ngrok subscription — tells the node to use the paid setup (interactive Mini App charts). Omit or leave unset on free ngrok. |
 
 Generate a webhook secret example:
 
@@ -156,7 +158,7 @@ Expect **`local: 200`**.
 
 On VPS/Linux with **`install-mpc-auth-docker-systemd.sh`**, or on **Windows/macOS Docker Desktop** after the Continuum install (WSL / macOS pending watcher), the node app **Webhooks** panel can enable a host-managed ngrok sidecar:
 
-1. Set Variables: **`NGROK_AUTHTOKEN`**, **`TELEGRAM_BOT_TOKEN`**, and the webhook secret.
+1. Set Variables: **`NGROK_AUTHTOKEN`**, **`TELEGRAM_BOT_TOKEN`**, and the webhook secret. For a paid ngrok subscription (Mini App charts), also set **`NGROK_PAID_PLAN=true`**.
 2. Enable Telegram ngrok for the webhook (panel → **`POST /telegramNgrok/setEnabled`**).
 3. Host automation consumes **`/var/lib/mpc-auth-docker/pending-telegram-ngrok.json`** and runs **`docker run --network container:<app> … ngrok/ngrok http 18090`** as container **`mpc-auth-telegram-ngrok`**.
 4. Confirm with **`GET /telegramNgrok/status`**, then register the webhook (**`POST /telegramNgrok/registerWebhook`** or the panel action).
@@ -330,7 +332,7 @@ When the agent calls `prepare_chart_from_rows`, mpc-auth stores the `continuum/c
 | Chart preview in chat (text sparkline + recent OHLC) | Yes | Yes |
 | **Open chart** Mini App (interactive) | **No** — blank WebView (ngrok interstitial) | Yes |
 
-If you plot on free ngrok, the bot sends a **text sparkline** and the last few OHLC bars, plus a note that the interactive Mini App needs paid ngrok. Upgrade at [ngrok billing](https://dashboard.ngrok.com/billing), use a reserved HTTPS hostname, register it as the bot **Mini App domain** in @BotFather, and optionally set **`TELEGRAM_WEBAPP_BASE_URL`** to that host.
+If you plot on free ngrok, the bot sends a **text sparkline** and the last few OHLC bars, plus a note that the interactive Mini App needs paid ngrok. Upgrade at [ngrok billing](https://dashboard.ngrok.com/billing), then set **`NGROK_PAID_PLAN=true`** in **AI Agent → Variables** so the node uses the paid setup (paid plans remove ngrok’s browser interstitial even on `*.ngrok-free.dev` / `*.ngrok-free.app` hosts). Prefer a reserved HTTPS hostname when you have one; register the tunnel hostname as the bot **Mini App domain** in @BotFather, and optionally set **`TELEGRAM_WEBAPP_BASE_URL`** if auto-detection fails.
 
 **Hook listener routes** (default port **18090**, same mux as **`POST /hooks/inbound/{webhookId}`**):
 
@@ -343,7 +345,7 @@ GET /telegram/chart/static/*
 **Operator setup (once per bot):**
 
 1. Enable ngrok for webhooks (existing flow) — note the public host.
-2. **For charts:** upgrade to a paid ngrok plan and reserve a domain (not `*.ngrok-free.dev`). In **@BotFather** → your bot → **Bot Settings** → configure the **Mini App domain** to that host (no path).
+2. **For charts:** upgrade to a paid ngrok plan. In **AI Agent → Variables**, set **`NGROK_PAID_PLAN=true`** so the node uses the paid setup. Prefer a reserved domain (not only `*.ngrok-free.dev`). In **@BotFather** → your bot → **Bot Settings** → configure the **Mini App domain** to that host (no path).
 3. Optional override: set agent env **`TELEGRAM_WEBAPP_BASE_URL`** to your reserved HTTPS host if auto-detection from ngrok state fails.
 
 **Typical flow:**

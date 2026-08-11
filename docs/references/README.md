@@ -6,6 +6,7 @@ This directory contains reference docs for node APIs, agent workflows, and local
 
 | File | Description |
 |------|-------------|
+| [`../CREATE_NODE_ONESHOT.md`](../CREATE_NODE_ONESHOT.md) | **AI agents — create a node:** canonical one-shot VPS script (`scripts/install-node-debian-ubuntu.sh`). Also [`../../AGENTS.md`](../../AGENTS.md). |
 | `../CONFIGURING_ED25519_KEYS.md` | Technical lifecycle: bootstrap + added Ed25519 management keys, on-disk paths, preferred signer. User UI: [Default Ed25519 signer](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/DefaultEd25519Signer). Operational signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`. |
 | `./ED25519_MANAGEMENT_KEY_SIGNING.md` | Ed25519 management API signing for agents (allow-list, nonces, KeyGen `ClientKeys`). |
 | `./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md` | Authoritative guide for **`multiSignRequest`** payloads: recipes, compose + Foundry helpers, **`multiSignJoin`**, **`messageToSign`** rules. |

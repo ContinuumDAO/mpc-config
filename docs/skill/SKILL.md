@@ -103,7 +103,14 @@ approval first.
 
 **ContinuumDAO documentation** (end-user setup, before this skill applies):
 
-- **Running a node** — install, configure, operate an mpc-auth node.  
+- **Create / install a node (AI agents — one-shot VPS)** — start here if the node does not exist yet:  
+  **`$MPC_CONFIG_PATH/docs/CREATE_NODE_ONESHOT.md`** · script **`$MPC_CONFIG_PATH/scripts/install-node-debian-ubuntu.sh`** · repo **`$MPC_CONFIG_PATH/AGENTS.md`** ·  
+  https://github.com/ContinuumDAO/mpc-config/blob/main/docs/CREATE_NODE_ONESHOT.md  
+  Raw installer:  
+  `https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh`
+- **Install a node (humans — node map)** —  
+  https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Install
+- **Running a node** — long advanced / manual path (not the default for greenfield VPS).  
   https://docs.continuumdao.org/ContinuumDAO/RunningInstructions/NodeRunningInstruction
 - **Creating an MPC signer** — Group, KeyGen, shared MPC wallet / address.  
   https://docs.continuumdao.org/ContinuumDAO/MPCSigner/CreateMPCSigner
@@ -113,9 +120,7 @@ approval first.
 via the repo helpers listed under **When this skill applies**—not arbitrary forge
 projects or hand-written JSON.)
 
-Complete those guides first; then use this skill for **day-to-day agent
-behavior** (messaging, `multiSignRequest`, agree/trigger/execute, and API
-discipline).
+If you must **create** the agent’s node first, follow **CREATE_NODE_ONESHOT** then peer/Group/KeyGen setup. Complete those guides before day-to-day **mpa-wallet** behavior (messaging, `multiSignRequest`, agree/trigger/execute, and API discipline).
 
 ## New session and environment bootstrap
 

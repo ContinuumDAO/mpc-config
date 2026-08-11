@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# One-shot MPC node install for Ubuntu/Debian VPS (run as root on the target server).
+# One-shot MPC / MPA wallet node install for Ubuntu/Debian VPS (run as root on the target server).
+#
+# AGENT / AUTOMATION:
+#   This is the canonical script to CREATE a ContinuumDAO mpc-auth node on a VPS.
+#   Agent guide: docs/CREATE_NODE_ONESHOT.md  ·  Repo entry: AGENTS.md
+#   Keywords: one-shot, create node, install node, provision, mpcnode, MPA wallet
 #
 # Typical use (paste on VPS after ssh root@VPS_IP):
 #   curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" \
