@@ -21,13 +21,13 @@ If **`hasPublicMgtKey`** is false, the node is not using Ed25519 management keys
 The node stores **only public keys**. You must know which **private** keys you can use locally.
 
 1. **Fetch the allow-list** with **`GET /getAllowedEd25519MgtKeys`** (or **`GET /getPublicMgtKey`**).
-2. For each candidate private key file (e.g. **`$AUTH_KEY_PATH/$AUTH_KEY_FILENAME`** or **`~/.ssh/mpc_auth_ed25519`** per **`../skill/SKILL.md`** **Environment**), derive the **64-hex public key**:
+2. For each candidate private key file (e.g. **`$AUTH_KEY_PATH/$AUTH_KEY_FILENAME`** or **`~/.ssh/mpc_auth_ed25519`**), derive the **64-hex public key**:
 
    ```bash
-   "$MPA_PATH/.venv/bin/python" "$MPA_PATH/tools/ed25519_private_to_pubkey_hex.py" /path/to/private_key
+   python3 tools/ed25519_private_to_pubkey_hex.py /path/to/private_key
    ```
 
-   (`cryptography` in **`$MPA_PATH/.venv`** — see **`../skill/SKILL.md`** **Python dependencies**.)
+   (Requires **`cryptography`**. Run from the **mpc-config** repo root, or pass an absolute path to the tool.)
 
 3. **Match** that hex string against the **`publicKey`** values from **`getAllowedEd25519MgtKeys`**. Only keys that appear in the list can authenticate **`POST`** requests.
 
@@ -39,7 +39,7 @@ If none of your keys match, you cannot sign management **`POST`**s on this node 
 
 **Every** **`POST`** to the management API requires **management** authentication: **Ed25519** (this doc) or **Ethereum** **`NodeMgtKey`** / **`personal_sign`** (EIP-191), depending on what the node accepts (see **`./API_IMPLEMENTATION.md`** § *Using an Ethereum wallet or Ed25519 for Management API Authentication*).
 
-- **`clientSig`** on **`POST /multiSignRequest`** and **`POST /signRequestAgree`** signs the canonical JSON body (with **`clientSig`** cleared) using the **management** key, together with **`nonce`** and **`nodeKey`**. Details: **`./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`** and **`./API_IMPLEMENTATION.md`**.
+- **`clientSig`** on **`POST /multiSignRequest`** and **`POST /signRequestAgree`** signs the canonical JSON body (with **`clientSig`** cleared) using the **management** key, together with **`nonce`** and **`nodeKey`**. Details: **`./API_IMPLEMENTATION.md`**.
 
 Do **not** confuse **management signatures** (per-node HTTP auth) with **MPC signatures** (threshold signing for the shared wallet).
 
@@ -82,7 +82,7 @@ A **KeyGen result** includes **`ClientKeys`**: a map from **node public key** (1
 
 ### `clientId` on `multiSignRequest` payloads
 
-Helpers such as **`generateMultiSignRequestFromCompose.py`** add an optional **`clientId`** field to the **`multiSignRequest`** body. They take it from **`ClientKeys`** (first non-empty value) or from compose JSON **`clientId`** / **`client_id`** override — see **`generateMultiSignRequestFromCompose.py`** (loads **`clientId`** from **`getKeyGenResultById`**). That value is **MPC / request metadata** for the proposal, not the same field as the HTTP **management** signature.
+Compose / transfer helpers (MCP tools and the Multi-Sign UI) may add an optional **`clientId`** field to the **`multiSignRequest`** body, typically from **`ClientKeys`** (first non-empty value) or an explicit override. That value is **MPC / request metadata** for the proposal, not the same field as the HTTP **management** signature.
 
 ### Same identity for KeyGen-scoped actions
 
@@ -104,13 +104,13 @@ For **KeyGen messaging** (`POST /sendMessage`, `POST /markMessageRead`, …), th
 
 ---
 
-## 6. Tools (`$MPA_PATH/tools/`)
+## 6. Tools (`mpc-config/tools/`)
 
 | Tool | Path | Use |
 |------|------|-----|
-| **`sign-clipboard`** | **`$MPA_PATH/tools/sign-clipboard`** (see **`README.md`** there) | Sign the **exact** UTF-8 string the API expects. For automation, use **`--inline`** or **`--inline-file`** (not clipboard) so the signed bytes match the **`POST`** body or **`messageToSign`**. |
-| **`ed25519_private_to_pubkey_hex.py`** | **`$MPA_PATH/tools/ed25519_private_to_pubkey_hex.py`** | Derive **64-hex** public key from a private key file to **match** **`getAllowedEd25519MgtKeys`**. |
-| **`check_ed25519_mgt_keygen.py`** | **`$MPA_PATH/tools/check_ed25519_mgt_keygen.py`** | Given **`--seed-hex`** or **`--key-file`**, derive the Ed25519 **64-hex** pubkey and check **`GET /getAllowedEd25519MgtKeys`** and **`GET /getKeyGenResultById` → `ClientKeys`** (exit **0** only if the key appears in **both**). Use when debugging **`client sig is not valid`** on **`POST /multiSignRequest`** (see **§8**). Requires **PyNaCl**; **`--key-file`** needs **cryptography**. |
+| **`sign-clipboard`** | **`tools/sign-clipboard`** (see **`README.md`** there) | Sign the **exact** UTF-8 string the API expects. For automation, use **`--inline`** or **`--inline-file`** (not clipboard) so the signed bytes match the **`POST`** body or **`messageToSign`**. |
+| **`ed25519_private_to_pubkey_hex.py`** | **`tools/ed25519_private_to_pubkey_hex.py`** | Derive **64-hex** public key from a private key file to **match** **`getAllowedEd25519MgtKeys`**. |
+| **`check_ed25519_mgt_keygen.py`** | **`tools/check_ed25519_mgt_keygen.py`** | Given **`--seed-hex`** or **`--key-file`**, derive the Ed25519 **64-hex** pubkey and check **`GET /getAllowedEd25519MgtKeys`** and **`GET /getKeyGenResultById` → `ClientKeys`** (exit **0** only if the key appears in **both**). Use when debugging **`client sig is not valid`** on **`POST /multiSignRequest`** (see **§8**). Requires **PyNaCl**; **`--key-file`** needs **cryptography**. |
 
 **Example (`sign-clipboard`):**
 
@@ -127,15 +127,15 @@ curl -sS -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/..." \
 
 ## 7. Raw 32-byte seed vs key file (avoid PKCS#8 / base64 confusion)
 
-Some flows expose the **private key** as **PKCS#8 DER** (often shown as a **Base64** line) or as an **OpenSSH** / **PEM** file. Those are **not** the same thing as the **raw Ed25519 seed** used by helpers that take **`--ed25519-seed-hex`** or the env var **`MPC_MGT_ED25519_SEED_HEX`** in **`../skill/SKILL.md`** / **`scripts/mpc_mgt_helpers.py`**.
+Some flows expose the **private key** as **PKCS#8 DER** (often shown as a **Base64** line) or as an **OpenSSH** / **PEM** file. Those are **not** the same thing as a **raw 32-byte Ed25519 seed** (64 hex characters).
 
 | What you have | What to do |
 |-----------------|------------|
-| **64 hex characters** (32 bytes), lowercase/uppercase hex | Valid **`MPC_MGT_ED25519_SEED_HEX`** / **`--ed25519-seed-hex`**. |
-| **OpenSSH** (`-----BEGIN OPENSSH PRIVATE KEY-----`) or **PEM** file on disk | Use **`--ed25519-key-file`** on recipes (e.g. **`recipes/linea_register.py`**) or rely on **`AUTH_KEY_PATH`** + **`AUTH_KEY_FILENAME`** so **`mpc_mgt_helpers.load_ed25519_private_key()`** loads the file—**do not** `cat` the file into **`MPC_MGT_ED25519_SEED_HEX`**. |
-| **Base64** blob starting with **`MC`** (or similar) — PKCS#8 **DER** for Ed25519 | **Not** valid hex seed. Either save the key as a proper **`.pem`** / OpenSSH file and use **`--ed25519-key-file`**, or derive the **32-byte seed** with **`cryptography`** (same as loading that DER) and then use the **64-hex** seed only if you must use env-based signing. |
+| **64 hex characters** (32 bytes) | Valid raw seed for tools that accept a hex seed (e.g. **`tools/check_ed25519_mgt_keygen.py --seed-hex`**). |
+| **OpenSSH** (`-----BEGIN OPENSSH PRIVATE KEY-----`) or **PEM** file on disk | Prefer **`--key-file`** / the node’s configured management key path—**do not** paste file contents into a hex-seed env var. |
+| **Base64** blob starting with **`MC`** (or similar) — PKCS#8 **DER** for Ed25519 | **Not** valid hex seed. Save as **`.pem`** / OpenSSH and use **`--key-file`**, or derive the **32-byte seed** with **`cryptography`** if you must use seed hex. |
 
-If a recipe or script fails before printing JSON (e.g. empty **`curl -d`** and **`Error":"EOF"`** on **`POST /multiSignRequest`**), the usual cause is **invalid seed hex** (wrong length or wrong encoding), not the MPC logic.
+If a management-signed **`POST /multiSignRequest`** fails with an empty body / **`EOF`**, a common cause is **invalid seed hex** (wrong length or encoding), not the MPC logic.
 
 ---
 
@@ -158,7 +158,7 @@ The management **`clientSig`** must be an **Ed25519** signature (128 hex) over *
 
    Or **`--key-file ~/.ssh/mpc_auth_ed25519`**. Exit code **0** only if the derived pubkey appears in **both** the allow-list and **`ClientKeys`**.
 
-4. **Fresh payload** — Re-run the recipe **once** and **`POST`** immediately; **`msgHash`** / fees tie to RPC state—do not mix an old **`clientSig`** with a new body.
+4. **Fresh payload** — Rebuild the proposal **once** and **`POST`** immediately; **`msgHash`** / fees tie to RPC state—do not mix an old **`clientSig`** with a new body.
 
 ---
 
@@ -167,8 +167,6 @@ The management **`clientSig`** must be an **Ed25519** signature (128 hex) over *
 | Topic | Document |
 |--------|----------|
 | Bootstrap **`PublicMgtKey`**, add keys, private key file layout | **`../CONFIGURING_ED25519_KEYS.md`** |
-| **`multiSignRequest`** creation (recipes, helpers, **never** hand-roll tx payloads) | **`./AI_AGENT_COMPOSE_MULTISIGNREQUEST.md`** |
-| Foundry → **`multiSignRequest`** | **`./AI_AGENT_FORGE_SIGNREQUEST.md`** |
 | KeyGen messaging bodies | **`./API_KEYGEN_MESSAGING.md`** |
 | Full REST spec | **`./API_IMPLEMENTATION.md`** |
-| Agent env defaults (`$MPA_PATH/.env`, **`AUTH_KEY_PATH`**, **`MPC_MGT_ED25519_SEED_HEX`**) | **`../skill/SKILL.md`** **Environment** |
+| User AI harness setup | [AI harness overview](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AIHarness/Overview), [Configure](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AIHarness/Configure) |

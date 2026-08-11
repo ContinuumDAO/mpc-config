@@ -34,8 +34,7 @@ try:
     )
 except ImportError:
     print(
-        "error: install cryptography: pip install -r tools/requirements-ed25519-tools.txt "
-        "(see docs/skill/SKILL.md Python dependencies)",
+        "error: install cryptography: pip install -r tools/requirements-ed25519-tools.txt",
         file=sys.stderr,
     )
     sys.exit(1)

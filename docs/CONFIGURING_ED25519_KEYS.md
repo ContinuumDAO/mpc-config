@@ -116,4 +116,4 @@ See [ED25519_MANAGEMENT_KEY_SIGNING.md](./references/ED25519_MANAGEMENT_KEY_SIGN
 
 - Protect on-disk **management** material (`bootstrap_key/`, `added_keys/`); do not commit seeds; restrict who can reach **`ManagementAPIsPort`**.
 - Protecting management keys is separate from MPC: the node still never reconstructs or stores a full on-chain wallet private key.
-- **External / script agents** that keep private keys off-node (e.g. `AUTH_KEY_PATH` / `~/.ssh/mpc_auth_ed25519`) still authenticate only if the matching public key is on the allow-list — see [ED25519_MANAGEMENT_KEY_SIGNING.md](./references/ED25519_MANAGEMENT_KEY_SIGNING.md) and [skill/SKILL.md](./skill/SKILL.md).
+- **External / script agents** that keep private keys off-node (e.g. `AUTH_KEY_PATH` / `~/.ssh/mpc_auth_ed25519`) still authenticate only if the matching public key is on the allow-list — see [ED25519_MANAGEMENT_KEY_SIGNING.md](./references/ED25519_MANAGEMENT_KEY_SIGNING.md).

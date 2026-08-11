@@ -10,9 +10,9 @@ Supports common formats:
   - Raw hex seed (UTF-8 text): 64 hex chars (32-byte seed), same as bootstrap_key/ed25519_private.hex;
     or 128 hex chars (64-byte expanded secret; first 32 bytes used as seed), matching bootstrap_key_provision.py.
 
-Requires: cryptography (e.g. install in ``$MPA_PATH/.venv`` with ``pip install cryptography``; see ``docs/skill/SKILL.md`` **Python dependencies**).
+Requires: cryptography (see ``tools/requirements-ed25519-tools.txt``).
 
-  $MPA_PATH/.venv/bin/python tools/ed25519_private_to_pubkey_hex.py ~/.ssh/mpc_auth_ed25519
+  python3 tools/ed25519_private_to_pubkey_hex.py ~/.ssh/mpc_auth_ed25519
   python3 tools/ed25519_private_to_pubkey_hex.py key.pem --passphrase secret
 """
 
@@ -33,8 +33,7 @@ try:
     )
 except ImportError:
     print(
-        "error: install cryptography: $MPA_PATH/.venv/bin/pip install cryptography "
-        "(see docs/skill/SKILL.md Python dependencies)",
+        "error: install cryptography: pip install -r tools/requirements-ed25519-tools.txt",
         file=sys.stderr,
     )
     sys.exit(1)

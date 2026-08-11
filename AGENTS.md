@@ -29,8 +29,9 @@ Do **not** prefer the long interactive `process_config.sh` / Node Running Instru
 
 | Task | Where |
 |------|--------|
-| Day-to-day MPA wallet skill (already installed node) | [`docs/skill/SKILL.md`](docs/skill/SKILL.md) |
+| Day-to-day agent operation (already installed node) | [AI harness](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AIHarness/Overview), [Configure](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AIHarness/Configure), [`agent_llm_config.defaults/Skills/`](agent_llm_config.defaults/Skills/) |
 | Management API | [`docs/references/API_IMPLEMENTATION.md`](docs/references/API_IMPLEMENTATION.md) |
-| Ed25519 management keys | [`docs/CONFIGURING_ED25519_KEYS.md`](docs/CONFIGURING_ED25519_KEYS.md) |
-| Telegram / ngrok webhooks | [`docs/TELEGRAM_WEBHOOK_NGROK.md`](docs/TELEGRAM_WEBHOOK_NGROK.md) |
+| Ed25519 management keys | [`docs/CONFIGURING_ED25519_KEYS.md`](docs/CONFIGURING_ED25519_KEYS.md), [`docs/references/ED25519_MANAGEMENT_KEY_SIGNING.md`](docs/references/ED25519_MANAGEMENT_KEY_SIGNING.md) |
+| Agent hooks / webhooks | [`docs/AGENT_HOOKS.md`](docs/AGENT_HOOKS.md) |
+| Telegram / ngrok | [Telegram Mini App](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AIHarness/TelegramMiniApp) (user); [`docs/TELEGRAM_WEBHOOK_NGROK.md`](docs/TELEGRAM_WEBHOOK_NGROK.md) (operator) |
 | Docker Desktop (not VPS curl) | [`docs/INSTALL_NODE_WINDOWS_DOCKER_DESKTOP.md`](docs/INSTALL_NODE_WINDOWS_DOCKER_DESKTOP.md), [`docs/INSTALL_NODE_MACOS_DOCKER_DESKTOP.md`](docs/INSTALL_NODE_MACOS_DOCKER_DESKTOP.md) |
