@@ -2559,6 +2559,104 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.ResetSkillsFromDefaultsPost'
+  /listUserFolder:
+    get:
+      description: 'List entries under MPC_AUTH_USER_FOLDER (jailed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /listUserFolder).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Management API
+      summary: List entries under MPC_AUTH_USER_FOLDER (jailed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /getUserFolderFile:
+    get:
+      description: 'Read a file under MPC_AUTH_USER_FOLDER (jailed, size-capped) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /getUserFolderFile).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Management API
+      summary: Read a file under MPC_AUTH_USER_FOLDER (jailed, size-capped)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /writeUserFolderFile:
+    post:
+      description: 'Create or overwrite a file under user_folder (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /writeUserFolderFile).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Management API
+      summary: Create or overwrite a file under user_folder (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.WriteUserFolderFilePost'
+  /mkdirUserFolder:
+    post:
+      description: 'Create a directory under user_folder (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /mkdirUserFolder).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Management API
+      summary: Create a directory under user_folder (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.MkdirUserFolderPost'
+  /deleteUserFolderPath:
+    post:
+      description: 'Delete a file or directory under user_folder (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /deleteUserFolderPath).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Management API
+      summary: Delete a file or directory under user_folder (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.DeleteUserFolderPathPost'
   /getTradeDeskConfig:
     get:
       description: 'Get trade-desk.yaml (runtime file or bundled defaults preview) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
@@ -3236,20 +3334,20 @@ paths:
   /agent/mcp/tools:
     get:
       description: Connects to continuum-mcp (Streamable HTTP), runs tools/list, and returns wire tool summaries. With static
-        tools/list, toolCount is the full Continuum catalog; llmToolCount is the default LLM-visible subset (pinned Continuum
-        groups + host meta tools). Requires read JWT on Browser HTTPS / loopback when JWT applies. See mpc-config docs/references/API_IMPLEMENTATION.md
-        (GET /agent/mcp/tools).
+        tools/list, toolCount is the full Continuum catalog; llmToolCount and llmTools are the default LLM-visible subset
+        (pinned Continuum groups + host meta tools). Requires read JWT on Browser HTTPS / loopback when JWT applies. See mpc-config
+        docs/references/API_IMPLEMENTATION.md (GET /agent/mcp/tools).
       consumes:
       - application/json
       produces:
       - application/json
       tags:
       - Agent automation
-      summary: List continuum-mcp tools/list (wire catalog) plus llmToolCount for default LLM-visible Continuum tools (read
-        JWT on Browser HTTPS / loopback)
+      summary: List continuum-mcp tools/list (wire catalog) plus llmToolCount and llmTools for default LLM-visible Continuum
+        tools (read JWT on Browser HTTPS / loopback)
       responses:
         '200':
-          description: OK — wire tools/list plus llmToolCount
+          description: OK — wire tools/list plus llmToolCount and llmTools
           schema:
             $ref: '#/definitions/node.APIResponseAgentMcpTools'
         '503':
@@ -5414,6 +5512,12 @@ definitions:
       llmToolCount:
         type: integer
         description: LLM-visible tool count at chat start with default Continuum groups (not the full wire catalog)
+      llmTools:
+        type: array
+        items:
+          $ref: '#/definitions/node.AgentMcpToolSummary'
+        description: 'Default LLM-visible tool summaries (same filter as llmToolCount): Continuum tools in pinned default
+          groups with continuum__ prefix, plus host meta tools'
       tools:
         type: array
         items:

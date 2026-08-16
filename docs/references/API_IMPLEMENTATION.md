@@ -283,7 +283,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /agent/conversations`](#get-agentconversations) - List thread metadata for multi-tab UI (**read JWT**)
 - [`GET /agent/conversations/:id`](#get-agentconversationsid) - Load one thread by id (**read JWT**)
 - [`DELETE /agent/conversations/:id`](#delete-agentconversationsid) - Delete a thread (**read JWT**)
-- [`GET /agent/mcp/tools`](#get-agentmcptools) - **tools/list** from **continuum-mcp** (`toolCount` wire + `llmToolCount` default LLM filter; Streamable HTTP; **read JWT** when JWT applies)
+- [`GET /agent/mcp/tools`](#get-agentmcptools) - **tools/list** from **continuum-mcp** (`toolCount` wire + `llmToolCount` / `llmTools` default LLM filter; Streamable HTTP; **read JWT** when JWT applies)
 
 ### Node Ping & Connectivity
 - [`GET /pingNodesRequest`](#get-pingnodesrequest) - Ping nodes to test connectivity
@@ -3833,6 +3833,7 @@ With MCP 2026-07-28 / static **`tools/list`**, continuum-mcp exposes the full Co
 | `mcpServerUrl` | Resolved continuum-mcp URL |
 | `toolCount` | Wire catalog size — length of continuum-mcp **`tools/list`** (all Continuum tools) |
 | `llmToolCount` | How many tools the chat LLM sees at turn start with **default** Continuum groups expanded (pinned defaults + always-on host meta tools). Not the full wire catalog. |
+| `llmTools` | Summaries for that default LLM-visible set: Continuum tools use the `continuum__` prefix; host meta tools use bare names (e.g. `agent_load_mcp_server`). Same filter as `llmToolCount`. |
 | `tools` | Summaries for the wire list: `{ "name", "title", "description" }` |
 
 ```json
@@ -3845,12 +3846,16 @@ With MCP 2026-07-28 / static **`tools/list`**, continuum-mcp exposes the full Co
     "llmToolCount": 42,
     "tools": [
       { "name": "version", "title": "", "description": "…" }
+    ],
+    "llmTools": [
+      { "name": "continuum__search_continuum_tools", "title": "", "description": "…" },
+      { "name": "agent_load_mcp_server", "title": "", "description": "Load a configured MCP server into this session" }
     ]
   }
 }
 ```
 
-On connect failure: **503** with `code: 1`, empty `tools`, and `toolCount` / `llmToolCount` of `0`.
+On connect failure: **503** with `code: 1`, empty `tools` and `llmTools`, and `toolCount` / `llmToolCount` of `0`.
 
 ### 3. Node Tools
 
