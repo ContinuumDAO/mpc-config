@@ -241,7 +241,7 @@ ContinuumdaoNodeApp:
 ContinuumMcpServer:
   Enabled: true
   Image: continuumdao/continuum-mcp-server
-  Tag: latest
+  Tag: v1.3.14
   HostPort: 8446
   Port: 8446
   HttpPath: /mcp

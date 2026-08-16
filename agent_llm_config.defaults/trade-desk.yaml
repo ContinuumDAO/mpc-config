@@ -40,9 +40,10 @@ version: 1  # Schema version (must be 1 today).
 #      Example: ATR = $40, entryProximityPct 25 → gate within $10 of entry (25% of one ATR).
 #      ATR mode often uses larger numbers than price mode (e.g. 15–50, not 0.5–2).
 #
-# 3) BAND-WIDTH % — Bollinger ideas only (not in universal:)
-#    analyze_bollinger_bands uses entryProximityPct 5 on the *setup* = 5% of upper−lower
-#    band width. Universal entryProximityMode/Pct do not override that BB-specific gate.
+# 3) BOLLINGER PROXIMITY — Bollinger ideas only (not universal entryProximity*):
+#    bollingerEntryProximityMode bandWidth → pct of (upper−lower) width (default 5).
+#    bollingerEntryProximityMode atr → pct of one ATR bar (entryProximityAtrPeriod; typical 15–50).
+#    Universal entryProximityMode/Pct do not apply to Bollinger fade gates.
 #
 # Offsets (1) and proximity (2) are independent: proximity decides clear/unclear; offsets
 # shift the resting limit after the operator picks a clear idea.
@@ -136,6 +137,24 @@ universal:
   zScoreStopAtrMultiple: 2
   # Optional ATR gate: none | contracting (ATR[t] < ATR[t-1]).
   zScoreAtrFilter: none
+
+  # Bollinger bands (analyze_bollinger_bands + overlay type:bollinger).
+  # Injected as period / bollingerPeriod and stdDev / bollingerStdDev when unset.
+  bollingerPeriod: 20
+  bollingerStdDev: 2
+  # Fade entry gate when price is near an outer band (bb-fade):
+  #   bandWidth — pct of (upper−lower) width (default 5)
+  #   atr       — pct of one ATR bar (uses entryProximityAtrPeriod; typical 15–50)
+  bollingerEntryProximityMode: bandWidth
+  bollingerEntryProximityPct: 5
+
+  # Moving averages (analyze_moving_averages + SMA/EMA overlays).
+  # Injected as fastPeriod/slowPeriod/maType/freshCrossoverMaxBars when unset.
+  maFastPeriod: 50
+  maSlowPeriod: 200
+  maType: sma
+  # Max bars since golden/death cross for ma-cross clear setups.
+  maFreshCrossoverMaxBars: 5
 
   # Divergence detector (analyze_divergence). Injected when tool args omit these fields.
   # oscillator mode: rsi | stochasticrsi | both (default both)

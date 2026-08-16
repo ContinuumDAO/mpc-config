@@ -9,7 +9,17 @@ Tool: **`continuum__analyze_moving_averages`**.
 
 Works on **OHLCV candles** only. Same session binding as other analyses (`toolResult` or `{ title, ohlcvDigest }`).
 
-**Defaults** (`fastPeriod` **50**, `slowPeriod` **200**, `maType` **sma**, overlay JSON): **`chart-defaults`**. **Trade rules** (`ma-cross`, `ma-ret`, proximity, build offsets): **`trade-defaults`**.
+**Defaults** (from **`trade-desk.yaml`** `universal`, injected by the node when tool args omit them):
+
+| Desk key | Default | Role |
+|----------|---------|------|
+| `maFastPeriod` / `fastPeriod` | **50** | Fast MA length (bars) for analyze **and** chart overlay |
+| `maSlowPeriod` / `slowPeriod` | **200** | Slow MA length (bars) |
+| `maType` | **sma** | **`sma`** or **`ema`** |
+| `maFreshCrossoverMaxBars` / `freshCrossoverMaxBars` | **5** | Max bars since golden/death cross for **`ma-cross`** clear setups |
+| `entryProximityMode` / `entryProximityPct` | **price** / **1** | Proximity gate for **`ma-ret`** slow-MA retest |
+
+**Trade rules** (`ma-cross`, `ma-ret`, build offsets): **`trade-defaults`**.
 
 ## Summarize from tool JSON
 
@@ -28,4 +38,4 @@ Do not restate full trade rules here; they are in **`trade-defaults`** §1.
 
 ## Chart overlay (separate plotting step)
 
-Analysis does **not** draw MAs. When a chart is already prepared, merge two SMA/EMA overlays per **`chart-defaults`** into **`prepareReplay.overlays`**, then **`prepare_chart_from_rows`** with the same OHLCV session. The UI also offers a moving averages row in chat after analysis.
+Analysis does **not** draw MAs. When a chart is already prepared, merge two SMA/EMA overlays per **`chart-defaults`** (periods/type from **`trade-desk.yaml`**) into **`prepareReplay.overlays`**, then **`prepare_chart_from_rows`** with the same OHLCV session. The UI also offers a moving averages row in chat after analysis.
