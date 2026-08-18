@@ -1,8 +1,8 @@
 # Build from mpc-config repo root:
-#   docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.17 .
+#   docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.18 .
 #
 # Install extension (Windows / Linux / macOS Docker Desktop):
-#   docker extension install continuumdao/continuum-node-installer:0.1.17
+#   docker extension install continuumdao/continuum-node-installer:0.1.18
 #
 # Windows: install orchestration runs via host WSL → ~/mpc-config (no baked /mpc-config in this image).
 #
@@ -26,7 +26,7 @@ LABEL org.opencontainers.image.title="Continuum Node" \
     com.docker.extension.screenshots="[]" \
     com.docker.extension.detailed-description="Provision certificates, configs.yaml, and start the Continuum MPC stack via Docker Desktop. Windows: clones mpc-config to WSL ~/mpc-config. macOS/Linux: clones to ~/mpc-config on the host." \
     com.docker.extension.publisher-url="https://continuumdao.org" \
-    com.docker.extension.changelog="0.1.17: macOS Docker Desktop install; darwin host binaries; pending-update watcher + launchd."
+    com.docker.extension.changelog="0.1.18: Windows preflight (antivirus + WSL/GitHub checks) before mpc-config clone; clearer install failures on AV/network issues."
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -36,6 +36,7 @@ COPY docker-extension/metadata.json /metadata.json
 COPY docker-extension/docker-compose.yaml /docker-compose.yaml
 COPY docker-extension/continuum-icon.svg /continuum-icon.svg
 COPY docker-extension/host/windows/continuum-wsl.cmd /host/windows/continuum-wsl.cmd
+COPY docker-extension/host/windows/preflight-windows.ps1 /host/windows/preflight-windows.ps1
 COPY docker-extension/host/windows/continuum-register-watcher.cmd /host/windows/continuum-register-watcher.cmd
 COPY docker-extension/host/linux/continuum-linux.sh /host/linux/continuum-linux.sh
 COPY docker-extension/host/linux/continuum-orchestrate.sh /host/linux/continuum-orchestrate.sh

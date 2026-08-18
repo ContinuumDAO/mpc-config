@@ -46,7 +46,7 @@ The extension **backend image is UI-only** (no baked `/mpc-config`, no `docker.s
 After the image is published or built locally:
 
 ```bash
-docker extension install continuumdao/continuum-node-installer:0.1.17
+docker extension install continuumdao/continuum-node-installer:0.1.18
 ```
 
 Open **Docker Desktop → Extensions → Continuum Node** and complete the wizard.
@@ -65,7 +65,7 @@ Bump `EXT_TAG` for each release and keep it in sync across:
 
 ```bash
 # From mpc-config repo root
-export EXT_TAG=0.1.17
+export EXT_TAG=0.1.18
 
 cd docker-extension/ui && npm ci && npm run build && cd ../..
 
@@ -92,8 +92,8 @@ From the **mpc-config repo root**:
 
 ```bash
 cd docker-extension/ui && npm ci && npm run build && cd ../..
-docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.17 .
-docker extension install continuumdao/continuum-node-installer:0.1.17   # requires Docker Desktop on host
+docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.18 .
+docker extension install continuumdao/continuum-node-installer:0.1.18   # requires Docker Desktop on host
 ```
 
 Push to Docker Hub (multi-arch recommended for Windows):
@@ -101,7 +101,7 @@ Push to Docker Hub (multi-arch recommended for Windows):
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
   -f docker-extension/Dockerfile \
-  -t continuumdao/continuum-node-installer:0.1.17 \
+  -t continuumdao/continuum-node-installer:0.1.18 \
   --push .
 ```
 
@@ -225,6 +225,7 @@ bash /tmp/continuum-desktop-orchestrate.sh --profile macos --node-mgt-key "0x…
 |------|---------|
 | `/ui` | Extension tab (built from `ui/`) |
 | `/metadata.json` | Extension manifest |
+| `/host/windows/preflight-windows.ps1` | Windows host preflight — antivirus + WSL/GitHub checks before git clone |
 | `/host/windows/continuum-wsl.cmd` | Windows host binary — WSL entry point for `host.cli.exec` |
 | `/host/linux/continuum-linux.sh` | Linux host binary — delegates to host `PATH` (`curl`, `bash`, etc.) |
 | `/host/darwin/continuum-macos.sh` | macOS host binary — delegates to host `PATH` (`curl`, `bash`, etc.) |
@@ -242,6 +243,7 @@ On Windows, Docker Desktop copies **`continuum-wsl.cmd`** to the host when the e
 | macOS watcher not running | `bash ~/mpc-config/macos-desktop/install-launchagent.sh --repo-dir ~/mpc-config` |
 | Linux `sudo` password prompt / install hangs | Configure passwordless sudo for your user, or run orchestrator manually in a terminal |
 | `this installer requires WSL2` on Windows | Run inside WSL, not PowerShell |
+| Install failed exit 128 / git clone `early EOF` on Windows | Run extension **0.1.18+** — preflight blocks before clone and prompts to disable Real-time protection for ~30 minutes. Manual: `git -c http.version=HTTP/1.1 clone …` in WSL |
 | `passwordless sudo required` / install stops before clone | From PowerShell: `wsl -d <distro> -u root`, then `visudo` and add `<user> ALL=(ALL) NOPASSWD: ALL`. Verify: `wsl -d <distro> bash -lc 'sudo -n true && echo OK'` |
 | Could not run commands in WSL distro | Distro name must match `wsl -l -v` exactly |
 | `spawn …/host/curl ENOENT` on Linux | Extension missing Linux host wrapper — reinstall a build that ships `continuum-linux.sh`, or run the orchestrator manually (see below) |

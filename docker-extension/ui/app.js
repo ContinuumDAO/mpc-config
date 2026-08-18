@@ -15,8 +15,17 @@ const LOG_PANEL_VISIBLE = 'flex flex-col gap-2'
 const DESKTOP_ORCHESTRATE_SCRIPT_URL =
   'https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/desktop-local-orchestrate.sh'
 
-/** Shipped host binary (metadata.json host.binaries) — sole Windows WSL entry point. */
+/** Shipped host wrapper (metadata.json host.binaries) — sole Windows WSL entry point. */
 const WSL_HOST_WRAPPER = 'continuum-wsl.cmd'
+
+/** Exit codes from host/windows/preflight-windows.ps1 (via continuum-wsl.cmd preflight). */
+const PREFLIGHT_EXIT = {
+  OK: 0,
+  AV_ACTIVE: 10,
+  NETWORK_FAILED: 11,
+  DOCKER_WSL_FAILED: 12,
+  CONFIG_FAILED: 13,
+}
 
 /** Registers Windows logon Scheduled Task for WSL pending-update watcher. */
 const REGISTER_WATCHER_HOST_WRAPPER = 'continuum-register-watcher.cmd'
@@ -776,7 +785,76 @@ async function verifyWslDistro(cli, wslDistro, logOutput) {
   return false
 }
 
-async function runInstallOnHost(cli, { useWsl, wslDistro, profile, scriptArgs }, logOutput, progressTracker) {
+function userMessageForPreflightCode(code) {
+  switch (code) {
+    case PREFLIGHT_EXIT.AV_ACTIVE:
+      return (
+        'Real-time antivirus protection is active. Turn off Real-time protection for about 30 minutes ' +
+        '(Windows Security → Virus & threat protection → Manage settings), then click Install again.'
+      )
+    case PREFLIGHT_EXIT.NETWORK_FAILED:
+      return (
+        'GitHub is not reachable from WSL (git probe failed). See the detail log above, fix network or antivirus ' +
+        'settings, then click Install again.'
+      )
+    case PREFLIGHT_EXIT.DOCKER_WSL_FAILED:
+      return (
+        'docker compose is not available inside WSL. Enable Docker Desktop WSL integration for your distro, ' +
+        'restart Docker Desktop, then click Install again.'
+      )
+    case PREFLIGHT_EXIT.CONFIG_FAILED:
+      return (
+        'WSL distro not found or misconfigured. Confirm the distro name matches wsl -l -v exactly, then retry.'
+      )
+    default:
+      return `Windows preflight failed (exit ${code}). See the detail log above, then click Install again.`
+  }
+}
+
+async function runWindowsPreflight(cli, wslDistro, logOutput) {
+  appendLog(
+    logOutput,
+    `Running Windows preflight (antivirus + WSL/GitHub checks) via ${WSL_HOST_WRAPPER}…\n`,
+  )
+
+  const probe = await execHostSimple(cli, WSL_HOST_WRAPPER, ['preflight', '-WslDistro', wslDistro])
+  if (!probe.ok) {
+    appendLog(
+      logOutput,
+      `[host exec error: ${probe.error instanceof Error ? probe.error.message : String(probe.error)}]\n`,
+    )
+    return {
+      ok: false,
+      userMessage: `Could not run Windows preflight via ${WSL_HOST_WRAPPER}. Reinstall the extension, restart Docker Desktop, then retry.`,
+    }
+  }
+
+  const out = combinedExecOutput(probe.result)
+  const code = execExitCode(probe.result)
+  appendLog(logOutput, `[exit ${code ?? 'unknown'}]${out ? ` ${out}` : ''}\n`)
+
+  if (code === PREFLIGHT_EXIT.OK || code === null) {
+    appendLog(logOutput, 'Windows preflight passed.\n\n')
+    return { ok: true }
+  }
+
+  return { ok: false, userMessage: userMessageForPreflightCode(code) }
+}
+
+function orchestratorEnvVars(skipHostPreflight) {
+  const vars = ['CONTINUUM_INSTALL_PROGRESS=json']
+  if (skipHostPreflight) {
+    vars.unshift('CONTINUUM_SKIP_PREFLIGHT=1')
+  }
+  return vars
+}
+
+async function runInstallOnHost(
+  cli,
+  { useWsl, wslDistro, profile, scriptArgs, skipHostPreflight = false },
+  logOutput,
+  progressTracker,
+) {
   const orchestrateArgs = ['--profile', profile, ...scriptArgs]
 
   if (useWsl) {
@@ -795,7 +873,7 @@ async function runInstallOnHost(cli, { useWsl, wslDistro, profile, scriptArgs },
     appendLog(logOutput, `\nRunning orchestrator via ${WSL_HOST_WRAPPER}…\n\n`)
     const runArgs = wslHostArgs(wslDistro, [
       'env',
-      'CONTINUUM_INSTALL_PROGRESS=json',
+      ...orchestratorEnvVars(skipHostPreflight),
       'bash',
       ORCHESTRATE_SCRIPT_PATH,
       ...orchestrateArgs,
@@ -808,7 +886,7 @@ async function runInstallOnHost(cli, { useWsl, wslDistro, profile, scriptArgs },
   appendLog(logOutput, `Running bundled orchestrator via ${hostWrapper}…\n\n`)
   const runArgs = [
     'env',
-    'CONTINUUM_INSTALL_PROGRESS=json',
+    ...orchestratorEnvVars(false),
     'bash',
     ORCHESTRATE_SCRIPT_PATH,
     ...orchestrateArgs,
@@ -1014,6 +1092,7 @@ function initExtensionUi() {
     const profile =
       hostOs === HOST_OS.LINUX ? 'linux' : hostOs === HOST_OS.MACOS ? 'macos' : 'windows'
     const wslDistro = (wslDistroInput?.value ?? wslEnv.defaultDistro ?? '').trim()
+    let skipHostPreflight = false
 
     if (useWsl && !wslDistro) {
       showError(
@@ -1050,6 +1129,14 @@ function initExtensionUi() {
         installBtn.disabled = false
         return
       }
+
+      const preflight = await runWindowsPreflight(cli, wslDistro, logOutput)
+      if (!preflight.ok) {
+        showError(resultPanel, preflight.userMessage)
+        installBtn.disabled = false
+        return
+      }
+      skipHostPreflight = true
     }
 
     appendLog(
@@ -1064,14 +1151,14 @@ function initExtensionUi() {
       if (useWsl) {
         result = await runInstallOnHost(
           cli,
-          { useWsl: true, wslDistro, profile, scriptArgs },
+          { useWsl: true, wslDistro, profile, scriptArgs, skipHostPreflight },
           logOutput,
           progressTracker,
         )
       } else {
         result = await runInstallOnHost(
           cli,
-          { useWsl: false, wslDistro: null, profile, scriptArgs },
+          { useWsl: false, wslDistro: null, profile, scriptArgs, skipHostPreflight: false },
           logOutput,
           progressTracker,
         )
