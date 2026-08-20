@@ -34,3 +34,5 @@ Active webhooks and MCP servers live in MongoDB on the node after activation, no
 1. Edit **`cron/jobs.json`** — add one object to the `"jobs"` array (`name`, `schedule`, `message`, default `enabled`: false).
 2. Operators activate: **Available from repository** in the UI or **`POST /addCronJobFromCatalog`** (`GET /listCronJobs` → `availableCatalog`).
 3. Document non-obvious schedule or orchestration behavior in **`docs/references/API_IMPLEMENTATION.md`** (Agent cron jobs section) when helpful.
+
+ContinuumDAO governor Join is **`conditional-accept-governance-vote`**. Trade Join is **`conditional-accept-sign-request`**. Do not merge those jobs. Vote-create (never propose) is **`appraise-and-vote-proposals`**. All three default **disabled**.

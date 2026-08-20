@@ -129,6 +129,21 @@
       "name": "workspace-tooling",
       "filename": "workspace-tooling/SKILL.md",
       "initialLoad": false
+    },
+    {
+      "name": "continuum-dao-proposals",
+      "filename": "continuum-dao-proposals/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "continuum-dao-vote-policy",
+      "filename": "continuum-dao-vote-policy/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "continuum-dao-compose-proposal",
+      "filename": "continuum-dao-compose-proposal/SKILL.md",
+      "initialLoad": false
     }
   ]
 }

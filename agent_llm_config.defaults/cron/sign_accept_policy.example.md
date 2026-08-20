@@ -1,6 +1,14 @@
-# Conditional accept sign request (policy template)
+# Conditional accept sign request (TRADE Join only)
 
-Bundled catalog job: **`conditional-accept-sign-request`** (default **disabled**). Copy the **`signAcceptPolicy`** YAML fence into the cron job **`message`**, customize for your node, then **Run now** once before enabling.
+Bundled catalog job: **`conditional-accept-sign-request`** (default **disabled**). This job is **trade** `sign_request_agree` only (ctm1 / Hyperliquid / Arcus / GMX / Uniswap).
+
+**ContinuumDAO governor requests are a different job:** **`conditional-accept-governance-vote`**. See **`continuum_dao_vote_policy.example.md`**.
+
+If `get_sign_request_by_id` shows `evm.type` `continuum_dao_propose`, `continuum_dao_cast_vote`, `continuum_dao_execute`, or `continuum_dao_cancel` (or `signatureText.kind` is `ContinuumDAO` with those function names), **SKIP** — do not Accept or Reject. Leave the row for the governor Join cron.
+
+Escrow/lock/attach (`protocolId: continuum-dao` but not those four types) is also **not** this trade job — **SKIP**.
+
+Copy the **`signAcceptPolicy`** YAML fence into the cron job **`message`**, customize for your node, then **Run now** once before enabling.
 
 Load skill **`scheduled-automation`**. Purpose short codes: **`trade-defaults`** §4 (ctm1 format).
 
