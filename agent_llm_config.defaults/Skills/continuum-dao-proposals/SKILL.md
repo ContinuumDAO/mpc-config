@@ -36,8 +36,16 @@ If `overlay` is `backend-only`, say you could not confirm Governor state.
 6. Delta: one subsection per option, then **None of the above (NOTA)** as a vote slot with no actions.
 7. Bravo: “If this passes, the DAO will execute, in order.”
 8. Repeat the **Risks** list from the tool. Do not invent extra certainty.
-9. If `forumKey` is a topic URL (`/topic/:tid` or `/t/:tid`), `continuum__ctm_continuum_dao_forum_resolve` then `forum_fetch_thread` (index `0` = OP). Note **`section` / `cid`**. Expected: Decision→`decision`, Election→`election`, Treasury→`treasury`, Constitution→`constitution`, Admin→`admin`. If `section` is `ideas` or does not match `typeLabel`, treat as a **mismatch** (amber/red) and say so. Summarize the original post and reply count (`forum_reply_count`). Reads only — no login, reply, `forum_create_topic`, or `forum_create_idea` from this skill.
+9. If `forumKey` is a topic URL (`/topic/:tid` or `/t/:tid`), `continuum__ctm_continuum_dao_forum_resolve` then `forum_fetch_thread` (index `0` = OP). Note **`section` / `cid`**. Expected: Decision→`decision`, Election→`election`, Treasury→`treasury`, Constitution→`constitution`, Admin→`admin`. If `section` is `ideas` or does not match `typeLabel`, treat as a **mismatch** (amber/red) and say so. Summarize the original post and reply count (`forum_reply_count`). To list recent posts (id, title, username, createdAt), `forum_recent` (`hours` or `since`). To find matching posts, `forum_search` (`query` and/or `hours` / `since`) then `forum_fetch_post` on a returned `id`. Reads only — no login, reply, `forum_create_topic`, or `forum_create_idea` from this skill.
 10. Run **`continuum-dao-proposal-standards`** on the brief + OP (includes fetching Constitution **`continuumdao-proposals-and-voting`**). Highlight Vision/Mission failures, **type-fit** failures, missing Format elements, and Forum section mismatch (do not vote from this skill).
+
+## Forum post presentation
+
+`forum_fetch_post` / `forum_fetch_thread` `content` is composer **source**, usually markdown (not the HTML on the website). When showing a post in chat, if `content` looks like markdown, emit it as markdown in the reply so the chat can render it — do **not** wrap the body in a code fence. If it is HTML or NodeBB-only markup (`@mentions`, upload tokens), summarize in plain language instead of dumping tags.
+
+## Forum moderation (interactive only)
+
+`forum_delete` soft-deletes a post (`pid`), a thread (`tid` / `url`), or all posts by a `username`. Caller must be a forum **admin or moderator** (ticket required). Optional `hours` / `since`; omit both for all matches. Confirm the target and window with the operator before calling. Never from cron.
 
 This skill does **not** create a multi-sign request, vote, propose, execute, or call `sign_request_agree`.
 

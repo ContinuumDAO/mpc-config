@@ -43,8 +43,9 @@ votePolicy:
 
 A proposal should have a real `forumKey` (`/topic/:tid` or `/t/:tid`). Reads do not need a ticket.
 
-1. `continuum__ctm_continuum_dao_forum_resolve` then `forum_fetch_thread` (index `0` = OP; page replies with `start`/`limit`). Read **`section`**. Expected map: Decision→`decision`, Election→`election`, Treasury→`treasury`, Constitution→`constitution`, Admin→`admin`. `forum_reply_count` for volume. One post: `forum_fetch_post`. A user’s posts: `forum_user_post_ids` then `forum_fetch_post`.
+1. `continuum__ctm_continuum_dao_forum_resolve` then `forum_fetch_thread` (index `0` = OP; page replies with `start`/`limit`). Read **`section`**. Expected map: Decision→`decision`, Election→`election`, Treasury→`treasury`, Constitution→`constitution`, Admin→`admin`. `forum_reply_count` for volume. One post: `forum_fetch_post`. A user’s posts: `forum_user_post_ids` then `forum_fetch_post`. Recent posts: `forum_recent` (`hours` or `since`; id, title, username, createdAt). Keyword matches: `forum_search` then `forum_fetch_post`.
 2. Include the OP (and notable replies) in the appraisal. Scam / empty-description rules still apply if the on-chain brief is thin but the thread is not. A thread in **Ideas & Suggestions**, or a section that does not match `typeLabel`, is a **standards failure** (lean `against` / `nota`).
+3. `content` is composer source (usually markdown, not site HTML). When showing a post in chat, emit markdown as markdown so it can render — do **not** fence the body. If it is HTML or NodeBB-only markup, summarize in plain language.
 
 **Interactive write** (operator asked to comment or react — not from cron):
 
@@ -72,7 +73,7 @@ Interactive chat: state the recommendation and **wait for confirmation** before 
 
 Allowed tools: `ctm_continuum_dao_build_cast_vote_bravo_multisign` (support 0/1/2) or `…_cast_vote_delta_multisign` (weights length **nOptions + 1**). Forum read tools always; forum login / reply / react only in interactive chat (see above).
 
-Forbidden: propose_*, register_proposal, `forum_create_topic`, `forum_create_idea`, execute, cancel, Compose propose, `trigger_sign_result`, `broadcast_sign_result`.
+Forbidden: propose_*, register_proposal, `forum_create_topic`, `forum_create_idea`, `forum_delete`, execute, cancel, Compose propose, `trigger_sign_result`, `broadcast_sign_result`.
 
 ## Governor Join (`sign_request_agree`) — not the trade job
 
