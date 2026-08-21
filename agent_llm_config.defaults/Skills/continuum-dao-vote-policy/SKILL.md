@@ -1,11 +1,11 @@
 ---
 name: continuum-dao-vote-policy
-description: How this node votes on ContinuumDAO proposals and how governor Join Accept/Reject works. Never create a proposal. Trusted proposers are any EOA or contract.
+description: How this node votes on ContinuumDAO proposals and how governor Join Accept/Reject works. Read the forum thread; interactive login/reply/react allowed. Never create a proposal or forum topic. Trusted proposers are any EOA or contract.
 ---
 
 # ContinuumDAO vote policy
 
-Load for “how should I vote?”, policy appraisal, the **appraise-and-vote-proposals** cron, or **conditional-accept-governance-vote**. Always load **`continuum-dao-proposals`** first so the briefing exists. For interactive submit, also load **`execution-policy`**. For cron, load **`scheduled-automation`**.
+Load for “how should I vote?”, policy appraisal, the **appraise-and-vote-proposals** cron, or **conditional-accept-governance-vote**. Always load **`continuum-dao-proposals`** and **`continuum-dao-proposal-standards`** first so the briefing and Constitution/format check exist. For interactive submit, also load **`execution-policy`**. For cron, load **`scheduled-automation`**.
 
 This skill **never** authorizes `ctm_continuum_dao_build_propose_*` or `ctm_continuum_dao_register_proposal`. Do **not** load **`continuum-dao-compose-proposal`**.
 
@@ -39,23 +39,40 @@ votePolicy:
 
 **Trusted proposers are not KeyGens.** Any Ethereum address may author a proposal. `keyGenId` is only who **signs the vote**.
 
+## Forum (read always; write when interactive)
+
+A proposal should have a real `forumKey` (`/topic/:tid` or `/t/:tid`). Reads do not need a ticket.
+
+1. `continuum__ctm_continuum_dao_forum_resolve` then `forum_fetch_thread` (index `0` = OP; page replies with `start`/`limit`). `forum_reply_count` for volume. One post: `forum_fetch_post`. A user’s posts: `forum_user_post_ids` then `forum_fetch_post`.
+2. Include the OP (and notable replies) in the appraisal. Scam / empty-description rules still apply if the on-chain brief is thin but the thread is not.
+
+**Interactive write** (operator asked to comment or react — not from cron):
+
+1. `forum_sign_in_eligible` then `build_forum_sign_in_multisign` if there is no ticket (veCTM login gate; no EVM tx). Pass `ticket` on writes.
+2. `forum_reply` (English, ≤ 8000) or `forum_react` (`+1` `-1` `heart` `tada` `eyes`). Confirm before posting.
+3. `forum_sign_out({ ticket })` when done.
+
+**Cron:** read the thread only. Do **not** `forum_create_topic`, sign in, reply, or react. Never propose.
+
 ## Appraisal (interactive and cron)
 
-1. `explain_proposal` briefing + `fetch_proposal_state` (must be **Active** to vote).
-2. If `proposer` is in `blockedProposers` → `skip` (cron: do nothing).
-3. If `trustedProposers` is non-empty and proposer is not on it → `skip`.
-4. If type is in `types.block` → `skip` or `against` per YAML.
-5. Treasury / value / deny signatures / deny targets / scam flags → `against` or `nota` (Delta) or `skip` if `defaultAction` is skip and the rule says skip.
-6. If nothing matches → **`defaultAction`**. Never invent **For**.
-7. Delta “take no action” → put weight on the **last (NOTA)** slot only.
+1. `explain_proposal` briefing + `fetch_proposal_state` (must be **Active** to vote). Fetch the forum thread as above when `forumKey` is a topic URL.
+2. Run **`continuum-dao-proposal-standards`** on the on-chain brief + forum OP. Tell the operator every red (Vision/Mission) and amber (missing Format) item.
+3. If `proposer` is in `blockedProposers` → `skip` (cron: do nothing).
+4. If `trustedProposers` is non-empty and proposer is not on it → `skip`.
+5. If type is in `types.block` → `skip` or `against` per YAML.
+6. Treasury / value / deny signatures / deny targets / scam flags → `against` or `nota` (Delta) or `skip` if `defaultAction` is skip and the rule says skip.
+7. **Standards:** Vision/Mission non-conformance → `against` or `nota` (Constitution: voters should seriously consider rejecting). Missing Format (especially Treasury budget / timeline / success criteria, or no Abstract/Motivation/Scope) → same lean, or `skip` only if `defaultAction` is skip and no other deny rule fired. Cite the failing items in the recommendation.
+8. If nothing matches → **`defaultAction`**. Never invent **For**. Good format does not authorize For.
+9. Delta “take no action” → put weight on the **last (NOTA)** slot only.
 
 Interactive chat: state the recommendation and **wait for confirmation** before any vote multi-sign. Cron: no questions; if skip/unknown, **do nothing**.
 
 ## Creating a vote (interactive or vote cron only)
 
-Allowed tools: `ctm_continuum_dao_build_cast_vote_bravo_multisign` (support 0/1/2) or `…_cast_vote_delta_multisign` (weights length **nOptions + 1**).
+Allowed tools: `ctm_continuum_dao_build_cast_vote_bravo_multisign` (support 0/1/2) or `…_cast_vote_delta_multisign` (weights length **nOptions + 1**). Forum read tools always; forum login / reply / react only in interactive chat (see above).
 
-Forbidden: propose_*, register_proposal, execute, cancel, Compose propose, `trigger_sign_result`, `broadcast_sign_result`.
+Forbidden: propose_*, register_proposal, `forum_create_topic`, execute, cancel, Compose propose, `trigger_sign_result`, `broadcast_sign_result`.
 
 ## Governor Join (`sign_request_agree`) — not the trade job
 

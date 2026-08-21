@@ -144,6 +144,11 @@
       "name": "continuum-dao-compose-proposal",
       "filename": "continuum-dao-compose-proposal/SKILL.md",
       "initialLoad": false
+    },
+    {
+      "name": "continuum-dao-proposal-standards",
+      "filename": "continuum-dao-proposal-standards/SKILL.md",
+      "initialLoad": false
     }
   ]
 }

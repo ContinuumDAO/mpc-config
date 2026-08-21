@@ -1,11 +1,11 @@
 ---
 name: continuum-dao-proposals
-description: Present ContinuumDAO proposals (live, pending, ready to execute, recent). Deconstruct multi-action Bravo/Delta briefs. Do not vote from this skill.
+description: Present ContinuumDAO proposals (live, pending, ready to execute, recent). Deconstruct multi-action Bravo/Delta briefs and the linked forum thread. Do not vote from this skill.
 ---
 
 # ContinuumDAO proposals (presentation)
 
-Load when the operator asks what is live, recent, ready to execute, or what a proposal **does**. For “should I vote / how would this node vote?” also load **`continuum-dao-vote-policy`**. Do **not** load **`continuum-dao-compose-proposal`**.
+Load when the operator asks what is live, recent, ready to execute, or what a proposal **does**. Also load **`continuum-dao-proposal-standards`**. For “should I vote / how would this node vote?” also load **`continuum-dao-vote-policy`**. Do **not** load **`continuum-dao-compose-proposal`**.
 
 In agent chat, Continuum tools are **`continuum__<name>`**. Load the protocol first: **`continuum__load_defi_protocol({ "protocolId": "continuum-dao" })`**.
 
@@ -36,6 +36,8 @@ If `overlay` is `backend-only`, say you could not confirm Governor state.
 6. Delta: one subsection per option, then **None of the above (NOTA)** as a vote slot with no actions.
 7. Bravo: “If this passes, the DAO will execute, in order.”
 8. Repeat the **Risks** list from the tool. Do not invent extra certainty.
+9. If `forumKey` is a topic URL (`/topic/:tid` or `/t/:tid`), `continuum__ctm_continuum_dao_forum_resolve` then `forum_fetch_thread` (index `0` = OP). Summarize the original post and reply count (`forum_reply_count`). Reads only — no login, reply, or `forum_create_topic` from this skill.
+10. Run **`continuum-dao-proposal-standards`** on the brief + OP. Highlight Vision/Mission failures and missing Format elements to the operator (do not vote from this skill).
 
 This skill does **not** create a multi-sign request, vote, propose, execute, or call `sign_request_agree`.
 

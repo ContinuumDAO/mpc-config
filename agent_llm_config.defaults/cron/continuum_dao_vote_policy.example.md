@@ -9,7 +9,7 @@ Catalog jobs (default **disabled**):
 
 Trade Join stays on **`conditional-accept-sign-request`** (`sign_accept_policy.example.md`). That job **skips** ContinuumDAO governor types.
 
-Load skills **`scheduled-automation`**, **`continuum-dao-proposals`**, **`continuum-dao-vote-policy`**. Copy `votePolicy` from the vote-policy skill into the job message if you customize it. **Never** load **`continuum-dao-compose-proposal`**.
+Load skills **`scheduled-automation`**, **`continuum-dao-proposals`**, **`continuum-dao-proposal-standards`**, **`continuum-dao-vote-policy`**. Copy `votePolicy` from the vote-policy skill into the job message if you customize it. **Never** load **`continuum-dao-compose-proposal`**. When `forumKey` is a topic URL, **read** the thread (`forum_resolve` / `forum_fetch_thread`); do not sign in, reply, react, or `forum_create_topic`. Fetch Constitution Vision/Mission and How to Write a Proposal via `get_continuum_doc`; non-conformance and missing format lean **against** / **nota**.
 
 ## Governor request types
 

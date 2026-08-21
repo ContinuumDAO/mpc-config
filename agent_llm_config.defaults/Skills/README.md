@@ -15,7 +15,8 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 | **`scheduled-automation.md`** | Cron & webhook behavior: non-interactive runs, schedule kinds, conversation threading |
 | **`continuum-dao-proposals`** | Present live/recent ContinuumDAO proposals and deconstruct multi-action briefs (`initialLoad: false`) |
 | **`continuum-dao-vote-policy`** | Vote + governor Join policy. Trusted proposers are any EOA/contract. Never propose (`initialLoad: false`) |
-| **`continuum-dao-compose-proposal`** | Interactive interview → preview → propose. Never from cron or the other two gov skills (`initialLoad: false`) |
+| **`continuum-dao-compose-proposal`** | Interactive interview → **forum thread first** → propose. Forum EIP-712 login/logout. Never from cron (`initialLoad: false`) |
+| **`continuum-dao-proposal-standards`** | Fetch Constitution Vision/Mission + How to Write a Proposal; format/alignment checklist (`initialLoad: false`) |
 | **`<name>.md`** / **`<name>.txt`** | Additional skill bodies (markdown or plain text) |
 
 Skill **`name`** values must be lowercase (`a-z`, digits, hyphen, underscore) — they match the node API and manifest lookup.
