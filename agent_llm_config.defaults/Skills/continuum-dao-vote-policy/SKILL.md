@@ -43,8 +43,8 @@ votePolicy:
 
 A proposal should have a real `forumKey` (`/topic/:tid` or `/t/:tid`). Reads do not need a ticket.
 
-1. `continuum__ctm_continuum_dao_forum_resolve` then `forum_fetch_thread` (index `0` = OP; page replies with `start`/`limit`). `forum_reply_count` for volume. One post: `forum_fetch_post`. A user’s posts: `forum_user_post_ids` then `forum_fetch_post`.
-2. Include the OP (and notable replies) in the appraisal. Scam / empty-description rules still apply if the on-chain brief is thin but the thread is not.
+1. `continuum__ctm_continuum_dao_forum_resolve` then `forum_fetch_thread` (index `0` = OP; page replies with `start`/`limit`). Read **`section`**. Expected map: Decision→`decision`, Election→`election`, Treasury→`treasury`, Constitution→`constitution`, Admin→`admin`. `forum_reply_count` for volume. One post: `forum_fetch_post`. A user’s posts: `forum_user_post_ids` then `forum_fetch_post`.
+2. Include the OP (and notable replies) in the appraisal. Scam / empty-description rules still apply if the on-chain brief is thin but the thread is not. A thread in **Ideas & Suggestions**, or a section that does not match `typeLabel`, is a **standards failure** (lean `against` / `nota`).
 
 **Interactive write** (operator asked to comment or react — not from cron):
 
@@ -52,17 +52,17 @@ A proposal should have a real `forumKey` (`/topic/:tid` or `/t/:tid`). Reads do 
 2. `forum_reply` (English, ≤ 8000) or `forum_react` (`+1` `-1` `heart` `tada` `eyes`). Confirm before posting.
 3. `forum_sign_out({ ticket })` when done.
 
-**Cron:** read the thread only. Do **not** `forum_create_topic`, sign in, reply, or react. Never propose.
+**Cron:** read the thread only. Do **not** `forum_create_topic`, `forum_create_idea`, sign in, reply, or react. Never propose.
 
 ## Appraisal (interactive and cron)
 
 1. `explain_proposal` briefing + `fetch_proposal_state` (must be **Active** to vote). Fetch the forum thread as above when `forumKey` is a topic URL.
-2. Run **`continuum-dao-proposal-standards`** on the on-chain brief + forum OP. Tell the operator every red (Vision/Mission) and amber (missing Format) item.
+2. Run **`continuum-dao-proposal-standards`** on the on-chain brief + forum OP (must include the fetched **Proposals and Voting** type-fit). Tell the operator every red (Vision/Mission, type-fit) and amber (missing Format) item.
 3. If `proposer` is in `blockedProposers` → `skip` (cron: do nothing).
 4. If `trustedProposers` is non-empty and proposer is not on it → `skip`.
 5. If type is in `types.block` → `skip` or `against` per YAML.
 6. Treasury / value / deny signatures / deny targets / scam flags → `against` or `nota` (Delta) or `skip` if `defaultAction` is skip and the rule says skip.
-7. **Standards:** Vision/Mission non-conformance → `against` or `nota` (Constitution: voters should seriously consider rejecting). Missing Format (especially Treasury budget / timeline / success criteria, or no Abstract/Motivation/Scope) → same lean, or `skip` only if `defaultAction` is skip and no other deny rule fired. Cite the failing items in the recommendation.
+7. **Standards:** Vision/Mission non-conformance → `against` or `nota` (Constitution: voters should seriously consider rejecting). **Type-fit** failure against fetched Proposals and Voting (wrong type, Constitution without the new text, Treasury with no transfer, Election that is not multi-choice, Admin that is not onlyGov/upgrade/redeploy, or Forum section mismatch / Ideas `forumKey`) → same lean. Missing Format (especially Treasury budget / timeline / success criteria, or no Abstract/Motivation/Scope) → same lean, or `skip` only if `defaultAction` is skip and no other deny rule fired. Cite the failing items in the recommendation.
 8. If nothing matches → **`defaultAction`**. Never invent **For**. Good format does not authorize For.
 9. Delta “take no action” → put weight on the **last (NOTA)** slot only.
 
@@ -72,7 +72,7 @@ Interactive chat: state the recommendation and **wait for confirmation** before 
 
 Allowed tools: `ctm_continuum_dao_build_cast_vote_bravo_multisign` (support 0/1/2) or `…_cast_vote_delta_multisign` (weights length **nOptions + 1**). Forum read tools always; forum login / reply / react only in interactive chat (see above).
 
-Forbidden: propose_*, register_proposal, `forum_create_topic`, execute, cancel, Compose propose, `trigger_sign_result`, `broadcast_sign_result`.
+Forbidden: propose_*, register_proposal, `forum_create_topic`, `forum_create_idea`, execute, cancel, Compose propose, `trigger_sign_result`, `broadcast_sign_result`.
 
 ## Governor Join (`sign_request_agree`) — not the trade job
 
