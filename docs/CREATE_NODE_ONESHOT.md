@@ -13,11 +13,14 @@ primary_script: scripts/install-node-debian-ubuntu.sh
 raw_url: https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh
 repo: https://github.com/ContinuumDAO/mpc-config
 user_docs: https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Install
+agent_playbook: https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision
 ---
 
 # Create a node — one-shot install (for AI agents)
 
-**If your task is to create / install a ContinuumDAO MPC (MPA) node on an Ubuntu/Debian VPS, use this page first.** Do not start from the long interactive `process_config.sh` walkthrough unless the one-shot script cannot run.
+**If your task is to provision and configure a node (topology, peers, MQTT, Group, KeyGen), start at [Agent provision and configure](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision)** — this page is the **install script only**.
+
+**If your task is only to create / install containers on an Ubuntu/Debian VPS, use this page.** Do not start from the long interactive `process_config.sh` walkthrough unless the one-shot script cannot run.
 
 ## Canonical one-shot script
 
@@ -54,9 +57,11 @@ Restore / same Node Key: pass `--public-mgt-key` and ensure `bootstrap_key/ed255
 
 ## After install (agent checklist)
 
+Continue the full playbook: [Agent provision and configure](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision) — user SSH tunnel to **8446**, Path A MCP (`node_config`), peers / MQTT, Group, KeyGen, then hand-off. Do not stop at a single node.
+
 1. Confirm containers: `docker ps` as `mpcnode` (or via root).
-2. Attach at https://mpa.continuumdao.org (SSH tunnel or Browser HTTPS).
-3. **Node Peer IP Editing** + Inter Node Communication — a lone node cannot create a KeyGen; minimum useful wallet is **2/2** (see [Overview](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Overview)).
+2. Ask the operator to tunnel `continuum-mcp` to `127.0.0.1:8446` (and **3333** for later attach).
+3. Configure peers / MQTT via MCP (or the UI **Node Peer IP Editing** + Inter Node Communication). A lone node cannot create a KeyGen; prefer **2-of-3** across regions and providers (see the playbook).
 4. Prefer the UI **Maintenance** path to update an existing node — the one-shot installer **refuses** if `configs.yaml` or MPC containers already exist.
 
 ## Not this script

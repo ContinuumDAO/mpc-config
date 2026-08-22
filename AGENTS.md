@@ -8,7 +8,8 @@ This repository configures and installs **mpc-auth** MPC / MPA wallet nodes.
 
 | | |
 |--|--|
-| **Canonical guide** | [`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md) |
+| **Full playbook (provision + configure)** | https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision |
+| **Canonical install guide** | [`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md) |
 | **One-shot script** | [`scripts/install-node-debian-ubuntu.sh`](scripts/install-node-debian-ubuntu.sh) |
 | **Raw URL** | `https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh` |
 | **README section** | [One-shot VPS install](README.md#one-shot-vps-install) |
