@@ -9,6 +9,42 @@
       "initialLoad": false
     },
     {
+      "id": "gecko",
+      "displayName": "Gecko browser (gecko-mcp)",
+      "setupUrl": "https://github.com/Frumane/gecko-mcp",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "gecko-mcp"],
+      "runtime": {
+        "requireCommands": ["npx"]
+      },
+      "initialLoad": false
+    },
+    {
+      "id": "mullvad-browser",
+      "displayName": "Mullvad Browser (gecko-mcp)",
+      "setupUrl": "https://github.com/Frumane/gecko-mcp",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "gecko-mcp"],
+      "runtime": {
+        "requireCommands": ["npx"]
+      },
+      "initialLoad": false
+    },
+    {
+      "id": "firefox",
+      "displayName": "Firefox (Playwright MCP)",
+      "setupUrl": "https://github.com/JediLuke/firefox-mcp-server",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "firefox-mcp-server"],
+      "runtime": {
+        "requireCommands": ["npx"]
+      },
+      "initialLoad": false
+    },
+    {
       "id": "brave-search",
       "displayName": "Brave Search",
       "transport": "stdio",
@@ -33,6 +69,50 @@
       "runtime": {
         "requireCommands": ["npx"]
       },
+      "initialLoad": false
+    },
+    {
+      "id": "exa",
+      "displayName": "Exa search",
+      "setupUrl": "https://exa.ai/docs/reference/exa-mcp",
+      "transport": "http",
+      "url": "https://mcp.exa.ai/mcp",
+      "initialLoad": false
+    },
+    {
+      "id": "tavily",
+      "displayName": "Tavily search",
+      "setupUrl": "https://www.tavily.com/",
+      "transport": "http",
+      "url": "https://mcp.tavily.com/mcp",
+      "apiKeyEnvVar": "TAVILY_API_KEY",
+      "initialLoad": false
+    },
+    {
+      "id": "kagi",
+      "displayName": "Kagi search",
+      "setupUrl": "https://kagi.com/",
+      "transport": "http",
+      "url": "https://mcp.kagi.com/mcp",
+      "apiKeyEnvVar": "KAGI_API_KEY",
+      "initialLoad": false
+    },
+    {
+      "id": "serpapi",
+      "displayName": "SerpApi search",
+      "setupUrl": "https://serpapi.com/integrations/mcp",
+      "transport": "http",
+      "url": "https://mcp.serpapi.com/mcp",
+      "apiKeyEnvVar": "SERPAPI_API_KEY",
+      "initialLoad": false
+    },
+    {
+      "id": "perplexity",
+      "displayName": "Perplexity search",
+      "setupUrl": "https://www.perplexity.ai/",
+      "transport": "http",
+      "url": "https://api.perplexity.ai/mcp",
+      "apiKeyEnvVar": "PERPLEXITY_API_KEY",
       "initialLoad": false
     },
     {
@@ -173,6 +253,52 @@
       "envVars": ["MESSARI_SDK_API_KEY"],
       "runtime": {
         "requireCommands": ["npx"]
+      },
+      "initialLoad": false
+    },
+    {
+      "id": "financial-modeling-prep",
+      "displayName": "Financial Modeling Prep",
+      "setupUrl": "https://site.financialmodelingprep.com/developer/docs/mcp-server",
+      "transport": "http",
+      "url": "https://financialmodelingprep.com/mcp",
+      "apiKeyEnvVar": "FMP_API_KEY",
+      "apiKeyHeader": "apikey",
+      "initialLoad": false
+    },
+    {
+      "id": "alpaca",
+      "displayName": "Alpaca (v2)",
+      "setupUrl": "https://github.com/alpacahq/alpaca-mcp-server",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["alpaca-mcp-server@2"],
+      "apiKeyEnvVar": "ALPACA_API_KEY",
+      "envVars": ["ALPACA_API_KEY", "ALPACA_SECRET_KEY"],
+      "runtime": {
+        "requireCommands": ["uv"]
+      },
+      "initialLoad": false
+    },
+    {
+      "id": "equibles",
+      "displayName": "Equibles",
+      "setupUrl": "https://equibles.com/mcp",
+      "transport": "http",
+      "url": "https://mcp.equibles.com/mcp",
+      "apiKeyEnvVar": "EQUIBLES_API_KEY",
+      "initialLoad": false
+    },
+    {
+      "id": "edgartools",
+      "displayName": "EdgarTools (SEC filings)",
+      "setupUrl": "https://www.edgartools.io/edgartools-mcp-for-sec-filings/",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["--from", "edgartools[ai]", "edgartools-mcp"],
+      "envVars": ["EDGAR_IDENTITY"],
+      "runtime": {
+        "requireCommands": ["uv"]
       },
       "initialLoad": false
     },

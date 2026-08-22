@@ -378,12 +378,10 @@ mcpClassification:
     - google-search
     - exa
     - tavily
-    - chrome
     - firefox
     - mullvad-browser
-    - bing
     - kagi
-    - serper
+    - serpapi
     - perplexity
   knownResearchDataIDs:
     - messari
@@ -395,6 +393,9 @@ mcpClassification:
     - gdelt-cloud
     - fmp
     - financial-modeling-prep
+    - alpaca
+    - equibles
+    - edgartools
     - coingecko
     - coingecko-pro
     - coinmarketcap
@@ -409,11 +410,14 @@ mcpClassification:
     - tavily
     - exa
     - serp
-    - bing search
     - web_search
     - web search
     - perplexity
     - kagi
+    - mullvad
+    - mullvad-browser
+    - firefox
+    - firefox-mcp
   researchDataNeedles:
     - messari
     - dune
@@ -430,6 +434,13 @@ mcpClassification:
     - gdelt cloud
     - fmp
     - financial modeling
+    - alpaca
+    - equibles
+    - edgartools
+    - edgar
+    - 13f
+    - earnings
+    - sec filings
     - coingecko
     - coinmarketcap
     - altfins

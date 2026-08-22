@@ -16,8 +16,9 @@ Continuum does **not** endorse third-party data providers. Pick sources from **o
 If no OHLCV source is loaded and no fetch has run in this chat:
 
 1. **Stop** — do not chart, analyze, or load providers on your own.
-2. **Ask the operator** which source to use (CoinGecko, CoinMarketCap public, Hyperliquid, GMX, another catalog MCP, etc.).
-3. After they choose → **enable that source** (see below) → **fetch OHLCV** → pass full fetch object once, then **`{ title, ohlcvDigest }`** from **`meta.sessionBind`** on follow-ups.
+2. Call **`continuum__list_ohlcv_sources`** — **`active`** is on this node / loaded DeFi; **`repository`** is catalog MCP not yet added plus other DeFi `fetch_ohlcv` protocols. For the full MCP catalog (search, news, …) use **`list_mcp_servers`**.
+3. **Ask the operator** which source to use, quoting that list.
+4. After they choose → **enable that source** (see below) → **fetch OHLCV** → pass full fetch object once, then **`{ title, ohlcvDigest }`** from **`meta.sessionBind`** on follow-ups.
 
 Chart/analysis tools return a clear error when called without data; treat that as “ask the operator first”.
 
@@ -26,7 +27,7 @@ Chart/analysis tools return a clear error when called without data; treat that a
 | Kind | Examples | How to enable in this chat | Fetch tool |
 |------|----------|----------------------------|------------|
 | **DeFi protocol** (already on **continuum** MCP) | Hyperliquid, Arcus, GMX, Aave, Uniswap, … | **`continuum__load_defi_protocol`** `{ "protocolId": "hyperliquid" }` — **not** **`agent_load_mcp_server`** | `ctm_<protocol>_fetch_ohlcv` |
-| **Optional catalog MCP server** | `coinmarketcap-public`, `coinbase-public`, `coingecko`, `binance`, `technical-indicators`, … | **`continuum__agent_load_mcp_server`** `{ "serverId": "…" }` after operator choice | `coinmarketcap-public__*`, `coinbase-public__*`, `coingecko__*`, `binance__*`, … |
+| **Optional catalog MCP server** | `coinmarketcap-public`, `coinbase-public`, `coingecko`, `binance`, `financial-modeling-prep`, `alpaca`, `equibles`, `technical-indicators`, … | **`continuum__agent_load_mcp_server`** `{ "serverId": "…" }` after operator choice | `coinmarketcap-public__*`, `coinbase-public__*`, `coingecko__*`, `binance__*`, `financial-modeling-prep__*`, `alpaca__*`, `equibles__*`, … |
 
 **Hyperliquid is a DeFi protocol, not an MCP `serverId`.**  
 `agent_load_mcp_server({ "serverId": "hyperliquid" })` fails with *not configured* — that is expected. Use **`load_defi_protocol({ "protocolId": "hyperliquid" })`** instead, then **`ctm_hyperliquid_fetch_ohlcv`**.
@@ -35,7 +36,7 @@ Read-only DeFi (markets, OHLCV, charts, analysis) does **not** require RPC URL, 
 
 ## Load catalog MCP servers before fetch (catalog sources only)
 
-For **CoinGecko, CoinMarketCap public, Coinbase public, Binance**, etc. — not for Hyperliquid/GMX.
+For **CoinGecko, CoinMarketCap public, Coinbase public, Binance, Financial Modeling Prep, Alpaca, Equibles**, etc. — not for Hyperliquid/GMX.
 
 Most catalog servers have **`initialLoad: false`**. Call **`continuum__agent_load_mcp_server`** same turn, **before** fetch, only after the operator picks a **catalog** provider:
 
@@ -80,6 +81,9 @@ If a chosen server is **missing** from **`activeServers`** → tell the operator
 | CoinGecko | **`agent_load_mcp_server({ "serverId": "coingecko" })`** or **`coingecko-pro`** | **`coingecko__execute`** |
 | Binance | **`agent_load_mcp_server({ "serverId": "binance" })`** | **`binance_get_klines`** (or `binance__*` klines tool) with **`response_format: "json"`** |
 | Coinbase / Advanced Trade | **`agent_load_mcp_server({ "serverId": "coinbase-public" })`** | **`coinbase-public__get_product_candles`** (`productId` e.g. `BTC-USD`, `interval` e.g. `1h`) |
+| Financial Modeling Prep / FMP | **`agent_load_mcp_server({ "serverId": "financial-modeling-prep" })`** | Historical / chart tools (e.g. full, light, or intraday chart). Requires **`FMP_API_KEY`** in Variables |
+| Alpaca | **`agent_load_mcp_server({ "serverId": "alpaca" })`** | **`get_stock_bars`** / **`get_crypto_bars`** (timeframes `1Min`, `5Min`, `15Min`, `1Hour`, `1Day`). Requires **`ALPACA_API_KEY`** + **`ALPACA_SECRET_KEY`** |
+| Equibles | **`agent_load_mcp_server({ "serverId": "equibles" })`** | **`GetStockPrices`** (daily OHLCV). Requires **`EQUIBLES_API_KEY`**. Use **`GetLatestPrices`** for latest close (not a chart series) |
 | Other DeFi (Aave, Uniswap, …) | **`load_defi_protocol({ "protocolId": "<id>" })`** | That protocol’s **`ctm_*`** tools (see **`get_defi_protocol_skill`**) |
 
 ## Rule 2 — Generic spot (no venue or provider named)
@@ -90,9 +94,12 @@ Use the **first loaded OHLCV-capable MCP server** in this chat, in order:
 2. **`coingecko`** (if loaded)
 3. **`binance`** (if loaded)
 4. **`coinbase-public`** (if loaded)
-5. Any other **loaded** server that exposes spot OHLCV (future catalog sources)
+5. **`financial-modeling-prep`** (if loaded and **`FMP_API_KEY`** configured)
+6. **`alpaca`** (if loaded and **`ALPACA_API_KEY`** + **`ALPACA_SECRET_KEY`** configured)
+7. **`equibles`** (if loaded and **`EQUIBLES_API_KEY`** configured)
+8. Any other **loaded** server that exposes spot OHLCV (future catalog sources)
 
-**If no OHLCV source is loaded in this session** → **ask the operator** which provider to use. Offer concise options (e.g. CoinGecko, CoinMarketCap public, Coinbase, Binance, Hyperliquid). **Do not** silently load **`coinmarketcap-public`**, **`coinbase-public`**, **`coingecko`**, or **`binance`**.
+**If no OHLCV source is loaded in this session** → **ask the operator** which provider to use. Offer concise options (e.g. CoinGecko, CoinMarketCap public, Coinbase, Binance, Financial Modeling Prep, Alpaca, Equibles, Hyperliquid). **Do not** silently load **`coinmarketcap-public`**, **`coinbase-public`**, **`coingecko`**, **`binance`**, **`financial-modeling-prep`**, **`alpaca`**, or **`equibles`**.
 
 After the operator chooses and you load the server:
 
@@ -100,6 +107,9 @@ After the operator chooses and you load the server:
 - **`coinbase-public`**: keyless **`get_product_candles`** (normalized Continuum bars); optional CDP Variables for authenticated routes
 - **`coingecko`** / **`coingecko-pro`**: **`coingecko__execute`** → **`coins.ohlc.get`** or market chart — see **`chart-periods`**
 - **`binance`**: **`binance_get_klines`** with **`response_format: "json"`** — see **`chart-periods`**
+- **`financial-modeling-prep`**: historical / chart tools — rows use **`date`** + OHLC + **`volume`**; envelopes `{ symbol, historical }` or `{ data: […] }`. Pass the **full** object as **`toolResult`**. Keep **`date`**. Requires **`FMP_API_KEY`**. See **`chart-periods`**
+- **`alpaca`**: **`get_stock_bars`** / **`get_crypto_bars`** — rows use **`t`/`o`/`h`/`l`/`c`/`v`**; envelopes `{ symbol, timeframe, bars }` or `{ bars: { TICKER: […] } }`. Pass the **full** object as **`toolResult`**. Keep **`t`**. Requires **`ALPACA_API_KEY`** + **`ALPACA_SECRET_KEY`**. See **`chart-periods`**
+- **`equibles`**: **`GetStockPrices`** — daily OHLCV as a markdown table or `{ data: [{ date, open, high, low, close, volume }] }`. Pass the **full** object as **`toolResult`**. Keep **`date`**. Requires **`EQUIBLES_API_KEY`**. **`GetLatestPrices`** is a snapshot, not bars. See **`chart-periods`**
 
 | When | Fetch |
 |------|-------|
@@ -107,6 +117,9 @@ After the operator chooses and you load the server:
 | Operator chose CMC | **`coinmarketcap-public__get_kline_candles`** (or **`get_crypto_ohlcv_historical`** if Pro key on continuum-mcp) |
 | Operator chose Coinbase | **`coinbase-public__get_product_candles`** — see **`chart-periods`** |
 | Operator chose Binance | **`binance_get_klines`** with **`response_format: "json"`** — see **`chart-periods`** |
+| Operator chose Financial Modeling Prep / FMP | Historical / chart tools — see **`chart-periods`** |
+| Operator chose Alpaca | **`get_stock_bars`** / **`get_crypto_bars`** — see **`chart-periods`** |
+| Operator chose Equibles | **`GetStockPrices`** — see **`chart-periods`** |
 
 If fetch fails (429, empty, stale), report to the operator and offer **other sources** — do not auto-switch without their choice.
 
@@ -119,7 +132,7 @@ Fetch OHLCV first. Then branch on operator intent:
 | **Analyze / interpret** (no chart requested) | **`analyze_*`** with full fetch as **`toolResult`**. **Do not** call **`prepare_chart_from_rows`**. |
 | **Chart / plot / draw** | **`prepare_chart_from_rows`** with full fetch as **`toolResult`**. |
 
-**Never** call **`prepare_chart_from_rows`** with only **`title`** / **`label`**. **Never** rewrite candle timestamps — pass fetch JSON verbatim (Hyperliquid uses **`timestampMs`**; Binance uses **`openTime`** ms — do not add or replace with a generic **`time`** field).
+**Never** call **`prepare_chart_from_rows`** with only **`title`** / **`label`**. **Never** rewrite candle timestamps — pass fetch JSON verbatim (Hyperliquid uses **`timestampMs`**; Binance uses **`openTime`** ms; FMP uses **`date`**; Alpaca uses **`t`**; Equibles uses **`date`** — do not add or replace with a generic **`time`** field).
 
 **Catalog / CEX chart path (Binance, Coinbase, CMC, CoinGecko):** Continuum MCP renders the chart. After a successful OHLCV fetch, the node **binds the session** and **auto-prepares only when the operator explicitly asked to chart/plot/render** (e.g. “chart the 4H BTC”). **Cron / scheduled analysis** and fetch-only / analyze-only turns must **not** call **`prepare_chart_from_rows`** (mentions of “chart bundle” or `chart_pattern` are not plot requests). Tool text may be a **slim** summary — do **not** re-paste full `klines` / `candles` / execute rows. Follow-ups: **`{ title, ohlcvDigest }`** or the fetch object once without rewriting vendor timestamps (`openTime`, `timestampMs`, Continuum `time`).
 
@@ -161,6 +174,9 @@ Keeps KeyGen context lean — analysis prose in one task, chart JSON in another.
 |--------|----------------|
 | CoinGecko | **`coinId`** + **`bucketSec`** on execute output |
 | Binance | Full klines JSON (`symbol` + `klines`) → **`binance.tickerPrice`** |
+| Financial Modeling Prep | Full historical/chart JSON (`symbol` + `historical` / `data`) → **`fmp.quote`** |
+| Alpaca | Full bars JSON (`symbol` + `bars` or `{ bars: { TICKER: […] } }`) → **`alpaca.latestTrade`** |
+| Equibles | Static — use **`GetLatestPrices`** / **`GetLiveQuote`** as tools; no chart poller (shared daily quota) |
 | Other third-party klines | Static unless a live adapter exists |
 | Hyperliquid / DeFi | Full fetch JSON; node may bind perp live |
 
