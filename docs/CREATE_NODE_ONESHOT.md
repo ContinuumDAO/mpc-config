@@ -60,9 +60,11 @@ Restore / same Node Key: pass `--public-mgt-key` and ensure `bootstrap_key/ed255
 Continue the full playbook: [Agent provision and configure](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision) — user SSH tunnel to **8446**, Path A MCP (`node_config`), peers / MQTT, Group, KeyGen, then hand-off. Do not stop at a single node.
 
 1. Confirm containers: `docker ps` as `mpcnode` (or via root).
-2. Ask the operator to tunnel `continuum-mcp` to `127.0.0.1:8446` (and **3333** for later attach).
-3. Configure peers / MQTT via MCP (or the UI **Node Peer IP Editing** + Inter Node Communication). A lone node cannot create a KeyGen; prefer **2-of-3** across regions and providers (see the playbook).
-4. Prefer the UI **Maintenance** path to update an existing node — the one-shot installer **refuses** if `configs.yaml` or MPC containers already exist.
+2. Oneshot created `mpcnode` with **no login password**. Give this copy-paste line so they can SSH as `mpcnode` (they choose the password at the prompt; do not put it in chat):
+   `ssh root@YOUR_VPS_PUBLIC_IP 'passwd mpcnode'`
+3. Then give the copy-paste `ssh -4 -N -L 127.0.0.1:8446:…` tunnel as **`mpcnode@`** (include **3333** / **8080** / **18080** if they will attach in the browser). Exact line: [Agent provision](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision#2-user-opens-an-ssh-tunnel-path-a).
+4. Configure peers / MQTT via MCP (or the UI **Node Peer IP Editing** + Inter Node Communication). A lone node cannot create a KeyGen; prefer **2-of-3** across regions and providers (see the playbook).
+5. Prefer the UI **Maintenance** path to update an existing node — the one-shot installer **refuses** if `configs.yaml` or MPC containers already exist.
 
 ## Not this script
 
