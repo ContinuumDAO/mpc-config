@@ -57,7 +57,7 @@ Reads do not need a ticket. Writes (`forum_create_topic`, `forum_create_idea`, `
 4. `continuum__ctm_continuum_dao_forum_sections`. Then:
    - **Idea:** **`continuum__ctm_continuum_dao_forum_create_idea`**. Stop. Do not propose. Do not use the URL as `forumKey`.
    - **Proposal:** **`continuum__ctm_continuum_dao_forum_create_topic`** with the matching `section` from the type table. Title/body must be English. Body = formatted proposal (≤ 6200) **plus** the standards appendix if the operator insisted after a failed check. Keep the returned **`url`**.
-5. Optional: `forum_reply` / `forum_react` (`+1` `-1` `heart` `tada` `eyes`) on that thread.
+5. Optional: `forum_reply` / `forum_react` (`+1` `-1` `heart` `tada` `eyes`) on that thread. To check Unread / mark threads read, load **`continuum-dao-forum-inbox`**.
 6. When finished, `continuum__ctm_continuum_dao_forum_sign_out({ ticket })` — no multi-sign.
 
 Never call `build_propose_*` or `register_proposal` until `forum_create_topic` has returned a Governance topic URL. Never pass an Ideas URL as `forumKey`.

@@ -385,6 +385,7 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 - Set **`autoSubmitMultisign`: true** only if this subsection explicitly allows it for that cron class.
 - Cron YAML may set `protocolId`, `entryOffsetPct`, `invalidationOffsetPct`, and protocol-specific sizing fields from §5.
 - Trade-analysis cron: before submit, enforce **momentum OR candlestick OR divergence** confirmation with matching side on the selected primary idea (template prose in **`trade_analysis_cron.example.md`**).
+- End the cron turn with a concise operator summary (ideas found, selected `tradeIdeaId`, submitted or skipped). If the job has **`telegramNotify: true`**, the host sends that final answer to Telegram — do not call **`send_telegram_message`**.
 
 ### Policy template — new protocol
 

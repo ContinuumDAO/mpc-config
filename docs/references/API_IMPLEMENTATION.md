@@ -267,6 +267,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /activateWebhook`](#post-activatewebhook) - Enable webhook (**management signature**)
 - [`POST /deactivateWebhook`](#post-deactivatewebhook) - Disable webhook (**management signature**)
 - [`POST /runWebhook`](#post-runwebhook) - Manual test trigger (**management signature**)
+- [`POST /sendTelegramMessage`](#post-sendtelegrammessage) - Push a Telegram message to **`TELEGRAM_OPERATOR_CHAT_ID`** (**management signature**)
 - [`POST /resetWebhooksFromDefaults`](#post-resetwebhooksfromdefaults) - Overwrite bundled default webhooks from **`agent_llm_config.defaults/hooks/webhooks.json`** (**management signature**; custom webhooks preserved)
 - [`GET /getTelegramWebhookNgrokGuide`](#get-gettelegramwebhookngrokguide) - Bundled operator guide markdown for manual ngrok setup (**read JWT** when JWT applies)
 - [`GET /telegramNgrok/status`](#get-telegramngrok-status) - Telegram ngrok sidecar automation status (**read JWT** when JWT applies)
@@ -3202,6 +3203,7 @@ Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each **a
   "schedule": { "kind": "cron", "expr": "0 7 * * *", "tz": "UTC" },
   "enabled": true,
   "deleteAfterRun": false,
+  "telegramNotify": false,
   "conversationId": "optional — reuse [Orchestrator] thread",
   "orchestrationTopLevelMessageId": "optional — node resolves orchestrator conversationId",
   "nonce": 0,
@@ -3210,7 +3212,7 @@ Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each **a
 }
 ```
 
-Creates **`id`**, **`conversationId`**, and initial **`nextRunAt`**. New jobs default **`enabled: true`**. **`at`** jobs default **`deleteAfterRun: true`** unless overridden. For orchestration follow-up, set **`conversationId`** or **`orchestrationTopLevelMessageId`** so cron runs append to the **[Orchestrator]** thread (not a new `[Cron]`-only conversation).
+Creates **`id`**, **`conversationId`**, and initial **`nextRunAt`**. New jobs default **`enabled: true`**. **`at`** jobs default **`deleteAfterRun: true`** unless overridden. **`telegramNotify: true`** delivers the final assistant answer to Telegram after each successful run (`TELEGRAM_OPERATOR_CHAT_ID`). For orchestration follow-up, set **`conversationId`** or **`orchestrationTopLevelMessageId`** so cron runs append to the **[Orchestrator]** thread (not a new `[Cron]`-only conversation).
 
 **`GET /listCronJobs`** includes **`usesOrchestratorConversation`** and **`orchestrationTopLevelMessageId`** when the job’s `conversationId` matches an orchestration record.
 
@@ -3232,7 +3234,7 @@ Copies one entry from **`agent_llm_config.defaults/cron/jobs.json`** into runtim
 
 **Auth:** Management signature.
 
-**Body:** `{ "id"?, "name"?, "message"?, "schedule"?, "deleteAfterRun"?, "nonce", "clientSig", "nodeKey" }` — **`id` or `name`** required. Does **not** change **`enabled`** (use activate/deactivate).
+**Body:** `{ "id"?, "name"?, "message"?, "schedule"?, "deleteAfterRun"?, "telegramNotify"?, "nonce", "clientSig", "nodeKey" }` — **`id` or `name`** required. Does **not** change **`enabled`** (use activate/deactivate).
 
 <a id="post-activatecronjob"></a>
 #### `POST /activateCronJob`
@@ -3399,6 +3401,19 @@ Same body as activate; sets **`enabled: false`**.
 
 **Response data:** `{ "status": "started" }` — enqueues a test payload asynchronously.
 
+<a id="post-sendtelegrammessage"></a>
+#### `POST /sendTelegramMessage`
+
+**Auth:** Management signature. Requires **`EnableAgentHooks`**.
+
+**Body:** `{ "text", "webhookName"?, "chatIdEnvVar"?, "nonce", "clientSig", "nodeKey" }`.
+
+Sends **`text`** to Telegram Bot API **`sendMessage`** using **`TELEGRAM_BOT_TOKEN`** (or the named telegram webhook’s bot-token Variable) and **`TELEGRAM_OPERATOR_CHAT_ID`** (or **`chatIdEnvVar`**). The operator must have `/start`ed the bot once. First private inbound auto-stores **`TELEGRAM_OPERATOR_CHAT_ID`** if unset. Long text is split at 4096 characters.
+
+**Response data:** `{ "sent": true, "chatId": <int>, "chunks": <int> }`.
+
+This is the node API behind MCP **`send_telegram_message`**. It is not a reply to an inbound Telegram update.
+
 <a id="post-resetwebhooksfromdefaults"></a>
 #### `POST /resetWebhooksFromDefaults`
 
@@ -3438,6 +3453,7 @@ Requires **`MPC_AUTH_TELEGRAM_NGROK_PENDING_FILE`** / **`MPC_AUTH_TELEGRAM_NGROK
 |----------|---------|
 | **`NGROK_AUTHTOKEN`** | ngrok dashboard authtoken |
 | **`TELEGRAM_BOT_TOKEN`** | Bot token from @BotFather |
+| **`TELEGRAM_OPERATOR_CHAT_ID`** | Private chat id for MCP **`send_telegram_message`**. Auto-stored on first inbound after `/start`. |
 | **`WEBHOOK_SECRET_TELEGRAM_UPDATES`** (or job **`secretEnvVar`**) | **`secret_token`** for Telegram **`setWebhook`** |
 
 <a id="get-telegramngrok-status"></a>

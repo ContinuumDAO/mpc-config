@@ -33,6 +33,7 @@ On each run, mpc-auth uses YAML fences **in the job message** when present; othe
 1. Configure **`tradeConsensus`** + **`tradeBuild`** once under **Cron → Trade cron** for your venue and sizing.
 2. Custom job **`message`** = opening instructions + customized **Steps** + **Selection guidance** only (no YAML fences unless this job needs different gates than the node file).
 3. Create the job, **Run now** once, then enable on schedule.
+4. Optional: enable **`telegramNotify`** on the job so the host DMs the final summary to Telegram after each successful run (same bot as `telegram_updates`; requires a one-time `/start`).
 
 **Pattern B — self-contained (good for one-off or per-job overrides)**
 

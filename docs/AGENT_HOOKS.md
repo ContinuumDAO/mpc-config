@@ -67,7 +67,8 @@ flowchart TB
 Webhook signing secrets are **never** stored in webhook job documents. Each webhook uses a Variables entry:
 
 - **`WEBHOOK_SECRET_<WEBHOOK_NAME>`** — e.g. `WEBHOOK_SECRET_GITHUB_EVENTS` for webhook name `github_events`
-- **`TELEGRAM_BOT_TOKEN`** — required for Telegram **replies** (separate from the webhook secret)
+- **`TELEGRAM_BOT_TOKEN`** — required for Telegram **replies** and **`send_telegram_message`** (separate from the webhook secret)
+- **`TELEGRAM_OPERATOR_CHAT_ID`** — numeric private chat id for proactive **`send_telegram_message`**. Auto-stored on first private inbound after the user `/start`s the bot; can also be set manually.
 
 Set values in **AI Agent → Variables** or **`POST /addEnvironmentVariable`**. When you **add** a webhook (custom or from catalog), mpc-auth creates the variable name and stores an auto-generated placeholder secret; replace it with the real provider secret before **activating** the webhook.
 
@@ -330,6 +331,7 @@ All types run your **prompt** plus a formatted event body. Max payload **256 KiB
 3. In **Variables**:
    - **`TELEGRAM_BOT_TOKEN`** — bot token (sensitive; not shown to the agent in prompts)
    - **`WEBHOOK_SECRET_TELEGRAM_UPDATES`** — choose a random string; used as Telegram `secret_token`
+   - **`TELEGRAM_OPERATOR_CHAT_ID`** — optional until the first private `/start`; required for **`send_telegram_message`** (proactive notify). Auto-stored on first inbound.
 4. Register webhook with Telegram (public HTTPS required):
 
    ```bash
@@ -339,7 +341,8 @@ All types run your **prompt** plus a formatted event body. Max payload **256 KiB
    ```
 
 5. Users message the bot; each text message triggers an agent turn on **one shared** webhook conversation. Long replies are **split** at 4096 characters automatically.
-6. To reset context, delete that conversation in the agent UI or clear the thread; the webhook keeps the same `conversationId` until you recreate the webhook.
+6. After the operator `/start`s once, the agent can push later with MCP **`send_telegram_message`** (cron, web chat, or “notify me when X”) using **`TELEGRAM_OPERATOR_CHAT_ID`**. Telegram still blocks DMs if the user never started the bot.
+7. To reset context, delete that conversation in the agent UI or clear the thread; the webhook keeps the same `conversationId` until you recreate the webhook.
 
 **Note:** Inbound listener must be reachable from Telegram’s servers (not loopback-only without a tunnel/proxy).
 

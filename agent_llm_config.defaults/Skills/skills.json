@@ -149,6 +149,16 @@
       "name": "continuum-dao-proposal-standards",
       "filename": "continuum-dao-proposal-standards/SKILL.md",
       "initialLoad": false
+    },
+    {
+      "name": "continuum-dao-forum-replies",
+      "filename": "continuum-dao-forum-replies/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "continuum-dao-forum-inbox",
+      "filename": "continuum-dao-forum-inbox/SKILL.md",
+      "initialLoad": false
     }
   ]
 }

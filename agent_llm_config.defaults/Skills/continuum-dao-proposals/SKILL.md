@@ -54,4 +54,5 @@ This skill does **not** create a multi-sign request, vote, propose, execute, or 
 - Operator wants a stance → load **`continuum-dao-vote-policy`**.
 - Operator wants to vote in this chat → that skill + **`execution-policy`** (confirm before submit).
 - Operator wants to **create** a proposal → load **`continuum-dao-compose-proposal`** (interactive only; never from cron).
+- Operator wants to **check Forum Unread / messages** while signed in → load **`continuum-dao-forum-inbox`** (interactive; `forum_unread` / `forum_mark_read`).
 - Unattended vote / Join → cron templates; this skill stays presentation-only.

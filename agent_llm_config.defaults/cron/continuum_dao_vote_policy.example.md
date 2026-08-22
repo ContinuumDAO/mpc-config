@@ -11,6 +11,8 @@ Trade Join stays on **`conditional-accept-sign-request`** (`sign_accept_policy.e
 
 Load skills **`scheduled-automation`**, **`continuum-dao-proposals`**, **`continuum-dao-proposal-standards`**, **`continuum-dao-vote-policy`**. Copy `votePolicy` from the vote-policy skill into the job message if you customize it. **Never** load **`continuum-dao-compose-proposal`**. When `forumKey` is a topic URL, **read** the thread (`forum_resolve` / `forum_fetch_thread`); do not sign in, reply, react, or `forum_create_topic`. Fetch Constitution Vision/Mission and How to Write a Proposal via `get_continuum_doc`; non-conformance and missing format lean **against** / **nota**.
 
+The bundled **`appraise-and-vote-proposals`** job sets **`telegramNotify: true`**. End the turn with a concise operator summary; the host sends that final answer to Telegram. Leave notify off on **`conditional-accept-governance-vote`** unless you want a ping every 5 minutes.
+
 ## Governor request types
 
 From `get_sign_request_by_id({ compact: false })`: `evm.type` or `signatureText` JSON (`kind: ContinuumDAO`).

@@ -35,4 +35,4 @@ Active webhooks and MCP servers live in MongoDB on the node after activation, no
 2. Operators activate: **Available from repository** in the UI or **`POST /addCronJobFromCatalog`** (`GET /listCronJobs` → `availableCatalog`).
 3. Document non-obvious schedule or orchestration behavior in **`docs/references/API_IMPLEMENTATION.md`** (Agent cron jobs section) when helpful.
 
-ContinuumDAO governor Join is **`conditional-accept-governance-vote`**. Trade Join is **`conditional-accept-sign-request`**. Do not merge those jobs. Vote-create (never propose) is **`appraise-and-vote-proposals`**. All three default **disabled**.
+ContinuumDAO governor Join is **`conditional-accept-governance-vote`**. Trade Join is **`conditional-accept-sign-request`**. Do not merge those jobs. Vote-create (never propose) is **`appraise-and-vote-proposals`**. Forum reply Telegram watch is **`notify-forum-replies`**. All of those default **disabled**.

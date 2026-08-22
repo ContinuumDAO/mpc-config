@@ -11,6 +11,7 @@ Telegram requires a **public HTTPS** URL for `setWebhook`. A stock node listens 
 ## What you get
 
 - Message a **Telegram bot** → mpc-auth runs an **agent turn** (LLM + MCP tools) → reply is sent back in chat.
+- After a one-time **`/start`**, the agent can also **push** with MCP **`send_telegram_message`** (cron / web chat / “notify me when X”) using **`TELEGRAM_OPERATOR_CHAT_ID`**.
 - Bundled template: **`telegram_updates`** (`type: telegram`).
 - Inbound path: **`POST /hooks/inbound/{webhookId}`** on the hook port (default **18090**).
 
@@ -94,6 +95,7 @@ The last path segment is **`{webhookId}`** — unique per node; keep it for `set
 | Variable | Value |
 |----------|--------|
 | **`TELEGRAM_BOT_TOKEN`** | Bot token from @BotFather |
+| **`TELEGRAM_OPERATOR_CHAT_ID`** | Your private Telegram chat id (for **`send_telegram_message`**). Auto-stored on first inbound after `/start`; or set it from `getUpdates`. |
 | **`WEBHOOK_SECRET_TELEGRAM_UPDATES`** | Long random string (**not** the bot token) |
 | **`NGROK_AUTHTOKEN`** | Authtoken from the [ngrok dashboard](https://dashboard.ngrok.com/get-started/your-authtoken) (needed for the automated sidecar) |
 | **`NGROK_PAID_PLAN`** | Set to **`true`** when you have a **paid** ngrok subscription — tells the node to use the paid setup (interactive Mini App charts). Omit or leave unset on free ngrok. |

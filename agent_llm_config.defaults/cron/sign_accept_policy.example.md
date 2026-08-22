@@ -12,6 +12,8 @@ Copy the **`signAcceptPolicy`** YAML fence into the cron job **`message`**, cust
 
 Load skill **`scheduled-automation`**. Purpose short codes: **`trade-defaults`** §4 (ctm1 format).
 
+Optional: set **`telegramNotify: true`** on the job if you want the host to DM the final accept/reject summary to Telegram after each run (high-frequency jobs will ping often).
+
 ## Non-interactive rules
 
 - Do **not** ask the operator questions or use MCP elicitation.

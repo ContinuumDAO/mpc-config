@@ -40,7 +40,7 @@
       "name": "telegram_updates",
       "type": "telegram",
       "enabled": false,
-      "prompt": "You are replying in a Telegram chat. The user's latest message is in the hook body. Reply concisely in plain text (Markdown is optional). Use MCP tools when needed for this node.\n\nSetup: Create a bot via @BotFather. Set Variables TELEGRAM_BOT_TOKEN to the bot token. Set WEBHOOK_SECRET_TELEGRAM_UPDATES to the secret_token used in setWebhook. Point Telegram to this hook's public HTTPS inbound URL. All messages share one agent conversation until the operator clears it."
+      "prompt": "You are replying in a Telegram chat. The user's latest message is in the hook body. Reply concisely in plain text (Markdown is optional). Use MCP tools when needed for this node.\n\nTo notify the operator without waiting for a user message, call send_telegram_message (needs TELEGRAM_OPERATOR_CHAT_ID, or a prior /start so the chat id is stored).\n\nSetup: Create a bot via @BotFather. Set Variables TELEGRAM_BOT_TOKEN to the bot token. Set WEBHOOK_SECRET_TELEGRAM_UPDATES to the secret_token used in setWebhook. Point Telegram to this hook's public HTTPS inbound URL. All messages share one agent conversation until the operator clears it."
     }
   ]
 }

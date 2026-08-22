@@ -44,6 +44,15 @@ Wrong threading creates a confusing extra `[Cron]` thread disconnected from orch
 - Inbound URL is loopback by default — external providers need a relay/tunnel (see node **`AGENT_HOOKS.md`**).
 - Webhook **`prompt`** must be self-contained and non-interactive, same as cron **`message`**.
 
+## Telegram notify (cron)
+
+When a cron job has **`telegramNotify: true`**, the **host** sends your **final assistant message** to the operator after a successful run. Do **not** call **`send_telegram_message`** from a cron turn for that delivery.
+
+- Always end the turn with a concise operator-facing summary (what you did, skipped, or why nothing ran).
+- Prerequisites: operator `/start`ed the same bot once; **`TELEGRAM_BOT_TOKEN`** and **`TELEGRAM_OPERATOR_CHAT_ID`** (auto-stored on first inbound).
+- Use MCP **`send_telegram_message`** only for interactive / ad-hoc notify outside this host delivery.
+- Leave **`telegramNotify`** off for high-frequency silent jobs (auto-sign, auto-accept) unless the operator asked for a ping every run.
+
 ## MultiSign in scheduled turns
 
 When a scheduled turn should propose on-chain actions:
@@ -101,3 +110,4 @@ Gather policy in **interactive chat first** (test against sample `get_sign_reque
 - [ ] **`run_cron_job`** succeeded once in staging
 - [ ] Orchestration follow-ups use orchestrator **`conversationId`**, not a new empty thread
 - [ ] Webhook secrets configured in Variables before **activate**
+- [ ] If the operator wants a Telegram ping, set **`telegramNotify: true`** on the job (host delivers the final answer)

@@ -5,7 +5,7 @@ description: How this node votes on ContinuumDAO proposals and how governor Join
 
 # ContinuumDAO vote policy
 
-Load for “how should I vote?”, policy appraisal, the **appraise-and-vote-proposals** cron, or **conditional-accept-governance-vote**. Always load **`continuum-dao-proposals`** and **`continuum-dao-proposal-standards`** first so the briefing and Constitution/format check exist. For interactive submit, also load **`execution-policy`**. For cron, load **`scheduled-automation`**.
+Load for “how should I vote?”, policy appraisal, the **appraise-and-vote-proposals** cron, or **conditional-accept-governance-vote**. Always load **`continuum-dao-proposals`** and **`continuum-dao-proposal-standards`** first so the briefing and Constitution/format check exist. For interactive submit, also load **`execution-policy`**. For cron, load **`scheduled-automation`**. End each cron turn with a concise operator summary (voted / skipped / rejected and why). If the job has **`telegramNotify: true`**, the host sends that final answer to Telegram — do not call **`send_telegram_message`**.
 
 This skill **never** authorizes `ctm_continuum_dao_build_propose_*` or `ctm_continuum_dao_register_proposal`. Do **not** load **`continuum-dao-compose-proposal`**.
 
