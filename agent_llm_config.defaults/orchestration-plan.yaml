@@ -378,12 +378,10 @@ mcpClassification:
     - google-search
     - exa
     - tavily
-    - chrome
     - firefox
     - mullvad-browser
-    - bing
     - kagi
-    - serper
+    - serpapi
     - perplexity
   knownResearchDataIDs:
     - messari
@@ -409,11 +407,14 @@ mcpClassification:
     - tavily
     - exa
     - serp
-    - bing search
     - web_search
     - web search
     - perplexity
     - kagi
+    - mullvad
+    - mullvad-browser
+    - firefox
+    - firefox-mcp
   researchDataNeedles:
     - messari
     - dune
