@@ -152,6 +152,52 @@
       "initialLoad": false
     },
     {
+      "id": "financial-modeling-prep",
+      "displayName": "Financial Modeling Prep",
+      "setupUrl": "https://site.financialmodelingprep.com/developer/docs/mcp-server",
+      "transport": "http",
+      "url": "https://financialmodelingprep.com/mcp",
+      "apiKeyEnvVar": "FMP_API_KEY",
+      "apiKeyHeader": "apikey",
+      "initialLoad": false
+    },
+    {
+      "id": "alpaca",
+      "displayName": "Alpaca (v2)",
+      "setupUrl": "https://github.com/alpacahq/alpaca-mcp-server",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["alpaca-mcp-server@2"],
+      "apiKeyEnvVar": "ALPACA_API_KEY",
+      "envVars": ["ALPACA_API_KEY", "ALPACA_SECRET_KEY"],
+      "runtime": {
+        "requireCommands": ["uv"]
+      },
+      "initialLoad": false
+    },
+    {
+      "id": "equibles",
+      "displayName": "Equibles",
+      "setupUrl": "https://equibles.com/mcp",
+      "transport": "http",
+      "url": "https://mcp.equibles.com/mcp",
+      "apiKeyEnvVar": "EQUIBLES_API_KEY",
+      "initialLoad": false
+    },
+    {
+      "id": "edgartools",
+      "displayName": "EdgarTools (SEC filings)",
+      "setupUrl": "https://www.edgartools.io/edgartools-mcp-for-sec-filings/",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["--from", "edgartools[ai]", "edgartools-mcp"],
+      "envVars": ["EDGAR_IDENTITY"],
+      "runtime": {
+        "requireCommands": ["uv"]
+      },
+      "initialLoad": false
+    },
+    {
       "id": "alphavantage",
       "displayName": "Alpha Vantage (stock market data)",
       "transport": "stdio",

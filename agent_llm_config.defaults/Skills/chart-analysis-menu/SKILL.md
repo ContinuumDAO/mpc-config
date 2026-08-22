@@ -57,7 +57,7 @@ Load skill **`chart-analysis-time-series`** when interpreting TVL, fees, or cust
 Per **`chart-ohlcv-sources`** — **never auto-load** market-data MCP servers.
 
 1. Use **`coingecko`** / **`coingecko-pro`** if **loaded** in this chat → **`coingecko__execute`** (`coins.ohlc.get`).
-2. If **no OHLCV source loaded** → **ask the operator** which provider to use (CoinGecko, **`coinmarketcap-public`**, etc.); load only after they choose.
+2. If **no OHLCV source loaded** → call **`list_ohlcv_sources`**, then **ask the operator** which provider to use from that list; load only after they choose.
 
 | Goal | When CoinGecko loaded | When nothing else loaded |
 |------|----------------------|---------------------------|

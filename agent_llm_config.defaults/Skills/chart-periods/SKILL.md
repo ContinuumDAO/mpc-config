@@ -184,6 +184,60 @@ Then:
 
 For liquidity depth on the same session: **`analyze_liquidity_depth`** (defaults to **`depthExchangeId: coinbase`** when `dataSource` is `coinbase_candles`).
 
+### Spot / EOD / intraday — Financial Modeling Prep (`financial-modeling-prep`)
+
+**When the operator chooses Financial Modeling Prep / FMP.** Load **`financial-modeling-prep`** only after that choice (`initialLoad: false`). Requires **`FMP_API_KEY`** in Variables (header **`apikey`**). Do **not** put the key in the MCP URL.
+
+1. Call the loaded server’s historical / chart tool (e.g. full, light, or intraday chart) with the symbol (stocks `AAPL`, crypto `BTCUSD`, forex `EURUSD`) and requested window / interval.
+2. Tool results are vendor JSON: rows use **`date`** (`YYYY-MM-DD` EOD or `YYYY-MM-DD HH:mm:ss` intraday) plus **`open`/`high`/`low`/`close`/`volume`**. Envelopes may be `{ symbol, historical: […] }` or `{ data: […] }`.
+3. **`continuum__prepare_chart_from_rows`** — same turn; pass that **object** as **`toolResult`**. Keep **`date`** — Continuum normalizes it. Chart may attach **`live.providerId: "fmp.quote"`** (polls FMP quote; needs **`FMP_API_KEY`**).
+
+```json
+{
+  "title": "BTCUSD 1D — last 1y",
+  "label": "BTCUSD",
+  "toolResult": { "symbol": "BTCUSD", "historical": [ "... full historical rows from fetch ..." ] }
+}
+```
+
+**Never** rewrite **`date`** to **`time`** / **`timestampMs`**. **Never** use bar **`label`** (e.g. `January 02, 24`) as the chart title.
+
+### Spot / EOD / intraday — Alpaca v2 (`alpaca`)
+
+**When the operator chooses Alpaca.** Load **`alpaca`** only after that choice (`initialLoad: false`). Requires **`ALPACA_API_KEY`** and **`ALPACA_SECRET_KEY`** in Variables. Pin is **`uvx alpaca-mcp-server@2`** — do not use v1 tool names. Paper trading is the server default.
+
+1. **`get_stock_bars`** (equities `AAPL`) or **`get_crypto_bars`** (crypto `BTC/USD`) with **`timeframe`** (`1Min`, `5Min`, `15Min`, `1Hour`, `1Day`) and the requested window.
+2. Tool results are vendor JSON: rows use **`t`** (ISO timestamp) plus **`o`/`h`/`l`/`c`/`v`**. Envelopes may be `{ symbol, timeframe, bars: […] }` or `{ bars: { TICKER: […] } }`.
+3. **`continuum__prepare_chart_from_rows`** — same turn; pass that **object** as **`toolResult`**. Keep **`t`** — Continuum normalizes it. Chart may attach **`live.providerId: "alpaca.latestTrade"`** (polls latest trade; needs the same keys on continuum-mcp / node-app).
+
+```json
+{
+  "title": "AAPL 1D — last 1y",
+  "label": "AAPL",
+  "toolResult": { "symbol": "AAPL", "timeframe": "1Day", "bars": [ "... full bars from fetch ..." ] }
+}
+```
+
+**Never** rewrite **`t`** to **`time`** / **`timestampMs`**.
+
+### Spot / EOD — Equibles (`equibles`)
+
+**When the operator chooses Equibles.** Load **`equibles`** only after that choice (`initialLoad: false`). Requires **`EQUIBLES_API_KEY`** in Variables (default Bearer). Do **not** put the key in the MCP URL.
+
+1. **`GetStockPrices`** with the ticker (e.g. `AAPL`, `BRK-B`) and optional `startDate` / `endDate` / `maxResults`.
+2. Tool results are a markdown OHLCV table and/or `{ data: [{ date, open, high, low, close, volume }] }` (REST-shaped). Daily bars only.
+3. **`continuum__prepare_chart_from_rows`** — same turn; pass that **object** (or the markdown text) as **`toolResult`**. Keep **`date`**. Charts are static — use **`GetLatestPrices`** (latest close) or hosted **`GetLiveQuote`** as tools; do not poll the Equibles API for chart ticks (shared daily quota).
+
+```json
+{
+  "title": "AAPL 1D — last 1y",
+  "label": "AAPL",
+  "toolResult": { "data": [ "... full daily rows from GetStockPrices ..." ] }
+}
+```
+
+**Never** rewrite **`date`** to **`time`** / **`timestampMs`**. **Never** pass **`GetLatestPrices`** as chart `toolResult`.
+
 ### Perp / DeFi (Hyperliquid, Arcus, or GMX — when operator names the venue)
 
 **Never slice or shorten `candles` from the fetch** before `prepare_chart_from_rows`. Honor the operator’s interval and lookback exactly (e.g. 7d @ 1h ≈ 168–169 bars — chart as-is).
@@ -230,5 +284,7 @@ See **`get_defi_protocol_skill`** for fetch params. Never skip chart prepare whe
 - [ ] Spot **CoinGecko**: **`ohlc.get`** only; **`coinId`** + **`bucketSec`** for live ticks
 - [ ] Spot **Binance**: **`response_format: "json"`**; full parsed object as **`toolResult`**; keep **`openTime`**
 - [ ] Spot **Coinbase**: **`get_product_candles`**; full object as **`toolResult`**; keep Continuum **`time`** bars
+- [ ] Spot **FMP**: historical / chart tool; full object as **`toolResult`**; keep vendor **`date`**
+- [ ] Spot **Alpaca**: **`get_stock_bars`** / **`get_crypto_bars`**; full object as **`toolResult`**; keep vendor **`t`**
 - [ ] **`prepare_chart_from_rows`** in the **same turn** as fetch
 - [ ] Chart tool succeeded — MCP result shows `[Chart prepared: … · continuum/chart/v1]`

@@ -392,6 +392,9 @@ mcpClassification:
     - finance-news
     - fmp
     - financial-modeling-prep
+    - alpaca
+    - equibles
+    - edgartools
     - coingecko
     - coingecko-pro
     - coinmarketcap
@@ -420,6 +423,13 @@ mcpClassification:
     - finance-news
     - fmp
     - financial modeling
+    - alpaca
+    - equibles
+    - edgartools
+    - edgar
+    - 13f
+    - earnings
+    - sec filings
     - coingecko
     - coinmarketcap
     - altfins
