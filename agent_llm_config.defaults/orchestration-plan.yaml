@@ -390,6 +390,9 @@ mcpClassification:
     - dune
     - alphavantage
     - finance-news
+    - business-latest
+    - world-affairs
+    - gdelt-cloud
     - fmp
     - financial-modeling-prep
     - coingecko
@@ -418,6 +421,13 @@ mcpClassification:
     - alphavantage
     - finance news
     - finance-news
+    - business latest
+    - business-latest
+    - world affairs
+    - world-affairs
+    - gdelt
+    - gdelt-cloud
+    - gdelt cloud
     - fmp
     - financial modeling
     - coingecko

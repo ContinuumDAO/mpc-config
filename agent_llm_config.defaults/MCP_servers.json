@@ -54,6 +54,31 @@
       "initialLoad": false
     },
     {
+      "id": "business-latest",
+      "displayName": "Business Latest RSS",
+      "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
+      "transport": "http",
+      "url": "http://continuum-mcp:8446/mcp/business-latest",
+      "initialLoad": false
+    },
+    {
+      "id": "world-affairs",
+      "displayName": "World Affairs RSS",
+      "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
+      "transport": "http",
+      "url": "http://continuum-mcp:8446/mcp/world-affairs",
+      "initialLoad": false
+    },
+    {
+      "id": "gdelt-cloud",
+      "displayName": "GDELT Cloud",
+      "setupUrl": "https://gdeltcloud.com/product/mcp",
+      "transport": "http",
+      "url": "https://gdelt-cloud-mcp.fastmcp.app/mcp",
+      "apiKeyEnvVar": "GDELT_API_KEY",
+      "initialLoad": false
+    },
+    {
       "id": "foundry",
       "displayName": "Foundry (Forge, Cast, Anvil)",
       "transport": "stdio",
