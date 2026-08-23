@@ -230,6 +230,11 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getEnvironmentVariable`](#get-getenvironmentvariable) - Get one variable by `name` query param
 - [`POST /addEnvironmentVariable`](#post-addenvironmentvariable) - Add or update one variable (**management signature**; name normalized to uppercase `A-Z`, `0-9`, `_`)
 - [`POST /removeEnvironmentVariable`](#post-removeenvironmentvariable) - Remove one variable by name (**management signature**)
+- [`GET /listUserFolder`](#get-listuserfolder) - List files/directories under **`user_folder/`** (jailed path; read-only)
+- [`GET /getUserFolderFile`](#get-getuserfolderfile) - **Download** / read a text file under **`user_folder/`** (size-capped; read-only)
+- [`POST /writeUserFolderFile`](#post-writeuserfolderfile) - **Upload** / create or overwrite a file under **`user_folder/`** (**management signature**; path must be under an allowed subtree)
+- [`POST /mkdirUserFolder`](#post-mkdiruserfolder) - Create a directory under **`user_folder/`** (**management signature**)
+- [`POST /deleteUserFolderPath`](#post-deleteuserfolderpath) - Delete a file or directory under **`user_folder/`** (**management signature**; optional **`recursive`**)
 - [`GET /listMcpServers`](#get-listmcpservers) - List active MCP servers (node database) and available repository catalog (`agent_llm_config.defaults/MCP_servers.json`)
 - [`GET /getMcpServer`](#get-getmcpserver) - Get one active MCP server by `id`
 - [`POST /addMcpServer`](#post-addmcpserver) - Add or update a custom active MCP server in the node database (**management signature**)
@@ -348,6 +353,9 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 - [`POST /fetchBootstrapKey`](#post-fetchbootstrapkey) — returns **`ed25519PrivateSeedHex`** for offline backup decryption (**HTTPS** or **loopback** only); same eligibility as backup.
 - [`POST /postBootstrapKey`](#post-postbootstrapkey) — write **`bootstrap_key/ed25519_private.hex`** from **`ed25519PrivateSeedHex`** in the signed body when the file is absent; management-signed; **not** subject to maintenance quiescence (no **503** while draining).
 - [`POST /removeBootstrapKey`](#post-removebootstrapkey) — delete **`bootstrap_key/ed25519_private.hex`** if present; management-signed; **not** subject to maintenance quiescence.
+- [`POST /fetchAddedManagementKey`](#post-fetchaddedmanagementkey) — export **`added_keys/added_key_<N>`** PKCS#8 PEM and seed (**HTTPS** or **loopback** only); same deterministic-node eligibility as **`fetchBootstrapKey`**.
+- [`POST /postAddedManagementKey`](#post-postaddedmanagementkey) — write **`added_keys/added_key_<N>`** (+ `.pub`) when absent; **`publicKeyHex`** must match an active extra key in Mongo; **not** subject to maintenance quiescence.
+- [`POST /removeAddedManagementKey`](#post-removeaddedmanagementkey) — delete **`added_key_<N>`** and **`.pub`** on disk only; does **not** update Mongo (**`POST /removeManagementKey`** is the lifecycle route); **not** subject to maintenance quiescence.
 
 ### WireGuard admin VPN (VPS, Linux Docker Desktop, Windows WSL, macOS)
 Enable/disable a host WireGuard server from the Node page **VPN Panel** on **relay and client** nodes. Optional **Shadowsocks transport obfuscation** hides WireGuard UDP from DPI (see [Shadowsocks obfuscation](#shadowsocks-transport-obfuscation)). Requires **`MPC_AUTH_VPN_PENDING_FILE`** in **`docker-compose.relay.yml`** / **`docker-compose.client.yml`** (bind-mounted via generated **`docker-compose.yml`**) plus host automation: **`mpc-auth-vpn-pending.path`** on VPS and **Linux Docker Desktop** (systemd), or the **WSL / macOS pending watcher** on Docker Desktop. See **`systemd/README.md`** and **`docker-extension/README.md`**.
@@ -416,7 +424,7 @@ Enable/disable a host WireGuard server from the Node page **VPN Panel** on **rel
 
 Returns **`draining`**, **`inFlight`**, **`readyForProcessExit`**, and a hint list of tracked POST paths. Read-only; exempt from JWT on the browser HTTPS / loopback listeners where configured (for polling from scripts).
 
-**Flow:** (1) Sign and `POST /maintenance/requestRestartPrep`. (2) Poll `GET /maintenance/restartGate` until **`readyForProcessExit`** is `true` (`draining` is `true` and **`inFlight`** is `0`). (3) Restart the container or process on the host. Tracked paths include group/subgroup agree flows, keyGen, presign, sign/multiSign and related agrees/triggers/status/shelve, **KeyGen messaging** (`sendMessage`, read/delete variants), **`configUpdatePlan` / `configUpdateImplement`**, database backup routes **`POST /backupDatabase`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, **`POST /fetchDatabaseBackup`**, **`POST /fetchBootstrapKey`**, and **`POST /fixDatabase`** (automated integrity repairs under quiescence). **`POST /postBootstrapKey`** and **`POST /removeBootstrapKey`** are **not** tracked — they stay available while **`draining`** and do not increment **`inFlight`**.
+**Flow:** (1) Sign and `POST /maintenance/requestRestartPrep`. (2) Poll `GET /maintenance/restartGate` until **`readyForProcessExit`** is `true` (`draining` is `true` and **`inFlight`** is `0`). (3) Restart the container or process on the host. Tracked paths include group/subgroup agree flows, keyGen, presign, sign/multiSign and related agrees/triggers/status/shelve, **KeyGen messaging** (`sendMessage`, read/delete variants), **`configUpdatePlan` / `configUpdateImplement`**, database backup routes **`POST /backupDatabase`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, **`POST /fetchDatabaseBackup`**, **`POST /fetchBootstrapKey`**, **`POST /fetchAddedManagementKey`**, and **`POST /fixDatabase`** (automated integrity repairs under quiescence). **`POST /postBootstrapKey`**, **`POST /removeBootstrapKey`**, **`POST /postAddedManagementKey`**, and **`POST /removeAddedManagementKey`** are **not** tracked — they stay available while **`draining`** and do not increment **`inFlight`**.
 
 **MQTT caveat:** In-flight work that continues only over **MQTT** (without a matching management POST on this node) is **not** included in the HTTP ref-count. Pause clients or wait briefly if needed.
 
@@ -648,11 +656,13 @@ Other finding codes are **skipped** until a repair is implemented. Failed repair
 <a id="database-backup-maintenance"></a>
 ## MongoDB backup, restore, and bootstrap key (maintenance)
 
-These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or allowed **Ed25519** keys). **Additional gate:** the node’s stored **`nodeKey`** must match the **P-256 public key** derived from **`configs.yaml` `PublicMgtKey`** and the on-disk **`bootstrap_key/ed25519_private.hex`** (see **`DeterministicNodeKey`** in **`mpc-auth`** and **`docs-internal/DATABASE_BACKUP_RESTORE_PLAN.md`**). Legacy **random** `nodeKey` nodes receive **403** on **`POST /backupDatabase`**, **`POST /fetchDatabaseBackup`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, **`POST /fetchBootstrapKey`**, and **`POST /fixDatabase`**. **`GET /listDatabaseBackups`** is read-only metadata only and does **not** require a management signature or this eligibility gate.
+These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or allowed **Ed25519** keys). **Additional gate:** the node’s stored **`nodeKey`** must match the **P-256 public key** derived from **`configs.yaml` `PublicMgtKey`** and the on-disk **`bootstrap_key/ed25519_private.hex`** (see **`DeterministicNodeKey`** in **`mpc-auth`** and **`docs-internal/DATABASE_BACKUP_RESTORE_PLAN.md`**). Legacy **random** `nodeKey` nodes receive **403** on **`POST /backupDatabase`**, **`POST /fetchDatabaseBackup`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, **`POST /fetchBootstrapKey`**, **`POST /fetchAddedManagementKey`**, and **`POST /fixDatabase`**. **`GET /listDatabaseBackups`** is read-only metadata only and does **not** require a management signature or this eligibility gate.
 
 **Bootstrap file install/remove (separate):** **`POST /postBootstrapKey`** and **`POST /removeBootstrapKey`** are management-signed writes/deletes of **`bootstrap_key/ed25519_private.hex`** (see below). They use **`VerifyMgtKeySig`** but **not** the same deterministic-node / backup eligibility gate as the routes in the preceding paragraph, and they are **excluded** from [restart draining](#restart-quiescence-maintenance-detail) (no **503** while **`draining`**).
 
-**Config / layout (defaults):** beside **`configs.yaml`** — directory **`bootstrap_key/`** (private seed file **`ed25519_private.hex`**, `0600`) and **`database_backups/`** (encrypted JSON envelopes). Override with **`BootstrapKeyDir`** / **`DatabaseBackupsDir`** in **`configs.yaml`** (absolute or relative to the configs.yaml parent directory). In **mpc-config** Docker Compose, **`./database_backups`** is bind-mounted to **`/app/database_backups`** so the default **`DatabaseBackupsDir: database_backups`** persists on the host next to the compose project. If **`bootstrap_key`** is bind-mounted **read-only** into the container, **`POST /postBootstrapKey`** / **`POST /removeBootstrapKey`** cannot change the file from inside the container — use a read-write mount (or change the file on the host) for API-driven provisioning.
+**Added management key files (separate):** Keys added via **`POST /addManagementKey`** are stored in Mongo and written once to **`/app/added_keys/added_key_<N>`** (PKCS#8 PEM) and **`added_key_<N>.pub`**. **`POST /fetchAddedManagementKey`**, **`POST /postAddedManagementKey`**, and **`POST /removeAddedManagementKey`** operate on those **disk files only** — they do **not** add/remove Mongo allowed-key rows (**`POST /addManagementKey`** / **`POST /removeManagementKey`** remain the lifecycle routes). **`fetchAddedManagementKey`** uses the same deterministic-node eligibility and TLS/loopback transport rule as **`fetchBootstrapKey`**. **`postAddedManagementKey`** / **`removeAddedManagementKey`** are **not** subject to backup eligibility or maintenance draining (same class as bootstrap post/remove).
+
+**Config / layout (defaults):** beside **`configs.yaml`** — directory **`bootstrap_key/`** (private seed file **`ed25519_private.hex`**, `0600`), directory **`added_keys/`** ( **`added_key_<N>`** PEM + **`.pub`**, default **`/app/added_keys`** in Docker), and **`database_backups/`** (encrypted JSON envelopes). Override with **`BootstrapKeyDir`** / **`DatabaseBackupsDir`** in **`configs.yaml`** (absolute or relative to the configs.yaml parent directory). In **mpc-config** Docker Compose, **`./database_backups`** is bind-mounted to **`/app/database_backups`** so the default **`DatabaseBackupsDir: database_backups`** persists on the host next to the compose project. If **`bootstrap_key`** or **`added_keys`** is bind-mounted **read-only** into the container, **`POST /postBootstrapKey`**, **`POST /removeBootstrapKey`**, **`POST /postAddedManagementKey`**, and **`POST /removeAddedManagementKey`** cannot change files from inside the container — use a read-write mount (or change files on the host) for API-driven provisioning.
 
 **Provisioning:** **`process_config.sh`** always runs **`tools/bootstrap_key_provision.py`**. If **`PublicMgtKey`** is still empty after the management-key step, it writes **`bootstrap_key/ed25519_private.hex`**, sets **`PublicMgtKey`**, and sets **`DeterministicNodeKey: true`**. If **`PublicMgtKey`** is **already set** but **`DeterministicNodeKey`** was never written (common with **`provision-node.sh --public-mgt-key`**), the same script **verifies **`bootstrap_key/ed25519_private.hex`** matches **`configs.yaml`** and sets **`DeterministicNodeKey: true`**. Operators must archive **`bootstrap_key/`** securely (or call **`POST /fetchBootstrapKey`** over TLS after the node is up). For reinstallations, **`bootstrap_key/`** must exist **before** provisioning finishes so mpc-auth initializes Mongo with deterministic **`nodeKey`** (or wipe Mongo after **`DeterministicNodeKey`** plus seed are correct).
 
@@ -766,6 +776,49 @@ These routes require **`VerifyMgtKeySig`** (Ethereum **`NodeMgtKey`** and/or all
 **Success when file missing:** **`code: 0`**, **`removed: false`**, **`message`** **`Bootstrap key file was not present`**.
 
 **Errors:** **`401`** signature failure; **`500`** if **`stat`**/**`remove`** fails unexpectedly.
+
+<a id="post-fetchaddedmanagementkey"></a>
+#### `POST /fetchAddedManagementKey`
+
+**Purpose:** Export the on-disk private key for an **added** Ed25519 management signer (**`added_keys/added_key_<N>`**), not the bootstrap **`PublicMgtKey`**.
+
+**Body:** management-signed JSON (**`FetchAddedManagementKeyPost`**): **`nonce`**, **`clientSig`**, **`nodeKey`**, **`publicKeyHex`** (64 hex; must match an active extra key in Mongo — use **`GET /getAllowedEd25519MgtKeys`**).
+
+**Transport:** **`403`** when the request is **not** TLS and **not** to **loopback** (same rule as **`POST /fetchBootstrapKey`**).
+
+**Eligibility:** Same deterministic-node gate as backup routes.
+
+**Quiescence:** Tracked — requires **`readyForProcessExit`** while **`draining`**.
+
+**Success `data`:** **`publicKeyHex`**, **`slotN`**, **`privateKeyPem`** (PKCS#8), **`ed25519PrivateSeedHex`**, **`format`**, **`path`**. **Never log** private material.
+
+**Errors:** **`400`** if **`publicKeyHex`** is bootstrap **`PublicMgtKey`** (use bootstrap routes); **`404`** if pubkey is not an active added key or PEM file is missing.
+
+<a id="post-postaddedmanagementkey"></a>
+#### `POST /postAddedManagementKey`
+
+**Purpose:** Create **`added_key_<N>`** (PKCS#8 PEM, `0600`) and **`added_key_<N>.pub`** when absent. **`publicKeyHex`** must already exist as an active extra key in Mongo (from **`POST /addManagementKey`**).
+
+**Quiescence:** **None** — not tracked for restart draining.
+
+**Body:** management-signed JSON (**`PostAddedManagementKeyPost`**): **`nonce`**, **`clientSig`**, **`nodeKey`**, **`publicKeyHex`**, and **exactly one** of **`privateKeyPem`** (PKCS#8) or **`ed25519PrivateSeedHex`**. Seed/PEM must match **`publicKeyHex`**.
+
+**Success when absent:** **`data`:** **`path`**, **`wrote: true`**, **`alreadyPresent: false`**, **`publicKeyHex`**, **`slotN`**.
+
+**Success when already present:** **`code: 0`**, **`message`** **`Added management key file already in place`**, **`alreadyPresent: true`**, **`wrote: false`**.
+
+<a id="post-removeaddedmanagementkey"></a>
+#### `POST /removeAddedManagementKey`
+
+**Purpose:** Delete **`added_key_<N>`** and **`added_key_<N>.pub`** on disk if present. Does **not** soft-remove the key from Mongo — use **`POST /removeManagementKey`** for that lifecycle.
+
+**Quiescence:** **None** — same as **`POST /postAddedManagementKey`**.
+
+**Body:** management-signed JSON (**`RemoveAddedManagementKeyPost`**): **`nonce`**, **`clientSig`**, **`nodeKey`**, **`publicKeyHex`**.
+
+**Success when files existed:** **`data`:** **`path`**, **`removed: true`**, **`message`** **`Added management key file removed`**, **`publicKeyHex`**, **`slotN`**.
+
+**Success when files missing:** **`code: 0`**, **`removed: false`**, **`message`** **`Added management key file was not present`**.
 
 <a id="endpoint-categories"></a>
 ## Endpoint Categories
@@ -2869,7 +2922,80 @@ Seeded layout (created on first native-tool / API use): **`skills/`** (workspace
 
 #### Workspace file management APIs
 
-Paths are jailed to **`MPC_AUTH_USER_FOLDER`**. Writes require **management signature**. **Loose files at `user_folder/` root are rejected** — paths must be under an allowed subtree (`skills/`, `scripts/`, `plans/`, `data/`, `memory/`, `evm/`, `solana/`, `near/`, `stellar/`, `ton/`, `sui/`, `.foundry/`, `.svm/`, `.mcp-foundry-workspace/`). Protected exact paths include layout directory entries and their index READMEs (e.g. **`evm/`**, **`evm/README.md`**, **`skills/`**, root **`README.md`**). Protected prefixes (delete/write blocked): **`.foundry/bin`**, **`.mcp-runtime`**. Native tools **`agent_write_file`** / **`agent_edit_file`** enforce the same rules; non-read-only **`agent_bash`** requires **`cwd`** under an allowed subtree (not root).
+Paths are jailed to **`MPC_AUTH_USER_FOLDER`**. **Read** routes (`GET`) require no management signature (same class as **`GET /listEnvironmentVariables`**). **Write** routes require **`VerifyMgtKeySig`** ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey) with **`clientSig` cleared** in canonical JSON before verify).
+
+**Path rules:** **Loose files at `user_folder/` root are rejected** for writes — paths must be under an allowed subtree (`skills/`, `scripts/`, `plans/`, `data/`, `memory/`, `evm/`, `solana/`, `near/`, `stellar/`, `ton/`, `sui/`, `.foundry/`, `.svm/`, `.mcp-foundry-workspace/`). Protected exact paths include layout directory entries and their index READMEs (e.g. **`evm/`**, **`evm/README.md`**, **`skills/`**, root **`README.md`**). Protected prefixes (delete/write blocked): **`.foundry/bin`**, **`.mcp-runtime`**. Native tools **`agent_write_file`** / **`agent_edit_file`** enforce the same rules; non-read-only **`agent_bash`** requires **`cwd`** under an allowed subtree (not root).
+
+**Size limits:** Read and write content is capped at **512 000 bytes** (`agentNativeMaxReadWriteBytes`). **`GET /listUserFolder`** returns at most **500** entries per directory. Oversized reads are **truncated** (not rejected).
+
+**Continuum MCP (deferred group `agent_workspace`):** **`list_user_folder`**, **`get_user_folder_file`**, **`write_user_folder_file`** wrap the three primary routes below. Activate via **`activate_tool_group({ groupId: "agent_workspace" })`**.
+
+Node app: AI Agent → **Workspace** tab (not Skills).
+
+<a id="get-listuserfolder"></a>
+#### `GET /listUserFolder`
+
+**Purpose:** List entries in a directory under **`user_folder/`**.
+
+**Auth:** Read-only; no management signature.
+
+**Query:** **`path`** (optional) — relative path under **`user_folder`**; default **`.`** (workspace root).
+
+**Success `data`:** `{ "path", "entries": [ { "name", "type": "file"|"dir", "size", "mtime"?, "sizeTruncated"? } ], "root": "user_folder" }`. For directories, **`size`** is the sum of regular files in the subtree (may set **`sizeTruncated: true`** when the walk exceeds 50 000 files).
+
+**Errors:** **`400`** for path escape or invalid path.
+
+<a id="get-getuserfolderfile"></a>
+#### `GET /getUserFolderFile`
+
+**Purpose:** Read (download) a **text** file from **`user_folder/`**.
+
+**Auth:** Read-only; no management signature.
+
+**Query:** **`path`** (required) — relative file path (e.g. **`data/backups/myfile.json`**, **`evm/src/Counter.sol`**).
+
+**Success `data`:** `{ "path", "content" (UTF-8 string), "size" }`. Content longer than **512 000 bytes** is **truncated** to that cap.
+
+**Errors:** **`400`** if **`path`** is missing or invalid; **`404`** if the file does not exist.
+
+<a id="post-writeuserfolderfile"></a>
+#### `POST /writeUserFolderFile`
+
+**Purpose:** Create or overwrite a file (upload text content).
+
+**Auth:** Management signature.
+
+**Body:** management-signed JSON (**`WriteUserFolderFilePost`**): **`nonce`**, **`clientSig`**, **`nodeKey`**, **`path`**, **`content`**. **`path`** must be under an allowed write subtree (not root, not protected). **`content`** max **512 000 bytes**.
+
+**Success `data`:** `{ "path", "size" }`.
+
+**Errors:** **`400`** path/content validation (including protected paths and plan-mode workspace lock); **`401`** signature failure; **`409`** when plan workspace is locked for the path.
+
+<a id="post-mkdiruserfolder"></a>
+#### `POST /mkdirUserFolder`
+
+**Purpose:** Create a directory (including parents via **`MkdirAll`**).
+
+**Auth:** Management signature.
+
+**Body:** management-signed JSON (**`MkdirUserFolderPost`**): **`nonce`**, **`clientSig`**, **`nodeKey`**, **`path`**.
+
+**Success `data`:** `{ "path" }`.
+
+**Errors:** **`400`** path validation; **`401`** signature failure.
+
+<a id="post-deleteuserfolderpath"></a>
+#### `POST /deleteUserFolderPath`
+
+**Purpose:** Delete a file or directory.
+
+**Auth:** Management signature.
+
+**Body:** management-signed JSON (**`DeleteUserFolderPathPost`**): **`nonce`**, **`clientSig`**, **`nodeKey`**, **`path`**, optional **`recursive`** (boolean; required to delete a non-empty directory).
+
+**Success `data`:** `{ "path", "deleted": true }`.
+
+**Errors:** **`400`** if path is protected, is workspace root, or directory is non-empty without **`recursive`**; **`401`** signature failure; **`404`** if path missing.
 
 | Endpoint | Auth | Role |
 |----------|------|------|
@@ -2878,8 +3004,6 @@ Paths are jailed to **`MPC_AUTH_USER_FOLDER`**. Writes require **management sign
 | **`POST /writeUserFolderFile`** | mgt sig | Create/overwrite file (`path`, `content`) |
 | **`POST /mkdirUserFolder`** | mgt sig | Create directory (`path`) |
 | **`POST /deleteUserFolderPath`** | mgt sig | Delete file/dir (`path`, optional `recursive`) |
-
-Node app: AI Agent → **Workspace** tab (not Skills).
 
 ### Agent MCP servers (node database + repository catalog)
 
