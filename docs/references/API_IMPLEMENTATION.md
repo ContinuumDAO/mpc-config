@@ -2865,11 +2865,11 @@ Stored in the base MongoDB database collection **`LocalAgentEnvironmentVariables
 
 STDIO MCP servers with **`useUserFolder`: true** (default **foundry**) run with **`HOME`** set to **`MPC_AUTH_USER_FOLDER`** so tools persist files on the host (e.g. Foundry MCP workspace at **`user_folder/.mcp-foundry-workspace/`** on the VPS). The **foundry** MCP package expects Foundry at **`$HOME/.foundry/bin/`**; mpc-auth symlinks the image’s **`/usr/local/bin/{forge,cast,anvil}`** into **`user_folder/.foundry/bin/`** before connect (the image tools alone are not enough when **`HOME`** is redirected).
 
-Seeded layout (created on first native-tool / API use): **`skills/`** (workspace skills as `<name>/SKILL.md`), **`scripts/`** (+ `README.md` index), **`data/`** (`offloads/`, `artifacts/`), **`memory/`**. Operator catalog skills remain under **`agent_llm_config/Skills/`** (not this tree).
+Seeded layout (created on first native-tool / API use): **`skills/`** (workspace skills as `<name>/SKILL.md`), **`scripts/`** (+ `README.md` index), **`plans/`**, **`data/`** (`offloads/`, `artifacts/`, `vpn/`), **`memory/`**, chain roots **`evm/`** (Foundry: `src/`, `lib/`, `out/`, `broadcast/`), **`solana/`**, **`near/`**, **`stellar/`**, **`ton/`**, **`sui/`** (+ index `README.md` at `user_folder/` root). Operator catalog skills remain under **`agent_llm_config/Skills/`** (not this tree). Continuum MCP VPN download tools write under **`data/vpn/`**.
 
 #### Workspace file management APIs
 
-Paths are jailed to **`MPC_AUTH_USER_FOLDER`**. Writes require **management signature**. Protected prefixes (delete/write blocked): **`.foundry/bin`**, **`.mcp-runtime`**.
+Paths are jailed to **`MPC_AUTH_USER_FOLDER`**. Writes require **management signature**. **Loose files at `user_folder/` root are rejected** — paths must be under an allowed subtree (`skills/`, `scripts/`, `plans/`, `data/`, `memory/`, `evm/`, `solana/`, `near/`, `stellar/`, `ton/`, `sui/`, `.foundry/`, `.svm/`, `.mcp-foundry-workspace/`). Protected exact paths include layout directory entries and their index READMEs (e.g. **`evm/`**, **`evm/README.md`**, **`skills/`**, root **`README.md`**). Protected prefixes (delete/write blocked): **`.foundry/bin`**, **`.mcp-runtime`**. Native tools **`agent_write_file`** / **`agent_edit_file`** enforce the same rules; non-read-only **`agent_bash`** requires **`cwd`** under an allowed subtree (not root).
 
 | Endpoint | Auth | Role |
 |----------|------|------|

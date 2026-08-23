@@ -17,3 +17,6 @@ description: Use when creating or reusing scripts under user_folder (skills/<nam
 ## Layout
 - Prefer `skills/<name>/SKILL.md` + `skills/<name>/scripts/...` and name scripts in the skill body
 - Cross-cutting utilities go in `scripts/` with a one-line entry in `scripts/README.md`
+- **EVM / Foundry:** `evm/` — place `foundry.toml` there; run `forge` with cwd `evm/`; dry-run imports use `evm/broadcast/<script>/<chainId>/dry-run/run-latest.json`
+- **Other chains:** `solana/`, `near/`, `stellar/`, `ton/`, `sui/` — chain-specific contracts and tooling
+- Do not write loose files at `user_folder/` root; use a subtree from the root `README.md` index
