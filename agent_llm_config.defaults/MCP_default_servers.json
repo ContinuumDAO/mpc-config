@@ -5,7 +5,14 @@
       "displayName": "Continuum node MCP",
       "url": "",
       "initialLoad": true,
-      "envVars": ["TELEGRAM_API_ID", "TELEGRAM_API_HASH", "TELEGRAM_SESSION_PATH"]
+      "envVars": [
+        "TELEGRAM_API_ID",
+        "TELEGRAM_API_HASH",
+        "TELEGRAM_SESSION_PATH",
+        "REDDIT_CLIENT_ID",
+        "REDDIT_CLIENT_SECRET",
+        "REDDIT_USER_AGENT"
+      ]
     },
     {
       "id": "coinmarketcap-public",
