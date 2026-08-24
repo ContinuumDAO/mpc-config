@@ -3331,6 +3331,66 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.TelegramNgrokTestInboundPost'
+  /telegramSearch/status:
+    get:
+      description: 'Telegram public channel search (Telethon) setup status (read JWT when JWT applies) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (GET /telegramSearch/status).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Telegram public channel search (Telethon) setup status (read JWT when JWT applies)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /telegramSearch/sendCode:
+    post:
+      description: 'Send Telethon login code for social:telegram search (management-signed; no SSH) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (POST /telegramSearch/sendCode).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Send Telethon login code for social:telegram search (management-signed; no SSH)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.TelegramSearchSendCodePost'
+  /telegramSearch/signIn:
+    post:
+      description: 'Complete Telethon login and set TELEGRAM_SESSION_PATH (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /telegramSearch/signIn).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Complete Telethon login and set TELEGRAM_SESSION_PATH (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.TelegramSearchSignInPost'
   /agent/mcp/tools:
     get:
       description: Connects to continuum-mcp (Streamable HTTP), runs tools/list, and returns wire tool summaries. With static
@@ -5532,3 +5592,35 @@ definitions:
         type: string
       data:
         $ref: '#/definitions/node.AgentMcpToolsListData'
+  node.TelegramSearchSendCodePost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - phone
+      description: 'POST /telegramSearch/sendCode. Canonical JSON to sign: {"phone":"+<E.164>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
+        with clientSig cleared before signing. Requires TELEGRAM_API_ID and TELEGRAM_API_HASH in Variables. Proxies to continuum-mcp
+        Telethon (auth_telegram.py send_code). Stores phone_code_hash server-side until POST /telegramSearch/signIn.'
+      properties:
+        phone:
+          type: string
+          description: Phone number with country code (E.164, e.g. +15551234567)
+  node.TelegramSearchSignInPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - code
+      description: 'POST /telegramSearch/signIn. Canonical JSON to sign: {"code":"<telegram-login-code>","password":"<optional-2fa>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
+        with clientSig cleared before signing. Requires a prior POST /telegramSearch/sendCode. On success upserts TELEGRAM_SESSION_PATH
+        (default /app/user_folder/data/telegram/continuum_search). When Telethon returns needs_password, repeat with the same
+        code plus password.'
+      properties:
+        code:
+          type: string
+          description: Login code from Telegram SMS or app
+        password:
+          type: string
+          description: 'Telegram two-factor password (required when prior response had needsPassword: true)'

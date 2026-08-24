@@ -154,7 +154,7 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on **`GET`** requests. **`POST`** is not JWT-gated on that listener; use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same **`GET`** rules when Browser HTTPS is configured.
 
-**JWT-protected agent paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, and **`GET /telegramNgrok/status`**.
+**JWT-protected agent paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, and **`GET /telegramSearch/status`**.
 
 ## Quick Reference: All Endpoints
 
@@ -278,6 +278,9 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /telegramNgrok/status`](#get-telegramngrok-status) - Telegram ngrok sidecar automation status (**read JWT** when JWT applies)
 - [`POST /telegramNgrok/setEnabled`](#post-telegramngrok-setenabled) - Enable or disable host ngrok sidecar (**management signature**; writes **`pending-telegram-ngrok.json`**)
 - [`POST /telegramNgrok/registerWebhook`](#post-telegramngrok-registerwebhook) - Call Telegram **`setWebhook`** with active tunnel URL (**management signature**)
+- [`GET /telegramSearch/status`](#get-telegramsearch-status) - Telethon public channel search setup status (**read JWT** when JWT applies)
+- [`POST /telegramSearch/sendCode`](#post-telegramsearch-sendcode) - Send Telethon login code for **`social:telegram`** (**management signature**; node app wizard)
+- [`POST /telegramSearch/signIn`](#post-telegramsearch-signin) - Complete Telethon login and set **`TELEGRAM_SESSION_PATH`** (**management signature**)
 - [`POST /agent/plan/start`](#post-agentplanstart) - Start a plan thread with optional prior-orchestration rollup injected (**read JWT**)
 - [`POST /agent/plan/mode`](#post-agentplanmode) - Set plan mode and update plan frontmatter (**read JWT**)
 - [`POST /agent/orchestration/continue`](#post-agentorchestrationcontinue) - Open the [Orchestrator] thread for interactive post-synthesis follow-up (**read JWT**)
@@ -3694,6 +3697,96 @@ Probes Telegram delivery (not the same as **`POST /runWebhook`**):
 ```
 
 When **`sidecarStale`** is **`true`**, **`publicDeliveryStatus`** is often **404** even though the webhook **Run** test still passes — reattach the tunnel (**Disable → Enable → Register with Telegram**).
+
+<a id="telegram-search-telethon-setup"></a>
+### Telegram public channel search (Telethon setup)
+
+Operator-facing setup for continuum MCP **`social:telegram`** tools (**`search_telegram_messages`**, **`search_telegram_tickers`**) — separate from bot notify (**`send_telegram_message`**) and inbound webhooks.
+
+**Node app:** AI Agent → MCP Servers → **Continuum** → **Social search → Telegram** (phone + login code wizard; no SSH).
+
+| Variable | Purpose |
+|----------|---------|
+| **`TELEGRAM_API_ID`** | MTProto app id from [my.telegram.org/apps](https://my.telegram.org/apps) |
+| **`TELEGRAM_API_HASH`** | MTProto app hash (pair with **`TELEGRAM_API_ID`**) |
+| **`TELEGRAM_SESSION_PATH`** | Telethon session file path **without** `.session` suffix; set automatically on successful **`POST /telegramSearch/signIn`** (default **`/app/user_folder/data/telegram/continuum_search`**) |
+
+**continuum-mcp** runs Python Telethon via **`scripts/telegram-search/auth_telegram.py`**. The **`continuum-mcp`** container must include Python + Telethon and mount **`user_folder`** (see compose **`./user_folder:/app/user_folder`** on **`continuum-mcp`**).
+
+<a id="get-telegramsearch-status"></a>
+#### `GET /telegramSearch/status`
+
+**Auth:** Read JWT on Browser HTTPS / loopback when JWT applies.
+
+**Response `data` (typical):**
+```json
+{
+  "available": true,
+  "defaultSessionPath": "/app/user_folder/data/telegram/continuum_search",
+  "sessionPath": "/app/user_folder/data/telegram/continuum_search",
+  "apiIdConfigured": true,
+  "apiHashConfigured": true,
+  "sessionPathConfigured": true,
+  "sessionReady": true,
+  "pendingCode": false,
+  "missingPrerequisites": [],
+  "telegramUsername": "myuser",
+  "telegramUserId": 123456789,
+  "message": "Telegram search session is ready."
+}
+```
+
+- **`sessionReady`**: **`true`** when Telethon reports an authorized user session at **`sessionPath`** (via continuum-mcp internal auth check).
+- **`pendingCode`**: **`true`** after **`POST /telegramSearch/sendCode`** until **`POST /telegramSearch/signIn`** succeeds or the pending state expires (~10 minutes).
+- **`missingPrerequisites`**: e.g. **`["TELEGRAM_API_ID"]`** when Variables are unset.
+- **`lastError`**: present when mpc-auth cannot reach continuum-mcp (e.g. image missing Python/Telethon).
+
+<a id="post-telegramsearch-sendcode"></a>
+#### `POST /telegramSearch/sendCode`
+
+Management-signed JSON (canonical body with **`clientSig`** cleared for verification):
+
+```json
+{
+  "nonce": 15,
+  "clientSig": "0x… or 128-hex-ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
+  "phone": "+15551234567"
+}
+```
+
+**Requires:** **`TELEGRAM_API_ID`** and **`TELEGRAM_API_HASH`** in Variables.
+
+Proxies to **`http://continuum-mcp:8446/internal/telegram-search/auth`** (`action: send_code`). Stores **`phone_code_hash`** server-side for the subsequent sign-in.
+
+**Response data:** `{ "message": "Login code sent. Enter the code from Telegram below.", "phone": "+15551234567" }` — or when already authorized: `{ "message", "username", "userId", "sessionPath" }` and **`TELEGRAM_SESSION_PATH`** is upserted.
+
+**Errors:** **400** when Variables missing; **502** when continuum-mcp/Telethon fails.
+
+<a id="post-telegramsearch-signin"></a>
+#### `POST /telegramSearch/signIn`
+
+Management-signed JSON:
+
+```json
+{
+  "nonce": 16,
+  "clientSig": "…",
+  "nodeKey": "<128-hex>",
+  "code": "12345",
+  "password": "<optional Telegram 2FA password>"
+}
+```
+
+**Requires:** prior **`POST /telegramSearch/sendCode`** (pending login state).
+
+Completes Telethon sign-in via continuum-mcp. On success upserts **`TELEGRAM_SESSION_PATH`** to the session path used during login (default under **`user_folder/data/telegram/`**).
+
+**Response data (success):** `{ "message": "Telegram search session saved.", "username", "userId", "firstName", "sessionPath" }`.
+
+**Response data (2FA required):** `{ "needsPassword": true, "message": "…" }` — resubmit with the same **`code`** and **`password`**.
+
+**Errors:** **400** when no pending login, invalid code, or expired code; **502** when continuum-mcp/Telethon fails.
 
 #### Inbound HTTP (hook listener, not management port)
 

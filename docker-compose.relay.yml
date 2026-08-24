@@ -160,6 +160,7 @@ services:
       - ./added_keys:/app/added_keys
       # Bootstrap Ed25519 seed (PublicMgtKey); read-only — writes stay on app service (POST /postBootstrapKey).
       - ./bootstrap_key:/app/bootstrap_key:ro
+      - ./user_folder:/app/user_folder
     ports:
       - "127.0.0.1:8446:8446"
     networks:

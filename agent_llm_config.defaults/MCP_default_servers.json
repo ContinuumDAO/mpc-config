@@ -4,7 +4,8 @@
       "id": "continuum",
       "displayName": "Continuum node MCP",
       "url": "",
-      "initialLoad": true
+      "initialLoad": true,
+      "envVars": ["TELEGRAM_API_ID", "TELEGRAM_API_HASH", "TELEGRAM_SESSION_PATH"]
     },
     {
       "id": "coinmarketcap-public",
