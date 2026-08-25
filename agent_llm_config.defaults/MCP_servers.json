@@ -194,6 +194,16 @@
       "initialLoad": false
     },
     {
+      "id": "blockscout",
+      "displayName": "Blockscout (official)",
+      "setupUrl": "https://mcp.blockscout.com/",
+      "transport": "http",
+      "url": "https://mcp.blockscout.com/mcp",
+      "apiKeyEnvVar": "BLOCKSCOUT_PRO_API_KEY",
+      "apiKeyHeader": "Blockscout-MCP-Pro-Api-Key",
+      "initialLoad": false
+    },
+    {
       "id": "dune",
       "displayName": "Dune Analytics",
       "transport": "http",
