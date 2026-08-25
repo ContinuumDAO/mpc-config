@@ -58,6 +58,37 @@ rules:
       then apply_chart_drawings on the existing prepareReplay.
     modes: [interactive, cron]
 
+  # First-time plot (not "add ema" / "clean chart"). Host regex still gates auto-prepare;
+  # this rule is the budget: work → interactive rounds so fetch + prepare can finish.
+  - id: chart_render
+    tier: work
+    match:
+      anySubstring:
+        - chart the
+        - chart a
+        - chart an
+        - chart this
+        - chart my
+        - "chart it"
+        - chart that
+        - chart btc
+        - chart eth
+        - plot the
+        - plot a
+        - plot this
+        - candlestick chart
+        - show chart
+        - draw chart
+        - prepare_chart
+    boostGroups: [chart:core]
+    hint: >-
+      Operator asked to chart/plot/render OHLCV. In this same turn: run the provider fetch_ohlcv
+      tool, then continuum__prepare_chart_from_rows with the full fetch as toolResult or
+      { title, ohlcvDigest }. Do not call search_continuum_tools or list_tool_groups unless
+      those fetch/prepare tools are missing. The node auto-prepares the chart UI after a
+      successful fetch when possible.
+    modes: [interactive, cron]
+
   - id: chart_customization_simple
     tier: light
     match:
