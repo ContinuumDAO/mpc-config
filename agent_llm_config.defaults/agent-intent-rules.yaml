@@ -1,10 +1,34 @@
-# Host policy: free-text intent → Continuum pack boost + optional system hint.
+# Host policy: free-text intent → Continuum pack boost + optional system hint + MCP auto-load.
 # Never short-circuits the LLM. Structured UI / Telegram callbacks stay hardwired in code.
 # Orchestration hook turns ignore rules whose modes omit "hook".
+# mpc-auth only matches/loads; vendor and protocol names belong here, not in Go.
 version: 1
 
 rules:
+  - id: continuum_tool_discovery
+    always: true
+    hint: >-
+      Continuum tools are named continuum__<tool_name> — always use that prefix for tools/call.
+      If a tool you need isn't listed yet, call continuum__search_continuum_tools with your query,
+      then continuum__activate_tool_group on the returned group id; the host expands LLM tools from
+      search hits. Brand names alone (e.g. Hyperliquid, Uniswap, Aave, Morpho, GMX) are ambiguous:
+      "add/configure chain" or "RPC/network" → registry_chains (add_to_chain_registry);
+      trading/swaps/perps/DeFi protocol tools → search/activate defi_discovery then
+      continuum__load_defi_protocol — do not load a DeFi protocol merely because a chain brand
+      was mentioned.
+    modes: [interactive, cron]
+
+  - id: third_party_market_data_consent
+    always: true
+    hint: >-
+      Never auto-load market-data MCP servers (coingecko, coingecko-pro, coinbase, coinmarketcap,
+      coinmarketcap-public, binance, etc.) without asking the operator first. Prefer
+      agent_load_mcp_server after they name a source. DeFi OHLCV on Continuum uses
+      continuum__load_defi_protocol, not a third-party market-data MCP.
+    modes: [interactive, cron]
+
   - id: chart_analysis_catalog
+    tier: light
     match:
       anySubstring:
         - analysis options
@@ -13,10 +37,11 @@ rules:
         - show analysis
         - analysis menu
         - analysis catalog
-    boostGroups: [chart:analyze, chart:core]
+    boostGroups: [chart:core]
     hint: >-
       Operator asked for the analysis catalog; prefer list_chart_analysis_options when OHLCV is
-      bound in this conversation, then run analyze_* tools or wait for a menu pick.
+      bound in this conversation, then wait for a menu pick (host emits analysis_menu SSE).
+      Do not activate chart:analyze or run every analyze_* tool.
     modes: [interactive, cron]
 
   - id: chart_customization_catalog
@@ -34,16 +59,272 @@ rules:
     modes: [interactive, cron]
 
   - id: chart_customization_simple
+    tier: light
     match:
       anySubstring:
         - add macd
         - add rsi
         - add ema
+        - add sma
+        - add bollinger
+        - add ichimoku
+        - add donchian
+        - add supertrend
         - remove macd
         - remove rsi
         - remove ema
+        - remove sma
+        - remove bollinger
+        - remove ichimoku
+        - remove donchian
+        - remove supertrend
     boostGroups: [chart:core]
     hint: >-
       Operator asked to add/remove a common indicator; use apply_chart_drawings on the bound chart session
       (do not prepare a fresh chart unless none exists).
+    modes: [interactive, cron]
+
+  - id: foundry_compose_import
+    tier: work
+    loadMcpServers: [foundry]
+    match:
+      anySubstring:
+        - foundry
+        - forge script
+        - forge import
+        - foundry import
+        - import from foundry
+        - compose import
+        - run-latest
+    boostGroups: [mpc_compose]
+    hint: >-
+      Foundry / Compose import: if foundry__* tools are absent, say once that Foundry MCP is not
+      loaded and continue with native forge in user_folder. Dry-run with --rpc-url and --sender =
+      KeyGen ethereumaddress; no --broadcast. Call continuum__import_forge_dry_run_multi_sign_request
+      (not create_forge_multi_sign_request) with dryRunFilePath under evm/broadcast/ or
+      .mcp-foundry-workspace/broadcast/. Default useCustomGas false unless the operator asked for
+      custom gas. Report requestId; do not mark the import complete without it.
+    modes: [interactive, cron]
+
+  - id: rss_feed_more_items
+    tier: light
+    match:
+      anySubstring:
+        - get more items
+        - more items
+        - more headlines
+        - show more headlines
+        - fetch more headlines
+    hint: >-
+      Follow-up: the operator wants more RSS headlines from the prior fetch in this thread.
+      Re-call the RSS tool already used (world-affairs__get_world_affairs_latest or
+      business-latest__get_business_latest) with limit: 25 (max). Keep the same sourceId if
+      the prior call filtered by source. Do not use agent_bash, agent_read_file, or agent_grep
+      to inspect MCP source — pagination is the limit parameter. For agent_bash mutating commands,
+      cwd must be a workspace subtree (data/, skills/, evm/, …) — omitting cwd defaults to
+      user_folder root and fails.
+    modes: [interactive, cron]
+
+  - id: workspace_script
+    tier: work
+    match:
+      anySubstring:
+        - write a script
+        - create a script
+        - bash script
+        - under skills/
+        - scripts/
+    boostGroups: [agent_workspace]
+    hint: >-
+      Interactive workspace: write scripts under skills/<name>/scripts/ or scripts/; document in the skill
+      body or scripts/README.md. Run with agent_bash cwd set to the subtree (skills/, scripts/, data/, …).
+    modes: [interactive, cron]
+
+  - id: evm_forge
+    tier: work
+    match:
+      anySubstring:
+        - solidity
+        - foundry script
+        - forge script
+        - under evm/
+        - evm/src
+    boostGroups: [mpc_compose]
+    hint: >-
+      Foundry/Solidity work belongs under evm/ (foundry.toml seeded). Run forge with cwd: evm/.
+      Dry-run imports via continuum__import_forge_dry_run_multi_sign_request — no --broadcast.
+    modes: [interactive, cron]
+
+  - id: credits_status
+    tier: light
+    match:
+      anySubstring:
+        - how many free
+        - signature credit
+        - signature credits
+        - out of credit
+        - free signatures
+    hint: >-
+      Operator asked about remaining signature/free credits. Answer from node/keygen status
+      tools already available (e.g. get_mpa_wallet_status). Do not spawn research or write tools.
+    modes: [interactive, cron]
+
+  - id: analysis_menu_pick
+    tier: light
+    match:
+      anySubstring:
+        - run analysis #
+        - analysis #
+        - do analysis #
+    boostGroups: [chart:core]
+    hint: >-
+      Operator picked an analysis menu number. The host auto-runs that analyze_* tool on the
+      bound OHLCV session. Do not search or activate extra packs; do not re-list the catalog
+      unless the pick failed.
+    modes: [interactive, cron]
+
+  - id: list_backups
+    tier: light
+    match:
+      anySubstring:
+        - list backups
+        - show database backups
+        - list database backups
+        - show backups
+    boostGroups: [node_database:backup]
+    hint: >-
+      Read-only backup listing: call list_database_backups. Do not restore, delete keys, or
+      upload/download unless the operator explicitly asked.
+    modes: [interactive, cron]
+
+  - id: node_health
+    tier: light
+    match:
+      anySubstring:
+        - node status
+        - node health
+        - is the node online
+        - connectivity health
+    boostGroups: [node_info]
+    hint: >-
+      Operator asked whether the node is up. Prefer get_health / get_connectivity_health / node_id.
+      Do not start backup, restore, or research.
+    modes: [interactive, cron]
+
+  - id: pending_signs
+    tier: light
+    match:
+      anySubstring:
+        - pending sign requests
+        - list sign requests
+        - awaiting join
+        - signs awaiting join
+    boostGroups: [mpc_read]
+    hint: >-
+      Read-only MultiSign listing: list_sign_requests or list_sign_requests_awaiting_join.
+      Do not agree, trigger, or broadcast unless the operator explicitly asked.
+    modes: [interactive, cron]
+
+  - id: preferred_keygen
+    tier: light
+    match:
+      anySubstring:
+        - preferred keygen
+        - "what's my keygen"
+        - what is my keygen
+        - my preferred keygen
+    boostGroups: [keygen]
+    hint: >-
+      Operator asked for the preferred KeyGen. Call get_preferred_key_gen. Do not create or
+      accept a new keygen request unless they asked.
+    modes: [interactive, cron]
+
+  - id: clean_chart
+    tier: light
+    match:
+      anySubstring:
+        - clean chart
+        - remove overlays
+        - clear drawings
+        - remove all overlays
+    boostGroups: [chart:core, chart:drawings]
+    hint: >-
+      Operator asked to clear chart overlays. Use apply_chart_drawings / remove-drawing tools on
+      the bound prepareReplay. Do not fetch new OHLCV or prepare a fresh chart.
+    modes: [interactive, cron]
+
+  - id: data_organize
+    tier: work
+    match:
+      anySubstring:
+        - organize data
+        - data/artifacts
+        - data/exports
+        - move files under data
+        - sort exports
+    boostGroups: [agent_workspace]
+    hint: >-
+      Data organization uses user_folder/data/ subtrees. Use agent_ls/agent_glob to inspect, then
+      agent_bash with cwd: data/… for moves/transforms. Do not write loose files at user_folder root.
+    modes: [interactive, cron]
+
+  - id: block_explorer_tx
+    tier: light
+    loadMcpServers: [etherscan, etherscan-community]
+    match:
+      anySubstring:
+        - "/tx/0x"
+        - "lineascan"
+        - "etherscan.io"
+        - "basescan"
+        - "arbiscan"
+        - "polygonscan"
+        - "bscscan"
+        - "optimistic.etherscan"
+        - "snowtrace"
+        - "ftmscan"
+        - "mantlescan"
+        - "transaction hash"
+        - "tx hash"
+        - "block explorer"
+    hint: >-
+      Block explorer / on-chain transaction: use Etherscan MCP (official https://mcp.etherscan.io/mcp
+      or community stdio). One API key covers all Etherscan-compatible chains via the chainid parameter.
+      Prefer get_transaction_by_hash and get_transaction_receipt. Do not use agent_fetch_url on explorer
+      HTML or agent_bash to scrape pages. Common chainids: Ethereum=1, Sepolia=11155111, Hoodi=560048,
+      BSC=56, BSC testnet=97, Polygon=137, Polygon Amoy=80002, Base=8453, Base Sepolia=84532,
+      Arbitrum=42161, Arbitrum Sepolia=421614, Linea=59144, Linea Sepolia=59141, OP=10, OP Sepolia=11155420,
+      Avalanche=43114, Fuji=43113, Blast=81457, Blast Sepolia=168587773, Gnosis=100, Mantle=5000,
+      Mantle Sepolia=5003, Taiko=167000, Sonic=146, Unichain=130, Abstract=2741, Berachain=80094,
+      Monad=143, Sei=1329, World=480, ApeChain=33139, and others — full list at
+      https://docs.etherscan.io/supported-chains
+    modes: [interactive, cron]
+
+  - id: dune_onchain_analytics
+    loadMcpServers: [dune]
+    match:
+      anySubstring:
+        - dune
+        - dune analytics
+        - dune query
+        - on-chain analytics
+        - sql analytics
+    hint: >-
+      On-chain analytics via Dune MCP: agent_load_mcp_server dune (needs DUNE_API_KEY). Do not scrape
+      dune.com with agent_fetch_url. Continuum DeFi protocol tools are not a substitute for Dune SQL.
+    modes: [interactive, cron]
+
+  - id: market_data_ohlcv_ask
+    match:
+      anySubstring:
+        - coingecko
+        - coinmarketcap
+        - coinbase candles
+        - binance klines
+        - fetch ohlcv
+        - load candles
+    hint: >-
+      Market-data OHLCV: ask which catalog MCP or Continuum DeFi protocol to use if none is loaded.
+      Do not pick CoinGecko / CoinMarketCap / Coinbase / Binance by default. After the operator
+      chooses, agent_load_mcp_server (or continuum__load_defi_protocol) then that provider's fetch tool.
     modes: [interactive, cron]
