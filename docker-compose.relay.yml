@@ -119,11 +119,6 @@ services:
       - seccomp:unconfined
     cap_add:
       - SYS_PTRACE
-    # Prefer IPv4 for outbound dual-stack HTTP (Go ignores gai.conf). Avoids slow AAAA
-    # paths that stall streamable-HTTP MCP handshakes. No vendor hostnames.
-    sysctls:
-      - net.ipv6.conf.all.disable_ipv6=1
-      - net.ipv6.conf.default.disable_ipv6=1
     # BEGIN mpc-config relay-mqtt-hairpin-extra-hosts (process_config.sh adds relay WAN IP → host-gateway)
     extra_hosts:
       - "host.docker.internal:host-gateway"
