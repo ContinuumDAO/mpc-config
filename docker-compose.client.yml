@@ -101,6 +101,11 @@ services:
       - seccomp:unconfined
     cap_add:
       - SYS_PTRACE
+    # Prefer IPv4 for outbound dual-stack HTTP (Go ignores gai.conf). Avoids slow AAAA
+    # paths that stall streamable-HTTP MCP handshakes. No vendor hostnames.
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
 
   # BEGIN mpc-config continuumdao-node-app
   dashboard:
