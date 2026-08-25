@@ -172,7 +172,17 @@
     },
     {
       "id": "etherscan",
-      "displayName": "Etherscan (API v2)",
+      "displayName": "Etherscan (official)",
+      "setupUrl": "https://docs.etherscan.io/build-with-ai/mcp",
+      "transport": "http",
+      "url": "https://mcp.etherscan.io/mcp",
+      "apiKeyEnvVar": "ETHERSCAN_API_KEY",
+      "initialLoad": false
+    },
+    {
+      "id": "etherscan-community",
+      "displayName": "Etherscan (community stdio — not official)",
+      "setupUrl": "https://github.com/dennisonbertram/mcp-etherscan-server",
       "transport": "stdio",
       "command": "npx",
       "args": ["-y", "mcp-etherscan-server"],
