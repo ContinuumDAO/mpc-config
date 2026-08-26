@@ -3679,6 +3679,8 @@ Operator-facing setup for continuum MCP **`social:telegram`** tools (**`search_t
 
 **Node app:** AI Agent → MCP Servers → **Continuum** → **Social search → Telegram** (phone + login code wizard; no SSH).
 
+Channel allowlist: **`telegram.channels`** in bundled **`social-search.yaml`** (continuum-mcp **`dist/mcp/resources/social-search.yaml`**).
+
 | Variable | Purpose |
 |----------|---------|
 | **`TELEGRAM_API_ID`** | MTProto app id from [my.telegram.org/apps](https://my.telegram.org/apps) |
@@ -3761,6 +3763,39 @@ Completes Telethon sign-in via continuum-mcp. On success upserts **`TELEGRAM_SES
 **Response data (2FA required):** `{ "needsPassword": true, "message": "…" }` — resubmit with the same **`code`** and **`password`**.
 
 **Errors:** **400** when no pending login, invalid code, or expired code; **502** when continuum-mcp/Telethon fails.
+
+<a id="discord-social-search"></a>
+### Discord guild channel search (bot token)
+
+Operator setup for continuum MCP **`social:discord`** tools (**`search_discord_messages`**, **`search_discord_tickers`**).
+
+**Node app:** AI Agent → MCP Servers → **Continuum** → **Social search → Discord** (Variables checklist only; no OAuth wizard).
+
+| Variable | Purpose |
+|----------|---------|
+| **`DISCORD_BOT_TOKEN`** | Bot token from [Discord Developer Portal](https://discord.com/developers/applications) → **Bot** |
+| **`DISCORD_APPLICATION_ID`** | Optional — enables **Invite bot to server** link in the node app (View Channels + Read Message History) |
+
+**Bot setup:** enable **MESSAGE_CONTENT** privileged intent; invite the bot to target guilds; configure **`discord.guilds`** / **`channels`** in bundled **`social-search.yaml`** on the node (continuum-mcp **`dist/mcp/resources/social-search.yaml`**). Search uses Discord REST **`GET /guilds/{guild.id}/messages/search`** — guilds the bot has not joined are unavailable.
+
+**Tools (deferred group `social:discord`):** text/mention search, ticker scan over channel history. Activate via **`social_search`** or **`social:discord`**.
+
+<a id="reddit-social-search"></a>
+### Reddit subreddit search (PRAW)
+
+Operator setup for continuum MCP **`social:reddit`** tools (**`search_reddit_posts`**, **`search_reddit_tickers`**, **`get_reddit_thread`**).
+
+**Node app:** AI Agent → MCP Servers → **Continuum** → **Social search → Reddit** (Variables checklist only).
+
+| Variable | Purpose |
+|----------|---------|
+| **`REDDIT_CLIENT_ID`** | App id from [reddit.com/prefs/apps](https://www.reddit.com/prefs/apps) (create **script** app) |
+| **`REDDIT_CLIENT_SECRET`** | App secret (pair with **`REDDIT_CLIENT_ID`**) |
+| **`REDDIT_USER_AGENT`** | Unique string, e.g. **`continuum-node:social-search:1.0 (by /u/yourreddituser)`** — required by Reddit |
+
+**continuum-mcp** runs sync PRAW via **`scripts/reddit-search/`** (Python). Configure **`reddit.subreddits`** in **`social-search.yaml`**. Optional **`includeComments`** on search tools; use **`get_reddit_thread`** for deeper reply context.
+
+**Shared config:** **`social-search.yaml`** also holds Telegram and Discord slices plus shared **`tickers`** / **`ticker_detection`**.
 
 #### Inbound HTTP (hook listener, not management port)
 
