@@ -324,6 +324,7 @@ Scanner governance GETs below are on **`ManagementAPIsPort`** and, when **`Scann
 - [`POST /getTaprootPrivateKey`](#post-gettaprootprivatekey) - After eject: read exported **Taproot internal key scalar** and P2TR metadata (**bitcoin-taproot** only)
 - [`GET /getGlobalNonceByKeyGenId`](#get-getglobalnoncebykeygenid) - Get globalNonce by keyGen result id
 - [`GET /getFeeStatusByKeyGenId`](#get-getfeestatusbykeygenid) - Get MPA wallet fee status (remaining nonces, deposit wei, minimum top-up)
+- [`GET /getNodePrivilegeStatus`](#get-getnodeprivilegestatus) - Get veCTM privilege status used to gate VPN and later privileged services
 - [`GET /getKeyGenGroupId`](#get-getkeygengroupid) - Get key generation result and GroupId by keyGen ID
 - [`GET /getAllGroupIds`](#get-getallgroupids) - Get all GroupIds with their keyGens
 - [`GET /listGroupResults`](#get-listgroupresults) - List configured groups and member node keys (`nodeKeys`); optional filters `node_key`, `exclude_node_key`
@@ -482,9 +483,13 @@ Returns WireGuard VPN automation status for the **VPN Panel** in continuumdao-no
   "obfuscationAvailable": true,
   "shadowsocksListenPort": 8388,
   "shadowsocksMethod": "chacha20-ietf-poly1305",
-  "directWireGuardBlocked": false
+  "directWireGuardBlocked": false,
+  "privileged": true,
+  "privilegeSource": "vectm_attach"
 }
 ```
+
+- **`privileged` / `privilegeSource`**: cached veCTM privilege hint (`vectm_attach`). Enabling VPN requires `GET /getNodePrivilegeStatus` `entitled: true` (403 otherwise).
 
 - **`available`**: **`true`** when **`MPC_AUTH_VPN_PENDING_FILE`** / **`MpcAuthVpnPendingPath`** is configured in compose (host apply via systemd on VPS/Linux Docker Desktop, or WSL/macOS watcher on Docker Desktop).
 - **`active`**: read from host **`vpn-state.json`** (written by **`mpc-auth-vpn-enable.sh`** / **`disable`**).
@@ -5066,15 +5071,21 @@ For non-secp256k1 key types, numeric fields are zero and `registered` is false.
 curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getFeeStatusByKeyGenId?id=KeyGen20260111003720999cf104d0f"
 ```
 
-#### VPN billing — host binding (MultiSignAgentWallet)
+<a id="get-getnodeprivilegestatus"></a>
+#### `GET /getNodePrivilegeStatus`
 
-VPN register/deposit/sync contract calls must **not** pass raw host IP addresses on-chain. Compute a host binding off-chain and persist it locally:
+Returns whether this node may use privileged services (VPN now; other services later). Entitlement is **veCTM attach + voting-power threshold**, not a paid VPN month. Node trial does **not** grant services.
 
-```
-hostBinding = keccak256(abi.encodePacked(nodeKey, hostIpAddress))
-```
+**Response `data`:**
+- `entitled` — `nodeHasVeCtmPrivilege` on MultiSignAgentWallet
+- `source` — always `vectm_attach`
+- `paused` — `veCtmPrivilegesPaused`
+- `hasattachedvectm` — attached NFT id on the node's withdraw authority is non-zero
+- `meetsthreshold` — attached voting power meets `veCtmThresholdPower`
+- `tokenid` / `thresholdpower` — decimal strings
+- `reason` — set when not entitled (no attach, below threshold, or paused)
 
-Pass `bytes32 hostBinding` to `registerVpn`, `depositVpn`, `syncVpnBilling`, `getVpnSubscriptionStatus`, and `isVpnRegistered`. See **multi-sign-wallet** `README.md` and `integrations/continuumdao-node-app/vpnHostBinding.ts` for viem/Go helpers.
+VPN admin/egress writes return **403** (not 402) when this check fails. Operational WireGuard routes (`/vpn/*`) are unchanged.
 
 <a id="get-getkeygengroupid"></a>
 #### `GET /getKeyGenGroupId` **NEW**

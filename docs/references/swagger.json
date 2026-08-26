@@ -1853,9 +1853,9 @@
                 }
             }
         },
-        "/getVpnFeeStatus": {
+        "/getNodePrivilegeStatus": {
             "get": {
-                "description": "Get MPA VPN subscription fee status for this node host (credit pool wei, monthly fee, required top-up; hostIp query or node egress IP) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getVpnFeeStatus).",
+                "description": "Get veCTM privilege status for this node (entitled, paused, attached NFT, voting-power threshold) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getNodePrivilegeStatus).",
                 "consumes": [
                     "application/json"
                 ],
@@ -1865,7 +1865,7 @@
                 "tags": [
                     "Key Generation"
                 ],
-                "summary": "Get MPA VPN subscription fee status for this node host (credit pool wei, monthly fee, required top-up; hostIp query or node egress IP)",
+                "summary": "Get veCTM privilege status for this node (entitled, paused, attached NFT, voting-power threshold)",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1873,16 +1873,7 @@
                             "$ref": "#/definitions/node.APIResponse"
                         }
                     }
-                },
-                "parameters": [
-                    {
-                        "type": "string",
-                        "name": "hostIp",
-                        "in": "query",
-                        "required": false,
-                        "description": "Host IP for VPN hostBinding (defaults to node egress IP when omitted)"
-                    }
-                ]
+                }
             }
         },
         "/getKeyGenGroupId": {
