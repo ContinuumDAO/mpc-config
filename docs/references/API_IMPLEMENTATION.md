@@ -246,13 +246,10 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /addSkill`](#post-addskill) - Add or update a skill file (**management signature**)
 - [`POST /removeSkill`](#post-removeskill) - Remove a skill by name (**management signature**)
 - [`POST /resetSkillsFromDefaults`](#post-resetskillsfromdefaults) - Overwrite bundled default skill files from **`agent_llm_config.defaults/Skills/`** (**management signature**; custom skills preserved)
-- [`GET /getTradeDeskConfig`](#get-gettradedeskconfig) - Get **`trade-desk.yaml`** (installed runtime file or bundled defaults preview)
-- [`POST /upsertTradeDeskConfig`](#post-upserttradedeskconfig) - Write **`agent_llm_config/trade-desk.yaml`** after YAML validation (**management signature**)
-- [`POST /resetTradeDeskFromDefaults`](#post-resettradedeskfromdefaults) - Install or reset **`trade-desk.yaml`** from **`agent_llm_config.defaults/`** (**management signature**)
-- [`GET /getCronTradeConfig`](#get-getcrontradeconfig) - Get **`cron/trade-cron.yaml`** (installed runtime file or bundled defaults preview)
+- [`GET /getHostYamlConfig`](#get-gethostyamlconfig) - Get editable host YAML by **`kind`** (installed runtime file or bundled defaults preview; upgrade metadata)
+- [`POST /upsertHostYamlConfig`](#post-upserthostyamlconfig) - Write host YAML after validation (**management signature**; preserves submitted bytes)
+- [`POST /resetHostYamlFromDefaults`](#post-resethostyamlfromdefaults) - Install or reset host YAML from **`agent_llm_config.defaults/`** (**management signature**; writes sidecar)
 - [`GET /getCronTradeAnalysisExample`](#get-getcrontradeanalysisexample) - Get bundled **`cron/trade_analysis_cron.example.md`** (read-only trade proposal cron message template)
-- [`POST /upsertCronTradeConfig`](#post-upsertcrontradeconfig) - Write **`agent_llm_config/cron/trade-cron.yaml`** after YAML validation (**management signature**)
-- [`POST /resetCronTradeFromDefaults`](#post-resetcrontradefromdefaults) - Install or reset **`cron/trade-cron.yaml`** from **`agent_llm_config.defaults/cron/`** (**management signature**)
 - [`GET /listCronJobs`](#get-listcronjobs) - List active cron jobs and available repository catalog (`agent_llm_config.defaults/cron/jobs.json`; **read JWT** on Browser HTTPS / loopback)
 - [`GET /getCronJob`](#get-getcronjob) - Get one cron job including message (**read JWT** when JWT applies)
 - [`GET /listCronJobRuns`](#get-listcronjobruns) - Recent run history for a job (**read JWT**)
@@ -3127,29 +3124,45 @@ Each skill: **`initialLoad`** — when true, content is injected as a **system**
 
 **Response data:** `{ "skillCount": <int> }` — count of default skills refreshed.
 
-### Agent trade desk (`trade-desk.yaml`)
+### Host YAML configs (editable)
 
-Machine-readable defaults for **Build Trade** prefill (entry/invalidation offsets, proximity, per-protocol sizing, LLM-fallback triggers). This is **not** an agent skill — it is a single YAML file beside **`Skills/`** and **`cron/`**. Policy-only prose (break+retest alternates, fib regime switching, discretionary purpose text) stays in the **`trade-defaults`** skill under **`agent_llm_config/Skills/`**. Cron jobs may still override build fields via fenced **`tradeBuild`** YAML blocks inside a job **`message`**.
+Four **editable** host YAML files share one management API. Each has bundled defaults under **`agent_llm_config.defaults/`** and an optional runtime copy under **`agent_llm_config/`**. Use query/body **`kind`** to select the file.
 
-| Path | Role |
-|------|------|
-| **`agent_llm_config.defaults/trade-desk.yaml`** | Bundled defaults (bind-mounted catalog; edit in **mpc-config** repo) |
-| **`agent_llm_config/trade-desk.yaml`** | Active file on this node (used by deterministic prefill fast path when present) |
+| `kind` | Runtime path | Bundled defaults | Role |
+|--------|--------------|------------------|------|
+| **`trade-desk`** | **`agent_llm_config/trade-desk.yaml`** | **`agent_llm_config.defaults/trade-desk.yaml`** | Trade **Build Trade** prefill (entry/invalidation offsets, proximity, per-protocol sizing, LLM-fallback triggers). Policy-only prose stays in the **`trade-defaults`** skill under **`Skills/`**. |
+| **`orchestration-plan`** | **`agent_llm_config/orchestration-plan.yaml`** | **`agent_llm_config.defaults/orchestration-plan.yaml`** | Plan modes + execution policy (leaves, matchers, budgets, verify text). Change here after mpc-auth loader upgrade — no binary rebuild. |
+| **`agent-intent-rules`** | **`agent_llm_config/agent-intent-rules.yaml`** | **`agent_llm_config.defaults/agent-intent-rules.yaml`** | Free-text intent → pack boost + hints + optional **`always`** turn hints + **`loadMcpServers`** auto-load (never short-circuits the LLM). Protocol and third-party MCP policy lives here, not in mpc-auth. |
+| **`cron-trade`** | **`agent_llm_config/cron/trade-cron.yaml`** | **`agent_llm_config.defaults/cron/trade-cron.yaml`** | Node-wide **`tradeConsensus`** / **`tradeBuild`** defaults for scheduled trade-analysis cron runs. Per-job fenced blocks in a cron **`message`** override this file for that run. |
 
-**Provisioning:** **`process_config.sh`** copies **`trade-desk.yaml`** from **`agent_llm_config.defaults/`** into runtime **`agent_llm_config/`** once if missing. Operators can also install via **`POST /resetTradeDeskFromDefaults`** or the **Trade desk** section on the Skills tab in continuumdao-node-app.
+**Provisioning:** **`process_config.sh`** copies each default file into runtime **`agent_llm_config/`** once if missing. Operators can also install via **`POST /resetHostYamlFromDefaults`** or the **Skills** / **Cron** tabs in continuumdao-node-app.
 
-**Runtime behavior:** On trade idea prefill, mpc-auth loads **`trade-desk.yaml`** (runtime file, else defaults bind-mount). When the idea is eligible for the fast path (clear status, no LLM-fallback rules), desk defaults are applied without an LLM turn; otherwise the **`trade-defaults`** skill guides LLM fallback.
+**Sidecar:** On **`POST /resetHostYamlFromDefaults`**, mpc-auth writes **`{filename}.meta.json`** beside the active YAML with **`appliedDefaultsHash`** (SHA-256 of bundled default at reset time) and **`appliedAt`** (RFC3339). Sidecar is **not** updated on upsert. On first upsert when transitioning unconfigured→configured, sidecar is initialized from current bundled default hash.
 
-<a id="get-gettradedeskconfig"></a>
-#### `GET /getTradeDeskConfig`
+**Upgrade workflow:** When **`upgradeAvailable`** is true, bundled defaults changed since the last reset. Back up the installed file (download), call **`POST /resetHostYamlFromDefaults`**, then manually re-apply operator edits in the editor and save via **`POST /upsertHostYamlConfig`**. There is no merge UI.
+
+**Write semantics:** Upsert validates YAML per kind but writes the **exact submitted string** — no re-marshal through a YAML encoder (preserves comments and formatting).
+
+<a id="get-gethostyamlconfig"></a>
+#### `GET /getHostYamlConfig`
 
 **Auth:** Management API (same as **`GET /listSkills`** — no read JWT on plain management port).
+
+**Query:** **`kind`** — one of **`trade-desk`**, **`orchestration-plan`**, **`agent-intent-rules`**, **`cron-trade`**.
 
 **Response data:**
 ```json
 {
+  "kind": "trade-desk",
   "content": "<full yaml text>",
   "configured": true,
+  "defaultContent": "<bundled default yaml>",
+  "defaultsUpdatedAt": "2026-08-26T09:00:00Z",
+  "installedUpdatedAt": "2026-08-20T14:30:00Z",
+  "appliedDefaultsHash": "<sha256 hex>",
+  "appliedAt": "2026-08-20T14:30:00Z",
+  "upgradeAvailable": false,
+  "userModified": true,
   "path": "/app/agent_llm_config/trade-desk.yaml",
   "filename": "trade-desk.yaml"
 }
@@ -3157,93 +3170,49 @@ Machine-readable defaults for **Build Trade** prefill (entry/invalidation offset
 
 | Field | Notes |
 |-------|--------|
-| `content` | Full YAML body |
-| `configured` | `true` when **`agent_llm_config/trade-desk.yaml`** exists on the node; `false` when previewing bundled defaults only |
-| `path` | Source path used for the response (runtime or defaults) |
-| `filename` | Always **`trade-desk.yaml`** |
+| `kind` | Echo of requested kind |
+| `content` | Installed copy, or bundled preview when **`configured: false`** |
+| `configured` | `true` when runtime file exists under **`agent_llm_config/`** |
+| `defaultContent` | Current bundled default body |
+| `defaultsUpdatedAt` | RFC3339 mtime of bundled defaults file |
+| `installedUpdatedAt` | RFC3339 mtime of installed file (empty when not configured) |
+| `appliedDefaultsHash` | From **`{filename}.meta.json`** sidecar (empty when no sidecar) |
+| `appliedAt` | From sidecar |
+| `upgradeAvailable` | **`configured`** && sidecar hash ≠ SHA-256(**`defaultContent`**) |
+| `userModified` | **`configured`** && SHA-256(**`content`**) ≠ **`appliedDefaultsHash`** |
+| `path` | Source path used for **`content`** (runtime or defaults preview) |
+| `filename` | Relative filename (`trade-desk.yaml`, `orchestration-plan.yaml`, `agent-intent-rules.yaml`, or `cron/trade-cron.yaml`) |
 
-<a id="post-upserttradedeskconfig"></a>
-#### `POST /upsertTradeDeskConfig`
-
-**Auth:** Management signature.
-
-**Body:** `{ "content", "nonce", "clientSig", "nodeKey" }` — **`content`** is the full YAML file. Server validates YAML structure (`version`, `universal`, `llmFallback`, `protocols`) before atomic write to **`agent_llm_config/trade-desk.yaml`**.
-
-**Response data:** Same shape as **`GET /getTradeDeskConfig`** with **`configured: true`** and **`path`** set to the runtime file.
-
-<a id="post-resettradedeskfromdefaults"></a>
-#### `POST /resetTradeDeskFromDefaults`
-
-**Auth:** Management signature.
-
-**Body:** `{ "nonce", "clientSig", "nodeKey" }` — no other fields. Use the same [management signatures (`nonce`, `clientSig`, `nodeKey`)](#management-signatures-nodekey) flow as **`POST /resetSkillsFromDefaults`**: canonical JSON to sign is `{"nonce":N,"clientSig":"","nodeKey":"<128-hex>"}` with **`clientSig` cleared** before signing (Ed25519 128 hex, or EIP-191 **`signedMessage`** + **`clientSig`** from **`NodeMgtKey`**).
-
-**Behavior:** Copies **`agent_llm_config.defaults/trade-desk.yaml`** over **`agent_llm_config/trade-desk.yaml`**, overwriting any operator edits.
-
-**Response data:** Same shape as **`GET /getTradeDeskConfig`** after install (`configured: true`).
-
-### Agent cron trade defaults (`cron/trade-cron.yaml`)
-
-Node-wide **`tradeConsensus`** and **`tradeBuild`** defaults for scheduled trade-analysis cron runs. This is **not** a cron job manifest entry — it is a single YAML file under **`agent_llm_config/cron/`** (alongside **`jobs.json`**). Per-job fenced **`tradeConsensus:`** / **`tradeBuild:`** blocks inside a cron **`message`** override this file for that run.
-
-| Path | Role |
-|------|------|
-| **`agent_llm_config.defaults/cron/trade-cron.yaml`** | Bundled defaults (bind-mounted catalog; edit in **mpc-config** repo) |
-| **`agent_llm_config/cron/trade-cron.yaml`** | Active file on this node (applied on every cron turn when the job message has no inline YAML fences) |
-| **`agent_llm_config.defaults/cron/trade_analysis_cron.example.md`** | Read-only example cron **message** for analyze → consensus → **`submit_trade_from_consensus`** → **`multiSignRequest`** workflows (not a job entry; copy into a custom cron job). View in continuumdao-node-app **Cron** tab (**View template**) or **`GET /getCronTradeAnalysisExample`**. |
-
-**Provisioning:** **`process_config.sh`** copies **`cron/trade-cron.yaml`** from **`agent_llm_config.defaults/`** into runtime **`agent_llm_config/cron/`** once if missing. Operators can also install via **`POST /resetCronTradeFromDefaults`** or the **Trade cron** section on the Cron tab in continuumdao-node-app.
-
-**Runtime behavior:** On cron turns, mpc-auth loads **`tradeConsensus`** / **`tradeBuild`** from the job message when present; otherwise from **`cron/trade-cron.yaml`** (runtime file, else defaults bind-mount).
-
-<a id="get-getcrontradeconfig"></a>
-#### `GET /getCronTradeConfig`
-
-**Auth:** Management API (same as **`GET /listCronJobs`** — no read JWT on plain management port).
-
-**Response data:**
-```json
-{
-  "content": "<full yaml text>",
-  "configured": true,
-  "path": "/app/agent_llm_config/cron/trade-cron.yaml",
-  "filename": "cron/trade-cron.yaml"
-}
-```
-
-| Field | Notes |
-|-------|--------|
-| `content` | Full YAML body |
-| `configured` | `true` when **`agent_llm_config/cron/trade-cron.yaml`** exists on the node; `false` when previewing bundled defaults only |
-| `path` | Source path used for the response (runtime or defaults) |
-| `filename` | Always **`cron/trade-cron.yaml`** |
-
-<a id="post-upsertcrontradeconfig"></a>
-#### `POST /upsertCronTradeConfig`
+<a id="post-upserthostyamlconfig"></a>
+#### `POST /upsertHostYamlConfig`
 
 **Auth:** Management signature.
 
-**Body:** `{ "content", "nonce", "clientSig", "nodeKey" }` — **`content`** is the full YAML file. Server validates YAML structure (`version`, at least one of `tradeConsensus` / `tradeBuild`) before atomic write to **`agent_llm_config/cron/trade-cron.yaml`**.
+**Body:** `{ "kind", "content", "nonce", "clientSig", "nodeKey" }` — **`content`** is the full YAML file. Server validates structure per **`kind`** before atomic write. **`trade-desk`:** `version`, `universal`, `llmFallback`, `protocols`. **`orchestration-plan`:** plan schema. **`agent-intent-rules`:** rules schema. **`cron-trade`:** `version`, at least one of **`tradeConsensus`** / **`tradeBuild`**.
 
-**Response data:** Same shape as **`GET /getCronTradeConfig`** with **`configured: true`** and **`path`** set to the runtime file.
+**Response data:** Same shape as **`GET /getHostYamlConfig`** with **`configured: true`** and **`path`** set to the runtime file.
 
-<a id="post-resetcrontradefromdefaults"></a>
-#### `POST /resetCronTradeFromDefaults`
+<a id="post-resethostyamlfromdefaults"></a>
+#### `POST /resetHostYamlFromDefaults`
 
 **Auth:** Management signature.
 
-**Body:** `{ "nonce", "clientSig", "nodeKey" }` — no other fields. Same [management signatures (`nonce`, `clientSig`, `nodeKey`)](#management-signatures-nodekey) flow as **`POST /resetTradeDeskFromDefaults`**.
+**Body:** `{ "kind", "nonce", "clientSig", "nodeKey" }` — no other fields. Use the same [management signatures (`nonce`, `clientSig`, `nodeKey`)](#management-signatures-nodekey) flow as **`POST /resetSkillsFromDefaults`**: canonical JSON to sign is `{"kind":"<kind>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}` with **`clientSig` cleared** before signing.
 
-**Behavior:** Copies **`agent_llm_config.defaults/cron/trade-cron.yaml`** over **`agent_llm_config/cron/trade-cron.yaml`**, overwriting any operator edits.
+**Behavior:** Copies the bundled default for **`kind`** over the runtime file, overwriting operator edits, and writes/updates the sidecar **`{filename}.meta.json`**.
 
-**Response data:** Same shape as **`GET /getCronTradeConfig`** after install (`configured: true`).
+**Response data:** Same shape as **`GET /getHostYamlConfig`** after install (`configured: true`).
+
+### Agent cron trade analysis template (read-only)
+
+**`agent_llm_config.defaults/cron/trade_analysis_cron.example.md`** is a read-only example cron **message** for analyze → consensus → **`submit_trade_from_consensus`** → **`multiSignRequest`** workflows (not a job entry; copy into a custom cron job). View in continuumdao-node-app **Cron** tab (**View template**) or **`GET /getCronTradeAnalysisExample`**. This template is **not** listed in **`jobs.json`** catalog entries and has **no** upsert/reset API.
 
 <a id="get-getcrontradeanalysisexample"></a>
 #### `GET /getCronTradeAnalysisExample`
 
-**Auth:** Management API (same as **`GET /getCronTradeConfig`** — no read JWT on plain management port).
+**Auth:** Management API (same as **`GET /getHostYamlConfig`** — no read JWT on plain management port).
 
-**Behavior:** Returns the bundled **`agent_llm_config.defaults/cron/trade_analysis_cron.example.md`** file only. There is no runtime install path — operators copy the **`content`** into a custom cron job **`message`** (or use it as a starting point when editing an active job). This template is **not** listed in **`jobs.json`** catalog entries.
+**Behavior:** Returns the bundled **`agent_llm_config.defaults/cron/trade_analysis_cron.example.md`** file only. There is no runtime install path — operators copy the **`content`** into a custom cron job **`message`** (or use it as a starting point when editing an active job).
 
 **Response data:**
 ```json

@@ -2,7 +2,7 @@
 #
 # Used by mpc-auth on the deterministic fast path when a selected trade idea is
 # "clear" (no LLM-fallback rules below). Edit on the node under
-# agent_llm_config/trade-desk.yaml (Skills tab → Trade desk, or POST /upsertTradeDeskConfig).
+# agent_llm_config/trade-desk.yaml (Skills tab → Host YAML, or POST /upsertHostYamlConfig kind=trade-desk).
 #
 # Related config (not duplicated here):
 #   • Skills/trade-defaults.md — policy-only LLM fallback (nearest break+retest, Donchian alternate, unclear + clear alternate, etc.)

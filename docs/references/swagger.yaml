@@ -2657,33 +2657,45 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.DeleteUserFolderPathPost'
-  /getTradeDeskConfig:
+  /getHostYamlConfig:
     get:
-      description: 'Get trade-desk.yaml (runtime file or bundled defaults preview) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (GET /getTradeDeskConfig).'
+      description: 'Get host YAML config by kind (trade-desk, orchestration-plan, agent-intent-rules, cron-trade) with upgrade
+        metadata Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getHostYamlConfig).'
       consumes:
       - application/json
       produces:
       - application/json
       tags:
       - Management API
-      summary: Get trade-desk.yaml (runtime file or bundled defaults preview)
+      summary: Get host YAML config by kind (trade-desk, orchestration-plan, agent-intent-rules, cron-trade) with upgrade
+        metadata
       responses:
         '200':
           description: OK
           schema:
             $ref: '#/definitions/node.APIResponse'
-  /upsertTradeDeskConfig:
+      parameters:
+      - type: string
+        name: kind
+        in: query
+        required: true
+        enum:
+        - trade-desk
+        - orchestration-plan
+        - agent-intent-rules
+        - cron-trade
+        description: Host YAML kind
+  /upsertHostYamlConfig:
     post:
-      description: 'Write agent_llm_config/trade-desk.yaml after YAML validation (management-signed) Full detail: mpc-config
-        docs/references/API_IMPLEMENTATION.md (POST /upsertTradeDeskConfig).'
+      description: 'Write host YAML after validation; preserves submitted bytes (management-signed) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (POST /upsertHostYamlConfig).'
       consumes:
       - application/json
       produces:
       - application/json
       tags:
       - Management API
-      summary: Write agent_llm_config/trade-desk.yaml after YAML validation (management-signed)
+      summary: Write host YAML after validation; preserves submitted bytes (management-signed)
       responses:
         '200':
           description: OK
@@ -2694,18 +2706,18 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.UpsertTradeDeskConfigPost'
-  /resetTradeDeskFromDefaults:
+          $ref: '#/definitions/node.UpsertHostYamlConfigPost'
+  /resetHostYamlFromDefaults:
     post:
-      description: 'Install or reset trade-desk.yaml from agent_llm_config.defaults/ (management-signed) Full detail: mpc-config
-        docs/references/API_IMPLEMENTATION.md (POST /resetTradeDeskFromDefaults).'
+      description: 'Install or reset host YAML from agent_llm_config.defaults/ and write applied-defaults sidecar (management-signed)
+        Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /resetHostYamlFromDefaults).'
       consumes:
       - application/json
       produces:
       - application/json
       tags:
       - Management API
-      summary: Install or reset trade-desk.yaml from agent_llm_config.defaults/ (management-signed)
+      summary: Install or reset host YAML from agent_llm_config.defaults/ and write applied-defaults sidecar (management-signed)
       responses:
         '200':
           description: OK
@@ -2716,23 +2728,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/node.ResetTradeDeskFromDefaultsPost'
-  /getCronTradeConfig:
-    get:
-      description: 'Get cron/trade-cron.yaml (runtime file or bundled defaults preview) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (GET /getCronTradeConfig).'
-      consumes:
-      - application/json
-      produces:
-      - application/json
-      tags:
-      - Management API
-      summary: Get cron/trade-cron.yaml (runtime file or bundled defaults preview)
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
+          $ref: '#/definitions/node.ResetHostYamlFromDefaultsPost'
   /getCronTradeAnalysisExample:
     get:
       description: 'Get bundled cron/trade_analysis_cron.example.md (read-only trade proposal cron message template) Full
@@ -2749,50 +2745,6 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/node.APIResponse'
-  /upsertCronTradeConfig:
-    post:
-      description: 'Write agent_llm_config/cron/trade-cron.yaml after YAML validation (management-signed) Full detail: mpc-config
-        docs/references/API_IMPLEMENTATION.md (POST /upsertCronTradeConfig).'
-      consumes:
-      - application/json
-      produces:
-      - application/json
-      tags:
-      - Management API
-      summary: Write agent_llm_config/cron/trade-cron.yaml after YAML validation (management-signed)
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/node.UpsertCronTradeConfigPost'
-  /resetCronTradeFromDefaults:
-    post:
-      description: 'Install or reset cron/trade-cron.yaml from agent_llm_config.defaults/cron/ (management-signed) Full detail:
-        mpc-config docs/references/API_IMPLEMENTATION.md (POST /resetCronTradeFromDefaults).'
-      consumes:
-      - application/json
-      produces:
-      - application/json
-      tags:
-      - Management API
-      summary: Install or reset cron/trade-cron.yaml from agent_llm_config.defaults/cron/ (management-signed)
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/node.ResetCronTradeFromDefaultsPost'
   /listCronJobs:
     get:
       description: 'List active cron jobs and available repository catalog (agent_llm_config.defaults/cron/jobs.json) Full
@@ -5469,46 +5421,6 @@ definitions:
         enabled:
           type: boolean
           description: Override catalog default enabled flag (optional)
-  node.UpsertTradeDeskConfigPost:
-    type: object
-    allOf:
-    - *id002
-    - type: object
-      required:
-      - content
-      description: 'POST /upsertTradeDeskConfig. Canonical JSON to sign: {"content":"<yaml>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
-        with clientSig cleared before signing. Validates YAML structure before write.'
-      properties:
-        content:
-          type: string
-          description: Full trade-desk.yaml body (version, universal, llmFallback, protocols)
-  node.ResetTradeDeskFromDefaultsPost:
-    type: object
-    allOf:
-    - *id002
-    - type: object
-      description: 'POST /resetTradeDeskFromDefaults. Canonical JSON to sign: {"nonce":N,"clientSig":"","nodeKey":"<128-hex>"}.
-        Copies agent_llm_config.defaults/trade-desk.yaml into agent_llm_config/trade-desk.yaml.'
-  node.UpsertCronTradeConfigPost:
-    type: object
-    allOf:
-    - *id002
-    - type: object
-      required:
-      - content
-      description: 'POST /upsertCronTradeConfig. Canonical JSON to sign: {"content":"<yaml>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
-        with clientSig cleared before signing. Validates YAML structure before write.'
-      properties:
-        content:
-          type: string
-          description: Full cron/trade-cron.yaml body (version, tradeConsensus, tradeBuild)
-  node.ResetCronTradeFromDefaultsPost:
-    type: object
-    allOf:
-    - *id002
-    - type: object
-      description: 'POST /resetCronTradeFromDefaults. Canonical JSON to sign: {"nonce":N,"clientSig":"","nodeKey":"<128-hex>"}.
-        Copies agent_llm_config.defaults/cron/trade-cron.yaml into agent_llm_config/cron/trade-cron.yaml.'
   node.TelegramNgrokSetEnabledPost:
     type: object
     allOf:
@@ -5624,3 +5536,82 @@ definitions:
         password:
           type: string
           description: 'Telegram two-factor password (required when prior response had needsPassword: true)'
+  node.HostYamlConfigDetail:
+    type: object
+    description: Host YAML config response (GET /getHostYamlConfig and POST upsert/reset).
+    properties:
+      kind:
+        type: string
+        enum:
+        - trade-desk
+        - orchestration-plan
+        - agent-intent-rules
+        - cron-trade
+      content:
+        type: string
+        description: Installed copy, or bundled preview when not configured
+      configured:
+        type: boolean
+      defaultContent:
+        type: string
+        description: Current bundled default YAML
+      defaultsUpdatedAt:
+        type: string
+        description: RFC3339 mtime of bundled defaults file
+      installedUpdatedAt:
+        type: string
+        description: RFC3339 mtime of installed file (when configured)
+      appliedDefaultsHash:
+        type: string
+        description: SHA-256 hex from sidecar {filename}.meta.json
+      appliedAt:
+        type: string
+        description: RFC3339 timestamp from sidecar
+      upgradeAvailable:
+        type: boolean
+        description: configured && appliedDefaultsHash != sha256(defaultContent)
+      userModified:
+        type: boolean
+        description: configured && sha256(content) != appliedDefaultsHash
+      path:
+        type: string
+      filename:
+        type: string
+  node.UpsertHostYamlConfigPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - kind
+      - content
+      description: 'POST /upsertHostYamlConfig. Canonical JSON to sign: {"kind":"<kind>","content":"<yaml>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
+        with clientSig cleared before signing. Validates YAML per kind; writes submitted bytes verbatim.'
+      properties:
+        kind:
+          type: string
+          enum:
+          - trade-desk
+          - orchestration-plan
+          - agent-intent-rules
+          - cron-trade
+        content:
+          type: string
+          description: Full host YAML file body
+  node.ResetHostYamlFromDefaultsPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - kind
+      description: 'POST /resetHostYamlFromDefaults. Canonical JSON to sign: {"kind":"<kind>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}.
+        Copies bundled default into agent_llm_config/ and writes {filename}.meta.json sidecar.'
+      properties:
+        kind:
+          type: string
+          enum:
+          - trade-desk
+          - orchestration-plan
+          - agent-intent-rules
+          - cron-trade

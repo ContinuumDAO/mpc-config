@@ -7,7 +7,7 @@ version: 1
 rules:
   - id: continuum_tool_discovery
     always: true
-    hint: >-
+    hint: |
       Continuum tools are named continuum__<tool_name> — always use that prefix for tools/call.
       If a tool you need isn't listed yet, call continuum__search_continuum_tools with your query,
       then continuum__activate_tool_group on the returned group id; the host expands LLM tools from
@@ -20,7 +20,7 @@ rules:
 
   - id: third_party_market_data_consent
     always: true
-    hint: >-
+    hint: |
       Never auto-load market-data MCP servers (coingecko, coingecko-pro, coinbase, coinmarketcap,
       coinmarketcap-public, binance, etc.) without asking the operator first. Prefer
       agent_load_mcp_server after they name a source. DeFi OHLCV on Continuum uses
@@ -38,7 +38,7 @@ rules:
         - analysis menu
         - analysis catalog
     boostGroups: [chart:core]
-    hint: >-
+    hint: |
       Operator asked for the analysis catalog; prefer list_chart_analysis_options when OHLCV is
       bound in this conversation, then wait for a menu pick (host emits analysis_menu SSE).
       Do not activate chart:analyze or run every analyze_* tool.
@@ -53,7 +53,7 @@ rules:
         - which indicators
         - list indicators
     boostGroups: [chart:core]
-    hint: >-
+    hint: |
       Operator asked for chart customization/indicator options; prefer list_chart_customization_options
       then apply_chart_drawings on the existing prepareReplay.
     modes: [interactive, cron]
@@ -81,7 +81,7 @@ rules:
         - draw chart
         - prepare_chart
     boostGroups: [chart:core]
-    hint: >-
+    hint: |
       Operator asked to chart/plot/render OHLCV. In this same turn: run the provider fetch_ohlcv
       tool, then continuum__prepare_chart_from_rows with the full fetch as toolResult or
       { title, ohlcvDigest }. Do not call search_continuum_tools or list_tool_groups unless
@@ -110,7 +110,7 @@ rules:
         - remove donchian
         - remove supertrend
     boostGroups: [chart:core]
-    hint: >-
+    hint: |
       Operator asked to add/remove a common indicator; use apply_chart_drawings on the bound chart session
       (do not prepare a fresh chart unless none exists).
     modes: [interactive, cron]
@@ -128,7 +128,7 @@ rules:
         - compose import
         - run-latest
     boostGroups: [mpc_compose]
-    hint: >-
+    hint: |
       Foundry / Compose import: if foundry__* tools are absent, say once that Foundry MCP is not
       loaded and continue with native forge in user_folder. Dry-run with --rpc-url and --sender =
       KeyGen ethereumaddress; no --broadcast. Call continuum__import_forge_dry_run_multi_sign_request
@@ -146,7 +146,7 @@ rules:
         - more headlines
         - show more headlines
         - fetch more headlines
-    hint: >-
+    hint: |
       Follow-up: the operator wants more RSS headlines from the prior fetch in this thread.
       Re-call the RSS tool already used (world-affairs__get_world_affairs_latest or
       business-latest__get_business_latest) with limit: 25 (max). Keep the same sourceId if
@@ -166,7 +166,7 @@ rules:
         - under skills/
         - scripts/
     boostGroups: [agent_workspace]
-    hint: >-
+    hint: |
       Interactive workspace: write scripts under skills/<name>/scripts/ or scripts/; document in the skill
       body or scripts/README.md. Run with agent_bash cwd set to the subtree (skills/, scripts/, data/, …).
     modes: [interactive, cron]
@@ -181,7 +181,7 @@ rules:
         - under evm/
         - evm/src
     boostGroups: [mpc_compose]
-    hint: >-
+    hint: |
       Foundry/Solidity work belongs under evm/ (foundry.toml seeded). Run forge with cwd: evm/.
       Dry-run imports via continuum__import_forge_dry_run_multi_sign_request — no --broadcast.
     modes: [interactive, cron]
@@ -195,7 +195,7 @@ rules:
         - signature credits
         - out of credit
         - free signatures
-    hint: >-
+    hint: |
       Operator asked about remaining signature/free credits. Answer from node/keygen status
       tools already available (e.g. get_mpa_wallet_status). Do not spawn research or write tools.
     modes: [interactive, cron]
@@ -208,7 +208,7 @@ rules:
         - analysis #
         - do analysis #
     boostGroups: [chart:core]
-    hint: >-
+    hint: |
       Operator picked an analysis menu number. The host auto-runs that analyze_* tool on the
       bound OHLCV session. Do not search or activate extra packs; do not re-list the catalog
       unless the pick failed.
@@ -223,7 +223,7 @@ rules:
         - list database backups
         - show backups
     boostGroups: [node_database:backup]
-    hint: >-
+    hint: |
       Read-only backup listing: call list_database_backups. Do not restore, delete keys, or
       upload/download unless the operator explicitly asked.
     modes: [interactive, cron]
@@ -237,7 +237,7 @@ rules:
         - is the node online
         - connectivity health
     boostGroups: [node_info]
-    hint: >-
+    hint: |
       Operator asked whether the node is up. Prefer get_health / get_connectivity_health / node_id.
       Do not start backup, restore, or research.
     modes: [interactive, cron]
@@ -251,7 +251,7 @@ rules:
         - awaiting join
         - signs awaiting join
     boostGroups: [mpc_read]
-    hint: >-
+    hint: |
       Read-only MultiSign listing: list_sign_requests or list_sign_requests_awaiting_join.
       Do not agree, trigger, or broadcast unless the operator explicitly asked.
     modes: [interactive, cron]
@@ -265,7 +265,7 @@ rules:
         - what is my keygen
         - my preferred keygen
     boostGroups: [keygen]
-    hint: >-
+    hint: |
       Operator asked for the preferred KeyGen. Call get_preferred_key_gen. Do not create or
       accept a new keygen request unless they asked.
     modes: [interactive, cron]
@@ -279,7 +279,7 @@ rules:
         - clear drawings
         - remove all overlays
     boostGroups: [chart:core, chart:drawings]
-    hint: >-
+    hint: |
       Operator asked to clear chart overlays. Use apply_chart_drawings / remove-drawing tools on
       the bound prepareReplay. Do not fetch new OHLCV or prepare a fresh chart.
     modes: [interactive, cron]
@@ -294,7 +294,7 @@ rules:
         - move files under data
         - sort exports
     boostGroups: [agent_workspace]
-    hint: >-
+    hint: |
       Data organization uses user_folder/data/ subtrees. Use agent_ls/agent_glob to inspect, then
       agent_bash with cwd: data/… for moves/transforms. Do not write loose files at user_folder root.
     modes: [interactive, cron]
@@ -306,7 +306,7 @@ rules:
         - "transaction hash"
         - "tx hash"
         - "block explorer"
-    hint: >-
+    hint: |
       Explorer lookup without a clear host in the message: resolve chain first (URL hostname,
       chain name or chainId from the node registry, or ask the operator). Etherscan-family explorers
       (etherscan.io, basescan, arbiscan, polygonscan, …) → agent_load_mcp_server etherscan
@@ -332,7 +332,7 @@ rules:
         - "snowtrace"
         - "ftmscan"
         - "mantlescan"
-    hint: >-
+    hint: |
       Block explorer / on-chain transaction on Etherscan-family explorers (etherscan.io, basescan,
       arbiscan, polygonscan, bscscan, lineascan, snowtrace, …): use Etherscan MCP (official
       https://mcp.etherscan.io/mcp; needs ETHERSCAN_API_KEY). One key covers all Etherscan-compatible
@@ -363,7 +363,7 @@ rules:
         - "robinhoodchain.blockscout"
         - "worldchain.blockscout"
         - "lightlink.blockscout"
-    hint: >-
+    hint: |
       Block explorer / on-chain data on Blockscout-hosted chains: use Blockscout MCP (official
       https://mcp.blockscout.com/mcp; needs BLOCKSCOUT_PRO_API_KEY). One PRO API key covers all
       eligible Blockscout PRO gateway chains — call get_chains_list (narrow query by chain name or
@@ -382,7 +382,7 @@ rules:
         - dune query
         - on-chain analytics
         - sql analytics
-    hint: >-
+    hint: |
       On-chain analytics via Dune MCP: agent_load_mcp_server dune (needs DUNE_API_KEY). Do not scrape
       dune.com with agent_fetch_url. Continuum DeFi protocol tools are not a substitute for Dune SQL.
     modes: [interactive, cron]
@@ -396,7 +396,7 @@ rules:
         - binance klines
         - fetch ohlcv
         - load candles
-    hint: >-
+    hint: |
       Market-data OHLCV: ask which catalog MCP or Continuum DeFi protocol to use if none is loaded.
       Do not pick CoinGecko / CoinMarketCap / Coinbase / Binance by default. After the operator
       chooses, agent_load_mcp_server (or continuum__load_defi_protocol) then that provider's fetch tool.

@@ -20,7 +20,7 @@ Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent
 These are **not** agent Skills. mpc-auth loads them at plan/trade/turn time (mtime-aware cache). Ops model:
 
 1. **One-time:** upgrade mpc-auth so the node understands the YAML schema + management APIs.
-2. **Ongoing:** edit the file under **`agent_llm_config.defaults/`**, `git pull` on the node, then **reset-from-defaults** in the UI (or `POST /resetOrchestrationPlanFromDefaults` / `/resetTradeDeskFromDefaults` / `/resetAgentIntentRulesFromDefaults`) to overwrite the runtime copy. Or edit runtime YAML via upsert APIs / UI editor.
+2. **Ongoing:** edit the file under **`agent_llm_config.defaults/`**, `git pull` on the node, then **reset-from-defaults** in the UI (or **`POST /resetHostYamlFromDefaults`** with the matching **`kind`**) to overwrite the runtime copy. Or edit runtime YAML via **`POST /upsertHostYamlConfig`** / UI editor.
 
 If YAML is missing or invalid, the node falls back to an empty embedded stub (no product rules) and logs a warning. Keep this file current — it is the policy source of truth.
 | **`cron/jobs.json`** | Not copied to runtime | **Repository catalog** of cron job templates. Use **Available from repository** in the UI or `POST /addCronJobFromCatalog`. Active jobs live in **`agent_llm_config/cron/jobs.json`**. |

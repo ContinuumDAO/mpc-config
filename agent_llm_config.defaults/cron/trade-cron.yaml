@@ -3,7 +3,7 @@
 # Applied on every cron turn when the job message does NOT embed fenced
 # `tradeConsensus:` / `tradeBuild:` YAML blocks (message blocks override this file).
 # Edit on the node under agent_llm_config/cron/trade-cron.yaml (Cron tab → Trade cron,
-# or POST /upsertCronTradeConfig).
+# or POST /upsertHostYamlConfig kind=cron-trade).
 #
 # Related config (not duplicated here):
 #   • trade-desk.yaml — entryProximity*, offsets, Donchian/Z-score/Fib knobs for analyze_* and Build Trade
