@@ -164,7 +164,7 @@ def main() -> int:
     if raw_s and existing_hex is None:
         print(
             "bootstrap_key_provision: PublicMgtKey is not 64 hex; "
-            "convert OpenSSH to hex first (tools/openssh_ed25519_to_hex.py). Skipping deterministic sync.",
+            "convert OpenSSH to hex first (tools/ed25519_public_to_hex.py). Skipping deterministic sync.",
             file=sys.stderr,
         )
         return 0

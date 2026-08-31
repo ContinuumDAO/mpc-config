@@ -109,6 +109,8 @@ For **KeyGen messaging** (`POST /sendMessage`, `POST /markMessageRead`, …), th
 | Tool | Path | Use |
 |------|------|-----|
 | **`sign-clipboard`** | **`tools/sign-clipboard`** (see **`README.md`** there) | Sign the **exact** UTF-8 string the API expects. For automation, use **`--inline`** or **`--inline-file`** (not clipboard) so the signed bytes match the **`POST`** body or **`messageToSign`**. |
+| **`ed25519_public_to_hex.py`** | **`tools/ed25519_public_to_hex.py`** | OpenSSH `.pub` line or base64 blob → **64-hex** public key (**PublicMgtKey**). |
+| **`ed25519_private_to_hex.py`** | **`tools/ed25519_private_to_hex.py`** | Private key file → **64-hex** private seed (bootstrap **`ed25519_private.hex`**). Requires **cryptography**. |
 | **`ed25519_private_to_pubkey_hex.py`** | **`tools/ed25519_private_to_pubkey_hex.py`** | Derive **64-hex** public key from a private key file to **match** **`getAllowedEd25519MgtKeys`**. |
 | **`check_ed25519_mgt_keygen.py`** | **`tools/check_ed25519_mgt_keygen.py`** | Given **`--seed-hex`** or **`--key-file`**, derive the Ed25519 **64-hex** pubkey and check **`GET /getAllowedEd25519MgtKeys`** and **`GET /getKeyGenResultById` → `ClientKeys`** (exit **0** only if the key appears in **both**). Use when debugging **`client sig is not valid`** on **`POST /multiSignRequest`** (see **§8**). Requires **PyNaCl**; **`--key-file`** needs **cryptography**. |
 

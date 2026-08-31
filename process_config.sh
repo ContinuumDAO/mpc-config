@@ -2963,9 +2963,9 @@ normalize_openssh_public_mgt_key_in_yaml() {
     if ! command -v python3 &> /dev/null; then
         return 0
     fi
-    local ossh_to_hex="${REPO_ROOT}/tools/openssh_ed25519_to_hex.py"
+    local ossh_to_hex="${REPO_ROOT}/tools/ed25519_public_to_hex.py"
     if [ ! -f "$ossh_to_hex" ]; then
-        ossh_to_hex="${SCRIPT_DIR}/tools/openssh_ed25519_to_hex.py"
+        ossh_to_hex="${SCRIPT_DIR}/tools/ed25519_public_to_hex.py"
     fi
     if [ ! -f "$ossh_to_hex" ]; then
         return 0
@@ -3039,7 +3039,7 @@ proc = subprocess.run(
     capture_output=True,
 )
 if proc.returncode != 0:
-    err = (proc.stderr or proc.stdout or "openssh_ed25519_to_hex.py failed").strip()
+    err = (proc.stderr or proc.stdout or "ed25519_public_to_hex.py failed").strip()
     if strict_openssh:
         sys.stderr.write(err + "\n")
         sys.exit(1)
@@ -3245,9 +3245,9 @@ print('0x' + low)
         print_info "Enter: (1) 64 hex (32-byte public key), or (2) full OpenSSH line (ssh-ed25519 AAAA... [comment]), or (3) the base64 blob only from that line (no type prefix / comment). Press Enter to skip if you use NodeMgtKey only."
         echo ""
         local pk_in norm_pk ec ossh_to_hex
-        ossh_to_hex="${REPO_ROOT}/tools/openssh_ed25519_to_hex.py"
+        ossh_to_hex="${REPO_ROOT}/tools/ed25519_public_to_hex.py"
         if [ ! -f "$ossh_to_hex" ]; then
-            ossh_to_hex="${SCRIPT_DIR}/tools/openssh_ed25519_to_hex.py"
+            ossh_to_hex="${SCRIPT_DIR}/tools/ed25519_public_to_hex.py"
         fi
         while true; do
             read -r -p "Ed25519 public key (64 hex, ssh-ed25519 line, or base64 blob, or Enter to skip): " pk_in < /dev/tty || true
@@ -3258,7 +3258,7 @@ print('0x' + low)
             fi
             ec=0
             norm_pk=""
-            # OpenSSH full line or base64-only middle field -> 64 hex (tools/openssh_ed25519_to_hex.py).
+            # OpenSSH full line or base64-only middle field -> 64 hex (tools/ed25519_public_to_hex.py).
             if [ -f "$ossh_to_hex" ]; then
                 norm_pk=$(printf '%s\n' "$pk_in" | python3 "$ossh_to_hex" 2>/dev/null) || ec=$?
                 if [ "$ec" -eq 0 ] && [ -n "$norm_pk" ]; then
@@ -3289,7 +3289,7 @@ print(s.lower())
                 continue
             fi
             if [ "$ec" -ne 0 ] || [ -z "$norm_pk" ]; then
-                print_error "Invalid input: use 64 hex (public key), or ssh-ed25519 <base64> [comment], or the base64 key blob alone (tools/openssh_ed25519_to_hex.py)."
+                print_error "Invalid input: use 64 hex (public key), or ssh-ed25519 <base64> [comment], or the base64 key blob alone (tools/ed25519_public_to_hex.py)."
                 continue
             fi
             set_pub="$norm_pk"
@@ -6099,9 +6099,9 @@ show_process_config_help() {
     echo ""
     echo "This script validates configuration and generates certificates."
     echo ""
-    echo "If PublicMgtKey in configs.yaml is an ssh-ed25519 line or OpenSSH base64 blob, it is rewritten to 64 hex (tools/openssh_ed25519_to_hex.py)."
+    echo "If PublicMgtKey in configs.yaml is an ssh-ed25519 line or OpenSSH base64 blob, it is rewritten to 64 hex (tools/ed25519_public_to_hex.py)."
     echo "If NodeMgtKey or PublicMgtKey is empty, the script prompts first (interactive TTY): Ethereum wallet / NodeMgtKey"
-    echo "and/or Ed25519 public key (64 hex, ssh-ed25519 line, or base64 blob; tools/openssh_ed25519_to_hex.py)."
+    echo "and/or Ed25519 public key (64 hex, ssh-ed25519 line, or base64 blob; tools/ed25519_public_to_hex.py)."
     echo "tools/bootstrap_key_provision.py runs for every configs.yaml:"
     echo "  - PublicMgtKey empty: creates bootstrap_key/ed25519_private.hex (0600), sets PublicMgtKey + DeterministicNodeKey."
     echo "  - PublicMgtKey preset (reinstall): if bootstrap_key/ed25519_private.hex exists and matches, sets DeterministicNodeKey."

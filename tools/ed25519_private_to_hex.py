@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-Derive the raw Ed25519 public key (64 lowercase hex) from a private key file.
-Use the same value for mpc-auth PublicMgtKey as you would from *.pub via
-ed25519_public_to_hex.py.
+Convert an Ed25519 private key file to 64 lowercase hex (32-byte seed).
+
+Same value as bootstrap_key/ed25519_private.hex written by bootstrap_key_provision.py.
 
 Supports common formats:
   - OpenSSH (ssh-keygen): -----BEGIN OPENSSH PRIVATE KEY-----
   - PEM PKCS#8: openssl genpkey -algorithm ED25519
-  - Raw hex seed (UTF-8 text): 64 hex chars (32-byte seed), same as bootstrap_key/ed25519_private.hex;
-    or 128 hex chars (64-byte expanded secret; first 32 bytes used as seed), matching bootstrap_key_provision.py.
+  - Raw hex seed (UTF-8 text): 64 hex chars (32-byte seed), or 128 hex chars
+    (64-byte expanded secret; first 32 bytes used as seed).
 
-Requires: cryptography (see ``tools/requirements-ed25519-tools.txt``).
+Requires: cryptography (see tools/requirements-ed25519-tools.txt).
 
-  python3 tools/ed25519_private_to_pubkey_hex.py ~/.ssh/mpc_auth_ed25519
-  python3 tools/ed25519_private_to_pubkey_hex.py key.pem --passphrase secret
+  python3 tools/ed25519_private_to_hex.py ~/.ssh/mpc_auth_ed25519
+  python3 tools/ed25519_private_to_hex.py key.pem --prompt
+
+To derive the matching public key hex (PublicMgtKey), use tools/ed25519_private_to_pubkey_hex.py.
 """
 
 from __future__ import annotations
@@ -27,7 +29,8 @@ try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives.serialization import (
         Encoding,
-        PublicFormat,
+        NoEncryption,
+        PrivateFormat,
         load_pem_private_key,
         load_ssh_private_key,
     )
@@ -84,20 +87,26 @@ def load_ed25519_private_key(data: bytes, password: bytes | None) -> Ed25519Priv
     raise ValueError(msg)
 
 
-def private_key_to_pubkey_hex(data: bytes, password: bytes | None) -> str:
+def ed25519_private_to_hex(data: bytes, password: bytes | None) -> str:
     key = load_ed25519_private_key(data, password=password)
-    raw = key.public_key().public_bytes(
+    raw = key.private_bytes(
         encoding=Encoding.Raw,
-        format=PublicFormat.Raw,
+        format=PrivateFormat.Raw,
+        encryption_algorithm=NoEncryption(),
     )
     if len(raw) != 32:
-        raise ValueError(f"expected 32-byte public key, got {len(raw)}")
+        raise ValueError(f"expected 32-byte private seed, got {len(raw)}")
     return raw.hex()
+
+
+def _looks_encrypted(data: bytes) -> bool:
+    text = data.decode("utf-8", errors="ignore")
+    return "ENCRYPTED" in text.upper()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Ed25519 private key file -> 64 hex public key (PublicMgtKey)."
+        description="Ed25519 private key file -> 64 hex private seed (bootstrap_key/ed25519_private.hex)."
     )
     parser.add_argument(
         "path",
@@ -130,7 +139,7 @@ def main() -> None:
 
     data = path.read_bytes()
     try:
-        print(private_key_to_pubkey_hex(data, password=password))
+        print(ed25519_private_to_hex(data, password=password))
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         if password is None and _looks_encrypted(data):
@@ -139,11 +148,6 @@ def main() -> None:
                 file=sys.stderr,
             )
         sys.exit(1)
-
-
-def _looks_encrypted(data: bytes) -> bool:
-    text = data.decode("utf-8", errors="ignore")
-    return "ENCRYPTED" in text.upper()
 
 
 if __name__ == "__main__":

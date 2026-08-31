@@ -103,7 +103,8 @@ Operators set preferred via **`POST /setPreferredSigner`** or the node app (**No
 
 | Tool | Purpose |
 |------|---------|
-| `$MPA_PATH/tools/openssh_ed25519_to_hex.py` | OpenSSH `.pub` / line → 64 hex public key |
+| `$MPA_PATH/tools/ed25519_public_to_hex.py` | OpenSSH `.pub` / line → 64 hex public key |
+| `$MPA_PATH/tools/ed25519_private_to_hex.py` | Private PEM / OpenSSH / seed hex → 64 hex private seed (`cryptography` in `$MPA_PATH/.venv`) |
 | `$MPA_PATH/tools/ed25519_private_to_pubkey_hex.py` | Private PEM / OpenSSH / seed hex → 64 hex public (`cryptography` in `$MPA_PATH/.venv`) |
 | `$MPA_PATH/tools/sign-clipboard` | Human clipboard signing helper |
 | `$MPA_PATH/tools/check_ed25519_mgt_keygen.py` | Match private key against allow-list and KeyGen `ClientKeys` |
