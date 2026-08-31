@@ -88,12 +88,12 @@ UFW_OPEN_MANAGEMENT_PORT="${UFW_OPEN_MANAGEMENT_PORT:-0}"
 NODE_MGT_ETH_PLACEHOLDER="0x1234567890abcdef1234567890abcdef12345678"
 
 # Default relayer HTTP base (pre-signing verification). Used when PreSigningVerification is set but RelayerAPIURL is empty.
-DEFAULT_RELAYER_API_URL="http://82.208.20.136:8080"
+DEFAULT_RELAYER_API_URL="https://relayer.continuumdao.org"
 
-# UFW + configs.yaml: used when ScannerAPIURLs is [] / missing (same host as default relayer unless you override).
+# UFW + configs.yaml: used when ScannerAPIURLs is [] / missing.
 # Full URLs are fine; :port is ignored for firewall (only host/IP/CIDR matter—same as RelayerAPIURL).
 DEFAULT_SCANNER_API_URLS=(
-    "http://82.208.20.136:8080"
+    "https://scanner1.continuumdao.org"
 )
 
 # Agent LLM settings directory beside configs.yaml (bind-mounted ./agent_llm_config; see API_IMPLEMENTATION.md).
