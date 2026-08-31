@@ -46,7 +46,7 @@ The extension **backend image is UI-only** (no baked `/mpc-config`, no `docker.s
 After the image is published or built locally:
 
 ```bash
-docker extension install continuumdao/continuum-node-installer:0.1.18
+docker extension install continuumdao/continuum-node-installer:0.1.19
 ```
 
 Open **Docker Desktop → Extensions → Continuum Node** and complete the wizard.
@@ -65,7 +65,7 @@ Bump `EXT_TAG` for each release and keep it in sync across:
 
 ```bash
 # From mpc-config repo root
-export EXT_TAG=0.1.18
+export EXT_TAG=0.1.19
 
 cd docker-extension/ui && npm ci && npm run build && cd ../..
 
@@ -92,8 +92,8 @@ From the **mpc-config repo root**:
 
 ```bash
 cd docker-extension/ui && npm ci && npm run build && cd ../..
-docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.18 .
-docker extension install continuumdao/continuum-node-installer:0.1.18   # requires Docker Desktop on host
+docker build -f docker-extension/Dockerfile -t continuumdao/continuum-node-installer:0.1.19 .
+docker extension install continuumdao/continuum-node-installer:0.1.19   # requires Docker Desktop on host
 ```
 
 Push to Docker Hub (multi-arch recommended for Windows):
@@ -101,7 +101,7 @@ Push to Docker Hub (multi-arch recommended for Windows):
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
   -f docker-extension/Dockerfile \
-  -t continuumdao/continuum-node-installer:0.1.18 \
+  -t continuumdao/continuum-node-installer:0.1.19 \
   --push .
 ```
 

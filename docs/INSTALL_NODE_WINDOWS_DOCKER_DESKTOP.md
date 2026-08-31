@@ -108,7 +108,7 @@ The extension install path may run `sudo` steps inside WSL. Configure **password
 In WSL, **as your regular user** (not root), install the extension image so Docker Desktop can load it:
 
 ```bash
-docker extension install continuumdao/continuum-node-installer:0.1.17
+docker extension install continuumdao/continuum-node-installer:0.1.19
 ```
 
 Ensure Docker Desktop is running before you run this command.
