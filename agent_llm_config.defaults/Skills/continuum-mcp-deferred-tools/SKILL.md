@@ -44,6 +44,7 @@ DeFi tools are **already registered** on the **continuum** MCP server. They are 
 |---------------|-------|-------|
 | “Load Hyperliquid”, “use HL”, “Hyperliquid OHLCV” | **`agent_load_mcp_server({ "serverId": "hyperliquid" })`** → *not configured* | **`continuum__load_defi_protocol({ "protocolId": "hyperliquid" })`** → **`continuum__ctm_hyperliquid_*`** |
 | “Load Arcus”, “Robinhood Chain perps”, “Arcus OHLCV” | **`agent_load_mcp_server({ "serverId": "arcus" })`** → *not configured* | **`continuum__load_defi_protocol({ "protocolId": "arcus" })`** → **`continuum__ctm_arcus_*`** / **`continuum__ctm_arcus_spot_*`** (chain **4663**) |
+| “Pendle”, “PT/YT”, “yield tokenization”, “Pendle markets” | Grep **`agent_llm_config/Skills/`** or assume unsupported | **`continuum__list_defi_protocols`** or **`continuum__search_continuum_tools`** `q: "pendle"`, then **`continuum__load_defi_protocol({ "protocolId": "pendle" })`** → **`continuum__ctm_pendle_*`** |
 | “Load the DeFi protocol hyperliquid” | Ask for RPC/wallet before fetch/chart | **`continuum__load_defi_protocol`** only; wallet only for multisign **orders** |
 
 Workflow:
@@ -54,6 +55,8 @@ Workflow:
 4. **`continuum__unload_defi_protocol`** when finished with that protocol (optional).
 
 For OHLCV charts after fetch, see skill **`chart-ohlcv-sources`** and **`chart-periods`**.
+
+**Protocol support questions** (“what DeFi protocols do you support?”, “do you have Pendle?”): call **`continuum__list_defi_protocols`** — do not infer from operator **`Skills/`** files (protocol packs live in **`ctm-mpc-defi`**, not **`agent_llm_config/Skills/`**). Optional: **`continuum__search_continuum_docs`** for operator-facing capability tables.
 
 ## Optional catalog MCP servers (CoinMarketCap, CoinGecko, …)
 
