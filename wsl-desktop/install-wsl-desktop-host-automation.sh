@@ -17,7 +17,8 @@ Usage:
   bash wsl-desktop/install-wsl-desktop-host-automation.sh --repo-dir PATH
 
 Installs libexec copies, repo-local mpc-auth-docker.env, /var/lib/mpc-auth-docker,
-and starts the pending-update + pending-vpn + pending-telegram-ngrok watcher.
+starts the pending-update + pending-vpn + pending-telegram-ngrok watcher, writes a
+WSL [boot] command, and registers Windows Scheduled Tasks (logon + 5-minute poll).
 EOF
 }
 
@@ -160,6 +161,16 @@ chmod +x "${WSL_ROOT}"/*.sh 2>/dev/null || true
 
 log "Starting pending-update watcher"
 bash "${WSL_ROOT}/start-watcher.sh"
+
+log "Installing WSL [boot] command for watcher autostart"
+if ! bash "${WSL_ROOT}/install-wsl-boot-command.sh"; then
+	warn "wsl.conf [boot] command not set — watcher will not start on WSL boot until this succeeds"
+fi
+
+log "Registering Windows Scheduled Tasks (logon + 5-minute poll)"
+if ! bash "${WSL_ROOT}/register-windows-scheduled-task.sh"; then
+	warn "Scheduled Task registration skipped or failed — Docker extension also registers ContinuumNodeMpcAuthWatcher after install"
+fi
 
 log "WSL desktop host automation ready."
 log "  status: ${WSL_ROOT}/status-watcher.sh"

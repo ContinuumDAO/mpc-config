@@ -38,6 +38,7 @@ COPY docker-extension/continuum-icon.svg /continuum-icon.svg
 COPY docker-extension/host/windows/continuum-wsl.cmd /host/windows/continuum-wsl.cmd
 COPY docker-extension/host/windows/preflight-windows.ps1 /host/windows/preflight-windows.ps1
 COPY docker-extension/host/windows/continuum-register-watcher.cmd /host/windows/continuum-register-watcher.cmd
+COPY docker-extension/host/windows/register-windows-scheduled-task.ps1 /host/windows/register-windows-scheduled-task.ps1
 COPY docker-extension/host/linux/continuum-linux.sh /host/linux/continuum-linux.sh
 COPY docker-extension/host/linux/continuum-orchestrate.sh /host/linux/continuum-orchestrate.sh
 RUN chmod +x /host/linux/continuum-linux.sh /host/linux/continuum-orchestrate.sh

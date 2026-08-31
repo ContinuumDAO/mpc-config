@@ -57,22 +57,26 @@ apply_once() {
 	fi
 }
 
+apply_all() {
+	apply_once
+	apply_vpn_once
+	apply_telegram_ngrok_once
+}
+
 log "Continuum mpc-auth WSL pending watcher started (poll=${POLL_SECS}s, update=${pending}, vpn=${vpn_pending}, telegram-ngrok=${ngrok_pending})"
 
+# Always poll so Docker Desktop bind-mount events that miss inotify still apply.
+# inotifywait -t wakes early on close_write/create; timeout falls through to poll.
 if command -v inotifywait >/dev/null 2>&1; then
-	log "using inotifywait on ${pending_dir}"
+	log "using inotifywait + ${POLL_SECS}s poll on ${pending_dir}"
 	while true; do
-		inotifywait -q -e close_write,moved_to,create "${pending_dir}" 2>/dev/null || sleep "$POLL_SECS"
-		apply_once
-		apply_vpn_once
-		apply_telegram_ngrok_once
+		inotifywait -q -t "$POLL_SECS" -e close_write,moved_to,create "${pending_dir}" 2>/dev/null || true
+		apply_all
 	done
 else
 	log "inotifywait not found — polling every ${POLL_SECS}s (optional: sudo apt install inotify-tools)"
 	while true; do
-		apply_once
-		apply_vpn_once
-		apply_telegram_ngrok_once
+		apply_all
 		sleep "$POLL_SECS"
 	done
 fi

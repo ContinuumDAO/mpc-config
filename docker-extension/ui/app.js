@@ -27,7 +27,7 @@ const PREFLIGHT_EXIT = {
   CONFIG_FAILED: 13,
 }
 
-/** Registers Windows logon Scheduled Task for WSL pending-update watcher. */
+/** Registers Windows logon + 5-minute Scheduled Tasks for WSL pending-update watcher. */
 const REGISTER_WATCHER_HOST_WRAPPER = 'continuum-register-watcher.cmd'
 
 /** Shipped host binary (metadata.json host.binaries) — Linux host PATH delegate. */
@@ -1167,7 +1167,7 @@ function initExtensionUi() {
       resultPanel.hidden = false
       if (result?.code === 0) {
         if (useWsl && wslDistro) {
-          appendLog(logOutput, `\nRegistering Windows logon task for WSL pending-update watcher (${REGISTER_WATCHER_HOST_WRAPPER})…\n`)
+          appendLog(logOutput, `\nRegistering Windows logon + 5-minute tasks for WSL pending-update watcher (${REGISTER_WATCHER_HOST_WRAPPER})…\n`)
           try {
             const reg = await execHostSimple(cli, REGISTER_WATCHER_HOST_WRAPPER, [wslDistro])
             const regOut = combinedExecOutput(reg.result)
@@ -1175,13 +1175,13 @@ function initExtensionUi() {
             if (!reg.ok || !execSucceeded(reg.result)) {
               appendLog(
                 logOutput,
-                `warning: logon task registration failed — run manually in WSL: ~/mpc-config/wsl-desktop/start-watcher.sh\n`,
+                `warning: Scheduled Task registration failed — run manually in WSL: ~/mpc-config/wsl-desktop/start-watcher.sh\n`,
               )
             }
           } catch (regErr) {
             appendLog(
               logOutput,
-              `warning: could not register logon task (${regErr instanceof Error ? regErr.message : String(regErr)}). Start watcher manually: ~/mpc-config/wsl-desktop/start-watcher.sh\n`,
+              `warning: could not register Scheduled Tasks (${regErr instanceof Error ? regErr.message : String(regErr)}). Start watcher manually: ~/mpc-config/wsl-desktop/start-watcher.sh\n`,
             )
           }
         } else if (hostOs === HOST_OS.MACOS) {

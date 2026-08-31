@@ -199,9 +199,9 @@ Back up **`~/mpc-config/bootstrap_key/`** in WSL if the install generated new ke
 ## Windows-specific maintenance (optional)
 
 - **Config and compose**: `~/mpc-config` in WSL (`docker compose` commands run from that directory).
-- **Pending watcher**: after extension install, a Windows logon task may run `~/mpc-config/wsl-desktop/start-watcher.sh`. It applies **pending-update.json**, **pending-vpn.json**, and **pending-telegram-ngrok.json**. Status: `~/mpc-config/wsl-desktop/status-watcher.sh`.
+- **Pending watcher**: install writes a WSL `[boot] command` and registers Windows Scheduled Tasks (`ContinuumNodeMpcAuthWatcher` at logon, `ContinuumNodeMpcAuthWatcherPoll` every 5 minutes) that run `~/mpc-config/wsl-desktop/start-watcher.sh`. It applies **pending-update.json**, **pending-vpn.json**, and **pending-telegram-ngrok.json**. Status: `~/mpc-config/wsl-desktop/status-watcher.sh`. Log: `~/mpc-config/wsl-desktop/watcher.log`.
 - **Telegram ngrok**: from the node app AI Agent → Webhooks panel (after Variables include `NGROK_AUTHTOKEN`); the watcher starts sidecar **`mpc-auth-telegram-ngrok`** on the `app` network. Manual fallback: [`TELEGRAM_WEBHOOK_NGROK.md`](./TELEGRAM_WEBHOOK_NGROK.md).
-- **Manual restart**: `cd ~/mpc-config && docker compose restart app`
+- **Manual restart** (from WSL, not PowerShell): `cd ~/mpc-config && docker compose restart app`
 
 Details: [`docker-extension/README.md`](../docker-extension/README.md).
 

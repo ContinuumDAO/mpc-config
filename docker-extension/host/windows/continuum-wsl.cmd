@@ -10,11 +10,27 @@ set "_WSL=%SystemRoot%\System32\wsl.exe"
 if not exist "%_WSL%" set "_WSL=wsl.exe"
 set "_HOSTDIR=%~dp0"
 set "_PREFLIGHT=%_HOSTDIR%preflight-windows.ps1"
+set "_REGISTER_CMD=%_HOSTDIR%continuum-register-watcher.cmd"
+set "_REGISTER_PS1=%_HOSTDIR%register-windows-scheduled-task.ps1"
 
 rem Explicit preflight (optional): continuum-wsl.cmd preflight -WslDistro Ubuntu-24.04
 if /I "%~1"=="preflight" (
   shift
   call :RunPreflight %*
+  exit /b !ERRORLEVEL!
+)
+
+rem Start WSL pending-update watcher: continuum-wsl.cmd start-watcher -WslDistro Ubuntu-24.04
+if /I "%~1"=="start-watcher" (
+  shift
+  call :StartWatcher %*
+  exit /b !ERRORLEVEL!
+)
+
+rem Register logon + 5-minute Scheduled Tasks: continuum-wsl.cmd register-watcher -WslDistro Ubuntu-24.04
+if /I "%~1"=="register-watcher" (
+  shift
+  call :RegisterWatcher %*
   exit /b !ERRORLEVEL!
 )
 
@@ -49,6 +65,45 @@ for %%A in (%*) do (
   if /I "%%~A"=="-d" set "_WANT=1"
 )
 goto :eof
+
+:ParseWslDistroArg
+set "_DISTRO="
+set "_WANT="
+for %%A in (%*) do (
+  if defined _WANT (
+    set "_DISTRO=%%~A"
+    set "_WANT="
+    goto :eof
+  )
+  if /I "%%~A"=="-WslDistro" set "_WANT=1"
+)
+goto :eof
+
+:StartWatcher
+call :ParseWslDistroArg %*
+if defined _DISTRO (
+  "%_WSL%" -d !_DISTRO! -- bash -lc "~/mpc-config/wsl-desktop/start-watcher.sh"
+) else (
+  "%_WSL%" -- bash -lc "~/mpc-config/wsl-desktop/start-watcher.sh"
+)
+exit /b %ERRORLEVEL%
+
+:RegisterWatcher
+call :ParseWslDistroArg %*
+if not defined _DISTRO (
+  echo error: -WslDistro is required for register-watcher >&2
+  exit /b 1
+)
+if exist "%_REGISTER_CMD%" (
+  call "%_REGISTER_CMD%" "!_DISTRO!"
+  exit /b !ERRORLEVEL!
+)
+if exist "%_REGISTER_PS1%" (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%_REGISTER_PS1%" -Distro "!_DISTRO!"
+  exit /b !ERRORLEVEL!
+)
+echo error: missing continuum-register-watcher.cmd and register-windows-scheduled-task.ps1 beside %~nx0 >&2
+exit /b 1
 
 :RunPreflight
 if not exist "%_PREFLIGHT%" (

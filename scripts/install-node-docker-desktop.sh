@@ -67,8 +67,11 @@ Environment:
   MPC_REPO_DIR                Same as --repo-dir
 
 Notes:
-  - Maintenance auto-restart via systemd paths is not available on desktop.
-  - After updates, restart manually: cd mpc-config && docker compose restart
+  - Host apply for Maintenance update/restart is the WSL pending-update watcher
+    (status: ~/mpc-config/wsl-desktop/status-watcher.sh, log: ~/mpc-config/wsl-desktop/watcher.log,
+    failed applies: /var/lib/mpc-auth-docker/applied/). Autostart: WSL [boot] command plus
+    Windows Scheduled Tasks ContinuumNodeMpcAuthWatcher (logon) and ContinuumNodeMpcAuthWatcherPoll (5 min).
+  - Manual fallback in WSL: cd ~/mpc-config && docker compose restart app
   - Dashboard discovery is configured post-provision so the dashboard container reaches mpc-auth via the compose service "app".
 EOF
 }
@@ -545,7 +548,7 @@ Config and keys on disk: ${REPO_DIR}/configs.yaml, bootstrap_key/, added_keys/
 Next steps:
   1. Attach your node at https://mpa.continuumdao.org
   2. Back up ${REPO_DIR}/bootstrap_key/ if PublicMgtKey was auto-generated
-  3. Host restart automation: WSL pending-update watcher (see ~/mpc-config/wsl-desktop/status-watcher.sh). A Windows logon task is registered by the Docker extension after install.
+  3. Host restart automation: WSL pending-update watcher (status: ~/mpc-config/wsl-desktop/status-watcher.sh). Autostart via WSL [boot] command and Windows Scheduled Tasks (logon + 5-minute poll). Manual fallback in WSL: cd ~/mpc-config && docker compose restart app
   4. VPN: enable from the node app VPN panel; host applies via pending-vpn.json + the same WSL watcher (UDP 51820 must reach WSL for remote clients).
   5. Telegram ngrok: enable from the node app AI Agent webhooks panel; host starts sidecar mpc-auth-telegram-ngrok via pending-telegram-ngrok.json + the same watcher.
 
