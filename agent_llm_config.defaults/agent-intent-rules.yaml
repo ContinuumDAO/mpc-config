@@ -310,11 +310,11 @@ rules:
       Explorer lookup without a clear host in the message: resolve chain first (URL hostname,
       chain name or chainId from the node registry, or ask the operator). Etherscan-family explorers
       (etherscan.io, basescan, arbiscan, polygonscan, …) → agent_load_mcp_server etherscan
-      (official https://mcp.etherscan.io/mcp; ETHERSCAN_API_KEY; chainid parameter). Blockscout-hosted
-      chains (*.blockscout.com) → agent_load_mcp_server blockscout (BLOCKSCOUT_PRO_API_KEY;
-      get_chains_list to resolve chain_id). Do not assume Etherscan. Community stdio etherscan-community
-      only if the operator prefers it over official. Do not use agent_fetch_url on explorer HTML or
-      agent_bash to scrape pages.
+      (only official data MCP is https://mcp.etherscan.io/mcp; ETHERSCAN_API_KEY; chainid parameter).
+      Blockscout-hosted chains (*.blockscout.com) → agent_load_mcp_server blockscout
+      (BLOCKSCOUT_PRO_API_KEY; get_chains_list to resolve chain_id). Do not assume Etherscan.
+      Community stdio etherscan-community is unofficial — only if the operator prefers it over official.
+      Do not use agent_fetch_url on explorer HTML or agent_bash to scrape pages.
     modes: [interactive, cron]
 
   - id: block_explorer_etherscan
@@ -334,11 +334,13 @@ rules:
         - "mantlescan"
     hint: |
       Block explorer / on-chain transaction on Etherscan-family explorers (etherscan.io, basescan,
-      arbiscan, polygonscan, bscscan, lineascan, snowtrace, …): use Etherscan MCP (official
-      https://mcp.etherscan.io/mcp; needs ETHERSCAN_API_KEY). One key covers all Etherscan-compatible
-      chains via the chainid parameter. Prefer get_transaction_by_hash and get_transaction_receipt.
-      For *.blockscout.com use blockscout MCP instead. Community stdio (etherscan-community) only if
-      the operator chose it over official. Do not scrape explorer HTML. Common chainids: Ethereum=1,
+      arbiscan, polygonscan, bscscan, lineascan, snowtrace, …): use official Etherscan MCP
+      https://mcp.etherscan.io/mcp (ETHERSCAN_API_KEY, default Bearer). One key covers 60+ chains via
+      chainid. Prefer get_transaction_by_hash and get_transaction_receipt; other official tools include
+      get_native_balance, get_token_balances, get_transactions, get_token_transfers, get_contract_abi,
+      get_gas_oracle. get_address_labels is Pro. For *.blockscout.com use blockscout MCP instead.
+      Community stdio (etherscan-community) is unofficial — only if the operator chose it over official.
+      Do not scrape explorer HTML. Common chainids: Ethereum=1,
       Sepolia=11155111, Hoodi=560048, BSC=56, BSC testnet=97, Polygon=137, Polygon Amoy=80002,
       Base=8453, Base Sepolia=84532, Arbitrum=42161, Arbitrum Sepolia=421614, Linea=59144,
       Linea Sepolia=59141, OP=10, OP Sepolia=11155420, Avalanche=43114, Fuji=43113, Blast=81457,
