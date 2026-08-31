@@ -1596,7 +1596,7 @@ Returns the status and configuration of pre-signing verification.
   "error": "",
   "data": {
     "enabled": true,
-    "relayerAPIURL": "http://82.208.20.136:8080",
+    "relayerAPIURL": "https://relayer.continuumdao.org",
     "verificationMode": "strict"
   }
 }
@@ -6229,7 +6229,7 @@ Registers a new relayer in the whitelist. **Can only be called once per node** -
   "allowedChains": ["11155111", "1", "421614"],
   "registeredBy": "node-operator",
   "metadata": {
-    "relayerAPIURL": "http://82.208.20.136:8080",
+    "relayerAPIURL": "https://relayer.continuumdao.org",
     "source": "manual-registration"
   }
 }
@@ -6287,7 +6287,7 @@ Lists all whitelisted relayers.
       "registeredBy": "operator",
       "isActive": true,
       "metadata": {
-        "relayerAPIURL": "http://82.208.20.136:8080",
+        "relayerAPIURL": "https://relayer.continuumdao.org",
         "source": "manual-registration"
       },
       "lastSeen": "",
