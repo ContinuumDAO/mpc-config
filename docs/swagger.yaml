@@ -2243,6 +2243,94 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.AgentLlmApiKeyPost'
+  /agentTechnocoreStatus:
+    get:
+      description: 'Technocore DID status (masked key; read JWT on Browser HTTPS / loopback) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /agentTechnocoreStatus).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Technocore DID status (masked key; read JWT on Browser HTTPS / loopback)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: Authorization
+        in: header
+        required: false
+        description: Bearer read JWT required on Browser HTTPS (8443) and BrowserLoopbackReadHTTP GET
+  /agentTechnocoreConfig:
+    post:
+      description: 'Update Technocore room and posting flag (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /agentTechnocoreConfig).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Update Technocore room and posting flag (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.AgentTechnocoreConfigPost'
+  /agentTechnocoreKey:
+    post:
+      description: 'Import, generate, or clear Technocore Ed25519 key (management-signed; never returns private key) Full
+        detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /agentTechnocoreKey).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Import, generate, or clear Technocore Ed25519 key (management-signed; never returns private key)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.AgentTechnocoreKeyPost'
+  /agentTechnocoreAnnounce:
+    post:
+      description: 'Signed Technocore room post (management-signed; requires posting on) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /agentTechnocoreAnnounce).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Signed Technocore room post (management-signed; requires posting on)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.AgentTechnocoreAnnouncePost'
   /listEnvironmentVariables:
     get:
       description: 'List MCP agent environment variables stored on this node (local MongoDB) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
@@ -5608,3 +5696,41 @@ definitions:
           - orchestration-plan
           - agent-intent-rules
           - cron-trade
+  node.AgentTechnocoreConfigPost:
+    type: object
+    description: POST /agentTechnocoreConfig. Sign canonical JSON {"action":"agentTechnocoreConfig","clientSig":"","nonce":N,"nodeKey":"<128-hex>","posting":false,"room":"continuum-mpa"}.
+    allOf:
+    - *id002
+    - type: object
+      properties:
+        room:
+          type: string
+          description: Technocore room (default continuum-mpa)
+        posting:
+          type: boolean
+          description: Human enable for agent announce
+  node.AgentTechnocoreAnnouncePost:
+    type: object
+    description: POST /agentTechnocoreAnnounce. Sign canonical JSON {"action":"agentTechnocoreAnnounce","clientSig":"","nonce":N,"nodeKey":"<128-hex>","text":"..."}.
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - text
+      properties:
+        text:
+          type: string
+          description: Single-line announce text
+  node.AgentTechnocoreKeyPost:
+    type: object
+    description: POST /agentTechnocoreKey. Sign canonical JSON {"action":"agentTechnocoreKey","clientSig":"","generate":false,"nonce":N,"nodeKey":"<128-hex>","privateKey":"..."}.
+    allOf:
+    - *id002
+    - type: object
+      properties:
+        privateKey:
+          type: string
+          description: PEM or hex; empty clears
+        generate:
+          type: boolean
+          description: Node generates an Ed25519 pair

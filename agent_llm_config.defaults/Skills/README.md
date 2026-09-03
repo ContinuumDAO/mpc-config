@@ -19,6 +19,7 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 | **`continuum-dao-proposal-standards`** | Fetch Constitution Vision/Mission + **Proposals and Voting** (canonical types) + How to Write a Proposal; type-fit and format checklist (`initialLoad: false`) |
 | **`continuum-dao-forum-replies`** | Read-only watch for replies to the operator’s Forum posts; cron **`notify-forum-replies`** + Telegram (`initialLoad: false`) |
 | **`continuum-dao-forum-inbox`** | Interactive: list NodeBB Unread, present posts, mark threads read (`initialLoad: false`) |
+| **`continuum-dao-mpa-wallet-chat`** | MPA Wallet Chat listings, Agent Mail, Technocore discovery. Never ads in Ideas/Governance (`initialLoad: false`) |
 | **`<name>.md`** / **`<name>.txt`** | Additional skill bodies (markdown or plain text) |
 
 Skill **`name`** values must be lowercase (`a-z`, digits, hyphen, underscore) — they match the node API and manifest lookup.

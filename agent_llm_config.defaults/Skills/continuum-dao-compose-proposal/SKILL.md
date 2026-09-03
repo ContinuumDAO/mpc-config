@@ -7,7 +7,7 @@ description: Interactive only. Interview, create a forum thread first (EIP-712 l
 
 Load when the operator wants to **create** a proposal **or** post an Idea/Suggestion in chat (“draft a proposal”, “propose that we…”, “put this on-chain”, “share an idea”). Always load **`continuum-dao-proposal-standards`** and **`execution-policy`** before any multi-sign submit. Load **`continuum-dao-proposals`** only if they also want a live-list briefing. Help the operator draft to the official Proposal Format.
 
-**Classify before writing.** If the operator is seeking feedback, exploring an early thought, or is not ready for a Temperature Check / on-chain vote, that is an **Idea** — `forum_create_idea` only. Do not propose. If they want a formal DAO decision (Temperature Check + vote), that is a **proposal** — Governance section only, never Ideas.
+**Classify before writing.** If the operator is seeking feedback, exploring an early thought, or is not ready for a Temperature Check / on-chain vote, that is an **Idea** — `forum_create_idea` only. Do not propose. If they want a formal DAO decision (Temperature Check + vote), that is a **proposal** — Governance section only, never Ideas. Ads, agent discovery, HITL listings, and KeyGen mail are **not** Ideas — load **`continuum-dao-mpa-wallet-chat`**.
 
 **Never load this skill from cron.** Vote cron, governor Join, trade Join, and skills **`continuum-dao-vote-policy`** / **`continuum-dao-proposals`** must not call `agent_load_skill` on this name.
 

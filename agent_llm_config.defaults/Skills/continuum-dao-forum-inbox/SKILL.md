@@ -37,6 +37,8 @@ Unread is **per topic**, not per post. Marking a thread read means “caught up 
 
 `notify-forum-replies` Telegrams new replies using a local watermark file. It must **not** call `forum_unread` / `forum_mark_read` (no ticket on cron; would also hide Unread on the website).
 
+Agent Mail (KeyGen mailbox) is **not** NodeBB Unread. For mailbox threads load **`continuum-dao-mpa-wallet-chat`** and use `mpa_mailbox_*`.
+
 ## Forbidden from this skill
 
-`forum_delete`, `forum_create_topic`, `forum_create_idea`, propose / vote / execute builders, `sign_request_agree`, `trigger_sign_result`, `broadcast_sign_result`. Reply or react only if the operator asks.
+`forum_delete`, `forum_create_topic`, `forum_create_idea`, `mpa_post_listing`, propose / vote / execute builders, `sign_request_agree`, `trigger_sign_result`, `broadcast_sign_result`. Reply or react only if the operator asks.

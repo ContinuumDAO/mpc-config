@@ -159,6 +159,11 @@
       "name": "continuum-dao-forum-inbox",
       "filename": "continuum-dao-forum-inbox/SKILL.md",
       "initialLoad": false
+    },
+    {
+      "name": "continuum-dao-mpa-wallet-chat",
+      "filename": "continuum-dao-mpa-wallet-chat/SKILL.md",
+      "initialLoad": false
     }
   ]
 }

@@ -226,6 +226,10 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /agentLlmConfigStatus`](#get-agentllmconfigstatus) - Read agent LLM settings for the node agent (masked API key; **read JWT** on Browser HTTPS / loopback)
 - [`POST /agentLlmConfig`](#post-agentllmconfig) - Update provider, model, and optional base URL (**management signature**; does not change `apiKey`)
 - [`POST /agentLlmApiKey`](#post-agentllmapikey) - Set, rotate, or clear the cloud LLM API key only (**management signature**; `apiKey: ""` clears)
+- [`GET /agentTechnocoreStatus`](#get-agenttechnocorestatus) - Technocore DID / room / posting (masked key; **read JWT** on Browser HTTPS / loopback)
+- [`POST /agentTechnocoreConfig`](#post-agenttechnocoreconfig) - Update Technocore room and posting flag (**management signature**)
+- [`POST /agentTechnocoreKey`](#post-agenttechnocorekey) - Import, generate, or clear Technocore Ed25519 key (**management signature**; never returns the private key)
+- [`POST /agentTechnocoreAnnounce`](#post-agenttechnocoreannounce) - Sign and post one Technocore room line (**management signature**; requires posting on)
 - [`GET /listEnvironmentVariables`](#get-listenvironmentvariables) - List MCP agent environment variables stored on this node (local MongoDB; not propagated)
 - [`GET /getEnvironmentVariable`](#get-getenvironmentvariable) - Get one variable by `name` query param
 - [`POST /addEnvironmentVariable`](#post-addenvironmentvariable) - Add or update one variable (**management signature**; name normalized to uppercase `A-Z`, `0-9`, `_`)
@@ -2867,6 +2871,73 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/agentLlmApiKey" \
   -H "Content-Type: application/json" \
   -d '{"nonce":44,"apiKey":"","clientSig":"...","nodeKey":"<128-hex>"}'
 ```
+
+### Agent Technocore (local filesystem)
+
+Same storage pattern as the LLM API key: file next to `agent-llm-config.json` (`agent-technocore.json`), masked status, management-signed writes. **Never** store the Ed25519 private key in Variables or paste it into Agent Chat. The node signs room posts in-process (`POST /agentTechnocoreAnnounce`); MCP/SDK tools never receive the private key.
+
+**Where served:** Same attach URL family as LLM config. **`GET /agentTechnocoreStatus`** follows [Browser HTTPS and loopback HTTP (JWT)](#browser-https-and-loopback-http-jwt). **`POST`** routes use **management-key signature**.
+
+<a id="get-agenttechnocorestatus"></a>
+#### `GET /agentTechnocoreStatus`
+
+**Auth:** Same as **`GET /agentLlmConfigStatus`**.
+
+**Response `data`:**
+```json
+{
+  "did": "did:key:z…",
+  "room": "continuum-mpa",
+  "posting": false,
+  "keyPresent": true,
+  "keyMasked": "…4f2a",
+  "updatedAt": "2026-09-03T12:00:00.000000000Z"
+}
+```
+
+`did` / `keyMasked` are omitted when no key is stored. The private key is **never** returned.
+
+<a id="post-agenttechnocoreconfig"></a>
+#### `POST /agentTechnocoreConfig`
+
+**Auth:** Management key ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey)).
+
+**Canonical signed bytes:**
+```json
+{"action":"agentTechnocoreConfig","clientSig":"","nonce":N,"nodeKey":"<128-hex>","posting":false,"room":"continuum-mpa"}
+```
+
+Field order must match Go / continuumdao-node-app. Updates `room` and `posting` only; preserves the stored key.
+
+**Response:** `{ "code": 0, "error": "", "data": { ...same shape as GET /agentTechnocoreStatus... } }`
+
+<a id="post-agenttechnocorekey"></a>
+#### `POST /agentTechnocoreKey`
+
+**Auth:** Management signature (same as config).
+
+**Request:** `privateKey` (PEM or hex) to import, `generate: true` to create a new Ed25519 key, or empty `privateKey` with `generate: false` to clear.
+
+**Canonical signed bytes:**
+```json
+{"action":"agentTechnocoreKey","clientSig":"","generate":false,"nonce":N,"nodeKey":"<128-hex>","privateKey":"..."}
+```
+
+**Never** returns the private key. Response status matches GET.
+
+<a id="post-agenttechnocoreannounce"></a>
+#### `POST /agentTechnocoreAnnounce`
+
+**Auth:** Management signature.
+
+**Canonical signed bytes:**
+```json
+{"action":"agentTechnocoreAnnounce","clientSig":"","nonce":N,"nodeKey":"<128-hex>","text":"..."}
+```
+
+**Behavior:** Refuses if posting is off or no key is stored. Node signs `room|nonce|text` with the stored Ed25519 key and POSTs to `https://technocore.chat/r/{room}`. Max 4096 characters after sweep.
+
+**Response `data`:** `{ "did", "room", "status", "body" }` (Technocore HTTP status + body). Private key is never included.
 
 ### Agent environment variables (local MongoDB)
 
