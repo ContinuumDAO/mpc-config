@@ -74,6 +74,7 @@ Continue the full playbook: [Agent provision and configure](https://docs.continu
 | Windows/macOS Docker Desktop | Extension **Continuum Node**, or `scripts/desktop-local-orchestrate.sh` / `install-node-docker-desktop.sh` — [README § Docker Desktop](../README.md#docker-desktop-windows-local) |
 | Already cloned repo, only config | `scripts/provision-node.sh` then `docker compose up -d` |
 | Step-by-step manual VPS | [Node Running Instructions](https://docs.continuumdao.org/ContinuumDAO/RunningInstructions/NodeRunningInstruction) |
+| Uninstall / decommission | [`UNINSTALL_NODE.md`](UNINSTALL_NODE.md) — [Uninstall](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Uninstall) |
 
 ## Related in this repo
 

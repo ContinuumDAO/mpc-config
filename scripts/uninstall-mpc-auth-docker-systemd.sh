@@ -31,6 +31,20 @@ UNIT_FILES=(
 	"mpc-auth-vpn-pending.service"
 	"mpc-auth-wireguard-wg0.service"
 	"mpc-auth-vpn-mgmt-proxy.service"
+	"mpc-auth-shadowsocks.service"
+	"mpc-auth-wg-obfuscator.service"
+	"mpc-auth-udp2raw.service"
+	"mpc-auth-lwo.service"
+	"mpc-auth-vpn-egress-pending.path"
+	"mpc-auth-vpn-egress-pending.service"
+	"mpc-auth-wireguard-wg-egress.service"
+	"mpc-auth-shadowsocks-egress.service"
+	"mpc-auth-wg-obfuscator-egress.service"
+	"mpc-auth-udp2raw-egress.service"
+	"mpc-auth-telegram-ngrok-pending.path"
+	"mpc-auth-telegram-ngrok-pending.service"
+	"mpc-auth-agent-llm-config.path"
+	"mpc-auth-agent-llm-config.service"
 )
 
 LIBEXEC_SCRIPTS=(
@@ -41,7 +55,25 @@ LIBEXEC_SCRIPTS=(
 	"mpc-auth-apply-pending-vpn.sh"
 	"mpc-auth-vpn-enable.sh"
 	"mpc-auth-vpn-disable.sh"
+	"mpc-auth-apply-pending-vpn-egress.sh"
+	"mpc-auth-vpn-egress-enable.sh"
+	"mpc-auth-vpn-egress-disable.sh"
+	"mpc-auth-apply-pending-telegram-ngrok.sh"
+	"mpc-auth-telegram-ngrok-enable.sh"
+	"mpc-auth-telegram-ngrok-disable.sh"
+	"mpc-auth-apply-agent-llm-config.sh"
+	"mpc-auth-sync-compose-role.sh"
 	"mpc-auth-vpn-wg0-hooks.sh"
+	"mpc-auth-vpn-ss-hooks.sh"
+	"mpc-auth-vpn-wg-obfuscator-hooks.sh"
+	"mpc-auth-vpn-lwo-hooks.sh"
+	"mpc-auth-vpn-udp2raw-hooks.sh"
+	"mpc-auth-vpn-obfuscation-hooks.sh"
+	"mpc-auth-vpn-wg-egress-hooks.sh"
+	"mpc-auth-vpn-wg-obfuscator-egress-hooks.sh"
+	"mpc-auth-vpn-udp2raw-egress-hooks.sh"
+	"mpc-auth-udp2raw-run.sh"
+	"mpc-auth-udp2raw-egress-run.sh"
 )
 
 KEEP_ENV=false
@@ -148,7 +180,7 @@ mpc_auth_stop_disable_known_units() {
 
 	# Enabled instances often omit a separate unit file; disable anything still registered.
 	local listed
-	listed="$(systemctl list-unit-files --no-pager --no-legend 2>/dev/null | awk '$1 ~ /^mpc-auth-docker/ {print $1}' || true)"
+	listed="$(systemctl list-unit-files --no-pager --no-legend 2>/dev/null | awk '$1 ~ /^mpc-auth-/ {print $1}' || true)"
 	while IFS= read -r line; do
 		[[ -z "$line" ]] && continue
 		run systemctl stop "$line" 2>/dev/null || true
@@ -162,7 +194,8 @@ mpc_auth_stop_disable_known_units() {
 	done
 
 	shopt -s nullglob
-	for f in "${UNIT_DIR}/mpc-auth-docker-update@"*.service; do
+	for f in "${UNIT_DIR}/mpc-auth-docker-update@"*.service "${UNIT_DIR}/mpc-auth-"*.service "${UNIT_DIR}/mpc-auth-"*.path; do
+		[[ -e "$f" ]] || continue
 		run rm -f "$f"
 	done
 	shopt -u nullglob
@@ -176,6 +209,16 @@ mpc_auth_remove_libexec() {
 		[[ -f "${LIBEXEC}/${s}" ]] || continue
 		run rm -f "${LIBEXEC}/${s}"
 	done
+	# Sweep leftovers so future installer helpers are not left behind.
+	if [[ -d "$LIBEXEC" ]]; then
+		shopt -s nullglob
+		local leftover
+		for leftover in "${LIBEXEC}/mpc-auth-"*; do
+			[[ -e "$leftover" ]] || continue
+			run rm -f "$leftover"
+		done
+		shopt -u nullglob
+	fi
 	if [[ "$DRY_RUN" != true ]] && [[ -d "$LIBEXEC" ]]; then
 		rmdir "$LIBEXEC" 2>/dev/null || true
 	elif [[ "$DRY_RUN" == true ]] && [[ -d "$LIBEXEC" ]]; then
@@ -244,4 +287,4 @@ mpc_auth_remove_env
 mpc_auth_remove_var_lib
 mpc_auth_journal_touch
 
-echo "Done. Unit templates under ${UNIT_DIR} named mpc-auth-docker-* should be gone; libexec cleared under ${LIBEXEC}."
+echo "Done. Unit templates under ${UNIT_DIR} named mpc-auth-* should be gone; libexec cleared under ${LIBEXEC}."

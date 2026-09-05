@@ -7,6 +7,7 @@ This directory contains reference docs for node APIs, agent workflows, and local
 | File | Description |
 |------|-------------|
 | [`../CREATE_NODE_ONESHOT.md`](../CREATE_NODE_ONESHOT.md) | **AI agents — create a node:** canonical one-shot VPS script (`scripts/install-node-debian-ubuntu.sh`). Also [`../../AGENTS.md`](../../AGENTS.md). |
+| [`../UNINSTALL_NODE.md`](../UNINSTALL_NODE.md) | **AI agents — uninstall a node:** OS skills under [`../skills/`](../skills/) + `scripts/uninstall-node-*.sh`. User page: [Uninstall](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Uninstall). |
 | `../CONFIGURING_ED25519_KEYS.md` | Technical lifecycle: bootstrap + added Ed25519 management keys, on-disk paths, preferred signer. User UI: [Default Ed25519 signer](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/DefaultEd25519Signer). Operational signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`. |
 | `./ED25519_MANAGEMENT_KEY_SIGNING.md` | Ed25519 management API signing for agents (allow-list, nonces, KeyGen `ClientKeys`). |
 | `./API_IMPLEMENTATION.md` | Full management API behavior, endpoint contracts, and conventions. Includes **agent hook listener** routes on port **18090** (`POST /hooks/inbound/{webhookId}`, Telegram chart Mini App **`GET /telegram/chart/*`**). § **`POST /triggerSignRequestById`** documents **EVM** trigger (**`txParams`/`messageHash`/`txParamsBatch`**) for supported automation (**continuum-node-sdk** MCP, **continuumdao-node-app**). |

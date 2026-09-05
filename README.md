@@ -11,6 +11,8 @@ This repository contains the configuration files and setup scripts needed to dep
 - **`scripts/install-node-debian-ubuntu.sh`** - **One-shot VPS install** (Ubuntu/Debian, run as root): apt packages, **`mpcnode`** user, clone repo, **`provision-node.sh`**, **`docker compose up -d`**. **Preferred path for AI agents creating a node** — see **[`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md)** and **[`AGENTS.md`](AGENTS.md)**.
 - **`scripts/install-node-docker-desktop.sh`** - **Docker Desktop local install** (Windows/macOS): provision + compose via Desktop engine; no apt docker, UFW, or systemd. See **Docker Desktop (Windows local)** and **`docker-extension/README.md`**.
 - **`scripts/desktop-local-orchestrate.sh`** - **Desktop clone + install**: git clone to **`~/mpc-config`**, then `install-node-docker-desktop.sh` (used by the Docker extension and manual WSL).
+- **`scripts/uninstall-node-debian-ubuntu.sh`** - **One-shot VPS uninstall** (Ubuntu/Debian, run as root): compose down, Continuum images, systemd, `mpc-config`, **`mpcnode`** user. **`--yes`** skips prompts. See **[`docs/UNINSTALL_NODE.md`](docs/UNINSTALL_NODE.md)** and **[`AGENTS.md`](AGENTS.md)**.
+- **`scripts/uninstall-node-docker-desktop.sh`** / **`uninstall-node-macos-docker-desktop.sh`** - Docker Desktop uninstall (Windows/WSL, macOS).
 - **`tools/provision-command.js`** - Reference module for the MPA frontend to build curl/SSH one-liner commands (wallet or manual Ethereum address + VPS IP).
 - **`mosquitto/config/mosquitto.conf`** - MQTT broker configuration
 - **`sign-clipboard in tools/`** - Utility to sign Ed25519 messages
@@ -78,6 +80,23 @@ curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scrip
 Build, Windows QA checklist, and compose bind-mount notes: **[`docker-extension/README.md`](docker-extension/README.md)**.
 
 Full options: **`./scripts/install-node-docker-desktop.sh --help`**
+
+---
+
+## Uninstall
+
+**AI agents:** [`docs/UNINSTALL_NODE.md`](docs/UNINSTALL_NODE.md) and the OS skills under [`docs/skills/`](docs/skills/). Published page: [Uninstall MPA Wallet](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Uninstall).
+
+Before you delete a node: **back up** the bootstrap key pair and an encrypted database (store them separately), **or Eject** KeyGens, **or transfer** assets. Other KeyGen members may then miss the TSS signing threshold (a 2-of-2 wallet freezes).
+
+Ubuntu/Debian VPS (as **root**). Interactive by default; agents pass **`--yes`**:
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/uninstall-node-debian-ubuntu.sh" \
+  | bash -s -- --yes
+```
+
+Windows (WSL, sudo): [`scripts/uninstall-node-docker-desktop.sh`](scripts/uninstall-node-docker-desktop.sh). macOS (sudo): [`scripts/uninstall-node-macos-docker-desktop.sh`](scripts/uninstall-node-macos-docker-desktop.sh). These remove the compose stack, Continuum images, host automation, `mpc-config`, and (VPS) the **`mpcnode`** user. They do **not** uninstall Docker Engine or OS packages.
 
 ---
 
