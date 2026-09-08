@@ -57,7 +57,7 @@ Follow the **Workstreams** list from the plan skeleton / YAML for the active mod
 
 - **Research leaves** — never `role: coordinator`; ~3 independent sources then summarize; Sources with https; host floors rounds / minSources from YAML.
 - **Trade named-asset** — default research trio + conditional financial-performance / core-business per asset class in YAML (do not collapse into one research task).
-- **TA** — depth-2 coordinator with `chart:analyze` child spawns after **one** OHLCV fetch; budgets from YAML `taskClasses.ta` / `policy.ta`. Isolated family skips (minBars / spawn reject) are coverage gaps — do not re-fetch or fail the whole TA.
+- **TA** — depth-2 coordinator with `chart:analyze` child spawns after **one** OHLCV fetch; budgets from YAML `taskClasses.ta` / `policy.ta`. Isolated family skips (minBars / spawn reject) are coverage gaps — do not re-fetch or fail the whole TA. After join, post a **slim** `mpc-task-result` immediately (`status: complete` if any family produced evidence). KeyGen `send` timeout is not task failure; retry once with a changed body (`deliveryRetry: 1`). Do not bake “every analyzeTools entry or fail” into the task prompt.
 - **Trade ideas** — leaves only; `dependsOn` TA; host auto-wires when missing (YAML `dependsOn.autoWire`).
 - **Yield / research / portfolio** — aspect-split leaves (~3) per mode skeleton; never one monolithic task.
 - **DAO** — stub only.
