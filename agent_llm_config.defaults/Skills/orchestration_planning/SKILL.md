@@ -39,7 +39,7 @@ Gather briefly (do not block forever if already answered):
 
 1. **Asset** — ticker or name.
 2. **OHLCV data source**.
-3. **Analysis window + candle size** — target ~**300 candles**; record lookback + interval in Assumptions.
+3. **Analysis window + candle size** — target ~**300 candles**; record lookback + interval in Assumptions. If the operator’s window is below `policy.ta.requiredToolMinBars` plus a conservative pad (`days = ceil(need × intervalHours / 24) + max(3 days, 10%)`), **lock the widened window** (e.g. 30d @ 4h → **37d @ 4h**) and say so. Do not lock a short window or promise shorter MA periods.
 4. **Execution venue (optional)** — if deferred, research + TA can still run; defer trade-ideas.
 5. **Trade size (optional)** — if deferred, note follow-on; do not block research/TA Execute.
 
@@ -57,7 +57,7 @@ Follow the **Workstreams** list from the plan skeleton / YAML for the active mod
 
 - **Research leaves** — never `role: coordinator`; ~3 independent sources then summarize; Sources with https; host floors rounds / minSources from YAML.
 - **Trade named-asset** — default research trio + conditional financial-performance / core-business per asset class in YAML (do not collapse into one research task).
-- **TA** — depth-2 coordinator with `chart:analyze` child spawns after OHLCV; budgets from YAML `taskClasses.ta` / `policy.ta`.
+- **TA** — depth-2 coordinator with `chart:analyze` child spawns after **one** OHLCV fetch; budgets from YAML `taskClasses.ta` / `policy.ta`. Isolated family skips (minBars / spawn reject) are coverage gaps — do not re-fetch or fail the whole TA.
 - **Trade ideas** — leaves only; `dependsOn` TA; host auto-wires when missing (YAML `dependsOn.autoWire`).
 - **Yield / research / portfolio** — aspect-split leaves (~3) per mode skeleton; never one monolithic task.
 - **DAO** — stub only.

@@ -54,7 +54,7 @@ modes:
       momentumWith: [rsi, macd]
 
     systemPrefixExtra: |
-      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period (months/days/hours) and candle interval (e.g. 4h, 15m) — prefer a window with bars ≥ longest MA period in policy.ta.requiredToolMinBars (default slow 200; aim ~220) so moving averages can run (e.g. ≥37d @ 4h or ≥10d @ 1h); keep candle count sensible (~300 max for the source; shorten lookback or widen interval if over), (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities, synthetic stock perps, and crypto; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets. For each research leaf, evaluate AI Ready MCPs (see host inventory) and put only topic-relevant ids on that task's mcpServers with continuum — e.g. finance-news/brave-search for sentiment; fundamentals MCPs for financial-performance; do not dump all AI Ready servers on every leaf. TA fan-out tools come only from policy.ta.analyzeTools in orchestration-plan.yaml — if that list is empty, omit technical-analysis and trade-ideas workstreams (do not invent analyze_* families).
+      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period and candle interval — lock a window that covers the longest policy.ta.requiredToolMinBars period plus a conservative pad (need = max period, e.g. SMA-200 → 200 bars; days = ceil(need × intervalHours / 24) + max(3 days, 10% of that)). Example: operator says 30d @ 4h (~180 bars) → lock 37d @ 4h (~222 bars) and tell them you widened. Do not lock a short window or promise shorter MA periods (50/100) — spawn gates use desk defaults. Keep ~300 candles max; if the padded window exceeds that, widen the interval instead of dropping below minBars, (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities, synthetic stock perps, and crypto; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets. For each research leaf, evaluate AI Ready MCPs (see host inventory) and put only topic-relevant ids on that task's mcpServers with continuum — e.g. finance-news/brave-search for sentiment; fundamentals MCPs for financial-performance; do not dump all AI Ready servers on every leaf. TA fan-out tools come only from policy.ta.analyzeTools in orchestration-plan.yaml — if that list is empty, omit technical-analysis and trade-ideas workstreams (do not invent analyze_* families).
     workstreams:
       - idSuffix: research-sentiment
         label: "**research-sentiment** — narrative / positioning for the named asset"
@@ -72,7 +72,7 @@ modes:
         label: "**research-core-business** — *(stocks + crypto; not ETFs)* recent deliveries and near-term roadmap"
         when: [cash_equity, synthetic_stock, crypto]
       - idSuffix: technical-analysis
-        label: "**technical-analysis** — depth-2 TA coordinator (fetch_ohlcv once, then spawn chart:analyze leaves for every tool in policy.ta.analyzeTools); avoid the phrase 'analysis tools' in the task prompt"
+        label: "**technical-analysis** — depth-2 TA coordinator (fetch_ohlcv once, then spawn chart:analyze leaves for every tool in policy.ta.analyzeTools; skip ineligible families — do not re-fetch); avoid the phrase 'analysis tools' in the task prompt"
         always: true
         requiresAnalyzeTools: true
       - idSuffix: trade-ideas
@@ -187,6 +187,8 @@ taskClasses:
     dependsOn:
       autoWireFirstClass: ta
       requireDepStatus: complete
+      # Fires only when TA posts status:failed (fetch-only / zero evidence).
+      # TA complete-with-coverage-gaps satisfies complete — trade-ideas still run.
       onDepFailed: failSelf
   ta:
     match:
@@ -229,7 +231,7 @@ policy:
     softAcceptVerifyWhenEvidence: true
     disableSoftSuccessToolGroupPrefixes: ["chart:analyze", "chart:core"]
     blockedDependentLastError: "skipped: TA did not complete"
-    incompleteAnalyzeMessage: "TA must spawn chart:analyze leaves (or run analyze_*) after OHLCV; fetch/prepare_chart alone is not enough for status: complete"
+    incompleteAnalyzeMessage: "TA must spawn chart:analyze leaves (or run analyze_*) after OHLCV; fetch/prepare_chart alone is not enough for status: complete. Isolated skipped families (minBars / spawn reject / leaf error) are coverage gaps when other families produced evidence — they do not fail the task."
     # Authoritative fan-out list (requiredTool per leaf). Empty → skip TA (skeleton + execute strip).
     # Edit here only — mpc-auth does not invent a default analyze set.
     analyzeTools:
@@ -244,6 +246,9 @@ policy:
     # Spawn enqueue gate: reject when session bars < need (avoids burning child budget).
     # Period-based tools: need = max(periods) — e.g. MA warm-up equals the longest MA.
     # Optional minBars overrides max(periods) when set > 0.
+    # Plan-lock pad (human / planner contract — not a new mpc-auth knob):
+    #   days = ceil(need × intervalHours / 24) + max(3 days, 10% of that)
+    #   30d @ 4h (180 bars) → 37d @ 4h (~222). Do not repair short bars by re-fetching at Execute.
     requiredToolMinBars:
       analyze_moving_averages:
         periods: [50, 200] # fastPeriod, slowPeriod (chart-defaults)
@@ -280,7 +285,7 @@ policy:
           spec: "Brief Unknowns/gaps when coverage is thin (including rate-limited backends)."
       chartTA:
         - name: analyze_fanout
-          spec: "Depth-2 TA must spawn chart:analyze leaves (or run analyze_* families) after OHLCV — posting complete after fetch/prepare_chart alone without analyze fan-out fails."
+          spec: "Depth-2 TA must spawn chart:analyze leaves (or run analyze_* families) after OHLCV — posting complete after fetch/prepare_chart alone without analyze fan-out fails. Isolated family skips (host spawn reject, insufficient bars, or leaf error) are coverage gaps, not task failure, when at least one family produced analyze evidence and remaining waves were joined. Do not require every analyzeTools entry to have been spawned."
         - name: chart_grounded
           spec: "Levels/setups grounded in fetched OHLCV; record chartDataSource/interval/barCount when available."
       tradeIdea:
@@ -304,19 +309,21 @@ policy:
 
 contracts:
   taCoordinatorHint: |
-    KeyGen TA coordinator (depth-2): you are a mid-level [Sub-agent]. Fetch OHLCV on this conversation once, then agent_spawn_sub_agent leaves with toolGroups:["chart:analyze"] and requiredTool set to each analyze_* name from the host-injected analyzeTools list (orchestration-plan.yaml policy.ta.analyzeTools). One family per child. Spawn every listed tool; do not invent extras unless the operator asked; do not skip listed tools.
+    KeyGen TA coordinator (depth-2): you are a mid-level [Sub-agent]. Fetch OHLCV on this conversation once, then agent_spawn_sub_agent leaves with toolGroups:["chart:analyze"] and requiredTool set to each analyze_* name from the host-injected analyzeTools list (orchestration-plan.yaml policy.ta.analyzeTools). One family per child. Do not invent extras unless the operator asked.
     If the host-injected analyzeTools list is empty, do not run TA fan-out — post status:failed noting policy.ta.analyzeTools is empty.
     OHLCV stays on this conversation — the host binds it into each leaf's requiredTool call; leaves must not fetch.
-    Moving averages: bars needed = longest MA period (policy.ta.requiredToolMinBars.analyze_moving_averages.periods → max; default 50/200 → 200). If the bound session is shorter, re-fetch with a longer lookback on this conversation first (e.g. ≥34d @ 4h), then spawn MA — the host rejects short-bar MA spawns so they do not burn child budget. Aim to complete MA when lookback allows.
+    ONE FETCH: after the first successful OHLCV bind, do not call *_fetch_ohlcv again — not to widen lookback, not after a spawn reject, not after a leaf error. Plan lock already padded the window (see modes.trade.systemPrefixExtra).
+    Moving averages / minBars: bars needed = longest period (policy.ta.requiredToolMinBars.analyze_moving_averages.periods → max; default 50/200 → 200). If a spawn is rejected (short bars or other gate), treat that family as skipped — list it as a coverage gap. Do not re-fetch, do not re-spawn the same requiredTool, do not burn rounds repairing it.
+    Isolated leaf failures (spawn reject, tool error, timeout) must not stall remaining waves or fail the whole TA.
     After prepare_chart / chart UI, do NOT stop for an analysis catalog/menu — continue spawning analyze_* leaves and join.
     Prefer wording analyze_* / chart:analyze (not the phrase "analysis tools") in prompts and summaries.
     analyze_range_volatility: do NOT pass lookback / lookbackDays — the bound OHLCV window is the series; optional knob is atrPeriod (2–50) only. For trend/key_levels swing lookback, use 2–20 only (never copy lookbackDays).
     Wave fan-out (async): call agent_spawn_sub_agent for each family in the wave (up to budget.maxChildSpawns, max 6) without waiting between spawns — each returns status:started immediately and runs in parallel.
-    Then call agent_join_sub_agents once to wait and collect results. Lifetime child budget is wave size × maxCoordinatorWaves (host-enforced, typically 18 when wave=6) — do not stop after the first 6 spawns when families remain; spawn the next wave and join again until every analyzeTools entry is covered.
-    After each join the host lists any remaining analyzeTools — treat that as a mandatory next wave (budget remaining is wave×waves, not "exhausted at 6").
-    Do not stop after the first wave when families remain — every spawn wave needs its own join.
-    HARD RULE: do NOT post mpc-task-result status:complete until every chart:analyze spawn wave has been joined and every analyzeTools entry was spawned. The host refuses status:complete while any analyzeTools entry is missing.
-    OHLCV fetch + prepare_chart alone must post status:failed (or keep working) — host rejects complete without analyze fan-out + joins.
+    Then call agent_join_sub_agents once to wait and collect results. Lifetime child budget is wave size × maxCoordinatorWaves (host-enforced, typically 18 when wave=6) — do not stop after the first 6 spawns when eligible families remain; spawn the next wave and join again.
+    After each join the host lists any remaining analyzeTools — spawn the next wave for families that are still eligible. Do not treat a skipped family as "remaining work" that requires a re-fetch.
+    Do not stop after the first wave when eligible families remain — every spawn wave needs its own join.
+    HARD RULE: post mpc-task-result status:complete after every eligible chart:analyze family has been spawned and joined (and at least one family produced analyze evidence). Skipped families (host spawn reject / insufficient bars / leaf error) are coverage gaps — name them in the summary — they do not make the task failed. Post status:failed only when OHLCV never bound, or zero analyze families produced evidence.
+    OHLCV fetch + prepare_chart alone must post status:failed (or keep working) — that is the fetch-only case, not a partial fan-out.
     Leaves upsert tradeIdeas on this conversation; summarize from joined compress / tradeIdeasMenu (not guesses).
     If send_key_gen_message aborts/times out: call get_key_gen_message_thread once; if your mpc-task-result landed, stop (success).
     Finish by posting mpc-task-result v1 with a slim summary and tradeIdeas[] that include analysisSetup and source.chartData {dataSource, interval, barCount}. Do not nest another mpc-task-result fence inside summary — one top-level fence via send_key_gen_message only. Do not build multiSign / Purpose / requestId — Orchestrator Continue does that. Specialists cannot spawn children.

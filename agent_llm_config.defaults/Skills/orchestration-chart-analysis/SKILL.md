@@ -11,7 +11,7 @@ Reference: **`chart_analysis_docs`**, **`chart_docs`**.
 
 ## Task-shape patterns (no hardcoded symbols or intervals)
 
-All **symbol, venue, candle interval, and lookback** come from the operator’s stated goal — document your choices in each `tasks[].prompt`.
+All **symbol, venue, candle interval, and lookback** come from the operator’s stated goal — document your choices in each `tasks[].prompt`. In **trade / plan-mode TA**, lock the lookback from **`orchestration-plan.yaml`** (minBars + conservative pad; e.g. 30d @ 4h → 37d @ 4h). Fetch OHLCV **once** on the TA coordinator; do not re-fetch to repair a skipped `analyze_*` family.
 
 ### Analysis-only sub-agent
 
