@@ -11,7 +11,7 @@ Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent
 | **`MCP_default_servers.json`** | Same name (legacy seed) | Default **active** servers seeded on first DB migration: **continuum** (`initialLoad: true`), **coinmarketcap-public** / **coinbase-public** (`initialLoad: false`). |
 | **`MCP_servers.json`** | Not copied to active storage | **Repository catalog** of optional MCP servers. Use **Add from repository** in the UI or `POST /addMcpServerFromCatalog` to activate on this node. See **MCP catalog secrets** below. |
 | **`trade-desk.yaml`** | Same name | Trade prefill desk defaults (offsets, sizing, LLM fallback). Host-parsed YAML; edit via UI **Host YAML configs** or reset-from-defaults. |
-| **`orchestration-plan.yaml`** | Same name | Plan modes, skeletons, task-class matchers, budgets, verify/soft-accept, contracts. Host-parsed YAML — product policy changes without rebuilding mpc-auth after the loader ships. |
+| **`orchestration-plan.yaml`** | Same name | Plan modes, skeletons, **`followOn`** (store prior TA trade ideas), task-class matchers, budgets, verify/soft-accept, contracts. Host-parsed YAML — product policy changes without rebuilding mpc-auth after the loader ships. |
 | **`agent-intent-rules.yaml`** | Same name | Free-text intent → pack boost, **`always`** turn hints, **`loadMcpServers`**, and vendor/protocol playbooks (never short-circuits the LLM). Host-parsed YAML; mpc-auth stays vendor-agnostic. |
 | **`Skills/`** | Same path | Agent skills: **`skills.json`** manifest plus **`.md`** / **`.txt`** bodies. |
 

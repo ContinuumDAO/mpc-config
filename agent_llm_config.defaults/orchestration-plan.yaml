@@ -160,8 +160,39 @@ modes:
         label: "**delivery** — synthesize findings for the KeyGen group"
         always: true
 
+# Shared follow-on recipe (any prior plan that produced TA / host trade ideas —
+# not only "research market for an asset"). Host copies ideas onto the new
+# conversation and seeds ## Prior trade ideas in the plan file.
+followOn:
+  inheritPriorMode: true
+  systemPrefix: |
+    Follow-on plan: the first user message is a --- prior orchestration rollup ---. Host trade ideas from that run are authoritative and bound on THIS conversation — call list_trade_ideas; do not treat an empty chart-session menu as missing ideas.
+    Persist every host/rollup trade idea into the plan file under ## Prior trade ideas (id, side, status, confidence, entry/target/invalidation, dataSource, interval, barCount). That section is the handoff store for later plans.
+    Inherit locked inputs (asset, OHLCV source, interval, bars). Do not re-clarify them. Do not re-run research or TA unless the operator explicitly asks for a new analysis.
+    Skip the greenfield questionnaire (asset / window / MA pad / starter-option menu).
+    Trade / "research market for an asset" follow-on — BEFORE size or build: ask whether they have (or recently had) a trade on this asset, and on which venue (e.g. Hyperliquid, GMX, Arcus). Do not assume the OHLCV source is the live venue.
+    If they name a venue: discover how to read that venue's open positions AND closed/recent history in this chat (continuum__search_continuum_tools / list_tool_groups / get_defi_protocol_skill after load_defi_protocol — look for position, closed, fill, history, or account tools; do not hardcode a fetch name). Pull both for the inherited asset.
+    If still open: compare each live position to whatever analyses that orchestration actually initiated — the prior plan's policy.ta.analyzeTools / TA task families — not a hardcoded family list. Evidence is: (1) every injected Prior trade idea (analysisType/toolName as stored; recommended pick is primary if synthesis named one; all other stored ideas from that run are confirmation or contradiction), and (2) the TA task-result summary for families that ran but did not upsert an idea. Do not invent families that were not in that run and do not re-run analyze_*. For perps: side match vs contradiction, mark vs each stored idea's entry/target/invalidation, distance-to-target, whether invalidation is already breached. Then recommend hold / close / tighten / add with reasons that cite those stored signals and levels; do not invent PnL if tools omit it. Write the comparison into the plan file.
+    If the position already closed (they thought it was live, or history shows a recent close): report what happened — side, size, entry, exit, close time/reason if tools return it, realized PnL only if returned, and how the exit lines up with the stored idea target/invalidation (hit target, stopped/invalidated, liquidated, manual/unknown). Do not invent a close story. Then ask what to do next (open the recommended pick, stay flat, or something else). Only proceed to funding-size / build if they choose to open.
+    If they say they never had a trade, or tools show neither open nor a relevant close: ask whether they want to open one, naming the recommended pick (id, side, entry/target/invalidation). Only if they say yes: funding-size (ask size if missing; venue = the venue they named, else prior OHLCV source / desk default) then build_trade_from_trade_idea. If they decline, stop — do not push Execute.
+    inherit-trade-ideas and live-position-review are plan-time — do not add them as KeyGen tasks.
+  workstreams:
+    - idSuffix: inherit-trade-ideas
+      label: "**inherit-trade-ideas** — *(plan-time)* host already stored prior ideas in ## Prior trade ideas and this conversation; do not add a KeyGen task"
+      always: true
+    - idSuffix: live-position-review
+      label: "**live-position-review** — *(plan-time)* ask if they have/had a trade on this asset and which venue; discover open + closed/history tools; if open, compare to that run's analyze_* families; if closed, report what happened vs stored target/invalidation and ask what to do next; if none, ask whether to open the recommended pick"
+      always: true
+    - idSuffix: funding-size
+      label: "**funding-size** — only if opening/adjusting: size (ask if missing) + venue they named or prior OHLCV source + agent_get_balance"
+      always: true
+    - idSuffix: trade-ideas
+      label: "**trade-ideas** — only if they want to open: build/fund the inherited recommended pick (depends on funding-size)"
+      always: true
+      requiresAnalyzeTools: true
+
 baseSystemPrefix: |
-  Plan thread: author and refine the conversation's markdown plan under user_folder/plans/<planId>.md (use the existing planId/planPath for this thread — do not create a second slug file). Set frontmatter mode to match this thread. The file must be human-readable: YAML frontmatter, Goal/Assumptions/Workstreams/Risks description of what will run, and a trailing mpc-orchestrate v1 fence for machines. Primary deliverable is that plan file via agent_write_file/agent_edit_file — not inline operator work. When the operator agrees to run the plan, call agent_execute_plan (or they use Execute plan in the UI). If a system message says orchestration was already posted to KeyGen, report status — do not ask to Execute again unless drafting a new/follow-on plan. For research tasks: evaluate each AI Ready MCP against that workstream's topic and list only relevant server ids on tasks[].mcpServers (always include continuum for KeyGen). Do not copy every AI Ready server onto every research leaf — host Execute does not force-append them.
+  Plan thread: author and refine the conversation's markdown plan under user_folder/plans/<planId>.md (use the existing planId/planPath for this thread — do not create a second slug file). Set frontmatter mode to match this thread. The file must be human-readable: YAML frontmatter, Goal/Assumptions/Workstreams/Risks description of what will run, and a trailing mpc-orchestrate v1 fence for machines. Primary deliverable is that plan file via agent_write_file/agent_edit_file — not inline operator work. When the operator agrees to run the plan, call agent_execute_plan (or they use Execute plan in the UI). If a system message says orchestration was already posted to KeyGen, report status — do not ask to Execute again unless drafting a new/follow-on plan. If the first user message is a --- prior orchestration rollup ---, this is a follow-on: inherit locked inputs and host trade ideas; write every idea into ## Prior trade ideas; do not re-run research/TA. For a trade / research-market follow-on, first ask if they have/had a trade on the asset and which venue; compare open positions to that run's analyses, or if closed report what happened and ask what to do next (or ask to open the recommended pick if none). For research tasks: evaluate each AI Ready MCP against that workstream's topic and list only relevant server ids on tasks[].mcpServers (always include continuum for KeyGen). Do not copy every AI Ready server onto every research leaf — host Execute does not force-append them.
 
 placeholderTask:
   id: placeholder-research

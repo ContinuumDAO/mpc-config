@@ -475,8 +475,8 @@ Use **Plan follow-on** only when drafting a **new** `mpc-orchestrate` manifest.
 When a run has finished and you need a **new** manifest from summarized context instead of re-pasting history:
 
 1. **Plan follow-on** in the node agent chat header → select the **`[Orchestrator]`** conversation for that run.
-2. The node calls **`POST /agent/plan/start`** and opens a new plan tab with an injected **`--- prior orchestration rollup ---`** block (synthesis prose + task results + statuses; size-capped).
-3. Describe what to do next; refine **`mpc-orchestrate v1`**; **Execute in KeyGen** when ready.
+2. The node calls **`POST /agent/plan/start`** and opens a new plan tab with an injected **`--- prior orchestration rollup ---`** block (locked inputs + host trade ideas first, then synthesis; size-capped). Host **copies every prior trade idea** onto the new conversation and seeds **`## Prior trade ideas`** in the plan file (any TA plan, not only “research market for an asset”).
+3. For a **trade / research-market** follow-on the agent should first ask if you have (or recently had) a trade on that asset and which venue, then fetch open **and** closed/history. If still open, compare to that run’s analyses. If already closed, report what happened vs stored target/invalidation and ask what to do next. If none, ask whether to open the recommended pick. Do not re-run research/TA unless you ask. Refine **`mpc-orchestrate v1`**; **Execute in KeyGen** when ready.
 
 Alternatively, call **`POST /agent/plan/start`** yourself:
 

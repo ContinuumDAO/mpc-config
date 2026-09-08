@@ -3958,7 +3958,7 @@ Require **`mode`**, **`title`**, and/or at least one prior ref. When both prior 
 **Behavior:** Creates a **new** plan conversation (`conversationPurpose: "plan"`), ensures a skeleton **`user_folder/plans/<planId>.md`**, and sets conversation meta (`planId`, `planPath`, `planMode`, `planStatus`).
 
 - **Blank plan:** `mode` / `title` only — no rollup message.
-- **Follow-on:** with prior refs — sets **`keyGenId`** from body or prior record, appends a capped **prior orchestration rollup** user message (synthesis excerpt + task-result summaries + statuses; ~24k runes).
+- **Follow-on:** with prior refs — sets **`keyGenId`** from body or prior record, inherits the prior plan **`mode`** when `mode` is omitted (`followOn.inheritPriorMode`), copies host **trade ideas** onto the new conversation, seeds **`## Prior trade ideas`** in the plan file, and appends a capped **prior orchestration rollup** user message (locked inputs + trade ideas first, then synthesis / task summaries; ~24k runes). Recipe: **`followOn`** in **`orchestration-plan.yaml`**.
 
 The **`orchestration_planning`** skill is loaded on subsequent **`POST /agent/chat`** turns.
 
