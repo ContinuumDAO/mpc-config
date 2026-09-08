@@ -54,7 +54,7 @@ modes:
       momentumWith: [rsi, macd]
 
     systemPrefixExtra: |
-      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period and candle interval — lock a window that covers the longest policy.ta.requiredToolMinBars period plus a conservative pad (need = max period, e.g. SMA-200 → 200 bars; days = ceil(need × intervalHours / 24) + max(3 days, 10% of that)). Example: operator says 30d @ 4h (~180 bars) → lock 37d @ 4h (~222 bars) and tell them you widened. Do not lock a short window or promise shorter MA periods (50/100) — spawn gates use desk defaults. Keep ~300 candles max; if the padded window exceeds that, widen the interval instead of dropping below minBars, (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities, synthetic stock perps, and crypto; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets. For each research leaf, evaluate AI Ready MCPs (see host inventory) and put only topic-relevant ids on that task's mcpServers with continuum — e.g. finance-news/brave-search for sentiment; fundamentals MCPs for financial-performance; do not dump all AI Ready servers on every leaf. TA fan-out tools come only from policy.ta.analyzeTools in orchestration-plan.yaml — if that list is empty, omit technical-analysis and trade-ideas workstreams (do not invent analyze_* families). In the TA task prompt: one OHLCV fetch; spawn at most 3 chart:analyze children per wave; skip isolated family failures; if a wave dies on MCP transport (connection refused / :8446), run those analyze_* on the coordinator with the bound session (no re-fetch); post a slim mpc-task-result immediately after work (status: complete if any analyze evidence); KeyGen send timeout is not failure — retry once with a changed body (deliveryRetry: 1). Do not write “every analyzeTools entry must be spawned or the task fails”.
+      Current mode: trade. Before locking the plan, clarify: (1) asset, (2) OHLCV data source, (3) analysis lookback period and candle interval — lock a window that covers the longest policy.ta.requiredToolMinBars period plus a conservative pad (need = max period, e.g. SMA-200 → 200 bars; days = ceil(need × intervalHours / 24) + max(3 days, 10% of that)). Example: operator says 30d @ 4h (~180 bars) → lock 37d @ 4h (~222 bars) and tell them you widened. Do not lock a short window or promise shorter MA periods (50/100) — spawn gates use desk defaults. Keep ~300 candles max; if the padded window exceeds that, widen the interval instead of dropping below minBars, (4) optional execution venue — ask if they want to name one now; if not, defer trade ideas/venue to a follow-on plan and say so, (5) optional trade size — ask if they have an amount in mind, but note they can set size in a follow-on plan. If size is specified and trade ideas run in THIS plan: use agent_get_balance for that asset on every configured chain; if a venue is also set and the venue chain balance is below size, warn to bridge/move from another chain or top up (do not hard-block research/TA Execute). If trade ideas are deferred to follow-on, defer the balance check to that follow-on plan. Do not insist on venue or size before Execute of research/TA. Named-asset research leaves: always sentiment + market-regime + macro; add research-financial-performance for cash equities, synthetic stock perps, and crypto; add research-core-business for stocks and crypto; omit both extras for ETFs/index baskets. For each research leaf, evaluate AI Ready MCPs (see host inventory) and put only topic-relevant ids on that task's mcpServers with continuum — e.g. finance-news/brave-search for sentiment; fundamentals MCPs for financial-performance; do not dump all AI Ready servers on every leaf. TA tools come only from policy.ta.analyzeTools in orchestration-plan.yaml — if that list is empty, omit technical-analysis and trade-ideas workstreams (do not invent analyze_* families). In the TA task prompt: load once then fetch once (if load errors, do not retry it — call fetch next; never retry identical args); run each analyze_* on the coordinator (do not spawn children); skip isolated family failures; post a slim mpc-task-result immediately (status: complete if any analyze evidence); KeyGen send timeout is not failure — retry once with a changed body (deliveryRetry: 1).
     workstreams:
       - idSuffix: research-sentiment
         label: "**research-sentiment** — narrative / positioning for the named asset"
@@ -72,7 +72,7 @@ modes:
         label: "**research-core-business** — *(stocks + crypto; not ETFs)* recent deliveries and near-term roadmap"
         when: [cash_equity, synthetic_stock, crypto]
       - idSuffix: technical-analysis
-        label: "**technical-analysis** — depth-2 TA coordinator (fetch_ohlcv once; spawn ≤3 chart:analyze leaves per wave; on MCP transport failure run analyze_* on the coordinator — do not re-fetch); avoid the phrase 'analysis tools' in the task prompt"
+        label: "**technical-analysis** — TA coordinator (fetch_ohlcv once, then run each policy.ta.analyzeTools analyze_* on this conversation — do not spawn children, do not re-fetch); avoid the phrase 'analysis tools' in the task prompt"
         always: true
         requiresAnalyzeTools: true
       - idSuffix: trade-ideas
@@ -198,7 +198,10 @@ taskClasses:
       toolGroupPrefixes: ["chart:analyze"]
       promptContains: [technical analysis, fetch ohlcv, analyze_chart, "chart:analyze", spawn leaf specialists, "analyze_* family"]
     role: coordinator
-    defaultMaxChildSpawns: 3
+    # Do not fan out chart:analyze children — parallel MCP sessions have crashed
+    # continuum-mcp (connection refused) and identical load retries abort the turn.
+    forceMaxChildSpawns: 0
+    defaultMaxChildSpawns: 0
     defaultMaxRounds: 32
   research:
     match:
@@ -218,22 +221,19 @@ policy:
       apiLimitWithMinSources: true
       minPostsSoftAcceptVerify: true
   ta:
-    # Keep waves small — six parallel chart:analyze children have knocked continuum-mcp
-    # over (dial tcp …:8446 connection refused). 3×3 waves still cover 8 analyzeTools.
-    defaultMaxChildSpawns: 3
+    # Coordinator-local analyze_* only. Child fan-out opens extra MCP sessions and has
+    # taken continuum-mcp down (dial tcp …:8446 connection refused).
+    defaultMaxChildSpawns: 0
     defaultMaxRounds: 32
-    maxCoordinatorWaves: 3
-    # requiredTool chart:analyze leaf budget (hard-fail still on when soft-success disabled).
+    maxCoordinatorWaves: 1
     analyzeLeafMaxRounds: 12
     requireAnalyzeEvidence: true
-    # Host refuses TA complete until spawn waves have matching joins (LastToolsRun coverage).
-    requireJoinBeforeComplete: true
-    # Leaf todo/run succeeds when requiredTool already produced analyze evidence (even if later rounds err).
+    requireJoinBeforeComplete: false
     completeOnRequiredToolEvidence: true
     softAcceptVerifyWhenEvidence: true
     disableSoftSuccessToolGroupPrefixes: ["chart:analyze", "chart:core"]
     blockedDependentLastError: "skipped: TA did not complete"
-    incompleteAnalyzeMessage: "TA must spawn chart:analyze leaves (or run analyze_*) after OHLCV; fetch/prepare_chart alone is not enough for status: complete. Isolated skipped families (minBars / spawn reject / leaf error) are coverage gaps when other families produced evidence — they do not fail the task."
+    incompleteAnalyzeMessage: "TA must run analyze_* families after OHLCV; fetch/prepare_chart alone is not enough for status: complete. Isolated family skips (minBars / tool error) are coverage gaps when other families produced evidence — they do not fail the task."
     # Authoritative fan-out list (requiredTool per leaf). Empty → skip TA (skeleton + execute strip).
     # Edit here only — mpc-auth does not invent a default analyze set.
     analyzeTools:
@@ -261,7 +261,7 @@ policy:
       summaryNeedles: [analyze_]
       tradeIdeasKey: tradeideas
       denyNeedles: ["no analyze", "analyze_* families could be", "spawn/join wave did not", "fan-out did not run"]
-      joinedChartAnalyze: true
+      joinedChartAnalyze: false
   synthesis:
     highConfidenceMin: 0.5
     minOverlayConfidence: 0.5
@@ -287,7 +287,7 @@ policy:
           spec: "Brief Unknowns/gaps when coverage is thin (including rate-limited backends)."
       chartTA:
         - name: analyze_fanout
-          spec: "Depth-2 TA must spawn chart:analyze leaves (or run analyze_* families) after OHLCV — posting complete after fetch/prepare_chart alone without analyze fan-out fails. Isolated family skips (host spawn reject, insufficient bars, or leaf error) are coverage gaps, not task failure, when at least one family produced analyze evidence and remaining waves were joined. Do not require every analyzeTools entry to have been spawned."
+          spec: "TA must run analyze_* families on the coordinator after OHLCV — posting complete after fetch/prepare_chart alone without analyze_* fails. Isolated family skips (insufficient bars or tool error) are coverage gaps, not task failure, when at least one family produced analyze evidence. Child spawn/join is not required."
         - name: chart_grounded
           spec: "Levels/setups grounded in fetched OHLCV; record chartDataSource/interval/barCount when available."
       tradeIdea:
@@ -311,29 +311,23 @@ policy:
 
 contracts:
   taCoordinatorHint: |
-    KeyGen TA coordinator (depth-2): you are a mid-level [Sub-agent]. Fetch OHLCV on this conversation once, then agent_spawn_sub_agent leaves with toolGroups:["chart:analyze"] and requiredTool set to each analyze_* name from the host-injected analyzeTools list (orchestration-plan.yaml policy.ta.analyzeTools). One family per child. Do not invent extras unless the operator asked.
-    If the host-injected analyzeTools list is empty, do not run TA fan-out — post status:failed noting policy.ta.analyzeTools is empty.
-    OHLCV stays on this conversation — the host binds it into each leaf's requiredTool call; leaves must not fetch.
-    ONE FETCH: after the first successful OHLCV bind, do not call *_fetch_ohlcv again — not to widen lookback, not after a spawn reject, not after a leaf error. Plan lock already padded the window (see modes.trade.systemPrefixExtra).
-    Moving averages / minBars: bars needed = longest period (policy.ta.requiredToolMinBars.analyze_moving_averages.periods → max; default 50/200 → 200). If a spawn is rejected (short bars or other gate), treat that family as skipped — list it as a coverage gap. Do not re-fetch, do not re-spawn the same requiredTool, do not burn rounds repairing it.
-    Isolated leaf failures (spawn reject, tool error, timeout) must not stall remaining waves or fail the whole TA.
-    After prepare_chart / chart UI, do NOT stop for an analysis catalog/menu — continue spawning analyze_* leaves and join.
-    Prefer wording analyze_* / chart:analyze (not the phrase "analysis tools") in prompts and summaries.
-    analyze_range_volatility: do NOT pass lookback / lookbackDays — the bound OHLCV window is the series; optional knob is atrPeriod (2–50) only. For trend/key_levels swing lookback, use 2–20 only (never copy lookbackDays).
-    Wave fan-out (async): call agent_spawn_sub_agent for each family in the wave (up to budget.maxChildSpawns, typically 3) without waiting between spawns — each returns status:started immediately and runs in parallel. Do not spawn 6 at once — that can knock continuum-mcp over (connection refused).
-    Then call agent_join_sub_agents once to wait and collect results. Lifetime child budget is wave size × maxCoordinatorWaves (host-enforced, typically 9 when wave=3) — do not stop after the first wave when eligible families remain; spawn the next wave and join again.
-    After each join the host lists any remaining analyzeTools — spawn the next wave for families that are still eligible. Do not treat a skipped family as "remaining work" that requires a re-fetch.
-    Do not stop after the first wave when eligible families remain — every spawn wave needs its own join.
-    MCP TRANSPORT FALLBACK (not a re-fetch): if a join returns only transport errors (connection refused, dial tcp …:8446, timeout awaiting headers) and that wave produced zero analyze evidence, do not spawn those families again. Run each remaining analyze_* yourself on THIS conversation using the bound OHLCV session ({ title, ohlcvDigest } / session bind). Then continue remaining waves or post. Complete if any family produced evidence.
-    HARD RULE: post mpc-task-result status:complete after every eligible chart:analyze family has been spawned and joined (and at least one family produced analyze evidence). Skipped families (host spawn reject / insufficient bars / leaf error) are coverage gaps — name them in the summary — they do not make the task failed. Post status:failed only when OHLCV never bound, or zero analyze families produced evidence.
-    OHLCV fetch + prepare_chart alone must post status:failed (or keep working) — that is the fetch-only case, not a partial fan-out.
-    Leaves upsert tradeIdeas on this conversation; summarize from joined compress / tradeIdeasMenu (not guesses).
-    After the last join, post immediately — do not grep, read workspace files, or fetch more data.
-    KeyGen body must be slim: short summary + tradeIdeas[] (analysisSetup + source.chartData {dataSource, interval, barCount} only). No research sibling URLs, no chart JSON, no delivery essay inside the fence.
-    Delivery timeout is not task failure. If fan-out produced analyze evidence, mpc-task-result status stays complete even when send_key_gen_message aborts.
-    If send_key_gen_message aborts/times out: call get_key_gen_message_thread once; if your mpc-task-result landed, stop (success). If it is missing, retry send once with a changed body (first summary line: "deliveryRetry: 1") so the host identical-call gate does not block the permitted retry. Do not retry with the exact same arguments.
-    If the turn is forced to a final answer before send lands: the assistant message itself MUST be one mpc-task-result v1 fence with status: complete (when evidence exists) so host-post fallback can finalize. Do not write a prose "delivery blocked" answer and do not set status: failed because KeyGen transport failed.
-    Finish by posting mpc-task-result v1 with a slim summary and tradeIdeas[] that include analysisSetup and source.chartData {dataSource, interval, barCount}. Do not nest another mpc-task-result fence inside summary — one top-level fence via send_key_gen_message only. Do not build multiSign / Purpose / requestId — Orchestrator Continue does that. Specialists cannot spawn children.
+    KeyGen TA coordinator: you are a mid-level [Sub-agent]. Run analyze_* on THIS conversation. Do not call agent_spawn_sub_agent (host child budget is 0 — extra MCP sessions have crashed continuum-mcp).
+    If the host-injected analyzeTools list is empty, post status:failed noting policy.ta.analyzeTools is empty.
+    NEVER retry a tool with identical arguments after an error — the host will abort the turn. Next call must be a different tool or changed args.
+    Pipeline: (1) load_defi_protocol once. If it errors, do not retry load — call the fetch tool next. (2) *_fetch_ohlcv once. If fetch errors, do not retry identical fetch and do not go back to load; post slim mpc-task-result status:failed (OHLCV never bound). (3) After a successful bind, run each policy.ta.analyzeTools analyze_* on this conversation with { title, ohlcvDigest } / session bind. Skip a family that errors; continue the rest. Do not re-fetch.
+    ONE FETCH: after the first successful OHLCV bind, do not call *_fetch_ohlcv again.
+    Moving averages / minBars: need = longest period (default 50/200 → 200). If analyze_moving_averages errors for short bars, skip it as a coverage gap.
+    Isolated analyze_* errors must not fail the whole TA when any other family produced evidence.
+    After prepare_chart / chart UI, do NOT stop for an analysis catalog/menu — keep calling analyze_*.
+    Prefer wording analyze_* (not the phrase "analysis tools").
+    analyze_range_volatility: do NOT pass lookback / lookbackDays; optional knob is atrPeriod (2–50) only. For trend/key_levels swing lookback, use 2–20 only.
+    HARD RULE: post mpc-task-result status:complete when at least one analyze_* produced evidence. Skipped families are coverage gaps — name them. Post status:failed only when OHLCV never bound, or every analyze_* failed.
+    Fetch + prepare_chart alone is not complete.
+    After the last analyze_*, post immediately — do not grep or read workspace files.
+    KeyGen body must be slim: short summary + tradeIdeas[] (analysisSetup + source.chartData {dataSource, interval, barCount} only). No research URLs, no chart JSON.
+    Delivery timeout is not task failure when analyze evidence exists. If send_key_gen_message aborts: get_key_gen_message_thread once; if your result landed, stop. If missing, retry send once with a changed body (first summary line: "deliveryRetry: 1"). Never retry identical send args.
+    If the turn is forced to a final answer: the message MUST be one mpc-task-result v1 fence (status: complete when evidence exists; status: failed only if OHLCV never bound / zero evidence). Do not paste a bare host-note.
+    Do not build multiSign / Purpose / requestId.
   synthesisEvidence: |
     --- synthesis rules ---
     Primary evidence is the host evidence pack above (KeyGen mpc-task-result bodies) plus --- host trade ideas (authoritative) --- and --- host HC trade decision assist ---. Treat task coverage from that pack — do not claim a leaf failed/missing when its result is present with status complete.

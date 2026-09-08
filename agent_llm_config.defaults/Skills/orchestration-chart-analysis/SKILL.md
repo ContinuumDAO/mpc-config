@@ -11,7 +11,7 @@ Reference: **`chart_analysis_docs`**, **`chart_docs`**.
 
 ## Task-shape patterns (no hardcoded symbols or intervals)
 
-All **symbol, venue, candle interval, and lookback** come from the operator’s stated goal — document your choices in each `tasks[].prompt`. In **trade / plan-mode TA**, lock the lookback from **`orchestration-plan.yaml`** (minBars + conservative pad; e.g. 30d @ 4h → 37d @ 4h). Fetch OHLCV **once** on the TA coordinator; do not re-fetch to repair a skipped `analyze_*` family. Spawn at most 3 `chart:analyze` children per wave. If children fail with MCP transport (`connection refused`), run `analyze_*` on the coordinator using the bound session.
+All **symbol, venue, candle interval, and lookback** come from the operator’s stated goal — document your choices in each `tasks[].prompt`. In **trade / plan-mode TA**, lock the lookback from **`orchestration-plan.yaml`** (minBars + conservative pad; e.g. 30d @ 4h → 37d @ 4h). Fetch OHLCV **once** on the TA coordinator, then run each `analyze_*` on that same conversation. Do not spawn children. Do not retry a tool with identical arguments after an error (if load fails, call fetch next).
 
 ### Analysis-only sub-agent
 
