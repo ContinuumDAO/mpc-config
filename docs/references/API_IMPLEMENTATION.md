@@ -1203,7 +1203,7 @@ Used so the node-app management modal can **OK** without **`sign-clipboard`**. T
 **Auth (do not skip):**
 
 - **Browser HTTPS** / **BrowserLoopbackReadHTTP:** require the existing **read JWT** (`Authorization: Bearer <JWT>`), same gate as **`POST /agent/chat`**.
-- **Plain management port** (e.g. **`:8080`**): **loopback client only**. Do not leave an unauthenticated LAN/Docker signing oracle.
+- **Plain management port** (e.g. **`:8080`**): allow **loopback `RemoteAddr`**, or **`Host` `127.0.0.1` / `localhost` / `::1`** (same Host gate as `fetchBootstrapKey`; needed when Docker publishes `127.0.0.1:8080:8080` and the container sees a bridge `RemoteAddr`). Do not allow WAN hosts. Keep the management port published on host loopback only.
 - Never logs seed, PEM, or the signature.
 
 **Request body:**
