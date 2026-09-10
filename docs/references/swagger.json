@@ -332,6 +332,89 @@
                 ]
             }
         },
+        "/signLocalEd25519Message": {
+            "post": {
+                "description": "Management listener only. Read JWT on Browser HTTPS / loopback HTTP; loopback client on plain :8080. Signs only management JSON for this nodeKey with the requested allowed Ed25519 that has a private file. Does not consume a nonce. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /signLocalEd25519Message). Schema: #/definitions/node.SignLocalEd25519MessagePost.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Node Related Info"
+                ],
+                "summary": "Sign a management body with an on-disk Ed25519 key",
+                "responses": {
+                    "200": {
+                        "description": "OK (`code`: 0, `data.signature` 128 hex)",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "public key not allowed / no local private key / message not a management body for this node",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "requires read JWT or loopback HTTP",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.SignLocalEd25519MessagePost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/localEd25519PrivateKeyAvailable": {
+            "get": {
+                "description": "Same JWT / loopback gate as POST /signLocalEd25519Message. Query publicKey (64 hex). Never returns key material. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /localEd25519PrivateKeyAvailable).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Node Related Info"
+                ],
+                "summary": "Whether an allowed Ed25519 key has a private file on this node",
+                "responses": {
+                    "200": {
+                        "description": "OK (`code`: 0, `data.localPrivateKeyAvailable` boolean)",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "requires read JWT or loopback HTTP",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "publicKey",
+                        "in": "query",
+                        "required": true,
+                        "description": "Ed25519 public key (64 hex)."
+                    }
+                ]
+            }
+        },
         "/addManagementKey": {
             "post": {
                 "description": "Generate and register a new Ed25519 management key pair. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /addManagementKey). Schema: #/definitions/node.AddManagementKeyPost.",
@@ -8487,6 +8570,44 @@
                     }
                 }
             ]
+        },
+        "node.SignLocalEd25519MessagePost": {
+            "type": "object",
+            "description": "POST /signLocalEd25519Message. Sign the exact UTF-8 management JSON (clientSig empty, nodeKey = this node) with the requested allowed Ed25519 key when its private file is on disk. Read JWT on Browser HTTPS / loopback HTTP; loopback client on plain :8080. No VerifyMgtKeySig on this route; does not consume a nonce. See mpc-config docs/references/API_IMPLEMENTATION.md (POST /signLocalEd25519Message).",
+            "required": [
+                "message",
+                "publicKey"
+            ],
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "Exact UTF-8 string to sign (canonical management JSON with clientSig empty). Must include nodeKey equal to GET /getNodeKey."
+                },
+                "publicKey": {
+                    "type": "string",
+                    "description": "64-hex allowed Ed25519 public key (header-selected). No silent bootstrap fallback."
+                }
+            }
+        },
+        "node.SignLocalEd25519MessageResult": {
+            "type": "object",
+            "description": "Data on POST /signLocalEd25519Message success.",
+            "properties": {
+                "signature": {
+                    "type": "string",
+                    "description": "128-hex Ed25519 signature over the exact message UTF-8."
+                }
+            }
+        },
+        "node.LocalEd25519PrivateKeyAvailableResult": {
+            "type": "object",
+            "description": "Data on GET /localEd25519PrivateKeyAvailable. Never includes key material.",
+            "properties": {
+                "localPrivateKeyAvailable": {
+                    "type": "boolean",
+                    "description": "True only if publicKey is allowed and has a readable private file on this node."
+                }
+            }
         }
     }
 }

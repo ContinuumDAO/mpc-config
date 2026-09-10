@@ -152,9 +152,9 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 <a id="browser-https-and-loopback-http-jwt"></a>
 ### Browser HTTPS and loopback HTTP (JWT)
 
-When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on **`GET`** requests. **`POST`** is not JWT-gated on that listener; use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same **`GET`** rules when Browser HTTPS is configured.
+When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on the paths listed in **`agentPathRequiresReadJWT`**. Other **`POST`**s on that listener use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same JWT rules when Browser HTTPS is configured.
 
-**JWT-protected agent paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, and **`GET /telegramSearch/status`**.
+**JWT-protected agent / read paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, **`GET /telegramSearch/status`**, plus node-local Ed25519 sign **`POST /signLocalEd25519Message`** and **`GET /localEd25519PrivateKeyAvailable`** (see those headings). On the **plain management port**, those two routes require a **loopback client** instead of JWT.
 
 ## Quick Reference: All Endpoints
 
@@ -171,6 +171,8 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getPublicMgtKey`](#get-getpublicmgtkey) - List allowed Ed25519 public keys (plain `[]string`, 64 hex); same allow-list as above. **Also served on `PublicDiscoveryPort`** (see [Public discovery HTTP](#public-discovery-http)) alongside `GET /getNodeMgtKey`.
 - [`GET /getPublicMgtKeyNonce`](#get-getpublicmgtkeynonce) - Get current nonce for an Ed25519 key (optional `?publicKey=` for added keys)
 - [`POST /verifyMgtKey`](#post-verifymgtkey) - Verify Ed25519 management key (attach-time proof; no other side effects)
+- [`POST /signLocalEd25519Message`](#post-signlocaled25519message) - Sign a management JSON body with an on-disk allowed Ed25519 key (read JWT or loopback; no management signature on this route)
+- [`GET /localEd25519PrivateKeyAvailable`](#get-localed25519privatekeyavailable) - Whether the requested allowed Ed25519 key has a private file on this node (same gate; no key material)
 - [`POST /addManagementKey`](#post-addmanagementkey) - Generate a new Ed25519 management key pair on the node, register its public key, and write local key files (`added_key_<N>` + `.pub`; continuum-mcp-server layout). Authorize with Ed25519 **`clientSig`** or EIP‑191 **NodeMgtKey** (`signedMessage` + **`clientSig`**).
 - [`POST /removeManagementKey`](#post-removemanagementkey) - Soft-remove an added Ed25519 key and delete its local `added_key_<N>` files (**same dual auth**; Ed25519 signer must be allowed and ≠ key removed)
 - [`GET /getAllowedKeyTypes`](#get-getallowedkeytypes) - Get allowed key types
@@ -1189,6 +1191,68 @@ Verify-only endpoint for Ed25519 management key ownership. Accepts **`nonce`**, 
 **Response (failure):** `code` non-zero, `error` describes the reason (e.g. invalid signature, nonce mismatch, nonce already used, missing/wrong `nodeKey`, or no Ed25519 key configured).
 
 **Example flow:** 1) `GET /getNodeKey` and `GET /getPublicMgtKeyNonce` → get `nodeKey` and nonce. 2) Build message `{"nonce":<n>,"clientSig":"","nodeKey":"<128-hex>"}` and sign with your Ed25519 private key. 3) `POST /verifyMgtKey` with body including `clientSig`.
+
+<a id="post-signlocaled25519message"></a>
+#### `POST /signLocalEd25519Message`
+Management listener only (**not** on **`PublicDiscoveryPort`**). Signs the exact UTF-8 management JSON the SPA already built as **`messageToSign`** (canonical body with **`clientSig`** empty) using the **header-selected** allowed Ed25519 key **when that key’s private file is on this node**.
+
+Used so the node-app management modal can **OK** without **`sign-clipboard`**. The returned 128-hex is then sent on the original management **`POST`**, which still runs **`VerifyMgtKeySig`** and consumes the nonce.
+
+**This route does not take a management signature** (that would recreate the chicken-and-egg). It is **not** a general Ed25519 oracle.
+
+**Auth (do not skip):**
+
+- **Browser HTTPS** / **BrowserLoopbackReadHTTP:** require the existing **read JWT** (`Authorization: Bearer <JWT>`), same gate as **`POST /agent/chat`**.
+- **Plain management port** (e.g. **`:8080`**): **loopback client only**. Do not leave an unauthenticated LAN/Docker signing oracle.
+- Never logs seed, PEM, or the signature.
+
+**Request body:**
+
+- **`message`** (required): exact UTF-8 string to sign. Must parse as JSON, **`clientSig`** (and **`nodeMgtKeySig`** if present) must be empty, and **`nodeKey`** must equal this node’s MPC public key from **`GET /getNodeKey`**. Arbitrary / non-management strings are rejected (`message not a management body for this node`).
+- **`publicKey`** (required): 64-hex Ed25519 the operator selected. Must be an **active allowed** key (`PublicMgtKey` or an extra slot).
+
+**Server checks before signing:**
+
+1. **`publicKey`** is allowed.
+2. That key has a readable private file: **`bootstrap_key/ed25519_private.hex`** if it matches bootstrap **`PublicMgtKey`**; otherwise **`added_keys/added_key_<N>`** for that slot. The node does **not** silently fall back to bootstrap if the requested key has no file.
+3. **`message`** is a management body for **this** **`nodeKey`** (see above).
+4. Sign only that UTF-8 message. **Do not** consume a nonce here.
+
+**Response (success):** `{ "code": 0, "error": "", "data": { "signature": "<128 hex>" } }`
+
+**Response (failure):** `403` if JWT/loopback gate fails (`requires read JWT or loopback HTTP`). `400` with short **`error`**: **`public key not allowed`**, **`no local private key`**, or **`message not a management body for this node`**.
+
+**Swagger:** **`#/definitions/node.SignLocalEd25519MessagePost`**, **`#/definitions/node.SignLocalEd25519MessageResult`**.
+
+**Example:**
+```bash
+# Browser HTTPS / loopback HTTP: send the read JWT
+curl -sS -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/signLocalEd25519Message" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $READ_JWT" \
+  -d '{"message":"{\"nonce\":1,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}","publicKey":"<64-hex>"}'
+
+# Plain :8080 from the node itself (loopback client; no JWT)
+curl -sS -X POST "http://127.0.0.1:$MANAGEMENT_PORT/signLocalEd25519Message" \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"{\"nonce\":1,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}","publicKey":"<64-hex>"}'
+```
+
+<a id="get-localed25519privatekeyavailable"></a>
+#### `GET /localEd25519PrivateKeyAvailable`
+Management listener only (**not** on **`PublicDiscoveryPort`**). Same JWT / loopback gate as [`POST /signLocalEd25519Message`](#post-signlocaled25519message). Returns whether the requested allowed Ed25519 key has a readable private file on this node. Never returns paths or key material.
+
+**Query:** **`publicKey`** (64 hex). Missing / disallowed / no file → **`localPrivateKeyAvailable`: false** (still `code: 0` when the gate passes).
+
+**Response (success):** `{ "code": 0, "error": "", "data": { "localPrivateKeyAvailable": true } }`
+
+**Swagger:** **`#/definitions/node.LocalEd25519PrivateKeyAvailableResult`**.
+
+**Example:**
+```bash
+curl -sS "$MPC_AUTH_URL:$MANAGEMENT_PORT/localEd25519PrivateKeyAvailable?publicKey=<64-hex>" \
+  -H "Authorization: Bearer $READ_JWT"
+```
 
 <a id="post-addmanagementkey"></a>
 #### `POST /addManagementKey`
