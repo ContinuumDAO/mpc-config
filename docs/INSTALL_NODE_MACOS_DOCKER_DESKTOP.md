@@ -2,6 +2,8 @@
 
 End-user guide for a **local macOS** node using [Docker Desktop](https://www.docker.com/products/docker-desktop/). Remote VPS installs use the [Debian/Ubuntu one-shot script](../scripts/install-node-debian-ubuntu.sh).
 
+> **For AI agents:** do **not** run the shell alternatives below (`install-node-macos-docker-desktop.sh`, `desktop-local-orchestrate.sh --profile macos`) on the operator’s Mac. **Coach** them through the **Continuum Node** Docker extension or [node map `+`](https://mpa.continuumdao.org/node-map) — the human clicks **Install** in the UI. Shell install is for a **human at the keyboard** who chooses not to use the extension. See [Agent install anti-patterns](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentInstallAntiPatterns) and [For AI agents — macOS home PC](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Install#for-ai-agents--macos-home-pc).
+
 ## Recommended: Docker Desktop Extension
 
 1. Install and start **Docker Desktop for Mac**.
@@ -44,7 +46,13 @@ bash /tmp/continuum-desktop-orchestrate.sh --profile macos --node-mgt-key "0x…
 
 ## After install
 
-1. Attach at [mpa.continuumdao.org](https://mpa.continuumdao.org).
+Verify layout (operator or agent may paste output):
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/verify-node-install-macos-desktop.sh" | bash -s
+```
+
+1. Attach at [mpa.continuumdao.org](https://mpa.continuumdao.org) (**Node hosted app (local PC)**).
 2. Back up `~/mpc-config/bootstrap_key/` if a new PublicMgtKey was generated.
 3. Maintenance **Restart node service** uses the macOS pending watcher (also applies VPN and Telegram ngrok pending files):
 

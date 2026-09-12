@@ -59,6 +59,17 @@ Restore / same Node Key: pass `--public-mgt-key` and ensure `bootstrap_key/ed255
 
 Continue the full playbook: [Agent provision and configure](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision) — user SSH tunnel to **8446**, Path A MCP (`node_config`), peers / MQTT, Group, KeyGen, then hand-off. Do not stop at a single node.
 
+### Verify canonical layout (required)
+
+Before tunnels or MCP, run on the VPS:
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/verify-node-install.sh" \
+  | bash -s
+```
+
+All checks must pass (`mpcnode` user, `/home/mpcnode/mpc-config`, `configs.yaml`, running containers). If not, see [Agent install anti-patterns](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentInstallAntiPatterns).
+
 1. Confirm containers: `docker ps` as `mpcnode` (or via root).
 2. Oneshot created `mpcnode` with **no login password**. Give this copy-paste line so they can SSH as `mpcnode` (they choose the password at the prompt; do not put it in chat):
    `ssh root@YOUR_VPS_PUBLIC_IP 'passwd mpcnode'`
@@ -80,5 +91,7 @@ Continue the full playbook: [Agent provision and configure](https://docs.continu
 
 - [README — One-shot VPS install](../README.md#one-shot-vps-install)
 - [`AGENTS.md`](../AGENTS.md) — agent entrypoint for this repository
+- [`scripts/verify-node-install.sh`](../scripts/verify-node-install.sh) — post-install layout check (read-only)
 - [`scripts/provision-node.sh`](../scripts/provision-node.sh) — non-interactive config helper used by the one-shot
+- [Agent install anti-patterns](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentInstallAntiPatterns) — wrong installs and recovery
 - Frontend command builder: `tools/provision-command.js`

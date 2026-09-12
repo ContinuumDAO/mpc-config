@@ -26,6 +26,20 @@ curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scrip
 
 Do **not** prefer the long interactive `process_config.sh` / Node Running Instructions path for a greenfield VPS unless the one-shot script is unsuitable.
 
+**After one-shot on VPS**, verify layout before mesh setup:
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/verify-node-install.sh" | bash -s
+```
+
+**Hard rules for agents:** do not `git clone` to custom paths, do not run greenfield VPS install without the one-shot, do not automate Windows/macOS home PC installs (coach the human via node map + Docker extension). After Mac extension install, verify:
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/verify-node-install-macos-desktop.sh" | bash -s
+```
+
+See [Agent install anti-patterns](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentInstallAntiPatterns), [For AI agents — macOS home PC](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Install#for-ai-agents--macos-home-pc), and [install-node.json](https://docs.continuumdao.org/well-known/install-node.json).
+
 ## Uninstall a node
 
 **Task keywords:** uninstall node, remove node, decommission, wipe mpcnode, delete MPA wallet node.
