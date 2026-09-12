@@ -53,7 +53,7 @@ ssh -o StrictHostKeyChecking=accept-new root@YOUR_VPS_PUBLIC_IP \
 
 New node (typical): omit `--public-mgt-key` so Ed25519 bootstrap is generated; then back up bootstrap + database via the node app ([Backup and restoration](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/BackupAndRestoration)).
 
-Restore / same Node Key: pass `--public-mgt-key` and ensure `bootstrap_key/ed25519_private.hex` is available as documented in the [README](../README.md#one-shot-vps-install) and [Backup and restoration](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/BackupAndRestoration).
+Restore / same Node Key: pass `--public-mgt-key` and ensure `bootstrap_key/ed25519_private.hex` is available as documented in the [README](../README.md#restore--deterministic-nodekey) and [Backup and restoration](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/BackupAndRestoration).
 
 ## After install (agent checklist)
 
@@ -82,7 +82,7 @@ All checks must pass (`mpcnode` user, `/home/mpcnode/mpc-config`, `configs.yaml`
 | Goal | Use instead |
 |------|-------------|
 | Human / interactive install | Node map **`+`**: https://mpa.continuumdao.org/node-map — [Install](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Install) |
-| Windows/macOS Docker Desktop | Extension **Continuum Node**, or `scripts/desktop-local-orchestrate.sh` / `install-node-docker-desktop.sh` — [README § Docker Desktop](../README.md#docker-desktop-windows-local) |
+| Windows/macOS Docker Desktop | Extension **Continuum Node**, or `scripts/desktop-local-orchestrate.sh` / `install-node-docker-desktop.sh` — [README § Docker Desktop](../README.md#docker-desktop-home-pc) |
 | Already cloned repo, only config | `scripts/provision-node.sh` then `docker compose up -d` |
 | Step-by-step manual VPS | [Node Running Instructions](https://docs.continuumdao.org/ContinuumDAO/RunningInstructions/NodeRunningInstruction) |
 | Uninstall / decommission | [`UNINSTALL_NODE.md`](UNINSTALL_NODE.md) — [Uninstall](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Uninstall) |
