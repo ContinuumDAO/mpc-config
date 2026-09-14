@@ -36,13 +36,13 @@ Chart tools are **not** pinned at session start. When the operator asks for char
 
 Load skill **`chart-defaults`** (via **`agent_load_skill`**) after activating the chart bundle for OHLCV source guidance. **Never auto-load** market-data MCP servers — if no OHLCV source is loaded, ask the operator to choose one (skill **`chart-ohlcv-sources`**).
 
-## Images (not loaded at init — activate when needed)
+## Images (pinned at init)
 
 Do **not** paste image bytes or huge data URLs into chat. Use the display tools so the node opens a window (Telegram Mini App **View image** on paid ngrok):
 
-1. Search / article URLs: host-native **`agent_show_image`** `{ "url": "https://…" }` (always listed; no bundle).
-2. ERC721 `tokenURI` or stored `symbolURL` (ERC20 / CTMERC20 / CTMRWA1): **`continuum__search_continuum_tools`** with `q: "nft"` or `image`, then **`continuum__activate_tool_group`** `{ "groupId": "images" }` (alias for **`media:display`**), then **`continuum__resolve_token_image`**.
-3. **`continuum__list_tool_groups`** marks **`media:display`** as **`recommended: true`**.
+1. Search / article URLs: host-native **`agent_show_image`** `{ "url": "https://…" }` (always listed). Call it again to re-open the popout.
+2. ERC721 `tokenURI` or stored `symbolURL` (ERC20 / CTMERC20 / CTMRWA1): **`continuum__resolve_token_image`** (group **`media:display`**, pinned). If the window does not open, follow with **`agent_show_image`** using the image or metadata URL.
+3. **`continuum__list_tool_groups`** marks **`media:display`** as pinned / **`recommended: true`**.
 
 CTMRWA1 in this cut uses registry **`symbolURL`** only — not Greenfield slot IMAGE records.
 
