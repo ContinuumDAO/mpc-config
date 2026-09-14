@@ -36,6 +36,16 @@ Chart tools are **not** pinned at session start. When the operator asks for char
 
 Load skill **`chart-defaults`** (via **`agent_load_skill`**) after activating the chart bundle for OHLCV source guidance. **Never auto-load** market-data MCP servers — if no OHLCV source is loaded, ask the operator to choose one (skill **`chart-ohlcv-sources`**).
 
+## Images (not loaded at init — activate when needed)
+
+Do **not** paste image bytes or huge data URLs into chat. Use the display tools so the node opens a window (Telegram Mini App **View image** on paid ngrok):
+
+1. Search / article URLs: host-native **`agent_show_image`** `{ "url": "https://…" }` (always listed; no bundle).
+2. ERC721 `tokenURI` or stored `symbolURL` (ERC20 / CTMERC20 / CTMRWA1): **`continuum__search_continuum_tools`** with `q: "nft"` or `image`, then **`continuum__activate_tool_group`** `{ "groupId": "images" }` (alias for **`media:display`**), then **`continuum__resolve_token_image`**.
+3. **`continuum__list_tool_groups`** marks **`media:display`** as **`recommended: true`**.
+
+CTMRWA1 in this cut uses registry **`symbolURL`** only — not Greenfield slot IMAGE records.
+
 ## DeFi protocols (Hyperliquid, Arcus, GMX, Aave, … — on continuum MCP)
 
 DeFi tools are **already registered** on the **continuum** MCP server. They are **not** separate optional MCP servers in **`list_mcp_servers`**.
