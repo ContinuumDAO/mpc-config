@@ -11,7 +11,7 @@ This skill **never** authorizes `ctm_continuum_dao_build_propose_*` or `ctm_cont
 
 ## votePolicy (edit on this node)
 
-Machine-editable defaults: **`continuum-dao-vote-policy.yaml`** in this skill directory. Marker `votePolicy:` then YAML. Empty allowlists mean “do not filter on that field” except `defaultAction`. Keep this block in sync with the YAML file.
+Machine-editable defaults live in host YAML **`continuum-dao-vote-policy.yaml`** (`kind=continuum-dao-vote-policy`). Edit via the Skills tab **Host YAML configs** row, or `POST /upsertHostYamlConfig`. The node injects the installed file when this skill loads — follow that YAML over the example below. Empty allowlists mean “do not filter on that field” except `defaultAction`.
 
 ```yaml
 votePolicy:

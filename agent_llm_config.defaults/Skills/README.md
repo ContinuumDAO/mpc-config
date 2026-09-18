@@ -4,23 +4,42 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 
 | File | Purpose |
 |------|---------|
-| **`skills.json`** | Manifest: `name`, `filename`, `initialLoad` per skill |
-| **`orchestration_planning.md`** | Plan-mode orchestration manifesto drafting (`toolGroups` / slim sub-loop budgets; `conversationPurpose: "plan"`) |
-| **`continuum-mcp-deferred-tools.md`** | Tool bundle discovery; **`load_defi_protocol`** vs **`agent_load_mcp_server`** |
-| **`chart-ohlcv-sources.md`** | OHLCV provider choice: DeFi protocols vs catalog MCP servers (`initialLoad: false`; host auto-loads on chart intents) |
-| **`chart-periods.md`** | Default lookback by bar interval, newest-first trim, and source-specific fetch notes for **`prepare_chart`** (host auto-loads on chart intents) |
-| **`chart-defaults.md`** | Default EMA(50) / RSI(14) / volume behavior, **`technical-indicators`** MCP load, operator override examples (host auto-loads on chart intents) |
-| **`chart-analysis-menu.md`** | Analysis menu / picker guidance (host auto-loads on chart intents) |
-| **`execution-policy.md`** | MultiSign / on-chain execution policy: gas, one `requestId` per round, confirmation before broadcast |
-| **`scheduled-automation.md`** | Cron & webhook behavior: non-interactive runs, schedule kinds, conversation threading |
-| **`continuum-dao-proposals`** | Present live/recent ContinuumDAO proposals and deconstruct multi-action briefs (`initialLoad: false`) |
-| **`continuum-dao-vote-policy`** | Vote + governor Join policy. Trusted proposers are any EOA/contract. Never propose (`initialLoad: false`) |
-| **`continuum-dao-compose-proposal`** | Interactive interview → classify Idea vs proposal → Governance `forum_create_topic` or `forum_create_idea`. Never from cron (`initialLoad: false`) |
-| **`continuum-dao-proposal-standards`** | Fetch Constitution Vision/Mission + **Proposals and Voting** (canonical types) + How to Write a Proposal; type-fit and format checklist (`initialLoad: false`) |
-| **`continuum-dao-forum-replies`** | Read-only watch for replies to the operator’s Forum posts; cron **`notify-forum-replies`** + Telegram (`initialLoad: false`) |
-| **`continuum-dao-forum-inbox`** | Interactive: list NodeBB Unread, present posts, mark threads read (`initialLoad: false`) |
-| **`continuum-dao-mpa-wallet-chat`** | MPA Wallet Chat listings, Agent Mail, Technocore discovery. Never ads in Ideas/Governance (`initialLoad: false`) |
-| **`<name>.md`** / **`<name>.txt`** | Additional skill bodies (markdown or plain text) |
+| **`skills.json`** | Manifest: `name`, `filename`, `initialLoad` per skill (must match every `Skills/<name>/SKILL.md` below) |
+| **`orchestration_planning`** | Plan-mode markdown plans (`user_folder/plans`); host rules live in **`orchestration-plan.yaml`** |
+| **`chart-ohlcv-sources`** | OHLCV provider choice: DeFi protocols vs catalog MCP servers (host auto-loads on chart intents) |
+| **`chart-periods`** | Default lookback by bar interval and source-specific fetch notes for **`prepare_chart`** |
+| **`chart-defaults`** | Default EMA/RSI/volume overlays; numeric periods come from **`trade-desk.yaml`** |
+| **`chart-analysis-menu`** | Analysis menu / picker guidance (host auto-loads on chart intents) |
+| **`chart-analysis-trend`** | Trend-structure analysis |
+| **`chart-analysis-levels`** | Key-level analysis |
+| **`chart-analysis-momentum`** | RSI/MACD momentum analysis |
+| **`chart-analysis-liquidity-depth`** | Liquidity depth / volume-profile style analysis |
+| **`chart-analysis-divergence`** | Momentum/price divergence analysis |
+| **`chart-analysis-range`** | Range / volatility analysis |
+| **`chart-analysis-patterns`** | Chart-pattern analysis entry points |
+| **`chart-analysis-classic-patterns`** | Classic geometric pattern analysis and drawing |
+| **`chart-analysis-time-series`** | Time-series style analysis tools |
+| **`chart-analysis-bollinger`** | Bollinger Bands analysis (desk knobs in **`trade-desk.yaml`**) |
+| **`chart-analysis-donchian`** | Donchian breakout analysis (desk knobs in **`trade-desk.yaml`**) |
+| **`chart-analysis-supertrend`** | Supertrend analysis (desk knobs in **`trade-desk.yaml`**) |
+| **`chart-analysis-ichimoku`** | Ichimoku cloud analysis (desk knobs in **`trade-desk.yaml`**) |
+| **`chart-analysis-z-score`** | Z-score analysis (desk knobs in **`trade-desk.yaml`**) |
+| **`chart-analysis-moving-averages`** | Moving-average analysis (desk knobs in **`trade-desk.yaml`**) |
+| **`orchestration-chart-analysis`** | Orchestration chart-analysis task drafting (not a host YAML) |
+| **`continuum-mcp-deferred-tools`** | Tool bundle discovery; **`load_defi_protocol`** vs **`agent_load_mcp_server`** (`initialLoad: true`) |
+| **`execution-policy`** | MultiSign / on-chain execution: gas, one `requestId` per round, confirm before broadcast |
+| **`scheduled-automation`** | Cron & webhook behavior: non-interactive runs, schedule kinds, conversation threading |
+| **`trade-defaults`** | Policy-only trade-build guidance; numeric desk defaults live in host YAML **`trade-desk.yaml`** |
+| **`workspace-tooling`** | Create / reuse scripts under **`user_folder`** |
+| **`continuum-dao-proposals`** | Present live/recent ContinuumDAO proposals and deconstruct multi-action briefs |
+| **`continuum-dao-vote-policy`** | Vote + governor Join procedure. Machine defaults live in host YAML **`continuum-dao-vote-policy.yaml`**. Never propose |
+| **`continuum-dao-compose-proposal`** | Interactive interview → forum topic/idea then propose. Never from cron |
+| **`continuum-dao-proposal-standards`** | Fetch Constitution + **Proposals and Voting** + How to Write; type-fit and format checklist |
+| **`continuum-dao-forum-replies`** | Read-only watch for replies to the operator’s Forum posts; cron **`notify-forum-replies`** |
+| **`continuum-dao-forum-inbox`** | Interactive: list NodeBB Unread, present posts, mark threads read |
+| **`continuum-dao-mpa-wallet-chat`** | MPA Wallet Chat listings, Agent Mail, Technocore discovery. Never ads in Ideas/Governance |
+
+Machine-editable host YAML is **not** under **`Skills/`**. Those files live at **`agent_llm_config.defaults/*.yaml`** (and **`cron/trade-cron.yaml`**) and appear on the Skills / Cron tabs as **Host YAML configs**.
 
 Skill **`name`** values must be lowercase (`a-z`, digits, hyphen, underscore) — they match the node API and manifest lookup.
 

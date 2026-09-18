@@ -3,7 +3,11 @@
 | File | Purpose |
 |------|---------|
 | `jobs.json` | **Repository catalog** of cron job templates (not copied to runtime; activate via UI or `POST /addCronJobFromCatalog`) |
-| `forum_replies_cron.example.md` | Setup for **`notify-forum-replies`** (Forum username, Telegram, baseline vs notify) |
+| `trade-cron.yaml` | Host YAML (`kind=cron-trade`). Node-wide **`tradeConsensus`** / **`tradeBuild`** defaults. Edit on the Cron tab **Host YAML config** row. |
+| `trade_analysis_cron.example.md` | Read-only copy-paste trade-analysis cron **message**. Cron tab **View template** or **`GET /getCronTradeAnalysisExample`**. Not a catalog job. |
+| `sign_accept_policy.example.md` | Template for **`conditional-accept-sign-request`** (`signAcceptPolicy` lives in the job **`message`**, not a host YAML file). |
+| `continuum_dao_vote_policy.example.md` | Template for **`appraise-and-vote-proposals`** and **`conditional-accept-governance-vote`**. Machine defaults live in host YAML **`continuum-dao-vote-policy.yaml`**. |
+| `forum_replies_cron.example.md` | Setup for **`notify-forum-replies`** (Forum username, Telegram, baseline vs notify). Watch state is agent-written **`data/cron/notify-forum-replies.yaml`**, not a host YAML kind. |
 
 Bundled jobs in `jobs.json`:
 

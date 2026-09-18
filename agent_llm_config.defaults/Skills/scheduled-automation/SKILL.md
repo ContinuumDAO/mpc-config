@@ -93,6 +93,9 @@ On **cron** turns the host may expose **`agent_spawn_sub_agent`** / **`agent_joi
 |-------------|----------|
 | **`auto-accept-sign-request`** | Blind accept every pending Join request (`accept: true`) with timestamped thoughts. |
 | **`conditional-accept-sign-request`** | Evaluate embedded **`signAcceptPolicy`** YAML: parse ctm1 Purpose short codes (`proto`, `setup`, `sz=` / `szUsd=`, symbol) **and** additional Purpose prose after ` · `; accept or **reject** with full Purpose cited in thoughts. Template: **`cron/sign_accept_policy.example.md`**. |
+| **`appraise-and-vote-proposals`** | ContinuumDAO **vote only**. Follow host YAML **`continuum-dao-vote-policy.yaml`**. Template: **`cron/continuum_dao_vote_policy.example.md`**. Never propose. |
+| **`conditional-accept-governance-vote`** | ContinuumDAO **governor Join** only (`sign_request_agree`). Same host YAML. Always reject propose/execute/cancel. |
+| **`notify-forum-replies`** | Read-only Forum reply watch + **`telegramNotify`**. Template: **`cron/forum_replies_cron.example.md`**. |
 
 Gather policy in **interactive chat first** (test against sample `get_sign_request_by_id`), paste frozen YAML into the cron **`message`**, **`run_cron_job`** once, then enable.
 

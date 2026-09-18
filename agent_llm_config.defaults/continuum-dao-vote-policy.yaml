@@ -1,5 +1,7 @@
-# Default ContinuumDAO votePolicy for this skill.
-# Keep the votePolicy block in SKILL.md in sync — the agent loads SKILL.md.
+# Default ContinuumDAO votePolicy.
+# Edit via Skills tab → Host YAML configs, or POST /upsertHostYamlConfig
+# with kind=continuum-dao-vote-policy. The vote-policy skill loads this
+# installed file (not the example in SKILL.md).
 votePolicy:
   version: 1
   defaultAction: skip          # skip | nota | against | abstain — never "for"
