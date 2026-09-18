@@ -11,14 +11,16 @@ This skill **never** authorizes `ctm_continuum_dao_build_propose_*` or `ctm_cont
 
 ## votePolicy (edit on this node)
 
-Marker `votePolicy:` then YAML. Empty allowlists mean “do not filter on that field” except `defaultAction`.
+Machine-editable defaults: **`continuum-dao-vote-policy.yaml`** in this skill directory. Marker `votePolicy:` then YAML. Empty allowlists mean “do not filter on that field” except `defaultAction`. Keep this block in sync with the YAML file.
 
 ```yaml
 votePolicy:
   version: 1
   defaultAction: skip          # skip | nota | against | abstain — never "for"
   keyGenId: ""                 # KeyGen that casts the vote (not a proposer filter)
-  trustedProposers: []         # any 0x EOA or contract; empty = do not filter by author
+  trustedProposers:
+    - "0x482cdCbdd72ef307997153Ee7eb627B7a2348d34"
+    - "0xd23eecBe0362F36b254F774C274823Cbfc482a10"
   blockedProposers: []
   types:
     block: [Admin]
