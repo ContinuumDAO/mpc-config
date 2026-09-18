@@ -17,13 +17,14 @@ Machine-editable defaults live in host YAML **`continuum-dao-vote-policy.yaml`**
 votePolicy:
   version: 1
   defaultAction: skip          # skip | nota | against | abstain — never "for"
+  trustedAction: for           # skip | nota | against | abstain | for — trusted + clean only
   keyGenId: ""                 # KeyGen that casts the vote (not a proposer filter)
   trustedProposers:
     - "0x482cdCbdd72ef307997153Ee7eb627B7a2348d34"
     - "0xd23eecBe0362F36b254F774C274823Cbfc482a10"
   blockedProposers: []
   types:
-    block: [Admin]
+    block: []                  # e.g. [Admin] — hard veto even for trusted proposers
     treasury:
       action: against          # against | nota | skip
       maxValueWei: "0"
@@ -63,11 +64,12 @@ A proposal should have a real `forumKey` (`/topic/:tid` or `/t/:tid`). Reads do 
 2. Run **`continuum-dao-proposal-standards`** on the on-chain brief + forum OP (must include the fetched **Proposals and Voting** type-fit). Tell the operator every red (Vision/Mission, type-fit) and amber (missing Format) item.
 3. If `proposer` is in `blockedProposers` → `skip` (cron: do nothing).
 4. If `trustedProposers` is non-empty and proposer is not on it → `skip`.
-5. If type is in `types.block` → `skip` or `against` per YAML.
+5. If type is in `types.block` → `skip` or `against` per YAML. This is a **hard veto** even when the proposer is trusted.
 6. Treasury / value / deny signatures / deny targets / scam flags → `against` or `nota` (Delta) or `skip` if `defaultAction` is skip and the rule says skip.
 7. **Standards:** Vision/Mission non-conformance → `against` or `nota` (Constitution: voters should seriously consider rejecting). **Type-fit** failure against fetched Proposals and Voting (wrong type, Constitution without the new text, Treasury with no transfer, Election that is not multi-choice, Admin that is not onlyGov/upgrade/redeploy, or Forum section mismatch / Ideas `forumKey`) → same lean. Missing Format (especially Treasury budget / timeline / success criteria, or no Abstract/Motivation/Scope) → same lean, or `skip` only if `defaultAction` is skip and no other deny rule fired. Cite the failing items in the recommendation.
-8. If nothing matches → **`defaultAction`**. Never invent **For**. Good format does not authorize For.
-9. Delta “take no action” → put weight on the **last (NOTA)** slot only.
+8. If the proposer is on `trustedProposers`, no veto/deny/scam/standards rule fired, and **`trustedAction`** is set → that action (**For** is allowed only here).
+9. If nothing matches → **`defaultAction`**. Never invent **For**. Good format does not authorize For. `defaultAction` itself must not be `for`.
+10. Delta “take no action” → put weight on the **last (NOTA)** slot only.
 
 Interactive chat: state the recommendation and **wait for confirmation** before any vote multi-sign. Cron: no questions; if skip/unknown, **do nothing**.
 

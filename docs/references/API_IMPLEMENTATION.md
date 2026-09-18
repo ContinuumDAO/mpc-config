@@ -3329,7 +3329,7 @@ Five **editable** host YAML files share one management API. Each has bundled def
 
 **Auth:** Management signature.
 
-**Body:** `{ "kind", "content", "nonce", "clientSig", "nodeKey" }` — **`content`** is the full YAML file. Server validates structure per **`kind`** before atomic write. **`trade-desk`:** `version`, `universal`, `llmFallback`, `protocols`. **`orchestration-plan`:** plan schema. **`agent-intent-rules`:** rules schema. **`continuum-dao-vote-policy`:** `votePolicy.version`, `defaultAction` (`skip` / `nota` / `against` / `abstain`), 0x proposer/target addresses. **`cron-trade`:** `version`, at least one of **`tradeConsensus`** / **`tradeBuild`**.
+**Body:** `{ "kind", "content", "nonce", "clientSig", "nodeKey" }` — **`content`** is the full YAML file. Server validates structure per **`kind`** before atomic write. **`trade-desk`:** `version`, `universal`, `llmFallback`, `protocols`. **`orchestration-plan`:** plan schema. **`agent-intent-rules`:** rules schema. **`continuum-dao-vote-policy`:** `votePolicy.version`, `defaultAction` (`skip` / `nota` / `against` / `abstain`), optional `trustedAction` (`skip` / `nota` / `against` / `abstain` / `for`), 0x proposer/target addresses. **`cron-trade`:** `version`, at least one of **`tradeConsensus`** / **`tradeBuild`**.
 
 **Response data:** Same shape as **`GET /getHostYamlConfig`** with **`configured: true`** and **`path`** set to the runtime file.
 

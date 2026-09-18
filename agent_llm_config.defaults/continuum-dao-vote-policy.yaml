@@ -5,13 +5,14 @@
 votePolicy:
   version: 1
   defaultAction: skip          # skip | nota | against | abstain — never "for"
+  trustedAction: for           # when proposer is on trustedProposers and no deny/block/scam/standards rule fired
   keyGenId: ""                 # KeyGen that casts the vote (not a proposer filter)
   trustedProposers:
     - "0x482cdCbdd72ef307997153Ee7eb627B7a2348d34"
     - "0xd23eecBe0362F36b254F774C274823Cbfc482a10"
   blockedProposers: []
   types:
-    block: [Admin]
+    block: []                  # e.g. [Admin] — hard skip/against even for trusted proposers
     treasury:
       action: against          # against | nota | skip
       maxValueWei: "0"
