@@ -14,7 +14,7 @@ In agent chat, Continuum tools are **`continuum__<name>`**. Load the protocol fi
 Do **not** answer from `ctm_continuum_dao_fetch_proposals` or backend `status`.
 
 1. `continuum__ctm_continuum_dao_fetch_live_proposals` with Linea `chainId` `59144` (Sepolia `59141`) and `rpcUrl` from the chain registry. Pass `governor` if the constant is still zero. Catalog ids **-2** and **-1** are the two proposals on the superseded Linea governor `0x4800F9f1dC1b6daCA841B71E0531F547D374168E` — do not invent ids 1 and 2 from `total: 3`.
-2. Read `note`, then print **four short lists** (titles, `#id`, `stateLabel`). Do not dump JSON.
+2. Read `note`, then print **four short lists** (titles, `#id`, `stateLabel`). If `committeeProposer` is true, say **Committee** next to that row. Do not dump JSON.
 
 | Bucket | Meaning |
 |--------|---------|
@@ -32,7 +32,7 @@ If `overlay` is `backend-only`, say you could not confirm Governor state.
 2. Read **`briefing` aloud**. Walk every line. Do not collapse to “some transfers.”
 3. Encoder no-ops (`value 0`, empty signature, `0x` calldata) are **signaling**, not ETH sent to a KeyGen.
 4. Each action has `network.name` / `network.label` / `network.chainId` and usually `network.c3governor` (always populated on Linea). **If the network is Linea** (`name`/`label` Linea, or chainId `59144` / `59141`), it is a **home-chain** action — not cross-chain. C3-remote only when the action network is a **different** chain.
-5. Header must include proposer as **any EOA or contract** (not “must be a KeyGen”).
+5. Header must include proposer as **any EOA or contract** (not “must be a KeyGen”). **Say whether it is a Committee proposal:** if `committeeProposer` is true (or the address is in installed `votePolicy.committeeProposers`), say **“This is a ContinuumDAO Committee proposal”** in the first sentence. If false, say it is **not** a Committee proposal.
 6. Delta: one subsection per option, then **None of the above (NOTA)** as a vote slot with no actions.
 7. Bravo: “If this passes, the DAO will execute, in order.”
 8. Repeat the **Risks** list from the tool. Do not invent extra certainty.

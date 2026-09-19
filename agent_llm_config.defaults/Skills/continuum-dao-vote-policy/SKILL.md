@@ -1,6 +1,6 @@
 ---
 name: continuum-dao-vote-policy
-description: How this node votes on ContinuumDAO proposals and how governor Join Accept/Reject works. Read the forum thread; interactive login/reply/react allowed. Never create a proposal or forum topic. Trusted proposers are any EOA or contract.
+description: How this node votes on ContinuumDAO proposals and how governor Join Accept/Reject works. Read the forum thread; interactive login/reply/react allowed. Never create a proposal or forum topic. Trusted and Committee proposers are any EOA or contract.
 ---
 
 # ContinuumDAO vote policy
@@ -17,14 +17,15 @@ Machine-editable defaults live in host YAML **`continuum-dao-vote-policy.yaml`**
 votePolicy:
   version: 1
   defaultAction: skip          # skip | nota | against | abstain — never "for"
-  trustedAction: for           # skip | nota | against | abstain | for — trusted + clean only
+  trustedAction: for           # skip | nota | against | abstain | for — trusted or committee + clean only
   keyGenId: ""                 # KeyGen that casts the vote (not a proposer filter)
-  trustedProposers:
+  trustedProposers: []         # node-operator allowlist; starts empty
+  committeeProposers:          # Constitution Committee (pre-filled)
     - "0x482cdCbdd72ef307997153Ee7eb627B7a2348d34"
     - "0xd23eecBe0362F36b254F774C274823Cbfc482a10"
   blockedProposers: []
   types:
-    block: []                  # e.g. [Admin] — hard veto even for trusted proposers
+    block: []                  # e.g. [Admin] — hard veto even for trusted/committee proposers
     treasury:
       action: against          # against | nota | skip
       maxValueWei: "0"
@@ -40,14 +41,16 @@ votePolicy:
     rejectEmptyDescriptionWithActions: true
 ```
 
-**Trusted proposers are not KeyGens.** Any Ethereum address may author a proposal. `keyGenId` is only who **signs the vote**.
+**Proposers are not KeyGens.** Any Ethereum address may author a proposal. `keyGenId` is only who **signs the vote**.
+
+**`trustedProposers`** is the node user’s allowlist (initially empty). **`committeeProposers`** is the current ContinuumDAO Committee (Constitution: Selqui, Hal, John CTM). Both lists can unlock **Admin For** via `trustedAction`. Difference: a **Committee** Admin proposal does **not** need a prior **Ideas & Suggestions** thread. A **trusted** (non-committee) Admin For still does — Citizens develop ideas there first (Constitution). Empty `trustedProposers` means “do not filter on that field”; it does not skip Committee rows.
 
 ## Forum (read always; write when interactive)
 
 A proposal should have a real `forumKey` (`/topic/:tid` or `/t/:tid`). Reads do not need a ticket.
 
 1. `continuum__ctm_continuum_dao_forum_resolve` then `forum_fetch_thread` (index `0` = OP; page replies with `start`/`limit`). Read **`section`**. Expected map: Decision→`decision`, Election→`election`, Treasury→`treasury`, Constitution→`constitution`, Admin→`admin`. `forum_reply_count` for volume. One post: `forum_fetch_post`. A user’s posts: `forum_user_post_ids` then `forum_fetch_post`. Recent posts: `forum_recent` (`hours` or `since`; id, title, username, createdAt). Keyword matches: `forum_search` then `forum_fetch_post`.
-2. Include the OP (and notable replies) in the appraisal. Scam / empty-description rules still apply if the on-chain brief is thin but the thread is not. A thread in **Ideas & Suggestions**, or a section that does not match `typeLabel`, is a **standards failure** (lean `against` / `nota`).
+2. Include the OP (and notable replies) in the appraisal. Scam / empty-description rules still apply if the on-chain brief is thin but the thread is not. A **`forumKey` in Ideas & Suggestions**, or a section that does not match `typeLabel`, is a **standards failure** (lean `against` / `nota`) — the on-chain thread must still be the matching Governance section. Separately, for **Admin For** from a **trusted** proposer, search Ideas for a prior discussion (OP link or `forum_search`); if none exists, do not unlock For. **Committee** Admin For skips that Ideas-prior check (quick Committee proposals).
 3. `content` is composer source (usually markdown, not site HTML). When showing a post in chat, emit markdown as markdown so it can render — do **not** fence the body. If it is HTML or NodeBB-only markup, summarize in plain language.
 
 **Interactive write** (operator asked to comment or react — not from cron):
@@ -60,16 +63,17 @@ A proposal should have a real `forumKey` (`/topic/:tid` or `/t/:tid`). Reads do 
 
 ## Appraisal (interactive and cron)
 
-1. `explain_proposal` briefing + `fetch_proposal_state` (must be **Active** to vote). Pass the catalog id (including `0`); the tool resolves `onchainId` — do not call Governor `state(0)`. Fetch the forum thread as above when `forumKey` is a topic URL.
+1. `explain_proposal` briefing + `fetch_proposal_state` (must be **Active** to vote). Pass the catalog id (including `0`); the tool resolves `onchainId` — do not call Governor `state(0)`. Fetch the forum thread as above when `forumKey` is a topic URL. **State Committee authorship first:** if `committeeProposer` is true or `proposer` is on `committeeProposers`, say **“This is a ContinuumDAO Committee proposal.”** Otherwise say it is not.
 2. Run **`continuum-dao-proposal-standards`** on the on-chain brief + forum OP (must include the fetched **Proposals and Voting** type-fit). Tell the operator every red (Vision/Mission, type-fit) and amber (missing Format) item.
 3. If `proposer` is in `blockedProposers` → `skip` (cron: do nothing).
-4. If `trustedProposers` is non-empty and proposer is not on it → `skip`.
-5. If type is in `types.block` → `skip` or `against` per YAML. This is a **hard veto** even when the proposer is trusted.
+4. If `trustedProposers` is non-empty and the proposer is on **neither** `trustedProposers` **nor** `committeeProposers` → `skip`. An empty `trustedProposers` list does not skip anyone.
+5. If type is in `types.block` → `skip` or `against` per YAML. This is a **hard veto** even when the proposer is trusted or Committee.
 6. Treasury / value / deny signatures / deny targets / scam flags → `against` or `nota` (Delta) or `skip` if `defaultAction` is skip and the rule says skip.
-7. **Standards:** Vision/Mission non-conformance → `against` or `nota` (Constitution: voters should seriously consider rejecting). **Type-fit** failure against fetched Proposals and Voting (wrong type, Constitution without the new text, Treasury with no transfer, Election that is not multi-choice, Admin that is not onlyGov/upgrade/redeploy, or Forum section mismatch / Ideas `forumKey`) → same lean. Missing Format (especially Treasury budget / timeline / success criteria, or no Abstract/Motivation/Scope) → same lean, or `skip` only if `defaultAction` is skip and no other deny rule fired. Cite the failing items in the recommendation.
-8. If the proposer is on `trustedProposers`, no veto/deny/scam/standards rule fired, and **`trustedAction`** is set → that action (**For** is allowed only here).
-9. If nothing matches → **`defaultAction`**. Never invent **For**. Good format does not authorize For. `defaultAction` itself must not be `for`.
-10. Delta “take no action” → put weight on the **last (NOTA)** slot only.
+7. **Standards:** Vision/Mission non-conformance → `against` or `nota` (Constitution: voters should seriously consider rejecting). **Type-fit** failure against fetched Proposals and Voting (wrong type, Constitution without the new text, Treasury with no transfer, Election that is not multi-choice, Admin that is not onlyGov/upgrade/redeploy, or Forum section mismatch / Ideas `forumKey`) → same lean. Missing Format (especially Treasury budget / timeline / success criteria, or no Abstract/Motivation/Scope) → same lean for a **trusted** proposer, or `skip` only if `defaultAction` is skip and no other deny rule fired. For a **Committee** Admin proposal, report amber format items but **do not** treat them as a For-blocking standards fire (quick Committee action). Cite the failing items in the recommendation.
+8. **Admin Ideas-prior:** if type is Admin and you would otherwise unlock For for a proposer who is on `trustedProposers` but **not** on `committeeProposers`, require evidence of a prior **Ideas & Suggestions** thread (OP link or Ideas search hit). If missing → do not unlock For (`skip` if `defaultAction` is skip). **Committee** Admin proposals skip this gate.
+9. If the proposer is on `trustedProposers` or `committeeProposers`, no veto/deny/scam/**red** standards rule fired, Ideas-prior is satisfied or waived, and **`trustedAction`** is set → that action (**For** is allowed only here). Both lists may unlock **Admin For**. Amber format still blocks **trusted** For; it does not block **Committee** Admin For.
+10. If nothing matches → **`defaultAction`**. Never invent **For**. Good format does not authorize For. `defaultAction` itself must not be `for`.
+11. Delta “take no action” → put weight on the **last (NOTA)** slot only.
 
 Interactive chat: state the recommendation and **wait for confirmation** before any vote multi-sign. Cron: no questions; if skip/unknown, **do nothing**.
 

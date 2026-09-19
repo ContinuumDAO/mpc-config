@@ -5,14 +5,17 @@
 votePolicy:
   version: 1
   defaultAction: skip          # skip | nota | against | abstain — never "for"
-  trustedAction: for           # when proposer is on trustedProposers and no deny/block/scam/standards rule fired
+  trustedAction: for           # when proposer is on trustedProposers or committeeProposers and no deny/block/scam/red standards fired
   keyGenId: ""                 # KeyGen that casts the vote (not a proposer filter)
-  trustedProposers:
+  # Node-operator allowlist (starts empty). Admin For still requires a prior Ideas & Suggestions thread.
+  trustedProposers: []
+  # Constitution Committee (Selqui, Hal, John CTM). Admin For does not require a prior Ideas post.
+  committeeProposers:
     - "0x482cdCbdd72ef307997153Ee7eb627B7a2348d34"
     - "0xd23eecBe0362F36b254F774C274823Cbfc482a10"
   blockedProposers: []
   types:
-    block: []                  # e.g. [Admin] — hard skip/against even for trusted proposers
+    block: []                  # e.g. [Admin] — hard skip/against even for trusted/committee proposers
     treasury:
       action: against          # against | nota | skip
       maxValueWei: "0"

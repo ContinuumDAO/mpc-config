@@ -45,7 +45,7 @@ Ask one topic at a time until the draft is complete. Plain English is enough; yo
 5. **Title** 8–128 chars (on-chain `description` and forum topic title). **Description** ≤ 1024 chars (backend). Forum body: proposal text ≤ **6200** so an 1800-char standards appendix still fits (tool max 8000, English).
 6. **Proposal Format** — follow **`continuum-dao-proposal-standards`**. Draft Abstract, Motivation, Overview, Type, Scope, and Treasury extras (Success Criteria, Timeline, Budget). Fetch How to Write a Proposal; do not skip headings.
 7. **Vision / Mission and type-fit** — follow **`continuum-dao-proposal-standards`** (required Constitution fetches). If the draft does not further Mission & Vision, or the Type does not match **Proposals and Voting**, **tell the operator** and recommend a rewrite or a different type/section. If they **insist**, continue and append the red/amber appendix from that skill.
-8. **Forum thread is required and must be created first in the matching Governance section.** Do not propose with the homepage, an Ideas URL, or an invented URL. `forumKey` must be `/topic/:tid` or `/t/:tid` on forum.continuumdao.org from `forum_create_topic`.
+8. **Forum thread is required and must be created first in the matching Governance section.** Do not propose with the homepage, an Ideas URL, or an invented URL. `forumKey` must be `/topic/:tid` or `/t/:tid` on forum.continuumdao.org from `forum_create_topic`. Citizens should have developed the ask in Ideas first; **Committee** operators may skip that Ideas pre-post for an urgent **Admin** proposal, but the on-chain `forumKey` is still a Governance `admin` topic — never an Ideas URL.
 
 ## Forum login / logout / write
 

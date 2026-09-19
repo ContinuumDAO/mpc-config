@@ -60,6 +60,8 @@ Also call out: no clear objectives; no community-discussion mention when the dra
 
 **Ideas vs proposals.** Ideas & Suggestions is **pre-proposal discussion only** — not a Temperature Check and not a valid `forumKey`. If the operator is not ready for on-chain governance, or the ask does not fit a Constitution type, guide them to post an Idea (`forum_create_idea`) instead of composing a proposal. All formal proposals must appear in a **Governance** category that matches Type.
 
+**Ideas-prior (vote appraisal).** The Constitution asks Citizens to develop a proposal in Ideas & Suggestions before a Committee member moves it to Governance. When **`continuum-dao-vote-policy`** would unlock **Admin For** for a **`trustedProposers`** address that is not also on **`committeeProposers`**, require evidence of that prior Ideas thread (OP link or Ideas search). **Committee** Admin proposals may skip Ideas (quick Committee action). A live `forumKey` that is still in Ideas remains a type-fit failure for everyone.
+
 **Help draft (compose only).** Walk the operator through those headings. Choose Type from the fetched Proposals and Voting section (do not default to Decision when another type fits). Suggest wording that states how the work serves Mission & Vision. Do not invent facts.
 
 ## Tell the operator first

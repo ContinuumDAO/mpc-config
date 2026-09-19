@@ -25,7 +25,7 @@ From `get_sign_request_by_id({ compact: false })`: `evm.type` or `signatureText`
 | `continuum_dao_cancel` / `ContinuumDAO.cancel` | **Forbidden** | **Reject** |
 | Trade / escrow / other | Do nothing | **Skip** (no agree) |
 
-Trusted proposers are **any EOA or contract**, not KeyGens. `keyGenId` is only who casts the vote.
+Trusted and Committee proposers are **any EOA or contract**, not KeyGens. `keyGenId` is only who casts the vote. **`committeeProposers`** is the Constitution Committee (Admin For without a prior Ideas thread). **`trustedProposers`** is the node-operator list (Admin For still needs Ideas-prior).
 
 ## Non-interactive rules (both jobs)
 
@@ -37,7 +37,7 @@ Trusted proposers are **any EOA or contract**, not KeyGens. `keyGenId` is only w
 
 ## Operator checklist
 
-- [ ] Edit **`continuum-dao-vote-policy.yaml`** on the Skills tab (**Host YAML configs**) — trusted/blocked proposers, treasury, signatures
+- [ ] Edit **`continuum-dao-vote-policy.yaml`** on the Skills tab (**Host YAML configs**) — committee/trusted/blocked proposers, treasury, signatures
 - [ ] Set `keyGenId` for the vote-create job
 - [ ] **Run now** each job once before enabling
 - [ ] Do **not** enable both governor Join auto-Accept and `auto-sign-and-broadcast` unless you intend unattended chain execution
