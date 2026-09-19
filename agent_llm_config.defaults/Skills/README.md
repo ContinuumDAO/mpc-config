@@ -33,7 +33,7 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 | **`workspace-tooling`** | Create / reuse scripts under **`user_folder`** |
 | **`continuum-dao-proposals`** | Present live/recent ContinuumDAO proposals and deconstruct multi-action briefs |
 | **`continuum-dao-vote-policy`** | Vote + governor Join procedure. Machine defaults live in host YAML **`continuum-dao-vote-policy.yaml`**. Never propose |
-| **`continuum-dao-compose-proposal`** | Interactive interview → forum topic/idea then propose. Never from cron |
+| **`continuum-dao-compose-proposal`** | Interactive interview (etherscan ABI + typed params + table + Foundry forge-script simulate) → KeyGen forum/propose or other-address draft. Never from cron |
 | **`continuum-dao-proposal-standards`** | Fetch Constitution + **Proposals and Voting** + How to Write; type-fit and format checklist |
 | **`continuum-dao-forum-replies`** | Read-only watch for replies to the operator’s Forum posts; cron **`notify-forum-replies`** |
 | **`continuum-dao-forum-inbox`** | Interactive: list NodeBB Unread, present posts, mark threads read |

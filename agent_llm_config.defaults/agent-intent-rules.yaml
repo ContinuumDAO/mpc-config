@@ -137,6 +137,27 @@ rules:
       custom gas. Report requestId; do not mark the import complete without it.
     modes: [interactive, cron]
 
+  - id: continuum_dao_compose_proposal
+    tier: work
+    loadMcpServers: [etherscan, foundry]
+    match:
+      anySubstring:
+        - compose proposal
+        - draft a proposal
+        - draft proposal
+        - simulate proposal
+        - simulate the proposal
+        - proposal draft
+        - create a proposal
+        - create a dao proposal
+    hint: |
+      ContinuumDAO compose/simulate: etherscan (official V2) and foundry must be loaded first.
+      Fetch ABI with etherscan__get_contract_abi (chainid 59144 or 59141). Sequential execute
+      dry-run is a Foundry forge script: write foundry.files with foundry__create_solidity_file,
+      then foundry__forge_script on a Linea fork with no --broadcast. Isolated eth_call or
+      cast call cannot carry state between actions. Never broadcast these scripts.
+    modes: [interactive]
+
   - id: rss_feed_more_items
     tier: light
     match:
