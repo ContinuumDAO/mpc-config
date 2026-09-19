@@ -140,22 +140,38 @@ rules:
   - id: continuum_dao_compose_proposal
     tier: work
     loadMcpServers: [etherscan, foundry]
+    boostGroups: ["defi:continuum-dao:governance-write"]
     match:
       anySubstring:
         - compose proposal
+        - compose a proposal
         - draft a proposal
         - draft proposal
+        - create a draft
+        - create a draft proposal
+        - draft continuumdao
+        - draft continuum dao
+        - write a proposal
+        - write a new proposal
+        - write a new continuumdao
+        - new continuumdao proposal
         - simulate proposal
         - simulate the proposal
         - proposal draft
         - create a proposal
         - create a dao proposal
+        - help me draft
+        - help drafting
     hint: |
-      ContinuumDAO compose/simulate: etherscan (official V2) and foundry must be loaded first.
-      Fetch ABI with etherscan__get_contract_abi (chainid 59144 or 59141). Sequential execute
-      dry-run is a Foundry forge script: write foundry.files with foundry__create_solidity_file,
-      then foundry__forge_script on a Linea fork with no --broadcast. Isolated eth_call or
-      cast call cannot carry state between actions. Never broadcast these scripts.
+      ContinuumDAO compose/simulate: host auto-loads etherscan (official V2) then foundry.
+      Load skill continuum-dao-compose-proposal. Interview first (KeyGen submit vs other-address
+      draft, then type, then per-action address + function). Do not open, grep, or reuse
+      data/proposals/ or any prior workspace draft unless the operator named that file or asked
+      to resume it. Do not fetch KeyGen voting power or treat proposalThreshold as the task
+      until they choose KeyGen submit. Fetch ABI with etherscan__get_contract_abi (chainid 59144
+      or 59141). Sequential execute dry-run is foundry__forge_script: write foundry.files with
+      foundry__create_solidity_file, then foundry__forge_script on a Linea fork with no
+      --broadcast. Isolated eth_call or cast call cannot carry state. Never broadcast these scripts.
     modes: [interactive]
 
   - id: rss_feed_more_items

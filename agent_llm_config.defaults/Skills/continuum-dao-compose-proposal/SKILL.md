@@ -28,6 +28,10 @@ Both paths use the same compose tool, the same simulate tool, and the same Found
 
 Do **not** gate the interview on KeyGen voting power. Check power only when they choose to **submit** from the KeyGen (before forum / `build_propose_*`). For another address, `ctm_continuum_dao_simulate_proposal` only **warns**.
 
+A new chat that asks to create or draft a proposal is a **new interview**. Do **not** `agent_grep` / `agent_ls` / `agent_read_file` / `agent_bash` under `data/proposals/` (or any prior `*.md` proposal) unless the operator named that path or said to resume or reuse it. Do not infer type, recipient, amount, or actions from an on-disk file.
+
+On the **other-address draft** path, do **not** call `get_preferred_key_gen`, `fetch_key_gen_result`, or `fetch_voting_power` for this node’s KeyGen. Those are submit-path only. A short KeyGen is not a reason to stop drafting.
+
 ## Interview (ask, do not guess)
 
 Ask one topic at a time until the draft is complete.
