@@ -60,7 +60,7 @@ A proposal should have a real `forumKey` (`/topic/:tid` or `/t/:tid`). Reads do 
 
 ## Appraisal (interactive and cron)
 
-1. `explain_proposal` briefing + `fetch_proposal_state` (must be **Active** to vote). Fetch the forum thread as above when `forumKey` is a topic URL.
+1. `explain_proposal` briefing + `fetch_proposal_state` (must be **Active** to vote). Pass the catalog id (including `0`); the tool resolves `onchainId` — do not call Governor `state(0)`. Fetch the forum thread as above when `forumKey` is a topic URL.
 2. Run **`continuum-dao-proposal-standards`** on the on-chain brief + forum OP (must include the fetched **Proposals and Voting** type-fit). Tell the operator every red (Vision/Mission, type-fit) and amber (missing Format) item.
 3. If `proposer` is in `blockedProposers` → `skip` (cron: do nothing).
 4. If `trustedProposers` is non-empty and proposer is not on it → `skip`.
