@@ -7,7 +7,7 @@ description: Fetch Constitution Vision/Mission, Proposals and Voting (canonical 
 
 Load with **`continuum-dao-compose-proposal`**, **`continuum-dao-vote-policy`**, or **`continuum-dao-proposals`**. Do **not** paste the Constitution or How-to into this file — fetch them. Apply the fetched **Proposals and Voting** text as the canonical definition of each type.
 
-## Fetch (once per session — all three are required)
+## Fetch (once per session — all four are required)
 
 Docs tools are the **`docs`** bundle. If `get_continuum_doc` is not in the tool list:
 
@@ -18,6 +18,7 @@ Then, in this order:
 1. `continuum__get_continuum_doc({ "path": "ContinuumDAO/Governance/Constitution", "sectionId": "mission-amp-vision" })` — **Mission & Vision**.
 2. `continuum__get_continuum_doc({ "path": "ContinuumDAO/Governance/Constitution", "sectionId": "continuumdao-proposals-and-voting" })` — **canonical proposal types**. Required before choosing a type, posting to a Forum section, or appraising a live proposal. Do not skip this because the page is long.
 3. `continuum__get_continuum_doc({ "path": "ContinuumDAO/Governance/HowToWriteAProposal" })` — **Proposal Format** and Necessary Elements.
+4. `continuum__get_continuum_doc({ "path": "ContinuumDAO/Governance/Constitution", "sectionId": "committee-list" })` — **Committee names and proposer addresses**. This is the only Committee roster. Ignore any `committeeProposers` in host YAML.
 
 If a `sectionId` is not found, `continuum__search_continuum_docs` for that heading and retry with the hit’s `sectionId`. Do not substitute memory or the type table in other skills for the fetched Proposals and Voting text.
 
@@ -25,6 +26,7 @@ Canonical URLs (for the operator, not as `forumKey`):
 
 - https://docs.continuumdao.org/ContinuumDAO/Governance/Constitution?id=mission-amp-vision
 - https://docs.continuumdao.org/ContinuumDAO/Governance/Constitution?id=continuumdao-proposals-and-voting
+- https://docs.continuumdao.org/ContinuumDAO/Governance/Constitution?id=committee-list
 - https://docs.continuumdao.org/ContinuumDAO/Governance/HowToWriteAProposal
 
 ## Checklist (apply to draft or live proposal + forum OP)
@@ -60,7 +62,7 @@ Also call out: no clear objectives; no community-discussion mention when the dra
 
 **Ideas vs proposals.** Ideas & Suggestions is **pre-proposal discussion only** — not a Temperature Check and not a valid `forumKey`. If the operator is not ready for on-chain governance, or the ask does not fit a Constitution type, guide them to post an Idea (`forum_create_idea`) instead of composing a proposal. All formal proposals must appear in a **Governance** category that matches Type.
 
-**Ideas-prior (vote appraisal).** The Constitution asks Citizens to develop a proposal in Ideas & Suggestions before a Committee member moves it to Governance. When **`continuum-dao-vote-policy`** would unlock **Admin For** for a **`trustedProposers`** address that is not also on **`committeeProposers`**, require evidence of that prior Ideas thread (OP link or Ideas search). **Committee** Admin proposals may skip Ideas (quick Committee action). A live `forumKey` that is still in Ideas remains a type-fit failure for everyone.
+**Ideas-prior (vote appraisal).** The Constitution asks Citizens to develop a proposal in Ideas & Suggestions before a Committee member moves it to Governance. When **`continuum-dao-vote-policy`** would unlock **Admin For** for a **`trustedProposers`** address that is **not** on the fetched Constitution **Committee List**, require evidence of that prior Ideas thread (OP link or Ideas search). **Committee** Admin proposals may skip Ideas (quick Committee action). A live `forumKey` that is still in Ideas remains a type-fit failure for everyone.
 
 **Help draft (compose only).** Walk the operator through those headings. Choose Type from the fetched Proposals and Voting section (do not default to Decision when another type fits). Suggest wording that states how the work serves Mission & Vision. Do not invent facts.
 

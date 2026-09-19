@@ -32,7 +32,7 @@ If `overlay` is `backend-only`, say you could not confirm Governor state.
 2. Read **`briefing` aloud**. Walk every line. Do not collapse to “some transfers.”
 3. Encoder no-ops (`value 0`, empty signature, `0x` calldata) are **signaling**, not ETH sent to a KeyGen.
 4. Each action has `network.name` / `network.label` / `network.chainId` and usually `network.c3governor` (always populated on Linea). **If the network is Linea** (`name`/`label` Linea, or chainId `59144` / `59141`), it is a **home-chain** action — not cross-chain. C3-remote only when the action network is a **different** chain.
-5. Header must include proposer as **any EOA or contract** (not “must be a KeyGen”). **Say whether it is a Committee proposal:** if `committeeProposer` is true (or the address is in installed `votePolicy.committeeProposers`), say **“This is a ContinuumDAO Committee proposal”** in the first sentence. If false, say it is **not** a Committee proposal.
+5. Header must include proposer as **any EOA or contract** (not “must be a KeyGen”). **Say whether it is a Committee proposal** from the fetched Constitution **Committee List** (`get_continuum_doc` path `ContinuumDAO/Governance/Constitution`, `sectionId` `committee-list`). If the proposer matches, say **“This is a ContinuumDAO Committee proposal”** and the member name in the first sentence. If not, say it is **not** a Committee proposal. Do not use host YAML `committeeProposers`. `committeeProposer` on the tool is a hint only.
 6. Delta: one subsection per option, then **None of the above (NOTA)** as a vote slot with no actions.
 7. Bravo: “If this passes, the DAO will execute, in order.”
 8. Repeat the **Risks** list from the tool. Do not invent extra certainty.
