@@ -131,6 +131,11 @@
       "initialLoad": false
     },
     {
+      "name": "continuum-dao-tokenomics",
+      "filename": "continuum-dao-tokenomics/SKILL.md",
+      "initialLoad": false
+    },
+    {
       "name": "continuum-dao-proposals",
       "filename": "continuum-dao-proposals/SKILL.md",
       "initialLoad": false

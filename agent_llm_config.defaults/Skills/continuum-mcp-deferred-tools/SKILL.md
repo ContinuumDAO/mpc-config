@@ -72,6 +72,8 @@ For OHLCV charts after fetch, see skill **`chart-ohlcv-sources`** and **`chart-p
 
 **`coinmarketcap-public`** and similar catalog MCP servers are **optional** — not part of continuum core bundles. Load via **`agent_load_mcp_server`** only when the **operator chooses** that provider — not as a silent fallback for generic chart requests. **Never** use **`agent_load_mcp_server`** for DeFi **`protocolId`** values.
 
+Asking for **live CTM circulating/escrowed/total supply, veCTM locks, or CTM protocol addresses** is choosing catalog MCP **`continuumdao-tokenomics`**. If it is not active: **`list_mcp_servers`** `scope: catalog` → **`add_mcp_server_from_catalog`** → **`agent_load_mcp_server`**. Then **`continuumdao-tokenomics__get_ctm_metrics`**. Do **not** answer those figures from the White Paper. Do not auto-load etherscan.
+
 ## Pinned at init (typical)
 
 Discovery tools, node health/version, preferred management signer reads, DeFi discovery gate — enough to orient and activate the right bundle for the operator’s task.

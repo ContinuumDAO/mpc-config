@@ -31,6 +31,7 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 | **`scheduled-automation`** | Cron & webhook behavior: non-interactive runs, schedule kinds, conversation threading |
 | **`trade-defaults`** | Policy-only trade-build guidance; numeric desk defaults live in host YAML **`trade-desk.yaml`** |
 | **`workspace-tooling`** | Create / reuse scripts under **`user_folder`** |
+| **`continuum-dao-tokenomics`** | Live CTM circulating/escrowed supply, protocol addresses, veCTM locks (catalog MCP, not White Paper) |
 | **`continuum-dao-proposals`** | Present live/recent ContinuumDAO proposals and deconstruct multi-action briefs |
 | **`continuum-dao-vote-policy`** | Vote + governor Join procedure. Machine defaults live in host YAML **`continuum-dao-vote-policy.yaml`**. Never propose |
 | **`continuum-dao-compose-proposal`** | Interactive interview (etherscan ABI + typed params + table + Foundry forge-script simulate) → KeyGen forum/propose or other-address draft. Never reuse `data/proposals/` unless asked. Never from cron |

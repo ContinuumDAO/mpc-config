@@ -16,6 +16,9 @@ rules:
       trading/swaps/perps/DeFi protocol tools → search/activate defi_discovery then
       continuum__load_defi_protocol — do not load a DeFi protocol merely because a chain brand
       was mentioned.
+      Live CTM circulating/escrowed/total supply, veCTM locks, or CTM protocol addresses are not
+      in the White Paper. Add/load catalog MCP continuumdao-tokenomics, then
+      continuumdao-tokenomics__get_ctm_metrics (or get_ctm_tokenomics_snapshot).
     modes: [interactive, cron]
 
   - id: third_party_market_data_consent
@@ -175,6 +178,39 @@ rules:
       foundry__create_solidity_file, then foundry__forge_script on a Linea fork with no
       --broadcast. Isolated eth_call or cast call cannot carry state. Never broadcast these scripts.
     modes: [interactive]
+
+  # Live CTM figures (not White Paper narrative). Do not use loadMcpServers until the
+  # operator has added catalog id continuumdao-tokenomics — missing active servers fail the turn.
+  - id: continuum_dao_tokenomics
+    tier: light
+    match:
+      anySubstring:
+        - circulating supply
+        - circulating ctm
+        - ctm circulating
+        - tokenomics
+        - vectm
+        - ve ctm
+        - ve-ctm
+        - locked ctm
+        - escrowed ctm
+        - ctm supply
+        - ctm metrics
+        - how much ctm
+        - total supply of ctm
+        - ctm protocol address
+        - ctm treasury
+    hint: |
+      Live ContinuumDAO tokenomics (this turn): do not answer circulating/escrowed/total supply,
+      veCTM locks, or protocol addresses from search_continuum_docs / the White Paper.
+      White Paper “all locked” is narrative; live circulatingSupply is unlocked-outside-treasury
+      from app-api. Load skill continuum-dao-tokenomics if present (add_skill_from_catalog first
+      if needed). If continuumdao-tokenomics__* tools are missing:
+      continuum__list_mcp_servers scope catalog → add_mcp_server_from_catalog id continuumdao-tokenomics
+      (operator signs) → agent_load_mcp_server { serverId: "continuumdao-tokenomics" }.
+      Then get_ctm_metrics or get_ctm_tokenomics_snapshot. For a wallet: get_ve_ctm_position.
+      Do not auto-load etherscan.
+    modes: [interactive, cron]
 
   - id: rss_feed_more_items
     tier: light
