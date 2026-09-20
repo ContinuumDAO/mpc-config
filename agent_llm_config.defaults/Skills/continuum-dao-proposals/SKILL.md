@@ -26,7 +26,7 @@ Do **not** answer from `ctm_continuum_dao_fetch_proposals` or backend `status`.
 
 If `overlay` is `backend-only`, say you could not confirm Governor state.
 
-After naming a proposal (live or past), offer **`continuum__ctm_continuum_dao_fetch_proposal_votes`** with that catalog `id` or `onchainId` so the operator can see **who voted and how**. Read `note`, then voter + `how` (For/Against/Abstain, or Delta option weights; last slot is NOTA) + **`attached`** (true when `NodeProperties.attachedTokenId` is set after `attachNodeFor`). Do not dump every tx hash unless asked.
+After naming a proposal (live or past), offer **`continuum__ctm_continuum_dao_fetch_proposal_votes`** with that catalog `id` or `onchainId` so the operator can see **who voted and how**. Read `note`, then voter + `how` (For/Against/Abstain, or Delta option weights; last slot is NOTA) + **`attached`** (true when `NodeProperties.attachedTokenId` is set after `attachNodeFor`). If `nodeInfo` is present, mention forum handle / VPS / DID — do **not** read email or IP aloud unless the operator asks. Do not dump every tx hash unless asked.
 
 ## Deconstruct one proposal
 
