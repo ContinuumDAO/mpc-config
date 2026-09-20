@@ -150,6 +150,14 @@
       "initialLoad": false
     },
     {
+      "id": "continuumdao-tokenomics",
+      "displayName": "ContinuumDAO tokenomics",
+      "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
+      "transport": "http",
+      "url": "http://continuum-mcp:8446/mcp/continuumdao-tokenomics",
+      "initialLoad": false
+    },
+    {
       "id": "gdelt-cloud",
       "displayName": "GDELT Cloud",
       "setupUrl": "https://gdeltcloud.com/product/mcp",
