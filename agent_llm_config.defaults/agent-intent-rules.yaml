@@ -139,6 +139,7 @@ rules:
 
   - id: continuum_dao_compose_proposal
     tier: work
+    verify: interview
     loadMcpServers: [etherscan, foundry]
     boostGroups: ["defi:continuum-dao:governance-write"]
     match:
@@ -165,7 +166,8 @@ rules:
     hint: |
       ContinuumDAO compose/simulate: host auto-loads etherscan (official V2) then foundry.
       Load skill continuum-dao-compose-proposal. Interview first (KeyGen submit vs other-address
-      draft, then type, then per-action address + function). Do not open, grep, or reuse
+      draft, then type, then per-action address + function). Stopping to ask is a complete turn
+      — do not invent type, actions, amounts, or an EOA. Do not open, grep, or reuse
       data/proposals/ or any prior workspace draft unless the operator named that file or asked
       to resume it. Do not fetch KeyGen voting power or treat proposalThreshold as the task
       until they choose KeyGen submit. Fetch ABI with etherscan__get_contract_abi (chainid 59144

@@ -34,7 +34,7 @@ On the **other-address draft** path, do **not** call `get_preferred_key_gen`, `f
 
 ## Interview (ask, do not guess)
 
-Ask one topic at a time until the draft is complete.
+Ask one topic at a time until the draft is complete. Stopping after one question is a finished turn. Do not invent type, actions, amounts, or an EOA to keep working.
 
 1. **Vote shape → Bravo vs Delta**
    - One yes/no (For / Against / Abstain) → **Bravo** (`configuration: 0`).
