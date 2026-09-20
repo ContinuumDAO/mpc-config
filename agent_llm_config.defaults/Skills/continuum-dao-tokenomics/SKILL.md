@@ -1,6 +1,6 @@
 ---
 name: continuum-dao-tokenomics
-description: Live CTM circulating/escrowed/total supply, protocol addresses, and veCTM locks via catalog MCP continuumdao-tokenomics. Do not answer those figures from the White Paper. Do not auto-load etherscan.
+description: Live CTM circulating/escrowed/total supply via catalog MCP continuumdao-tokenomics (not this skill). Call continuum__resolve_catalog_mcp_enablement. Do not answer from the White Paper. Do not auto-load etherscan.
 ---
 
 # ContinuumDAO tokenomics (live)
@@ -9,11 +9,12 @@ Load when the operator asks for **live** CTM supply, circulating/escrowed amount
 
 ## Load the catalog MCP
 
-Tools are **`continuumdao-tokenomics__*`**, not `continuum__*`.
+Tools are **`continuumdao-tokenomics__*`**, not `continuum__*`. This skill is **not** the MCP.
 
-1. `continuum__list_mcp_servers` (`scope: active`). If **`continuumdao-tokenomics`** is missing, `scope: catalog` then **`add_mcp_server_from_catalog({ id: "continuumdao-tokenomics" })`** (operator management-signs).
-2. **`agent_load_mcp_server({ serverId: "continuumdao-tokenomics" })`**.
-3. Call the read tools in the same turn after load.
+1. **`continuum__resolve_catalog_mcp_enablement({ "toolset": "continuumdao-tokenomics" })`**. Do **not** call `list_mcp_servers` `scope: catalog` (the payload is large and gets offloaded).
+2. Read `servers[]`. **`role: required`** (`continuumdao-tokenomics`): if `availability` is `repository`, tell the operator to **Add from repository** on the **MCP Servers** tab (or call `add_mcp_server_from_catalog` with `enable.addFromCatalog`) — they management-sign. Then `agent_load_mcp_server` from `enable.agentLoadMcpServer`. If `availability` is `missing`, use `missingHint`: ask them to **update the MPA Wallet code in the Maintenance section** — do not say pull mpc-config.
+3. **`role: desirable`** (`etherscan`): `askOperator: true` — mention it, do not add or load unless they ask.
+4. After load, call the read tools in the same turn.
 
 No API key. **`initialLoad` is false** — do not expect the tools at chat start.
 

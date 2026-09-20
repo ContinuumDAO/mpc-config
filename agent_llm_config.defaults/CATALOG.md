@@ -21,6 +21,8 @@ Builtin default **active** servers in **`MCP_default_servers.json`** (DB seed on
 
 Other optional servers belong in **`MCP_servers.json`** only — operators activate via catalog unless also added to **`MCP_default_servers.json`** for new-node seed.
 
+Recommended extras (not auto-seeded; add from the repository when useful): **`continuumdao-tokenomics`** and **`technical-indicators`** (no API key), official **`etherscan`** and **`foundry`** for DAO / compose work, plus **one** search MCP and **one** browser MCP (`firefox`, `mullvad-browser`, `gecko`, or another catalog browser). After a search or browser MCP is AI Ready, set Variable **`AGENT_DEFAULT_SEARCH_MCP`** to whichever search path you prefer — it does not have to be a browser. Set **`AGENT_CHAT_SETUP_HINTS=off`** (or Hide on the empty-chat line) to stop the setup hints. Do not add every catalog row.
+
 ## Add a new webhook template
 
 1. Edit **`hooks/webhooks.json`** — add one object to `"webhooks"` (`name`, `type`, `prompt`, default `enabled`: false).

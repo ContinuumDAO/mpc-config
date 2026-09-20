@@ -17,8 +17,14 @@ rules:
       continuum__load_defi_protocol — do not load a DeFi protocol merely because a chain brand
       was mentioned.
       Live CTM circulating/escrowed/total supply, veCTM locks, or CTM protocol addresses are not
-      in the White Paper. Add/load catalog MCP continuumdao-tokenomics, then
-      continuumdao-tokenomics__get_ctm_metrics (or get_ctm_tokenomics_snapshot).
+      in the White Paper. Call continuum__resolve_catalog_mcp_enablement
+      { toolset: "continuumdao-tokenomics" } (not list_mcp_servers catalog), then follow
+      enable.addFromCatalog / agentLoadMcpServer and get_ctm_metrics.
+      On the first assistant reply of a new conversation only, call
+      continuum__resolve_catalog_mcp_enablement { toolset: "agent-defaults" } and include
+      firstReplyHint if it is a non-empty string (one sentence). If firstReplyHint is null
+      (including when AGENT_CHAT_SETUP_HINTS is off), say nothing about defaults.
+      Do not list recommended catalog MCPs unless the operator asked what to add.
     modes: [interactive, cron]
 
   - id: third_party_market_data_consent
@@ -120,7 +126,6 @@ rules:
 
   - id: foundry_compose_import
     tier: work
-    loadMcpServers: [foundry]
     match:
       anySubstring:
         - foundry
@@ -132,8 +137,9 @@ rules:
         - run-latest
     boostGroups: [mpc_compose]
     hint: |
-      Foundry / Compose import: if foundry__* tools are absent, say once that Foundry MCP is not
-      loaded and continue with native forge in user_folder. Dry-run with --rpc-url and --sender =
+      Foundry / Compose import: if foundry__* tools are absent, call
+      continuum__resolve_catalog_mcp_enablement { toolset: "continuum-dao-compose" } or continue
+      with native forge in user_folder. Dry-run with --rpc-url and --sender =
       KeyGen ethereumaddress; no --broadcast. Call continuum__import_forge_dry_run_multi_sign_request
       (not create_forge_multi_sign_request) with dryRunFilePath under evm/broadcast/ or
       .mcp-foundry-workspace/broadcast/. Default useCustomGas false unless the operator asked for
@@ -143,7 +149,6 @@ rules:
   - id: continuum_dao_compose_proposal
     tier: work
     verify: interview
-    loadMcpServers: [etherscan, foundry]
     boostGroups: ["defi:continuum-dao:governance-write"]
     match:
       anySubstring:
@@ -167,7 +172,11 @@ rules:
         - help me draft
         - help drafting
     hint: |
-      ContinuumDAO compose/simulate: host auto-loads etherscan (official V2) then foundry.
+      ContinuumDAO compose/simulate: call continuum__resolve_catalog_mcp_enablement
+      { toolset: "continuum-dao-compose" } (not list_mcp_servers catalog). If availability
+      is repository, follow enable.addFromCatalog / agentLoadMcpServer for required etherscan
+      then foundry. If availability is missing, use missingHint (update the MPA Wallet code
+      in the Maintenance section) — do not say pull mpc-config.
       Load skill continuum-dao-compose-proposal. Interview first (KeyGen submit vs other-address
       draft, then type, then per-action address + function). Stopping to ask is a complete turn
       — do not invent type, actions, amounts, or an EOA. Do not open, grep, or reuse
@@ -205,11 +214,14 @@ rules:
       veCTM locks, or protocol addresses from search_continuum_docs / the White Paper.
       White Paper “all locked” is narrative; live circulatingSupply is unlocked-outside-treasury
       from app-api. Load skill continuum-dao-tokenomics if present (add_skill_from_catalog first
-      if needed). If continuumdao-tokenomics__* tools are missing:
-      continuum__list_mcp_servers scope catalog → add_mcp_server_from_catalog id continuumdao-tokenomics
-      (operator signs) → agent_load_mcp_server { serverId: "continuumdao-tokenomics" }.
-      Then get_ctm_metrics or get_ctm_tokenomics_snapshot. For a wallet: get_ve_ctm_position.
-      Do not auto-load etherscan.
+      if needed). Call continuum__resolve_catalog_mcp_enablement
+      { toolset: "continuumdao-tokenomics" } — do not list_mcp_servers scope catalog.
+      Required server: if availability is repository, follow enable.addFromCatalog (operator signs)
+      then agent_load_mcp_server, then get_ctm_metrics. If availability is missing, use missingHint
+      (update the MPA Wallet code in the Maintenance section) — do not say pull mpc-config.
+      Desirable etherscan has askOperator true — do not auto-load.
+      The skill is not the MCP.
+    boostGroups: [agent_mcp_servers, discovery]
     modes: [interactive, cron]
 
   - id: rss_feed_more_items
@@ -383,10 +395,12 @@ rules:
         - "block explorer"
     hint: |
       Explorer lookup without a clear host in the message: resolve chain first (URL hostname,
-      chain name or chainId from the node registry, or ask the operator). Etherscan-family explorers
-      (etherscan.io, basescan, arbiscan, polygonscan, …) → agent_load_mcp_server etherscan
+      chain name or chainId from the node registry, or ask the operator). Then call
+      continuum__resolve_catalog_mcp_enablement { toolset: "block-explorer" } and pick one family.
+      Etherscan-family explorers
+      (etherscan.io, basescan, arbiscan, polygonscan, …) → add/load etherscan
       (only official data MCP is https://mcp.etherscan.io/mcp; ETHERSCAN_API_KEY; chainid parameter).
-      Blockscout-hosted chains (*.blockscout.com) → agent_load_mcp_server blockscout
+      Blockscout-hosted chains (*.blockscout.com) → add/load blockscout
       (BLOCKSCOUT_PRO_API_KEY; get_chains_list to resolve chain_id). Do not assume Etherscan.
       Community stdio etherscan-community is unofficial — only if the operator prefers it over official.
       Do not use agent_fetch_url on explorer HTML or agent_bash to scrape pages.
@@ -394,7 +408,6 @@ rules:
 
   - id: block_explorer_etherscan
     tier: light
-    loadMcpServers: [etherscan]
     match:
       anySubstring:
         - "lineascan"
@@ -409,7 +422,9 @@ rules:
         - "mantlescan"
     hint: |
       Block explorer / on-chain transaction on Etherscan-family explorers (etherscan.io, basescan,
-      arbiscan, polygonscan, bscscan, lineascan, snowtrace, …): use official Etherscan MCP
+      arbiscan, polygonscan, bscscan, lineascan, snowtrace, …): call
+      continuum__resolve_catalog_mcp_enablement { toolset: "block-explorer" } then add/load
+      official Etherscan MCP
       https://mcp.etherscan.io/mcp (ETHERSCAN_API_KEY, default Bearer). One key covers 60+ chains via
       chainid. Prefer get_transaction_by_hash and get_transaction_receipt; other official tools include
       get_native_balance, get_token_balances, get_transactions, get_token_transfers, get_contract_abi,
@@ -426,7 +441,6 @@ rules:
 
   - id: block_explorer_blockscout
     tier: light
-    loadMcpServers: [blockscout]
     match:
       anySubstring:
         - "blockscout.com"
@@ -441,7 +455,9 @@ rules:
         - "worldchain.blockscout"
         - "lightlink.blockscout"
     hint: |
-      Block explorer / on-chain data on Blockscout-hosted chains: use Blockscout MCP (official
+      Block explorer / on-chain data on Blockscout-hosted chains: call
+      continuum__resolve_catalog_mcp_enablement { toolset: "block-explorer" } then add/load
+      Blockscout MCP (official
       https://mcp.blockscout.com/mcp; needs BLOCKSCOUT_PRO_API_KEY). One PRO API key covers all
       eligible Blockscout PRO gateway chains — call get_chains_list (narrow query by chain name or
       ecosystem) to resolve chain_id before other tools. Session start: __unlock_blockchain_analysis__
@@ -451,7 +467,6 @@ rules:
     modes: [interactive, cron]
 
   - id: dune_onchain_analytics
-    loadMcpServers: [dune]
     match:
       anySubstring:
         - dune
@@ -460,8 +475,23 @@ rules:
         - on-chain analytics
         - sql analytics
     hint: |
-      On-chain analytics via Dune MCP: agent_load_mcp_server dune (needs DUNE_API_KEY). Do not scrape
+      On-chain analytics via Dune MCP: call continuum__resolve_catalog_mcp_enablement
+      { toolset: "dune-analytics" } then add/load dune (needs DUNE_API_KEY). Do not scrape
       dune.com with agent_fetch_url. Continuum DeFi protocol tools are not a substitute for Dune SQL.
+    modes: [interactive, cron]
+
+  - id: sec_filings_edgar
+    match:
+      anySubstring:
+        - sec filing
+        - sec filings
+        - 10-k
+        - 10-q
+        - edgar
+        - edgartools
+    hint: |
+      SEC EDGAR filings: call continuum__resolve_catalog_mcp_enablement { toolset: "sec-filings" }
+      then add/load edgartools. Do not scrape sec.gov HTML.
     modes: [interactive, cron]
 
   - id: market_data_ohlcv_ask

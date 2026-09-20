@@ -72,7 +72,7 @@ For OHLCV charts after fetch, see skill **`chart-ohlcv-sources`** and **`chart-p
 
 **`coinmarketcap-public`** and similar catalog MCP servers are **optional** — not part of continuum core bundles. Load via **`agent_load_mcp_server`** only when the **operator chooses** that provider — not as a silent fallback for generic chart requests. **Never** use **`agent_load_mcp_server`** for DeFi **`protocolId`** values.
 
-Asking for **live CTM circulating/escrowed/total supply, veCTM locks, or CTM protocol addresses** is choosing catalog MCP **`continuumdao-tokenomics`**. If it is not active: **`list_mcp_servers`** `scope: catalog` → **`add_mcp_server_from_catalog`** → **`agent_load_mcp_server`**. Then **`continuumdao-tokenomics__get_ctm_metrics`**. Do **not** answer those figures from the White Paper. Do not auto-load etherscan.
+Asking for **live CTM circulating/escrowed/total supply, veCTM locks, or CTM protocol addresses** is choosing catalog MCP **`continuumdao-tokenomics`** (not the skill of the same theme). Call **`continuum__resolve_catalog_mcp_enablement({ "toolset": "continuumdao-tokenomics" })`** — do **not** dump **`list_mcp_servers` `scope: catalog`**. Follow **`enable.addFromCatalog`** then **`agent_load_mcp_server`**, then **`get_ctm_metrics`**. If **`availability` is `missing`**, use **`missingHint`**: **update the MPA Wallet code in the Maintenance section** — do not say pull mpc-config. Etherscan is desirable (`askOperator: true`) — do not auto-load. Do **not** answer those figures from the White Paper.
 
 ## Pinned at init (typical)
 
