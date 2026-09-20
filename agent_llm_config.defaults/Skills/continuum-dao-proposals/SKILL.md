@@ -1,6 +1,6 @@
 ---
 name: continuum-dao-proposals
-description: Present ContinuumDAO proposals (live, pending, ready to execute, recent). Deconstruct multi-action Bravo/Delta briefs and the linked forum thread. Do not vote from this skill.
+description: Present ContinuumDAO proposals (live, pending, ready to execute, recent). Deconstruct multi-action Bravo/Delta briefs, show who voted and how, and the linked forum thread. Do not vote from this skill.
 ---
 
 # ContinuumDAO proposals (presentation)
@@ -26,6 +26,8 @@ Do **not** answer from `ctm_continuum_dao_fetch_proposals` or backend `status`.
 
 If `overlay` is `backend-only`, say you could not confirm Governor state.
 
+After naming a proposal (live or past), offer **`continuum__ctm_continuum_dao_fetch_proposal_votes`** with that catalog `id` or `onchainId` so the operator can see **who voted and how**. Read `note`, then voter + `how` (For/Against/Abstain, or Delta option weights; last slot is NOTA) + **`attached`** (true when `NodeProperties.attachedTokenId` is set after `attachNodeFor`). Do not dump every tx hash unless asked.
+
 ## Deconstruct one proposal
 
 1. `continuum__ctm_continuum_dao_explain_proposal` with backend `id` or `onchainId`.
@@ -38,6 +40,7 @@ If `overlay` is `backend-only`, say you could not confirm Governor state.
 8. Repeat the **Risks** list from the tool. Do not invent extra certainty.
 9. If `forumKey` is a topic URL (`/topic/:tid` or `/t/:tid`), `continuum__ctm_continuum_dao_forum_resolve` then `forum_fetch_thread` (index `0` = OP). Note **`section` / `cid`**. Expected: Decision→`decision`, Election→`election`, Treasury→`treasury`, Constitution→`constitution`, Admin→`admin`. If `section` is `ideas` or does not match `typeLabel`, treat as a **mismatch** (amber/red) and say so. Summarize the original post and reply count (`forum_reply_count`). To list recent posts (id, title, username, createdAt), `forum_recent` (`hours` or `since`). To find matching posts, `forum_search` (`query` and/or `hours` / `since`) then `forum_fetch_post` on a returned `id`. Reads only — no login, reply, `forum_create_topic`, or `forum_create_idea` from this skill.
 10. Run **`continuum-dao-proposal-standards`** on the brief + OP (includes fetching Constitution **`continuumdao-proposals-and-voting`**). Highlight Vision/Mission failures, **type-fit** failures, missing Format elements, and Forum section mismatch (do not vote from this skill).
+11. Offer **`continuum__ctm_continuum_dao_fetch_proposal_votes`** so the operator can see who voted and how.
 
 ## Forum post presentation
 
@@ -51,6 +54,7 @@ This skill does **not** create a multi-sign request, vote, propose, execute, or 
 
 ## After the briefing
 
+- Operator wants who voted / how they voted → **`continuum__ctm_continuum_dao_fetch_proposal_votes`** (this skill; read-only).
 - Operator wants a stance → load **`continuum-dao-vote-policy`**.
 - Operator wants to vote in this chat → that skill + **`execution-policy`** (confirm before submit).
 - Operator wants to **create** or **draft** a proposal → load **`continuum-dao-compose-proposal`** (interactive only; never from cron).
