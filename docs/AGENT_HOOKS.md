@@ -435,16 +435,18 @@ KeyGen message bodies support up to **16 384** UTF-8 bytes. Orchestration mani
 
 **Plan mode** is for **designing** a multi-workstream plan in private agent chat, then executing it on KeyGen. While drafting, the plan thread does **not** spawn sub-agents by itself.
 
-**Source of truth:** `user_folder/plans/<planId>.md` — YAML frontmatter (`planId`, `mode`, `status`, …) + human markdown body + trailing fenced **`mpc-orchestrate v1`** (machine tasks). Modes: **`trade`**, **`yield`**, **`research`**, **`portfolio`**, **`dao`** (stub), **`custom`**.
+**Source of truth:** `user_folder/plans/<planId>.md` — YAML frontmatter (`planId`, `mode`, `status`, …) + human markdown body + trailing fenced **`mpc-orchestrate v1`** (machine tasks). Modes: **`trade`**, **`yield`**, **`research`**, **`portfolio`**, **`dao`** (stub), **`hedging`**, **`custom`**.
+
+Existing nodes keep runtime **`orchestration-plan.yaml`** until **AI Agent → Skills → orchestration-plan.yaml → reset from defaults** (or **`POST /resetHostYamlFromDefaults`** with `kind=orchestration-plan`). New skill files (`hedging-trade`, `hedging-monitor`) install on next `process_config.sh` only if missing.
 
 ### Setup
 
 1. Set a **preferred KeyGen** (node app **Settings** or **`POST /postPreferredKeyGen`**) so **Execute in KeyGen** knows where to post.
 2. Start a **Plan** conversation:
    - UI: **New plan** (calls **`POST /agent/plan/start`** with `mode`, creates skeleton under `plans/`), or
-   - UI: starter chips (market / yield / conditions / DAO / portfolio / something else), or
+   - UI: starter chips (market / yield / conditions / DAO / portfolio / **Hedging strategies** / something else), or
    - UI: **Plan follow-on** — pick a prior **`[Orchestrator] …`** thread (see [Finding orchestrator threads](#finding-orchestrator-threads)), or
-   - Telegram: **New plan** beside **New chat** (mode buttons + title; Mini App view/edit when paid ngrok is configured, else text fallback), or
+   - Telegram: **New plan** beside **New chat** (mode buttons including **Hedging strategies** + title; Mini App view/edit when paid ngrok is configured, else text fallback). Telegram inline buttons are hardwired in **mpc-auth** — if New plan modes are a static list, add `mode=hedging` there; if mpc-auth iterates `orchestration-plan.yaml` `modes:`, the YAML add is enough. `callback_query` must stay in `setWebhook` `allowed_updates` (see [`TELEGRAM_WEBHOOK_NGROK.md`](TELEGRAM_WEBHOOK_NGROK.md)), or
    - API: **`POST /agent/plan/start`** with `mode` / `title` and/or prior refs (rollup injected), or
    - API: **`POST /agent/chat`** with `"conversationPurpose": "plan"` and optional `"keyGenId"` override.
 
@@ -477,6 +479,7 @@ When a run has finished and you need a **new** manifest from summarized context 
 1. **Plan follow-on** in the node agent chat header → select the **`[Orchestrator]`** conversation for that run.
 2. The node calls **`POST /agent/plan/start`** and opens a new plan tab with an injected **`--- prior orchestration rollup ---`** block (locked inputs + host trade ideas first, then synthesis; size-capped). Host **copies every prior trade idea** onto the new conversation and seeds **`## Prior trade ideas`** in the plan file (any TA plan, not only “research market for an asset”).
 3. For a **trade / research-market** follow-on the agent should first ask if you have (or recently had) a trade on that asset and which venue, then fetch open **and** closed/history. If still open, compare to that run’s analyses. If already closed, report what happened vs stored target/invalidation and ask what to do next. If none, ask whether to open the recommended pick. Do not re-run research/TA unless you ask. Refine **`mpc-orchestrate v1`**; **Execute in KeyGen** when ready.
+4. For a **hedging** follow-on: inherit inventory, ratio, venue, unwind, and the synthesis pick. Compose open-hedge MultiSign legs (one theme per leg). After the hedge is live, load **`hedging-monitor`** and schedule unwind cron on the **same** `[Orchestrator]` thread (`telegramNotify: true` on triggers). Do not auto-Accept unwind.
 
 Alternatively, call **`POST /agent/plan/start`** yourself:
 

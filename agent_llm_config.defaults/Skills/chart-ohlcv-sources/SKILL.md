@@ -27,7 +27,7 @@ Chart/analysis tools return a clear error when called without data; treat that a
 | Kind | Examples | How to enable in this chat | Fetch tool |
 |------|----------|----------------------------|------------|
 | **DeFi protocol** (already on **continuum** MCP) | Hyperliquid, Arcus, GMX, Aave, Uniswap, … | **`continuum__load_defi_protocol`** `{ "protocolId": "hyperliquid" }` — **not** **`agent_load_mcp_server`** | `ctm_<protocol>_fetch_ohlcv` |
-| **Optional catalog MCP server** | `coinmarketcap-public`, `coinbase-public`, `coingecko`, `binance`, `financial-modeling-prep`, `alpaca`, `equibles`, `technical-indicators`, … | **`continuum__agent_load_mcp_server`** `{ "serverId": "…" }` after operator choice | `coinmarketcap-public__*`, `coinbase-public__*`, `coingecko__*`, `binance__*`, `financial-modeling-prep__*`, `alpaca__*`, `equibles__*`, … |
+| **Optional catalog MCP server** | `coinmarketcap-public`, `coinbase-public`, `coingecko`, `binance`, `financial-modeling-prep`, `alpaca`, `equibles`, `koinju`, `technical-indicators`, … | **`continuum__agent_load_mcp_server`** `{ "serverId": "…" }` after operator choice | `coinmarketcap-public__*`, `coinbase-public__*`, `coingecko__*`, `binance__*`, `financial-modeling-prep__*`, `alpaca__*`, `equibles__*`, `koinju__*`, … |
 
 **Hyperliquid is a DeFi protocol, not an MCP `serverId`.**  
 `agent_load_mcp_server({ "serverId": "hyperliquid" })` fails with *not configured* — that is expected. Use **`load_defi_protocol({ "protocolId": "hyperliquid" })`** instead, then **`ctm_hyperliquid_fetch_ohlcv`**.
@@ -84,6 +84,7 @@ If a chosen server is **missing** from **`activeServers`** → tell the operator
 | Financial Modeling Prep / FMP | **`agent_load_mcp_server({ "serverId": "financial-modeling-prep" })`** | Historical / chart tools (e.g. full, light, or intraday chart). Requires **`FMP_API_KEY`** in Variables |
 | Alpaca | **`agent_load_mcp_server({ "serverId": "alpaca" })`** | **`get_stock_bars`** / **`get_crypto_bars`** (timeframes `1Min`, `5Min`, `15Min`, `1Hour`, `1Day`). Requires **`ALPACA_API_KEY`** + **`ALPACA_SECRET_KEY`** |
 | Equibles | **`agent_load_mcp_server({ "serverId": "equibles" })`** | **`GetStockPrices`** (daily OHLCV). Requires **`EQUIBLES_API_KEY`**. Use **`GetLatestPrices`** for latest close (not a chart series) |
+| Koinju | **`agent_load_mcp_server({ "serverId": "koinju" })`** | **`find_markets`** then **`get_ohlcv`** (keep **`start`**). Requires **`KOINJU_API_KEY`** (`x-api-key`) |
 | Other DeFi (Aave, Uniswap, …) | **`load_defi_protocol({ "protocolId": "<id>" })`** | That protocol’s **`ctm_*`** tools (see **`get_defi_protocol_skill`**) |
 
 ## Rule 2 — Generic spot (no venue or provider named)
@@ -97,9 +98,10 @@ Use the **first loaded OHLCV-capable MCP server** in this chat, in order:
 5. **`financial-modeling-prep`** (if loaded and **`FMP_API_KEY`** configured)
 6. **`alpaca`** (if loaded and **`ALPACA_API_KEY`** + **`ALPACA_SECRET_KEY`** configured)
 7. **`equibles`** (if loaded and **`EQUIBLES_API_KEY`** configured)
-8. Any other **loaded** server that exposes spot OHLCV (future catalog sources)
+8. **`koinju`** (if loaded and **`KOINJU_API_KEY`** configured)
+9. Any other **loaded** server that exposes spot OHLCV (future catalog sources)
 
-**If no OHLCV source is loaded in this session** → **ask the operator** which provider to use. Offer concise options (e.g. CoinGecko, CoinMarketCap public, Coinbase, Binance, Financial Modeling Prep, Alpaca, Equibles, Hyperliquid). **Do not** silently load **`coinmarketcap-public`**, **`coinbase-public`**, **`coingecko`**, **`binance`**, **`financial-modeling-prep`**, **`alpaca`**, or **`equibles`**.
+**If no OHLCV source is loaded in this session** → **ask the operator** which provider to use. Offer concise options (e.g. CoinGecko, CoinMarketCap public, Coinbase, Binance, Financial Modeling Prep, Alpaca, Equibles, Koinju, Hyperliquid). **Do not** silently load **`coinmarketcap-public`**, **`coinbase-public`**, **`coingecko`**, **`binance`**, **`financial-modeling-prep`**, **`alpaca`**, **`equibles`**, or **`koinju`**.
 
 After the operator chooses and you load the server:
 
@@ -110,6 +112,7 @@ After the operator chooses and you load the server:
 - **`financial-modeling-prep`**: historical / chart tools — rows use **`date`** + OHLC + **`volume`**; envelopes `{ symbol, historical }` or `{ data: […] }`. Pass the **full** object as **`toolResult`**. Keep **`date`**. Requires **`FMP_API_KEY`**. See **`chart-periods`**
 - **`alpaca`**: **`get_stock_bars`** / **`get_crypto_bars`** — rows use **`t`/`o`/`h`/`l`/`c`/`v`**; envelopes `{ symbol, timeframe, bars }` or `{ bars: { TICKER: […] } }`. Pass the **full** object as **`toolResult`**. Keep **`t`**. Requires **`ALPACA_API_KEY`** + **`ALPACA_SECRET_KEY`**. See **`chart-periods`**
 - **`equibles`**: **`GetStockPrices`** — daily OHLCV as a markdown table or `{ data: [{ date, open, high, low, close, volume }] }`. Pass the **full** object as **`toolResult`**. Keep **`date`**. Requires **`EQUIBLES_API_KEY`**. **`GetLatestPrices`** is a snapshot, not bars. See **`chart-periods`**
+- **`koinju`**: **`find_markets`** then **`get_ohlcv`** — venue `exchange` + `market` exactly as listed (e.g. `binance` + `BTC-USDT`); rows use **`start`** + OHLC + **`volume`**. Pass the **full** object as **`toolResult`**. Keep **`start`**. Requires **`KOINJU_API_KEY`**. See **`chart-periods`**
 
 | When | Fetch |
 |------|-------|
@@ -120,6 +123,7 @@ After the operator chooses and you load the server:
 | Operator chose Financial Modeling Prep / FMP | Historical / chart tools — see **`chart-periods`** |
 | Operator chose Alpaca | **`get_stock_bars`** / **`get_crypto_bars`** — see **`chart-periods`** |
 | Operator chose Equibles | **`GetStockPrices`** — see **`chart-periods`** |
+| Operator chose Koinju | **`find_markets`** then **`get_ohlcv`** — see **`chart-periods`** |
 
 If fetch fails (429, empty, stale), report to the operator and offer **other sources** — do not auto-switch without their choice.
 
@@ -132,7 +136,7 @@ Fetch OHLCV first. Then branch on operator intent:
 | **Analyze / interpret** (no chart requested) | **`analyze_*`** with full fetch as **`toolResult`**. **Do not** call **`prepare_chart_from_rows`**. |
 | **Chart / plot / draw** | **`prepare_chart_from_rows`** with full fetch as **`toolResult`**. |
 
-**Never** call **`prepare_chart_from_rows`** with only **`title`** / **`label`**. **Never** rewrite candle timestamps — pass fetch JSON verbatim (Hyperliquid uses **`timestampMs`**; Binance uses **`openTime`** ms; FMP uses **`date`**; Alpaca uses **`t`**; Equibles uses **`date`** — do not add or replace with a generic **`time`** field).
+**Never** call **`prepare_chart_from_rows`** with only **`title`** / **`label`**. **Never** rewrite candle timestamps — pass fetch JSON verbatim (Hyperliquid uses **`timestampMs`**; Binance uses **`openTime`** ms; FMP uses **`date`**; Alpaca uses **`t`**; Equibles uses **`date`**; Koinju uses **`start`** — do not add or replace with a generic **`time`** field).
 
 **Catalog / CEX chart path (Binance, Coinbase, CMC, CoinGecko):** Continuum MCP renders the chart. After a successful OHLCV fetch, the node **binds the session** and **auto-prepares only when the operator explicitly asked to chart/plot/render** (e.g. “chart the 4H BTC”). **Cron / scheduled analysis** and fetch-only / analyze-only turns must **not** call **`prepare_chart_from_rows`** (mentions of “chart bundle” or `chart_pattern` are not plot requests). Tool text may be a **slim** summary — do **not** re-paste full `klines` / `candles` / execute rows. Follow-ups: **`{ title, ohlcvDigest }`** or the fetch object once without rewriting vendor timestamps (`openTime`, `timestampMs`, Continuum `time`).
 

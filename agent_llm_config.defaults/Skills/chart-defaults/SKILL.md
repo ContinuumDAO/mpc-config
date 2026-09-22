@@ -22,6 +22,7 @@ Charts: SDK **`prepare_chart_from_rows`** (single OHLCV feed) or **`prepare_char
 | Names **Financial Modeling Prep** / **FMP** | **`financial-modeling-prep`** (`serverId` exact) — historical / chart tools, then **`prepare_chart_from_rows`**. Needs **`FMP_API_KEY`** | Rewriting vendor **`date`**; embedding the API key in the MCP URL |
 | Names **Alpaca** | **`alpaca`** (`serverId` exact) — **`get_stock_bars`** / **`get_crypto_bars`**, then **`prepare_chart_from_rows`**. Needs **`ALPACA_API_KEY`** + **`ALPACA_SECRET_KEY`** | Using v1 tool names; rewriting vendor **`t`** |
 | Names **Equibles** | **`equibles`** (`serverId` exact) — **`GetStockPrices`**, then **`prepare_chart_from_rows`**. Needs **`EQUIBLES_API_KEY`** | Rewriting **`date`**; using **`GetLatestPrices`** as chart bars; embedding the API key in the MCP URL |
+| Names **Koinju** | **`koinju`** (`serverId` exact) — **`find_markets`** then **`get_ohlcv`**, then **`prepare_chart_from_rows`**. Needs **`KOINJU_API_KEY`** | Rewriting **`start`**; scraping koinju.io; treating SQL ClickHouse as the MCP |
 | Names **Hyperliquid**, **perp**, **GMX**, DEX pool, on-chain venue | **`load_defi_protocol`** then that protocol’s **`fetch_ohlcv`** — **not** **`agent_load_mcp_server`** | Treating DeFi **`protocolId`** as an MCP **`serverId`** |
 
 Hyperliquid OHLCV is **perpetual** market data, not generic spot USD index. Do not use it for undifferentiated “chart ETH”.
@@ -32,7 +33,7 @@ Hyperliquid OHLCV is **perpetual** market data, not generic spot USD index. Do n
    - **DeFi venue** (Hyperliquid, GMX, …) → **`continuum__load_defi_protocol`** `{ "protocolId": "…" }`
    - **Catalog MCP** (CoinGecko, CMC public, Binance, FMP, Alpaca, Equibles, …) → **`list_mcp_servers`** → **`continuum__agent_load_mcp_server`** for operator’s choice only
 2. If no source enabled yet → **ask the operator** which provider to use; then step 1 for their choice.
-3. **Fetch OHLCV** — e.g. **`ctm_hyperliquid_fetch_ohlcv`**, **`coingecko__execute`**, **`coinmarketcap-public__get_kline_candles`**, **`coinbase-public__get_product_candles`**, **`binance_get_klines`** (`response_format: "json"`), **`financial-modeling-prep`** historical / chart tools, **`alpaca__get_stock_bars`** / **`alpaca__get_crypto_bars`**, or **`equibles__GetStockPrices`**. Must succeed before charting.
+3. **Fetch OHLCV** — e.g. **`ctm_hyperliquid_fetch_ohlcv`**, **`coingecko__execute`**, **`coinmarketcap-public__get_kline_candles`**, **`coinbase-public__get_product_candles`**, **`binance_get_klines`** (`response_format: "json"`), **`financial-modeling-prep`** historical / chart tools, **`alpaca__get_stock_bars`** / **`alpaca__get_crypto_bars`**, **`equibles__GetStockPrices`**, or **`koinju__get_ohlcv`**. Must succeed before charting.
 4. **`continuum__prepare_chart_from_rows`** — first call: full fetch **object** as **`toolResult`**; follow-ups: **`{ title, ohlcvDigest }`** from **`meta.sessionBind`** (keep Hyperliquid **`timestampMs`** / Binance **`openTime`** / Coinbase Continuum **`time`** / FMP **`date`** / Alpaca **`t`** / Equibles **`date`** — never rewrite bars).
 
 **Never skip step 3.** Never pass a hand-edited subset of candles. Calling **`prepare_chart_from_rows`** with only **`title`** / **`label`** always fails validation.

@@ -31,7 +31,7 @@ rules:
     always: true
     hint: |
       Never auto-load market-data MCP servers (coingecko, coingecko-pro, coinbase, coinmarketcap,
-      coinmarketcap-public, binance, coinglass, etf-flow, nansen, cryptorank, etc.) without asking the operator first. Prefer
+      coinmarketcap-public, binance, coinglass, etf-flow, nansen, koinju, cryptorank, massive, etc.) without asking the operator first. Prefer
       agent_load_mcp_server after they name a source. DeFi OHLCV on Continuum uses
       continuum__load_defi_protocol, not a third-party market-data MCP.
     modes: [interactive, cron]
@@ -187,6 +187,65 @@ rules:
       foundry__create_solidity_file, then foundry__forge_script on a Linea fork with no
       --broadcast. Isolated eth_call or cast call cannot carry state. Never broadcast these scripts.
     modes: [interactive]
+
+  - id: hedging_strategies_plan
+    tier: work
+    match:
+      anySubstring:
+        - hedge
+        - hedging
+        - protect downside
+        - protect the bag
+        - keep the coins
+        - delta-neutral
+        - delta hedge
+        - collar
+        - protective put
+        - covered call
+        - de-risk
+        - stable sleeve
+        - hedge my lp
+        - hedge the lp
+        - uniswap lp
+        - curve lp
+        - aerodrome lp
+        - pendle pt
+        - pendle yt
+        - pendle hedge
+        - morpho earn
+        - euler earn
+        - reinsurance vault
+        - rwa vault
+    hint: |
+      Operator wants a hedge, not an unhedged directional trade. Steer them to Plan mode
+      Hedging strategies (mode hedging). Load skill hedging-trade. Interview first; write
+      the plan file only — no live fetches, no ctm_*_build_*_multisign, no compose here.
+      If they are already in a plan thread, set/keep mode hedging and follow hedging-trade.
+      Unwind / close / roll / monitor a live hedge is hedging-monitor, not this rule.
+    modes: [interactive]
+
+  - id: hedging_monitor_unwind
+    tier: work
+    match:
+      anySubstring:
+        - unwind
+        - close the hedge
+        - close my hedge
+        - tighten the hedge
+        - tighten my hedge
+        - roll the collar
+        - roll the put
+        - roll the pt
+        - monitor my hedge
+        - hedge monitor
+    hint: |
+      Live-hedge watch or unwind. Load skill hedging-monitor and execution-policy
+      (scheduled-automation if creating/editing cron). Copy Unwind + Hedge design from
+      the plan file into any cron message — do not elicit on cron. Draft close/tighten/roll
+      MultiSign only; autoSubmitMultisign false; do not Accept or broadcast unless the
+      frozen message already authorizes it. Telegram: telegramNotify true on trigger;
+      do not also send_telegram_message for that host delivery.
+    modes: [interactive, cron]
 
   # Live CTM figures (not White Paper narrative). Do not use loadMcpServers until the
   # operator has added catalog id continuumdao-tokenomics — missing active servers fail the turn.
@@ -719,6 +778,51 @@ rules:
       CryptoRank.
     modes: [interactive, cron]
 
+  - id: koinju_official
+    match:
+      anySubstring:
+        - koinju
+        - koinju.io
+        - koinju mcp
+        - koinju ohlcv
+    hint: |
+      Koinju: official catalog MCP **koinju** (serverId exact). Hosted
+      Streamable HTTP `https://mcp.koinju.io/mcp`
+      (https://docs.koinju.io/mcp-server). Needs Variable **KOINJU_API_KEY**
+      (header **x-api-key** — create at koinju.io/pricing). Do not auto-load.
+      If already active, agent_load_mcp_server then **find_markets** (keyless)
+      and **get_ohlcv** (historical candles; keep **start**). Other tools:
+      get_trades, get_funding_rate, option chain/smile/matrix. If only in the
+      catalog, tell the operator to Add from repository and set KOINJU_API_KEY.
+      Do not scrape koinju.io. get_ohlcv is a chartable historical OHLCV
+      source — pass the full tool result to prepare_chart_from_rows only when
+      the operator chose Koinju for charts. Free REST tier is 100 req/day and
+      100 items; keep windows small (daily/hourly). Bulk history is SQL, not MCP.
+    modes: [interactive, cron]
+
+  - id: massive_official
+    match:
+      anySubstring:
+        - massive.com
+        - massive mcp
+        - massive api
+        - polygon.io
+        - polygon api
+    hint: |
+      Massive (formerly Polygon.io): official catalog MCP **massive**
+      (serverId exact). Official server is stdio **mcp_massive**
+      (https://massive.com/docs/ai-tools/quickstart) — no hosted HTTP
+      MCP URL. Needs Variable **MASSIVE_API_KEY** (create at massive.com;
+      POLYGON_API_KEY is a deprecated alias, do not use it). Do not
+      auto-load. If already active, agent_load_mcp_server then
+      search_endpoints / call_api / query_data. If only in the catalog,
+      tell the operator to Add from repository and set MASSIVE_API_KEY.
+      Do not scrape massive.com. Not joinmassive web-render
+      (@joinmassive/mcp-server / MASSIVE_TOKEN). Aggregates can be
+      OHLCV-like — do not pass them to prepare_chart_from_rows unless
+      the operator chose Massive for charts.
+    modes: [interactive, cron]
+
   - id: market_data_ohlcv_ask
     match:
       anySubstring:
@@ -726,6 +830,7 @@ rules:
         - coinmarketcap
         - coinbase candles
         - binance klines
+        - koinju
         - fetch ohlcv
         - load candles
     hint: |

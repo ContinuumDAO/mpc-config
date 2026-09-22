@@ -579,6 +579,23 @@
       "initialLoad": false
     },
     {
+      "id": "koinju",
+      "displayName": "Koinju (official)",
+      "kind": "research-data",
+      "searchTags": [
+        "koinju",
+        "koinju.io",
+        "koinju mcp",
+        "koinju ohlcv"
+      ],
+      "setupUrl": "https://docs.koinju.io/mcp-server",
+      "transport": "http",
+      "url": "https://mcp.koinju.io/mcp",
+      "apiKeyEnvVar": "KOINJU_API_KEY",
+      "apiKeyHeader": "x-api-key",
+      "initialLoad": false
+    },
+    {
       "id": "cryptorank",
       "displayName": "CryptoRank (official)",
       "kind": "research-data",
@@ -904,6 +921,35 @@
       "envVars": [
         "CRYPTOPANIC_API_KEY",
         "CRYPTOPANIC_API_PLAN"
+      ],
+      "runtime": {
+        "requireCommands": [
+          "uv"
+        ]
+      },
+      "initialLoad": false
+    },
+    {
+      "id": "massive",
+      "displayName": "Massive (official)",
+      "kind": "research-data",
+      "searchTags": [
+        "massive",
+        "massive.com",
+        "polygon.io",
+        "massive mcp"
+      ],
+      "setupUrl": "https://massive.com/docs/ai-tools/quickstart",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/massive-com/mcp_massive@v0.10.0",
+        "mcp_massive"
+      ],
+      "apiKeyEnvVar": "MASSIVE_API_KEY",
+      "envVars": [
+        "MASSIVE_API_KEY"
       ],
       "runtime": {
         "requireCommands": [

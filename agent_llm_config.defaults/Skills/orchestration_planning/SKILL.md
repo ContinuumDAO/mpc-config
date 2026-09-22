@@ -29,6 +29,7 @@ You help the operator design a **markdown plan document** and a machine `mpc-orc
 | `research` | General market-conditions (may lack a single ticker) |
 | `portfolio` | KeyGen balances + protocol positions + priced inventory |
 | `dao` | ContinuumDAO proposals (**stub**) |
+| `hedging` | Hedge from live MPA inventory (interview → research leaves; compose is follow-on). Load **`hedging-trade`**. After the hedge is live, load **`hedging-monitor`** for unwind. |
 | `custom` | Freeform |
 
 Workstream bullets and asset-class conditionals (`when: cash_equity | synthetic_stock | crypto | etf_or_basket`) come from the YAML mode skeletons — mirror those in the plan markdown.
@@ -59,6 +60,7 @@ When the first user message is **`--- prior orchestration rollup ---`**, this th
    - **If they never had a trade** (or tools show neither open nor a relevant close): ask whether they want to **open** one, naming the recommended pick. Only if they say yes: **funding-size** then **trade-ideas** (`build_trade_from_trade_idea`). If they decline, stop.
 4. **inherit-trade-ideas** and **live-position-review** are plan-time — do **not** put them in the `mpc-orchestrate` fence.
 5. Skip the greenfield questionnaire and the custom-mode starter menu.
+6. **Hedging follow-on** (inherited mode `hedging`): inherit inventory, ratio, venue, unwind, and the synthesis pick. Compare live positions to the stored hedge. Recommend hold / tighten / close / roll / compose open-hedge legs. Load **`hedging-monitor`** once the hedge is live. Do not re-run inventory/venue/risk unless asked.
 
 ## AI Ready MCP + machine block
 
@@ -74,7 +76,7 @@ Follow the **Workstreams** list from the plan skeleton / YAML for the active mod
 - **Trade named-asset** — default research trio + conditional financial-performance / core-business per asset class in YAML (do not collapse into one research task).
 - **TA** — coordinator runs each `policy.ta.analyzeTools` `analyze_*` on **this** conversation after **one** load + **one** fetch. Do **not** spawn children (extra MCP sessions have crashed continuum-mcp). If `load_defi_protocol` errors, do not retry it — call fetch next. Never retry identical tool arguments. Isolated `analyze_*` errors are coverage gaps. Post a **slim** `mpc-task-result` immediately (`status: complete` if any family produced evidence). KeyGen `send` timeout is not task failure; retry once with a changed body (`deliveryRetry: 1`).
 - **Trade ideas** — leaves only; `dependsOn` TA; host auto-wires when missing (YAML `dependsOn.autoWire`).
-- **Yield / research / portfolio** — aspect-split leaves (~3) per mode skeleton; never one monolithic task.
+- **Yield / research / portfolio / hedging** — aspect-split leaves (~3) per mode skeleton; never one monolithic task. Hedging first Execute is research-only (inventory / venue / protocol-risk); compose is follow-on.
 - **DAO** — stub only.
 
 ## Execute

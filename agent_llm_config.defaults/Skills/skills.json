@@ -126,6 +126,16 @@
       "initialLoad": false
     },
     {
+      "name": "hedging-trade",
+      "filename": "hedging-trade/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "hedging-monitor",
+      "filename": "hedging-monitor/SKILL.md",
+      "initialLoad": false
+    },
+    {
       "name": "workspace-tooling",
       "filename": "workspace-tooling/SKILL.md",
       "initialLoad": false

@@ -147,11 +147,27 @@ modes:
     workstreamsFooter: |
       > DAO decision assessment details are the subject of a follow-on implementation plan.
 
+  hedging:
+    starterPrompt: |
+      Design a hedge from live MPA inventory without dumping core coins. Interview first (inventory source, what to preserve, risk to cut, hedge ratio, horizon, budget, venue, curated-vault opt-in, unwind), then draft the plan file only — no live fetches, no ctm_*_build_*_multisign.
+    systemPrefixExtra: |
+      Current mode: hedging. Load skill hedging-trade. Plan thread authors the markdown — no rates, no compose, no spawn. One-message interview if answers are missing (skip what they already said): (1) inventory source — KeyGen vs named assets/venues/wrappers (spot, wstETH, Uniswap v4 / Curve / Aerodrome / Pendle LP, Aave/Euler collateral, Morpho Earn and Euler Earn shares, Pendle PT/YT, open perps / Derive options), (2) what must be preserved, (3) risk to cut, (4) hedge ratio 25/50/100 default 50%, (5) horizon, (6) budget — max option premium, max funding/day, max leverage, min HF default 1.4, (7) venue preference, (8) curated vault opt-in — Morpho Earn and Euler curated Earn RWA/reinsurance vs crypto-lending only (default crypto-lending only), (9) unwind triggers. After answers: write Goal / Assumptions / Inventory / Hedge design / Workstreams / Risks / Unwind + mpc-orchestrate v1 with research leaves only (hedge-inventory-exposure, hedge-venue-market, hedge-protocol-risk). Do not put compose or MultiSign in the first fence. Tell them to open View plan and Execute. Optional TA only if they name an event and want a chart. Synthesis ranks one primary overlay plus a fallback.
+    workstreams:
+      - idSuffix: hedge-inventory-exposure
+        label: "**hedge-inventory-exposure** — balances, perps, Derive options, loans, Morpho+Euler Earn shares, Uni/Curve/Aero/Pendle LP (`agent_get_balance` + load_defi_protocol; do not invent positions)"
+        always: true
+      - idSuffix: hedge-venue-market
+        label: "**hedge-venue-market** — mark, funding, depth, IV/skew, Pendle implied APY, Morpho Exposure + Euler Strategies"
+        always: true
+      - idSuffix: hedge-protocol-risk
+        label: "**hedge-protocol-risk** — one short note per named protocol / curator / asset class"
+        always: true
+
   custom:
     starterPrompt: |
       Help me design a multi-workstream plan for my goal. Ask clarifying questions if needed.
     systemPrefixExtra: |
-      Current mode: custom. On a new empty plan, offer starter options: market research, stablecoin yield, market conditions, ContinuumDAO proposals (stub), portfolio assessment, or something else.
+      Current mode: custom. On a new empty plan, offer starter options: market research, stablecoin yield, market conditions, ContinuumDAO proposals (stub), portfolio assessment, hedging strategies, or something else.
     workstreams:
       - idSuffix: research
         label: "**research** — gather facts for the operator goal"
@@ -176,6 +192,7 @@ followOn:
     If the position already closed (they thought it was live, or history shows a recent close): report what happened — side, size, entry, exit, close time/reason if tools return it, realized PnL only if returned, and how the exit lines up with the stored idea target/invalidation (hit target, stopped/invalidated, liquidated, manual/unknown). Do not invent a close story. Then ask what to do next (open the recommended pick, stay flat, or something else). Only proceed to funding-size / build if they choose to open.
     If they say they never had a trade, or tools show neither open nor a relevant close: ask whether they want to open one, naming the recommended pick (id, side, entry/target/invalidation). Only if they say yes: funding-size (ask size if missing; venue = the venue they named, else prior OHLCV source / desk default) then build_trade_from_trade_idea. If they decline, stop — do not push Execute.
     inherit-trade-ideas and live-position-review are plan-time — do not add them as KeyGen tasks.
+    Hedging follow-on (inherited mode hedging, or prior plan Unwind / Hedge design): inherit inventory, ratio, venue, unwind, and the synthesis pick. Do not re-run inventory/venue/risk unless asked. Compare live positions to the stored hedge (entry, invalidation, funding, HF, Pendle time-to-expiry, Morpho Exposure / Euler Strategies, Derive DTE). Recommend hold / tighten / close / roll / compose the agreed open-hedge legs. Compose via build_trade_from_trade_idea (perps) or load_defi_protocol + official Pendle/Aave/Morpho/Euler/Derive builders — still no broadcast. Once the hedge is live, load hedging-monitor and schedule the unwind cron on the same [Orchestrator] thread.
   workstreams:
     - idSuffix: inherit-trade-ideas
       label: "**inherit-trade-ideas** — *(plan-time)* host already stored prior ideas in ## Prior trade ideas and this conversation; do not add a KeyGen task"

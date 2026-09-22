@@ -311,6 +311,23 @@ curl -sS "https://api.telegram.org/bot<BOT_TOKEN>/deleteWebhook"
 
 ---
 
+## Plan mode in Telegram
+
+**New plan** sits beside **New chat**. Mode buttons include **Hedging strategies** (`mode=hedging`) plus trade / yield / research / portfolio / dao / custom. Same APIs as the node app: **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, then chat with `conversationPurpose: "plan"`.
+
+| Step | How |
+|------|-----|
+| Start | **New plan** → **Hedging strategies** (or another mode) + title |
+| Interview | Answer in bot chat (one-message questionnaire). Agent writes `user_folder/plans/<planId>.md` |
+| Review | **View plan** Mini App on paid ngrok; text fallback on free ngrok |
+| Execute | UI **Execute** / **`agent_execute_plan`** — research leaves only for hedging |
+| Compose | Follow-on or **Continue in Orchestrator** — one MultiSign per open-hedge leg |
+| Unwind | After the hedge is live, monitor cron with **`telegramNotify: true`** on triggers. Accept close/roll MultiSign in the bot the same way as a trade build |
+
+`callback_query` must stay in `setWebhook` **`allowed_updates`**. Telegram inline buttons are hardwired in **mpc-auth**. If New plan modes are a static list, add the seventh button (`mode=hedging`) in mpc-auth; if mpc-auth iterates `orchestration-plan.yaml` `modes:`, the YAML add is enough.
+
+Skills: **`hedging-trade`** (design), **`hedging-monitor`** (watch + unwind). Do not auto-Accept or broadcast.
+
 ## Chart analysis menus in Telegram
 
 After OHLCV fetch and analysis tools run, mpc-auth sends **numbered option lists** and **inline keyboard buttons** in Telegram (same menus as SSE pickers in the node app chat).
