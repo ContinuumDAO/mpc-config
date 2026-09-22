@@ -366,9 +366,12 @@ rules:
     boostGroups: [prediction_markets]
     hint: |
       List or search with search_prediction_markets (empty query = trending; pages of 10).
-      Do not load_defi_protocol just to list. Do not fetch OHLCV or run analyze_* unless the
-      operator asked for chance history — that series is implied Yes/No probability samples
-      (resolution is seconds; hourly is 3600), not candlesticks. After a pick, get_prediction_market.
+      Default is live or finished in the last 14 days. Do not pass includeAll unless the
+      operator asked for closed, historical, or all markets. If the live board is empty, say so
+      — do not widen to stale markets. Do not load_defi_protocol just to list. Do not fetch
+      OHLCV or run analyze_* unless the operator asked for chance history — that series is
+      implied Yes/No probability samples (resolution is seconds; hourly is 3600), not candlesticks.
+      After a pick, get_prediction_market.
       Writes (mint / limit / burn / redeem / Yes-No swap) stay behind load_defi_protocol trueo;
       discover them with get_defi_protocol_skill or search_continuum_tools. Holdings: get_token_registry
       then list_my_prediction_markets. Do not add a web Sources section for a catalog list.
