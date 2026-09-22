@@ -3,77 +3,145 @@
     {
       "id": "duckduckgo",
       "displayName": "DuckDuckGo search",
+      "kind": "search-engine",
+      "searchTags": [
+        "duckduck",
+        "duckduckgo search"
+      ],
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "duckduckgo-mcp-server"],
+      "args": [
+        "-y",
+        "duckduckgo-mcp-server"
+      ],
       "initialLoad": false
     },
     {
       "id": "gecko",
       "displayName": "Gecko browser (gecko-mcp)",
+      "kind": "search-engine",
+      "searchTags": [
+        "gecko",
+        "gecko-mcp"
+      ],
       "setupUrl": "https://github.com/Frumane/gecko-mcp",
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "gecko-mcp"],
+      "args": [
+        "-y",
+        "gecko-mcp"
+      ],
       "runtime": {
-        "requireCommands": ["npx"]
+        "requireCommands": [
+          "npx"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "mullvad-browser",
       "displayName": "Mullvad Browser (gecko-mcp)",
+      "kind": "search-engine",
+      "searchTags": [
+        "mullvad",
+        "mullvad-browser"
+      ],
       "setupUrl": "https://github.com/Frumane/gecko-mcp",
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "gecko-mcp"],
+      "args": [
+        "-y",
+        "gecko-mcp"
+      ],
       "runtime": {
-        "requireCommands": ["npx"]
+        "requireCommands": [
+          "npx"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "firefox",
       "displayName": "Firefox (Playwright MCP)",
+      "kind": "search-engine",
+      "searchTags": [
+        "firefox",
+        "firefox-mcp",
+        "playwright"
+      ],
       "setupUrl": "https://github.com/JediLuke/firefox-mcp-server",
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "firefox-mcp-server"],
+      "args": [
+        "-y",
+        "firefox-mcp-server"
+      ],
       "runtime": {
-        "requireCommands": ["npx"]
+        "requireCommands": [
+          "npx"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "brave-search",
       "displayName": "Brave Search",
+      "kind": "search-engine",
+      "searchTags": [
+        "brave-search",
+        "brave search"
+      ],
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
       "apiKeyEnvVar": "BRAVE_API_KEY",
-      "envVars": ["BRAVE_API_KEY"],
+      "envVars": [
+        "BRAVE_API_KEY"
+      ],
       "runtime": {
-        "requireCommands": ["npx"]
+        "requireCommands": [
+          "npx"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "google-search",
       "displayName": "Google Search (Custom Search API)",
+      "kind": "search-engine",
+      "searchTags": [
+        "google-search",
+        "google search"
+      ],
       "setupUrl": "https://github.com/adenot/mcp-google-search",
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@adenot/mcp-google-search"],
+      "args": [
+        "-y",
+        "@adenot/mcp-google-search"
+      ],
       "apiKeyEnvVar": "GOOGLE_API_KEY",
-      "envVars": ["GOOGLE_API_KEY", "GOOGLE_SEARCH_ENGINE_ID"],
+      "envVars": [
+        "GOOGLE_API_KEY",
+        "GOOGLE_SEARCH_ENGINE_ID"
+      ],
       "runtime": {
-        "requireCommands": ["npx"]
+        "requireCommands": [
+          "npx"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "exa",
       "displayName": "Exa search",
+      "kind": "search-engine",
+      "searchTags": [
+        "exa"
+      ],
       "setupUrl": "https://exa.ai/docs/reference/exa-mcp",
       "transport": "http",
       "url": "https://mcp.exa.ai/mcp",
@@ -82,6 +150,10 @@
     {
       "id": "tavily",
       "displayName": "Tavily search",
+      "kind": "search-engine",
+      "searchTags": [
+        "tavily"
+      ],
       "setupUrl": "https://www.tavily.com/",
       "transport": "http",
       "url": "https://mcp.tavily.com/mcp",
@@ -91,6 +163,10 @@
     {
       "id": "kagi",
       "displayName": "Kagi search",
+      "kind": "search-engine",
+      "searchTags": [
+        "kagi"
+      ],
       "setupUrl": "https://kagi.com/",
       "transport": "http",
       "url": "https://mcp.kagi.com/mcp",
@@ -100,6 +176,11 @@
     {
       "id": "serpapi",
       "displayName": "SerpApi search",
+      "kind": "search-engine",
+      "searchTags": [
+        "serpapi",
+        "serp"
+      ],
       "setupUrl": "https://serpapi.com/integrations/mcp",
       "transport": "http",
       "url": "https://mcp.serpapi.com/mcp",
@@ -109,6 +190,10 @@
     {
       "id": "perplexity",
       "displayName": "Perplexity search",
+      "kind": "search-engine",
+      "searchTags": [
+        "perplexity"
+      ],
       "setupUrl": "https://www.perplexity.ai/",
       "transport": "http",
       "url": "https://api.perplexity.ai/mcp",
@@ -118,6 +203,12 @@
     {
       "id": "finance-news",
       "displayName": "Finance News RSS",
+      "kind": "research-data",
+      "searchTags": [
+        "finance news",
+        "finance-news",
+        "seeking alpha"
+      ],
       "transport": "stdio",
       "command": "uv",
       "args": [
@@ -129,13 +220,25 @@
         "main"
       ],
       "runtime": {
-        "requireCommands": ["uv"]
+        "requireCommands": [
+          "uv"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "business-latest",
       "displayName": "Business Latest RSS",
+      "kind": "research-data",
+      "searchTags": [
+        "business latest",
+        "business-latest",
+        "business rss",
+        "bbc business",
+        "cnbc",
+        "marketwatch",
+        "forbes"
+      ],
       "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/business-latest",
@@ -144,6 +247,11 @@
     {
       "id": "world-affairs",
       "displayName": "World Affairs RSS",
+      "kind": "research-data",
+      "searchTags": [
+        "world affairs",
+        "world-affairs"
+      ],
       "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/world-affairs",
@@ -152,6 +260,26 @@
     {
       "id": "crypto-latest",
       "displayName": "Crypto Latest RSS",
+      "kind": "research-data",
+      "searchTags": [
+        "crypto-latest",
+        "crypto rss",
+        "crypto news",
+        "crypto headlines",
+        "coindesk",
+        "the block",
+        "cointelegraph",
+        "decrypt",
+        "blockworks",
+        "the defiant",
+        "bitcoin magazine",
+        "crypto potato",
+        "cryptoslate",
+        "crypto slate",
+        "good morning crypto",
+        "openzeppelin",
+        "open zeppelin"
+      ],
       "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/crypto-latest",
@@ -160,6 +288,25 @@
     {
       "id": "crypto-security",
       "displayName": "Crypto Security RSS",
+      "kind": "research-data",
+      "searchTags": [
+        "crypto-security",
+        "crypto security",
+        "hack analysis",
+        "exploit postmortem",
+        "quillaudits",
+        "quill audits",
+        "slowmist",
+        "immunefi",
+        "blocksec",
+        "block sec",
+        "certik",
+        "rekt",
+        "rekt.news",
+        "trail-of-bits",
+        "trail of bits",
+        "trailofbits"
+      ],
       "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/crypto-security",
@@ -168,6 +315,12 @@
     {
       "id": "coin-bureau-newsletters",
       "displayName": "Coin Bureau Newsletters",
+      "kind": "research-data",
+      "searchTags": [
+        "coin-bureau-newsletters",
+        "coin bureau",
+        "coinbureau"
+      ],
       "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/coin-bureau-newsletters",
@@ -176,6 +329,14 @@
     {
       "id": "crypto-banter-newsletters",
       "displayName": "Crypto Banter Newsletters",
+      "kind": "research-data",
+      "searchTags": [
+        "crypto-banter-newsletters",
+        "crypto banter",
+        "the insider",
+        "good morning crypto",
+        "the daily candle"
+      ],
       "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/crypto-banter-newsletters",
@@ -184,6 +345,13 @@
     {
       "id": "continuumdao-tokenomics",
       "displayName": "ContinuumDAO tokenomics",
+      "kind": "research-data",
+      "searchTags": [
+        "continuumdao-tokenomics",
+        "tokenomics mcp",
+        "circulating supply",
+        "vectm"
+      ],
       "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/continuumdao-tokenomics",
@@ -192,6 +360,12 @@
     {
       "id": "gdelt-cloud",
       "displayName": "GDELT Cloud",
+      "kind": "research-data",
+      "searchTags": [
+        "gdelt",
+        "gdelt-cloud",
+        "gdelt cloud"
+      ],
       "setupUrl": "https://gdeltcloud.com/product/mcp",
       "transport": "http",
       "url": "https://gdelt-cloud-mcp.fastmcp.app/mcp",
@@ -201,18 +375,38 @@
     {
       "id": "foundry",
       "displayName": "Foundry (Forge, Cast, Anvil)",
+      "searchTags": [
+        "foundry",
+        "forge",
+        "cast",
+        "anvil"
+      ],
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@pranesh.asp/foundry-mcp-server"],
+      "args": [
+        "-y",
+        "@pranesh.asp/foundry-mcp-server"
+      ],
       "useUserFolder": true,
       "runtime": {
-        "requireCommands": ["npx", "forge", "cast", "anvil", "heimdall"]
+        "requireCommands": [
+          "npx",
+          "forge",
+          "cast",
+          "anvil",
+          "heimdall"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "etherscan",
       "displayName": "Etherscan (official)",
+      "kind": "research-data",
+      "searchTags": [
+        "etherscan",
+        "etherscan.io"
+      ],
       "setupUrl": "https://docs.etherscan.io/build-with-ai/mcp",
       "transport": "http",
       "url": "https://mcp.etherscan.io/mcp",
@@ -221,21 +415,39 @@
     },
     {
       "id": "etherscan-community",
-      "displayName": "Etherscan (community stdio — not official)",
+      "displayName": "Etherscan (community stdio \u2014 not official)",
+      "kind": "research-data",
+      "searchTags": [
+        "etherscan",
+        "etherscan.io"
+      ],
       "setupUrl": "https://github.com/dennisonbertram/mcp-etherscan-server",
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "mcp-etherscan-server"],
+      "args": [
+        "-y",
+        "mcp-etherscan-server"
+      ],
       "apiKeyEnvVar": "ETHERSCAN_API_KEY",
-      "envVars": ["ETHERSCAN_API_KEY"],
+      "envVars": [
+        "ETHERSCAN_API_KEY"
+      ],
       "runtime": {
-        "requireCommands": ["npx"]
+        "requireCommands": [
+          "npx"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "blockscout",
       "displayName": "Blockscout (official)",
+      "kind": "research-data",
+      "searchTags": [
+        "blockscout",
+        "basescan",
+        "arbiscan"
+      ],
       "setupUrl": "https://mcp.blockscout.com/",
       "transport": "http",
       "url": "https://mcp.blockscout.com/mcp",
@@ -246,6 +458,11 @@
     {
       "id": "dune",
       "displayName": "Dune Analytics",
+      "kind": "research-data",
+      "searchTags": [
+        "dune",
+        "dune analytics"
+      ],
       "transport": "http",
       "url": "https://api.dune.com/mcp/v1",
       "apiKeyEnvVar": "DUNE_API_KEY",
@@ -255,6 +472,10 @@
     {
       "id": "coingecko",
       "displayName": "CoinGecko (public)",
+      "kind": "research-data",
+      "searchTags": [
+        "coingecko"
+      ],
       "transport": "http",
       "url": "https://mcp.api.coingecko.com/mcp",
       "initialLoad": false
@@ -262,6 +483,11 @@
     {
       "id": "coingecko-pro",
       "displayName": "CoinGecko Pro",
+      "kind": "research-data",
+      "searchTags": [
+        "coingecko",
+        "coingecko-pro"
+      ],
       "transport": "http",
       "url": "https://mcp.pro-api.coingecko.com/mcp",
       "apiKeyEnvVar": "COINGECKO_API_KEY",
@@ -271,6 +497,12 @@
     {
       "id": "coinmarketcap-public",
       "displayName": "CoinMarketCap (public)",
+      "kind": "research-data",
+      "searchTags": [
+        "coinmarketcap",
+        "coinmarketcap-public",
+        "cmc"
+      ],
       "setupUrl": "https://pro.coinmarketcap.com/api/documentation/pro-api-reference/keyless-public-api",
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/cmc-public",
@@ -279,6 +511,11 @@
     {
       "id": "coinbase-public",
       "displayName": "Coinbase Advanced Trade (public)",
+      "kind": "research-data",
+      "searchTags": [
+        "coinbase",
+        "coinbase-public"
+      ],
       "setupUrl": "https://docs.cdp.coinbase.com/coinbase-app/advanced-trade-apis/rest-api",
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/coinbase-public",
@@ -287,6 +524,11 @@
     {
       "id": "coinmarketcap",
       "displayName": "CoinMarketCap",
+      "kind": "research-data",
+      "searchTags": [
+        "coinmarketcap",
+        "cmc"
+      ],
       "setupUrl": "https://coinmarketcap.com/api/documentation/ai-agent-hub/mcp",
       "transport": "http",
       "url": "https://mcp.coinmarketcap.com/mcp",
@@ -297,6 +539,10 @@
     {
       "id": "altfins",
       "displayName": "altFINS (crypto analytics)",
+      "kind": "research-data",
+      "searchTags": [
+        "altfins"
+      ],
       "transport": "http",
       "url": "https://mcp.altfins.com/mcp",
       "apiKeyEnvVar": "ALTFINS_API_KEY",
@@ -306,6 +552,10 @@
     {
       "id": "coinglass",
       "displayName": "CoinGlass (official)",
+      "kind": "research-data",
+      "searchTags": [
+        "coinglass"
+      ],
       "setupUrl": "https://docs.coinglass.com/reference/mcp-service",
       "transport": "http",
       "url": "https://api-mcp.coinglass.com/mcp",
@@ -316,6 +566,11 @@
     {
       "id": "nansen",
       "displayName": "Nansen (official)",
+      "kind": "research-data",
+      "searchTags": [
+        "nansen",
+        "nansen.ai"
+      ],
       "setupUrl": "https://docs.nansen.ai/mcp/overview",
       "transport": "http",
       "url": "https://mcp.nansen.ai/ra/mcp",
@@ -326,6 +581,11 @@
     {
       "id": "cryptorank",
       "displayName": "CryptoRank (official)",
+      "kind": "research-data",
+      "searchTags": [
+        "cryptorank",
+        "crypto rank"
+      ],
       "setupUrl": "https://docs.cryptorank.io/mcp-server",
       "transport": "http",
       "url": "https://api.cryptorank.io/mcp",
@@ -335,6 +595,11 @@
     {
       "id": "arkham-intel",
       "displayName": "Arkham Intel API",
+      "kind": "research-data",
+      "searchTags": [
+        "arkham-intel",
+        "arkham"
+      ],
       "setupUrl": "https://arkm.com/api/docs",
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/arkham-intel",
@@ -345,19 +610,38 @@
     {
       "id": "messari",
       "displayName": "Messari (crypto intelligence)",
+      "kind": "research-data",
+      "searchTags": [
+        "messari"
+      ],
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@messari/sdk-ts-mcp@latest", "--client=claude", "--tools=dynamic"],
+      "args": [
+        "-y",
+        "@messari/sdk-ts-mcp@latest",
+        "--client=claude",
+        "--tools=dynamic"
+      ],
       "apiKeyEnvVar": "MESSARI_SDK_API_KEY",
-      "envVars": ["MESSARI_SDK_API_KEY"],
+      "envVars": [
+        "MESSARI_SDK_API_KEY"
+      ],
       "runtime": {
-        "requireCommands": ["npx"]
+        "requireCommands": [
+          "npx"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "financial-modeling-prep",
       "displayName": "Financial Modeling Prep",
+      "kind": "research-data",
+      "searchTags": [
+        "financial modeling prep",
+        "fmp",
+        "financial-modeling-prep"
+      ],
       "setupUrl": "https://site.financialmodelingprep.com/developer/docs/mcp-server",
       "transport": "http",
       "url": "https://financialmodelingprep.com/mcp",
@@ -368,20 +652,35 @@
     {
       "id": "alpaca",
       "displayName": "Alpaca (v2)",
+      "kind": "research-data",
+      "searchTags": [
+        "alpaca"
+      ],
       "setupUrl": "https://github.com/alpacahq/alpaca-mcp-server",
       "transport": "stdio",
       "command": "uvx",
-      "args": ["alpaca-mcp-server@2"],
+      "args": [
+        "alpaca-mcp-server@2"
+      ],
       "apiKeyEnvVar": "ALPACA_API_KEY",
-      "envVars": ["ALPACA_API_KEY", "ALPACA_SECRET_KEY"],
+      "envVars": [
+        "ALPACA_API_KEY",
+        "ALPACA_SECRET_KEY"
+      ],
       "runtime": {
-        "requireCommands": ["uv"]
+        "requireCommands": [
+          "uv"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "equibles",
       "displayName": "Equibles",
+      "kind": "research-data",
+      "searchTags": [
+        "equibles"
+      ],
       "setupUrl": "https://equibles.com/mcp",
       "transport": "http",
       "url": "https://mcp.equibles.com/mcp",
@@ -391,32 +690,64 @@
     {
       "id": "edgartools",
       "displayName": "EdgarTools (SEC filings)",
+      "kind": "research-data",
+      "searchTags": [
+        "edgartools",
+        "edgar",
+        "sec filings",
+        "13f",
+        "earnings"
+      ],
       "setupUrl": "https://www.edgartools.io/edgartools-mcp-for-sec-filings/",
       "transport": "stdio",
       "command": "uvx",
-      "args": ["--from", "edgartools[ai]", "edgartools-mcp"],
-      "envVars": ["EDGAR_IDENTITY"],
+      "args": [
+        "--from",
+        "edgartools[ai]",
+        "edgartools-mcp"
+      ],
+      "envVars": [
+        "EDGAR_IDENTITY"
+      ],
       "runtime": {
-        "requireCommands": ["uv"]
+        "requireCommands": [
+          "uv"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "alphavantage",
       "displayName": "Alpha Vantage (stock market data)",
+      "kind": "research-data",
+      "searchTags": [
+        "alphavantage",
+        "alpha vantage"
+      ],
       "transport": "stdio",
       "command": "uvx",
-      "args": ["--from", "marketdata-mcp-server", "marketdata-mcp"],
+      "args": [
+        "--from",
+        "marketdata-mcp-server",
+        "marketdata-mcp"
+      ],
       "apiKeyEnvVar": "ALPHA_VANTAGE_API_KEY",
-      "envVars": ["ALPHA_VANTAGE_API_KEY"],
+      "envVars": [
+        "ALPHA_VANTAGE_API_KEY"
+      ],
       "runtime": {
-        "requireCommands": ["uv"]
+        "requireCommands": [
+          "uv"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "vpn",
       "displayName": "VPN (admin + egress)",
+      "searchTags": [
+        "vpn"
+      ],
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/vpn",
       "initialLoad": false,
@@ -425,6 +756,10 @@
     {
       "id": "technical-indicators",
       "displayName": "Technical indicators",
+      "searchTags": [
+        "technical indicators",
+        "ta mcp"
+      ],
       "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
       "transport": "http",
       "url": "http://continuum-mcp:8446/mcp/ta",
@@ -434,16 +769,30 @@
     {
       "id": "venice",
       "displayName": "Venice AI",
+      "searchTags": [
+        "venice"
+      ],
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@veniceai/mcp-server@0.2.0"],
+      "args": [
+        "-y",
+        "@veniceai/mcp-server@0.2.0"
+      ],
       "apiKeyEnvVar": "VENICE_API_KEY",
-      "runtime": { "requireCommands": ["npx"] },
+      "runtime": {
+        "requireCommands": [
+          "npx"
+        ]
+      },
       "initialLoad": false
     },
     {
       "id": "binance",
       "displayName": "Binance (public market data)",
+      "kind": "research-data",
+      "searchTags": [
+        "binance"
+      ],
       "transport": "stdio",
       "command": "uv",
       "args": [
@@ -457,13 +806,21 @@
         "https://raw.githubusercontent.com/danishashko/binance-mcp-server/main/binance_mcp.py"
       ],
       "runtime": {
-        "requireCommands": ["uv"]
+        "requireCommands": [
+          "uv"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "whale-tracker",
       "displayName": "Whale Tracker (Whale Alert)",
+      "kind": "research-data",
+      "searchTags": [
+        "whale",
+        "whale-tracker",
+        "whale alert"
+      ],
       "transport": "stdio",
       "command": "uv",
       "args": [
@@ -477,15 +834,26 @@
         "https://raw.githubusercontent.com/kukapay/whale-tracker-mcp/main/whale-tracker.py"
       ],
       "apiKeyEnvVar": "WHALE_ALERT_API_KEY",
-      "envVars": ["WHALE_ALERT_API_KEY"],
+      "envVars": [
+        "WHALE_ALERT_API_KEY"
+      ],
       "runtime": {
-        "requireCommands": ["uv"]
+        "requireCommands": [
+          "uv"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "etf-flow",
       "displayName": "ETF Flow (CoinGlass)",
+      "kind": "research-data",
+      "searchTags": [
+        "etf-flow",
+        "etf flow",
+        "bitcoin etf",
+        "ethereum etf"
+      ],
       "setupUrl": "https://github.com/kukapay/etf-flow-mcp",
       "transport": "stdio",
       "command": "uvx",
@@ -501,15 +869,24 @@
         "etf-flow-mcp"
       ],
       "apiKeyEnvVar": "COINGLASS_API_KEY",
-      "envVars": ["COINGLASS_API_KEY"],
+      "envVars": [
+        "COINGLASS_API_KEY"
+      ],
       "runtime": {
-        "requireCommands": ["uv"]
+        "requireCommands": [
+          "uv"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "cryptopanic",
-      "displayName": "CryptoPanic (community — not official)",
+      "displayName": "CryptoPanic (community \u2014 not official)",
+      "kind": "research-data",
+      "searchTags": [
+        "cryptopanic",
+        "crypto panic"
+      ],
       "setupUrl": "https://github.com/kukapay/cryptopanic-mcp-server",
       "transport": "stdio",
       "command": "uv",
@@ -524,18 +901,31 @@
         "https://raw.githubusercontent.com/kukapay/cryptopanic-mcp-server/main/main.py"
       ],
       "apiKeyEnvVar": "CRYPTOPANIC_API_KEY",
-      "envVars": ["CRYPTOPANIC_API_KEY", "CRYPTOPANIC_API_PLAN"],
+      "envVars": [
+        "CRYPTOPANIC_API_KEY",
+        "CRYPTOPANIC_API_PLAN"
+      ],
       "runtime": {
-        "requireCommands": ["uv"]
+        "requireCommands": [
+          "uv"
+        ]
       },
       "initialLoad": false
     },
     {
       "id": "x",
       "displayName": "X (Twitter)",
+      "kind": "research-data",
+      "searchTags": [
+        "twitter",
+        "x.com"
+      ],
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@iflow-mcp/datawhisker-x-mcp-server"],
+      "args": [
+        "-y",
+        "@iflow-mcp/datawhisker-x-mcp-server"
+      ],
       "envVars": [
         "TWITTER_API_KEY",
         "TWITTER_API_SECRET",

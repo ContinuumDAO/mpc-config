@@ -412,47 +412,10 @@ todoLabels:
   researchPrefix: "Research: "
 
 mcpClassification:
-  knownSearchEngineIDs:
-    - duckduckgo
-    - brave-search
-    - google-search
-    - exa
-    - tavily
-    - firefox
-    - mullvad-browser
-    - kagi
-    - serpapi
-    - perplexity
-  knownResearchDataIDs:
-    - messari
-    - dune
-    - alphavantage
-    - finance-news
-    - business-latest
-    - world-affairs
-    - crypto-latest
-    - crypto-security
-    - coin-bureau-newsletters
-    - crypto-banter-newsletters
-    - arkham-intel
-    - cryptopanic
-    - gdelt-cloud
-    - fmp
-    - financial-modeling-prep
-    - alpaca
-    - equibles
-    - edgartools
-    - coingecko
-    - coingecko-pro
-    - coinmarketcap
-    - coinmarketcap-public
-    - altfins
-    - whale-tracker
-    - etf-flow
-    - coinglass
-    - nansen
-    - cryptorank
-    - binance
+  # Per-server kind + searchTags live on MCP_servers.json. These id lists are
+  # optional extras for servers not yet in the catalog file.
+  knownSearchEngineIDs: []
+  knownResearchDataIDs: []
   searchNeedles:
     - duckduck
     - brave-search
@@ -465,74 +428,13 @@ mcpClassification:
     - perplexity
     - kagi
     - mullvad
-    - mullvad-browser
+    - gecko
     - firefox
     - firefox-mcp
   researchDataNeedles:
-    - messari
-    - dune
-    - alpha vantage
-    - alphavantage
-    - finance news
-    - finance-news
-    - business latest
-    - business-latest
-    - world affairs
-    - world-affairs
-    - crypto latest
-    - crypto-latest
-    - crypto-security
-    - crypto security
-    - quillaudits
-    - slowmist
-    - immunefi
-    - blocksec
-    - certik
-    - rekt
-    - trail-of-bits
-    - trail of bits
-    - crypto news
-    - crypto headlines
-    - cryptoslate
-    - crypto slate
-    - openzeppelin
-    - open zeppelin
-    - coin-bureau-newsletters
-    - coin bureau
-    - coinbureau
-    - crypto-banter-newsletters
-    - crypto banter
-    - the insider
-    - good morning crypto
-    - the daily candle
-    - arkham-intel
-    - arkham
-    - cryptopanic
-    - crypto panic
-    - gdelt
-    - gdelt-cloud
-    - gdelt cloud
-    - fmp
-    - financial modeling
-    - alpaca
-    - equibles
-    - edgartools
-    - edgar
-    - 13f
-    - earnings
-    - sec filings
-    - coingecko
-    - coinmarketcap
-    - altfins
-    - whale
-    - etf flow
-    - etf-flow
-    - coinglass
-    - nansen
-    - cryptorank
-    - crypto rank
-    - bitcoin etf
-    - ethereum etf
     - fundamentals
     - on-chain analytics
+    - market data
     - rss
+    - sec filings
+    - earnings
