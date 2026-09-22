@@ -430,6 +430,12 @@ mcpClassification:
     - finance-news
     - business-latest
     - world-affairs
+    - crypto-latest
+    - crypto-security
+    - coin-bureau-newsletters
+    - crypto-banter-newsletters
+    - arkham-intel
+    - cryptopanic
     - gdelt-cloud
     - fmp
     - financial-modeling-prep
@@ -442,6 +448,10 @@ mcpClassification:
     - coinmarketcap-public
     - altfins
     - whale-tracker
+    - etf-flow
+    - coinglass
+    - nansen
+    - cryptorank
     - binance
   searchNeedles:
     - duckduck
@@ -469,6 +479,36 @@ mcpClassification:
     - business-latest
     - world affairs
     - world-affairs
+    - crypto latest
+    - crypto-latest
+    - crypto-security
+    - crypto security
+    - quillaudits
+    - slowmist
+    - immunefi
+    - blocksec
+    - certik
+    - rekt
+    - trail-of-bits
+    - trail of bits
+    - crypto news
+    - crypto headlines
+    - cryptoslate
+    - crypto slate
+    - openzeppelin
+    - open zeppelin
+    - coin-bureau-newsletters
+    - coin bureau
+    - coinbureau
+    - crypto-banter-newsletters
+    - crypto banter
+    - the insider
+    - good morning crypto
+    - the daily candle
+    - arkham-intel
+    - arkham
+    - cryptopanic
+    - crypto panic
     - gdelt
     - gdelt-cloud
     - gdelt cloud
@@ -485,6 +525,14 @@ mcpClassification:
     - coinmarketcap
     - altfins
     - whale
+    - etf flow
+    - etf-flow
+    - coinglass
+    - nansen
+    - cryptorank
+    - crypto rank
+    - bitcoin etf
+    - ethereum etf
     - fundamentals
     - on-chain analytics
     - rss

@@ -31,7 +31,7 @@ rules:
     always: true
     hint: |
       Never auto-load market-data MCP servers (coingecko, coingecko-pro, coinbase, coinmarketcap,
-      coinmarketcap-public, binance, etc.) without asking the operator first. Prefer
+      coinmarketcap-public, binance, coinglass, etf-flow, nansen, cryptorank, etc.) without asking the operator first. Prefer
       agent_load_mcp_server after they name a source. DeFi OHLCV on Continuum uses
       continuum__load_defi_protocol, not a third-party market-data MCP.
     modes: [interactive, cron]
@@ -235,8 +235,12 @@ rules:
         - fetch more headlines
     hint: |
       Follow-up: the operator wants more RSS headlines from the prior fetch in this thread.
-      Re-call the RSS tool already used (world-affairs__get_world_affairs_latest or
-      business-latest__get_business_latest) with limit: 25 (max). Keep the same sourceId if
+      Re-call the RSS tool already used (world-affairs__get_world_affairs_latest,
+      business-latest__get_business_latest, crypto-latest__get_crypto_latest,
+      or coin-bureau-newsletters__get_coin_bureau_latest,
+      or crypto-banter-newsletters__get_crypto_banter_latest,
+      or crypto-security__get_crypto_security_latest)
+      with limit: 25 (max). Keep the same sourceId if
       the prior call filtered by source. Do not use agent_bash, agent_read_file, or agent_grep
       to inspect MCP source — pagination is the limit parameter. For agent_bash mutating commands,
       cwd must be a workspace subtree (data/, skills/, evm/, …) — omitting cwd defaults to
@@ -492,6 +496,227 @@ rules:
     hint: |
       SEC EDGAR filings: call continuum__resolve_catalog_mcp_enablement { toolset: "sec-filings" }
       then add/load edgartools. Do not scrape sec.gov HTML.
+    modes: [interactive, cron]
+
+  - id: crypto_latest_rss
+    match:
+      anySubstring:
+        - crypto news
+        - cryptocurrency news
+        - bitcoin news
+        - ethereum news
+        - crypto headlines
+        - crypto rss
+        - crypto-latest
+        - coindesk
+        - cointelegraph
+        - bitcoin magazine
+        - the defiant
+        - blockworks
+        - cryptoslate
+        - crypto slate
+        - good morning crypto
+        - openzeppelin
+        - open zeppelin
+    hint: |
+      Crypto headlines: catalog MCP crypto-latest (serverId exact) — keyless RSS
+      on continuum-mcp (CoinDesk, The Block, Cointelegraph, Decrypt, Blockworks,
+      The Defiant, Bitcoin Magazine, Crypto Potato, CryptoSlate, Good Morning
+      Crypto, OpenZeppelin). Do not auto-load. If already active,
+      agent_load_mcp_server then get_crypto_latest / search_crypto_latest. If it
+      is only in the catalog, tell the operator to Add from repository. Do not
+      scrape those sites. Prefer this over catalog **cryptopanic** unless the
+      operator named CryptoPanic and has Variables set. For Coin Bureau weekly
+      newsletters use **coin-bureau-newsletters**. For Crypto Banter / The
+      Insider / The Daily Candle use **crypto-banter-newsletters**. Good Morning
+      Crypto is in both: headlines via **crypto-latest** (`sourceId`
+      `good-morning-crypto`) or the Banter newsletter MCP. For hack analyses
+      / QuillAudits / SlowMist / Immunefi / BlockSec / CertiK / Rekt /
+      Trail of Bits use **crypto-security**.
+      Not an
+      OHLCV chart source.
+    modes: [interactive, cron]
+
+  - id: crypto_security_rss
+    match:
+      anySubstring:
+        - crypto security
+        - crypto-security
+        - hack analysis
+        - exploit postmortem
+        - smart contract exploit
+        - quillaudits
+        - quill audits
+        - slowmist
+        - immunefi
+        - blocksec
+        - block sec
+        - certik
+        - rekt
+        - rekt.news
+        - trail of bits
+        - trailofbits
+        - trail-of-bits
+    hint: |
+      Crypto security write-ups: catalog MCP crypto-security (serverId exact)
+      — keyless RSS on continuum-mcp (QuillAudits Medium author feed, SlowMist,
+      Immunefi, BlockSec, CertiK Medium author feed, Rekt, Trail of Bits).
+      Do not auto-load. If already active,
+      agent_load_mcp_server then get_crypto_security_latest /
+      search_crypto_security. Optional sourceId: quillaudits, slowmist,
+      immunefi, blocksec, certik, rekt, trail-of-bits. If it is only in the
+      catalog, tell the operator to Add from repository. Do not scrape Medium,
+      CoinMonks, quillaudits.com, certik.com, or rekt.news HTML yourself. Do
+      not use the mixed CoinMonks publication feed. Not crypto-latest
+      (news-wire headlines). Not QuillShield paid audits. Not an OHLCV
+      chart source.
+    modes: [interactive, cron]
+
+  - id: coin_bureau_newsletters
+    match:
+      anySubstring:
+        - coin bureau
+        - coinbureau
+        - coin bureau newsletter
+        - coinbureau newsletter
+    hint: |
+      Coin Bureau weekly newsletters: catalog MCP coin-bureau-newsletters
+      (serverId exact) — keyless archive + sitemap on continuum-mcp (no public
+      RSS). Do not auto-load. If already active, agent_load_mcp_server then
+      get_coin_bureau_latest / search_coin_bureau_newsletters. If it is only
+      in the catalog, tell the operator to Add from repository. Do not scrape
+      coinbureau.com HTML yourself. Not crypto-latest (RSS headlines). Not
+      CryptoPanic. Not an OHLCV chart source.
+    modes: [interactive, cron]
+
+  - id: crypto_banter_newsletters
+    match:
+      anySubstring:
+        - crypto banter
+        - cryptobanter
+        - the insider
+        - theinsiderletter
+        - good morning crypto
+        - the daily candle
+        - daily candle
+    hint: |
+      Crypto Banter newsletters: catalog MCP crypto-banter-newsletters
+      (serverId exact) — keyless Substack RSS on continuum-mcp (The Insider,
+      Good Morning Crypto, The Daily Candle). Do not auto-load. If already
+      active, agent_load_mcp_server then get_crypto_banter_latest /
+      search_crypto_banter_newsletters. Optional sourceId: the-insider,
+      good-morning-crypto, the-daily-candle. If it is only in the catalog,
+      tell the operator to Add from repository. Do not scrape cryptobanter.com
+      or the Substack HTML yourself. Good Morning Crypto headlines are also in
+      **crypto-latest** (`sourceId` `good-morning-crypto`). Not Coin Bureau.
+      Not CryptoPanic. Not an OHLCV chart source.
+    modes: [interactive, cron]
+
+  - id: cryptopanic_community
+    match:
+      anySubstring:
+        - cryptopanic
+        - crypto panic
+    hint: |
+      CryptoPanic: no official MCP (REST only). Catalog MCP **cryptopanic** is the
+      kukapay community wrapper (serverId exact) — tool get_crypto_news. Needs
+      Variables CRYPTOPANIC_API_KEY and CRYPTOPANIC_API_PLAN (plan slug in the
+      REST path; free developer plan was discontinued). Do not auto-load. If
+      already active, agent_load_mcp_server then get_crypto_news. If only in the
+      catalog, tell the operator to Add from repository and set both Variables.
+      For keyless crypto headlines use **crypto-latest**. Do not scrape
+      cryptopanic.com. Not an OHLCV chart source.
+    modes: [interactive, cron]
+
+  - id: arkham_intel_api
+    match:
+      anySubstring:
+        - arkham
+        - arkham intel
+        - arkham intelligence
+        - arkm.com
+        - intel.arkm
+    hint: |
+      Arkham Intel API: catalog MCP arkham-intel (serverId exact) — official
+      REST at api.arkm.com wrapped as MCP (no hosted Arkham MCP). Needs
+      Variable ARKHAM_API_KEY (header API-Key; request access at arkm.com/api).
+      Do not auto-load. If already active, agent_load_mcp_server then
+      list_arkham_api_paths / arkham_api_request. If only in the catalog, tell
+      the operator to Add from repository and set ARKHAM_API_KEY. Do not scrape
+      intel.arkm.com. Do not invent undocumented paths — use list_arkham_api_paths
+      or arkm.com/llms.txt. /transfers is billed per row. Not an OHLCV chart source.
+    modes: [interactive, cron]
+
+  - id: etf_flow_coinglass
+    match:
+      anySubstring:
+        - etf flow
+        - etf inflows
+        - etf outflows
+        - bitcoin etf
+        - ethereum etf
+        - btc etf
+        - eth etf
+        - spot etf
+        - coinglass
+    hint: |
+      CoinGlass data: prefer official catalog MCP **coinglass** (serverId exact;
+      hosted `https://api-mcp.coinglass.com/mcp`) for funding, open interest,
+      liquidations, order book, sentiment, and ETF (`get_bitcoin_etf_flow_history`).
+      Narrow extra **etf-flow** formats BTC/ETH flows as a ticker×date markdown
+      table via `get_etf_flow`. Both need Variable **COINGLASS_API_KEY** (same key;
+      official HTTP uses header CG-API-KEY). Do not auto-load. If the chosen server
+      is already active, agent_load_mcp_server then the matching tool. If it is
+      only in the catalog, tell the operator to Add from repository (prefer
+      **coinglass**) and set COINGLASS_API_KEY. Do not scrape coinglass.com.
+      Community CoinGlass stdio wrappers are not in the catalog. Not an OHLCV
+      chart source.
+    modes: [interactive, cron]
+
+  - id: nansen_official
+    match:
+      anySubstring:
+        - nansen
+        - nansen.ai
+        - nansen mcp
+        - nansen score
+    hint: |
+      Nansen: official catalog MCP **nansen** (serverId exact; hosted
+      `https://mcp.nansen.ai/ra/mcp`). Needs Variable **NANSEN_API_KEY**
+      (header NANSEN-API-KEY; create at app.nansen.ai/auth/agent-setup).
+      Do not auto-load. If already active, agent_load_mcp_server then the
+      matching Nansen tool (token_info, token_ohlcv, smart-money balances,
+      address_portfolio, wallet_pnl_summary, general_search, …). If only in
+      the catalog, tell the operator to Add from repository and set
+      NANSEN_API_KEY. tools/list works without a key; tool calls consume
+      Nansen API credits (general_search address lookups are expensive).
+      Do not scrape nansen.ai. Do not use Bearer — the hosted server looks
+      for **NANSEN-API-KEY**. token_ohlcv is Nansen OHLCV and costs credits
+      — do not use it for charts unless the operator chose Nansen.
+    modes: [interactive, cron]
+
+  - id: cryptorank_official
+    match:
+      anySubstring:
+        - cryptorank
+        - crypto rank
+        - cryptorank.io
+        - funding rounds
+        - token unlock
+        - token unlocks
+    hint: |
+      CryptoRank: official catalog MCP **cryptorank** (serverId exact; hosted
+      `https://api.cryptorank.io/mcp`). Needs Variable **CRYPTORANK_API_KEY**
+      (default Bearer — do not send X-Api-Key to this MCP; that header is REST
+      only). PRO API plan or higher. Create a key at
+      cryptorank.io/public-api/dashboard. Do not auto-load. If already active,
+      agent_load_mcp_server then resolve_entity / search_funding_round /
+      get_tokenomics_summary / search_unlock / get_historical_currency / …
+      If only in the catalog, tell the operator to Add from repository and set
+      CRYPTORANK_API_KEY. No keyless MCP tier. Do not scrape cryptorank.io.
+      Community fund wrappers are not this server. get_historical_currency is
+      CryptoRank OHLC — do not use it for charts unless the operator chose
+      CryptoRank.
     modes: [interactive, cron]
 
   - id: market_data_ohlcv_ask

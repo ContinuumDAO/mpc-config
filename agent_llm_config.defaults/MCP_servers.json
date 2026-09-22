@@ -150,6 +150,38 @@
       "initialLoad": false
     },
     {
+      "id": "crypto-latest",
+      "displayName": "Crypto Latest RSS",
+      "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
+      "transport": "http",
+      "url": "http://continuum-mcp:8446/mcp/crypto-latest",
+      "initialLoad": false
+    },
+    {
+      "id": "crypto-security",
+      "displayName": "Crypto Security RSS",
+      "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
+      "transport": "http",
+      "url": "http://continuum-mcp:8446/mcp/crypto-security",
+      "initialLoad": false
+    },
+    {
+      "id": "coin-bureau-newsletters",
+      "displayName": "Coin Bureau Newsletters",
+      "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
+      "transport": "http",
+      "url": "http://continuum-mcp:8446/mcp/coin-bureau-newsletters",
+      "initialLoad": false
+    },
+    {
+      "id": "crypto-banter-newsletters",
+      "displayName": "Crypto Banter Newsletters",
+      "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
+      "transport": "http",
+      "url": "http://continuum-mcp:8446/mcp/crypto-banter-newsletters",
+      "initialLoad": false
+    },
+    {
       "id": "continuumdao-tokenomics",
       "displayName": "ContinuumDAO tokenomics",
       "setupUrl": "https://github.com/ContinuumDAO/continuum-node-sdk",
@@ -269,6 +301,45 @@
       "url": "https://mcp.altfins.com/mcp",
       "apiKeyEnvVar": "ALTFINS_API_KEY",
       "apiKeyHeader": "X-Api-Key",
+      "initialLoad": false
+    },
+    {
+      "id": "coinglass",
+      "displayName": "CoinGlass (official)",
+      "setupUrl": "https://docs.coinglass.com/reference/mcp-service",
+      "transport": "http",
+      "url": "https://api-mcp.coinglass.com/mcp",
+      "apiKeyEnvVar": "COINGLASS_API_KEY",
+      "apiKeyHeader": "CG-API-KEY",
+      "initialLoad": false
+    },
+    {
+      "id": "nansen",
+      "displayName": "Nansen (official)",
+      "setupUrl": "https://docs.nansen.ai/mcp/overview",
+      "transport": "http",
+      "url": "https://mcp.nansen.ai/ra/mcp",
+      "apiKeyEnvVar": "NANSEN_API_KEY",
+      "apiKeyHeader": "NANSEN-API-KEY",
+      "initialLoad": false
+    },
+    {
+      "id": "cryptorank",
+      "displayName": "CryptoRank (official)",
+      "setupUrl": "https://docs.cryptorank.io/mcp-server",
+      "transport": "http",
+      "url": "https://api.cryptorank.io/mcp",
+      "apiKeyEnvVar": "CRYPTORANK_API_KEY",
+      "initialLoad": false
+    },
+    {
+      "id": "arkham-intel",
+      "displayName": "Arkham Intel API",
+      "setupUrl": "https://arkm.com/api/docs",
+      "transport": "http",
+      "url": "http://continuum-mcp:8446/mcp/arkham-intel",
+      "apiKeyEnvVar": "ARKHAM_API_KEY",
+      "apiKeyHeader": "API-Key",
       "initialLoad": false
     },
     {
@@ -407,6 +478,53 @@
       ],
       "apiKeyEnvVar": "WHALE_ALERT_API_KEY",
       "envVars": ["WHALE_ALERT_API_KEY"],
+      "runtime": {
+        "requireCommands": ["uv"]
+      },
+      "initialLoad": false
+    },
+    {
+      "id": "etf-flow",
+      "displayName": "ETF Flow (CoinGlass)",
+      "setupUrl": "https://github.com/kukapay/etf-flow-mcp",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/kukapay/etf-flow-mcp",
+        "--with",
+        "mcp[cli]>=1.6.0,<2",
+        "--with",
+        "httpx",
+        "--with",
+        "tabulate",
+        "etf-flow-mcp"
+      ],
+      "apiKeyEnvVar": "COINGLASS_API_KEY",
+      "envVars": ["COINGLASS_API_KEY"],
+      "runtime": {
+        "requireCommands": ["uv"]
+      },
+      "initialLoad": false
+    },
+    {
+      "id": "cryptopanic",
+      "displayName": "CryptoPanic (community — not official)",
+      "setupUrl": "https://github.com/kukapay/cryptopanic-mcp-server",
+      "transport": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--with",
+        "mcp[cli]>=1.3.0,<2",
+        "--with",
+        "requests",
+        "--with",
+        "python-dotenv",
+        "https://raw.githubusercontent.com/kukapay/cryptopanic-mcp-server/main/main.py"
+      ],
+      "apiKeyEnvVar": "CRYPTOPANIC_API_KEY",
+      "envVars": ["CRYPTOPANIC_API_KEY", "CRYPTOPANIC_API_PLAN"],
       "runtime": {
         "requireCommands": ["uv"]
       },
