@@ -2,6 +2,7 @@
 # Never short-circuits the LLM. Structured UI / Telegram callbacks stay hardwired in code.
 # Orchestration hook turns ignore rules whose modes omit "hook".
 # mpc-auth only matches/loads; vendor and protocol names belong here, not in Go.
+# verify: interview (clarify inputs) | lookup (catalog/read tools, no OHLCV/Sources/file) | deliverable (script/artifact).
 version: 1
 
 rules:
@@ -348,6 +349,29 @@ rules:
     hint: |
       Operator asked about remaining signature/free credits. Answer from node/keygen status
       tools already available (e.g. get_mpa_wallet_status). Do not spawn research or write tools.
+    modes: [interactive, cron]
+
+  - id: prediction_markets
+    tier: light
+    verify: lookup
+    match:
+      anySubstring:
+        - prediction market
+        - prediction markets
+        - trueo
+        - trending markets
+        - trending prediction
+        - yes/no market
+        - yes no market
+    boostGroups: [prediction_markets]
+    hint: |
+      List or search with search_prediction_markets (empty query = trending; pages of 10).
+      Do not load_defi_protocol just to list. Do not fetch OHLCV or run analyze_* unless the
+      operator asked for chance history — that series is implied Yes/No probability samples
+      (resolution is seconds; hourly is 3600), not candlesticks. After a pick, get_prediction_market.
+      Writes (mint / limit / burn / redeem / Yes-No swap) stay behind load_defi_protocol trueo;
+      discover them with get_defi_protocol_skill or search_continuum_tools. Holdings: get_token_registry
+      then list_my_prediction_markets. Do not add a web Sources section for a catalog list.
     modes: [interactive, cron]
 
   - id: analysis_menu_pick
