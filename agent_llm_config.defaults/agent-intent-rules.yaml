@@ -365,16 +365,18 @@ rules:
         - yes no market
     boostGroups: [prediction_markets]
     hint: |
-      List or search with search_prediction_markets. If the operator names a topic (silver,
-      inflation, Trump), pass it as query and do not set trending. Empty query = trending
-      (pages of 10). Title match is case-insensitive substring.
+      List or search with search_prediction_markets. Pass the operator's exact topic words as
+      query (do not substitute a category or synonym). Do not set trending when query is set.
+      Empty query = trending (pages of 10). Title match is case-insensitive substring.
       Default is live or finished in the last 14 days. Do not pass includeAll unless the
       operator asked for closed, historical, or all markets. If the live board is empty, say so
       — do not widen to stale markets. Do not load_defi_protocol just to list. Do not fetch
       OHLCV or run analyze_* unless the operator asked for chance history — that series is
       implied Yes/No probability samples (resolution is seconds; hourly is 3600), not candlesticks.
       After a pick, get_prediction_market.
-      Writes (mint / limit / burn / redeem / Yes-No swap) stay behind load_defi_protocol trueo;
+      Telegram Buy Yes/No uses the selected market envelope (venue, chainId, paymentSymbol,
+      venueMarketId) — load_defi_protocol for that venue, then that venue's Yes/No swap build.
+      Writes (mint / limit / burn / redeem / Yes-No swap) stay behind load_defi_protocol;
       discover them with get_defi_protocol_skill or search_continuum_tools. Holdings: get_token_registry
       then list_my_prediction_markets. Do not add a web Sources section for a catalog list.
     modes: [interactive, cron]
