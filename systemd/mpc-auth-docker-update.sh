@@ -448,18 +448,120 @@ mpc_auth_run_default_compose_up() {
 	return 1
 }
 
+# Hub newest vMAJOR.MINOR.PATCH for a docker.io repo (continuumdao/continuum-mcp-server).
+# Compose defaults to :latest; pulling only that alias can no-op on a stale local latest while Hub already moved.
+mpc_auth_dockerhub_latest_semver_tag() {
+	local repo="$1"
+	repo="$(mpc_auth_trim "$repo")"
+	[[ -z "$repo" ]] && return 0
+	if ! command -v python3 &>/dev/null; then
+		return 0
+	fi
+	python3 - "$repo" <<'PY' 2>/dev/null || true
+import json, re, sys, urllib.request
+
+repo = sys.argv[1].strip().lstrip("/")
+pat = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+best = None
+url = f"https://hub.docker.com/v2/repositories/{repo}/tags?page_size=100"
+for _ in range(10):
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        data = json.load(resp)
+    for row in data.get("results") or []:
+        name = str(row.get("name") or "")
+        m = pat.match(name)
+        if not m:
+            continue
+        key = tuple(int(x) for x in m.groups())
+        updated = str(row.get("last_updated") or "")
+        if best is None or key > best[0] or (key == best[0] and updated > best[1]):
+            best = (key, updated, name)
+    url = data.get("next")
+    if not url:
+        break
+if best:
+    print(best[2])
+PY
+}
+
+# When configs pin latest, pull Hub's newest semver (and latest), then point compose's :latest at it.
+mpc_auth_companion_pull_ref() {
+	local img="$1"
+	local tag="$2"
+	local hub
+	img="$(mpc_auth_trim "$img")"
+	tag="$(mpc_auth_trim "$tag")"
+	[[ -z "$tag" ]] && tag="latest"
+	if [[ "$tag" != "latest" ]]; then
+		printf '%s' "${img}:${tag}"
+		return 0
+	fi
+	hub="$(mpc_auth_trim "$(mpc_auth_dockerhub_latest_semver_tag "$img")")"
+	if [[ -n "$hub" ]]; then
+		echo "Companion ${img}: configs tag is latest; pulling Hub ${hub} (then retag onto :latest for compose)."
+		printf '%s' "${img}:${hub}"
+		return 0
+	fi
+	printf '%s' "${img}:latest"
+}
+
+mpc_auth_companion_retag_compose() {
+	local pulled="$1"
+	local compose_ref="$2"
+	pulled="$(mpc_auth_trim "$pulled")"
+	compose_ref="$(mpc_auth_trim "$compose_ref")"
+	[[ -z "$pulled" || -z "$compose_ref" ]] && return 0
+	if [[ "$pulled" == "$compose_ref" ]]; then
+		return 0
+	fi
+	if [[ "$(mpc_auth_trim "${MPC_AUTH_SKIP_RETAG_LATEST:-0}")" == "1" ]]; then
+		return 0
+	fi
+	if docker image inspect "$pulled" &>/dev/null; then
+		echo "Pointing $(printf %q "$compose_ref") at companion pull $(printf %q "$pulled") (so compose recreates with this image)."
+		docker tag "$pulled" "$compose_ref"
+	fi
+}
+
+mpc_auth_companion_compose_recreate() {
+	local workdir="$1"
+	local svc="$2"
+	if docker compose version &>/dev/null 2>&1; then
+		echo "Running: cd $(printf %q "$workdir") && docker compose pull --policy always $(printf %q "$svc")"
+		(cd "$workdir" && docker compose pull --policy always "$svc") || \
+			(cd "$workdir" && docker compose pull "$svc") || true
+		echo "Running: cd $(printf %q "$workdir") && docker compose up -d --no-deps --force-recreate $(printf %q "$svc")"
+		if (cd "$workdir" && docker compose up -d --no-deps --force-recreate --pull always "$svc" 2>/dev/null) || \
+			(cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc"); then
+			return 0
+		fi
+		return 1
+	fi
+	if command -v docker-compose &>/dev/null 2>&1; then
+		echo "WARNING: using legacy docker-compose (v1) for companion recreate." >&2
+		echo "Running: cd $(printf %q "$workdir") && docker-compose pull $(printf %q "$svc")"
+		(cd "$workdir" && docker-compose pull "$svc") || true
+		echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --no-deps --force-recreate $(printf %q "$svc")"
+		(cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc")
+		return $?
+	fi
+	return 1
+}
+
 # After mpc-auth pulls and compose recreates app: pull continuumdao-node-app (configs ContinuumdaoNodeApp) if MPC_AUTH_UPDATE_NODE_APP=1.
 mpc_auth_companion_dashboard_pull_and_recreate() {
 	case "${MPC_AUTH_UPDATE_NODE_APP:-1}" in
 	0 | false | FALSE | no | NO) return 0 ;;
 	esac
-	local img svc tag ref workdir dash_container old_img_id new_img_id compose_ok
+	local img svc tag ref compose_ref workdir dash_container old_img_id new_img_id
 	img="$(mpc_auth_trim "${NODE_APP_IMAGE:-}")"
 	svc="$(mpc_auth_trim "${MPC_AUTH_NODE_APP_COMPOSE_SERVICE:-dashboard}")"
 	[[ -z "$img" ]] && return 0
 	tag="$(mpc_auth_trim "${NODE_APP_TAG:-latest}")"
 	[[ -z "$tag" ]] && tag="latest"
-	ref="${img}:${tag}"
+	ref="$(mpc_auth_companion_pull_ref "$img" "$tag")"
+	compose_ref="$(mpc_auth_trim "${NODE_APP_COMPOSE_IMAGE_REF:-${img}:latest}")"
 	dash_container="$(mpc_auth_trim "${NODE_APP_CONTAINER_NAME:-}")"
 
 	old_img_id=""
@@ -472,30 +574,23 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 		echo "warning: companion continuumdao-node-app docker pull failed: ${ref}" >&2
 		return 0
 	}
+	if [[ "$ref" != "${img}:latest" ]]; then
+		docker pull "${img}:latest" || true
+	fi
+	mpc_auth_companion_retag_compose "$ref" "$compose_ref"
+	COMPANION_NODE_APP_PULLED_REF="$ref"
+	COMPANION_NODE_APP_COMPOSE_REF="$compose_ref"
 	workdir="$(mpc_auth_compose_workdir_resolve)"
 	if [[ -z "$workdir" ]] || [[ ! -d "$workdir" ]]; then
 		echo "warning: MPC_AUTH_COMPOSE_WORKDIR (or MPC_AUTH_COMPOSE_DIR) unset or missing — skipping continuumdao-node-app recreate." >&2
 		return 0
 	fi
-	compose_ok=1
-	if docker compose version &>/dev/null 2>&1; then
-		echo "Running: cd $(printf %q "$workdir") && docker compose up -d --no-deps --force-recreate $(printf %q "$svc")"
-		if (cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc"); then
-			compose_ok=0
-		else
-			echo "warning: continuumdao-node-app compose recreate failed (ContinuumdaoNodeApp disabled or compose has no '${svc}' service?)." >&2
-		fi
-	elif command -v docker-compose &>/dev/null 2>&1; then
-		echo "WARNING: using legacy docker-compose (v1) for continuumdao-node-app recreate." >&2
-		echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --no-deps --force-recreate $(printf %q "$svc")"
-		if (cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc"); then
-			compose_ok=0
-		else
-			echo "warning: continuumdao-node-app docker-compose recreate failed." >&2
-		fi
+	if ! mpc_auth_companion_compose_recreate "$workdir" "$svc"; then
+		echo "warning: continuumdao-node-app compose recreate failed (ContinuumdaoNodeApp disabled or compose has no '${svc}' service?)." >&2
+		return 0
 	fi
 
-	if [[ "$compose_ok" -eq 0 && -n "$old_img_id" ]]; then
+	if [[ -n "$old_img_id" ]]; then
 		new_img_id=""
 		if [[ -n "$dash_container" ]] && docker container inspect "$dash_container" &>/dev/null; then
 			new_img_id="$(docker inspect -f '{{.Image}}' "$dash_container")"
@@ -503,6 +598,8 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 		if [[ -n "$new_img_id" && "$new_img_id" != "$old_img_id" ]]; then
 			echo "Removing previous companion continuumdao-node-app image (force): ${old_img_id}"
 			docker rmi --force "$old_img_id" || true
+		elif [[ -n "$new_img_id" && "$new_img_id" == "$old_img_id" ]]; then
+			echo "warning: companion continuumdao-node-app still on ${old_img_id} after pulling ${ref}." >&2
 		fi
 	fi
 	return 0
@@ -513,13 +610,14 @@ mpc_auth_companion_mcp_server_pull_and_recreate() {
 	case "${MPC_AUTH_UPDATE_MCP_SERVER:-1}" in
 	0 | false | FALSE | no | NO) return 0 ;;
 	esac
-	local img svc tag ref workdir mcp_container old_img_id new_img_id compose_ok
+	local img svc tag ref compose_ref workdir mcp_container old_img_id new_img_id
 	img="$(mpc_auth_trim "${MCP_SERVER_IMAGE:-}")"
 	svc="$(mpc_auth_trim "${MPC_AUTH_MCP_SERVER_COMPOSE_SERVICE:-continuum-mcp}")"
 	[[ -z "$img" ]] && return 0
 	tag="$(mpc_auth_trim "${MCP_SERVER_TAG:-latest}")"
 	[[ -z "$tag" ]] && tag="latest"
-	ref="${img}:${tag}"
+	ref="$(mpc_auth_companion_pull_ref "$img" "$tag")"
+	compose_ref="$(mpc_auth_trim "${MCP_SERVER_COMPOSE_IMAGE_REF:-${img}:latest}")"
 	mcp_container="$(mpc_auth_trim "${MCP_SERVER_CONTAINER_NAME:-}")"
 
 	old_img_id=""
@@ -532,30 +630,23 @@ mpc_auth_companion_mcp_server_pull_and_recreate() {
 		echo "warning: companion MCP server docker pull failed: ${ref}" >&2
 		return 0
 	}
+	if [[ "$ref" != "${img}:latest" ]]; then
+		docker pull "${img}:latest" || true
+	fi
+	mpc_auth_companion_retag_compose "$ref" "$compose_ref"
+	COMPANION_MCP_PULLED_REF="$ref"
+	COMPANION_MCP_COMPOSE_REF="$compose_ref"
 	workdir="$(mpc_auth_compose_workdir_resolve)"
 	if [[ -z "$workdir" ]] || [[ ! -d "$workdir" ]]; then
 		echo "warning: MPC_AUTH_COMPOSE_WORKDIR (or MPC_AUTH_COMPOSE_DIR) unset or missing — skipping MCP server recreate." >&2
 		return 0
 	fi
-	compose_ok=1
-	if docker compose version &>/dev/null 2>&1; then
-		echo "Running: cd $(printf %q "$workdir") && docker compose up -d --no-deps --force-recreate $(printf %q "$svc")"
-		if (cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc"); then
-			compose_ok=0
-		else
-			echo "warning: MCP server compose recreate failed (ContinuumMcpServer disabled or compose has no '${svc}' service?)." >&2
-		fi
-	elif command -v docker-compose &>/dev/null 2>&1; then
-		echo "WARNING: using legacy docker-compose (v1) for MCP server recreate." >&2
-		echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --no-deps --force-recreate $(printf %q "$svc")"
-		if (cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc"); then
-			compose_ok=0
-		else
-			echo "warning: MCP server docker-compose recreate failed." >&2
-		fi
+	if ! mpc_auth_companion_compose_recreate "$workdir" "$svc"; then
+		echo "warning: MCP server compose recreate failed (ContinuumMcpServer disabled or compose has no '${svc}' service?)." >&2
+		return 0
 	fi
 
-	if [[ "$compose_ok" -eq 0 && -n "$old_img_id" ]]; then
+	if [[ -n "$old_img_id" ]]; then
 		new_img_id=""
 		if [[ -n "$mcp_container" ]] && docker container inspect "$mcp_container" &>/dev/null; then
 			new_img_id="$(docker inspect -f '{{.Image}}' "$mcp_container")"
@@ -563,6 +654,8 @@ mpc_auth_companion_mcp_server_pull_and_recreate() {
 		if [[ -n "$new_img_id" && "$new_img_id" != "$old_img_id" ]]; then
 			echo "Removing previous companion MCP server image (force): ${old_img_id}"
 			docker rmi --force "$old_img_id" || true
+		elif [[ -n "$new_img_id" && "$new_img_id" == "$old_img_id" ]]; then
+			echo "warning: companion MCP server still on ${old_img_id} after pulling ${ref}." >&2
 		fi
 	fi
 	return 0
@@ -593,14 +686,20 @@ _node_app_image="$(mpc_auth_trim "${NODE_APP_IMAGE:-}")"
 if [[ -n "$_node_app_image" ]]; then
 	_node_app_tag="$(mpc_auth_trim "${NODE_APP_TAG:-latest}")"
 	[[ -z "$_node_app_tag" ]] && _node_app_tag="latest"
-	mpc_auth_prune_unused_repo_images "$_node_app_image" "${_node_app_image}:${_node_app_tag}" || true
+	mpc_auth_prune_unused_repo_images "$_node_app_image" \
+		"${_node_app_image}:${_node_app_tag}" \
+		"${COMPANION_NODE_APP_PULLED_REF:-}" \
+		"${COMPANION_NODE_APP_COMPOSE_REF:-${_node_app_image}:latest}" || true
 fi
 
 _mcp_server_image="$(mpc_auth_trim "${MCP_SERVER_IMAGE:-}")"
 if [[ -n "$_mcp_server_image" ]]; then
 	_mcp_server_tag="$(mpc_auth_trim "${MCP_SERVER_TAG:-latest}")"
 	[[ -z "$_mcp_server_tag" ]] && _mcp_server_tag="latest"
-	mpc_auth_prune_unused_repo_images "$_mcp_server_image" "${_mcp_server_image}:${_mcp_server_tag}" || true
+	mpc_auth_prune_unused_repo_images "$_mcp_server_image" \
+		"${_mcp_server_image}:${_mcp_server_tag}" \
+		"${COMPANION_MCP_PULLED_REF:-}" \
+		"${COMPANION_MCP_COMPOSE_REF:-${_mcp_server_image}:latest}" || true
 fi
 
 echo "Update complete for $NEW_REF."
