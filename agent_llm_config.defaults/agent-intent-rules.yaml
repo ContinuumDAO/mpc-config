@@ -365,7 +365,9 @@ rules:
         - yes no market
     boostGroups: [prediction_markets]
     hint: |
-      List or search with search_prediction_markets (empty query = trending; pages of 10).
+      List or search with search_prediction_markets. If the operator names a topic (silver,
+      inflation, Trump), pass it as query and do not set trending. Empty query = trending
+      (pages of 10). Title match is case-insensitive substring.
       Default is live or finished in the last 14 days. Do not pass includeAll unless the
       operator asked for closed, historical, or all markets. If the live board is empty, say so
       — do not widen to stale markets. Do not load_defi_protocol just to list. Do not fetch
