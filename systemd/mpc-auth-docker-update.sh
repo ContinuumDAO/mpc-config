@@ -339,6 +339,82 @@ mpc_auth_run_restart_or_recreate() {
 	return 1
 }
 
+# Host result the running mpc-auth reads (GET /maintenance/dockerUpdateStatus). Same directory as pending-update.json.
+UPDATE_STATUS_STARTED=""
+COMPANION_PROBLEMS=""
+
+mpc_auth_update_status_path() {
+	local pending
+	pending="$(mpc_auth_trim "${MPC_AUTH_DOCKER_PENDING_FILE:-/var/lib/mpc-auth-docker/pending-update.json}")"
+	printf '%s/update-status.json' "$(dirname "$pending")"
+}
+
+mpc_auth_write_update_status() {
+	local phase="$1" ok_flag="$2" msg="$3" path started
+	path="$(mpc_auth_update_status_path)"
+	if ! command -v python3 &>/dev/null; then
+		echo "warning: python3 missing — not writing ${path}" >&2
+		return 0
+	fi
+	mkdir -p "$(dirname "$path")" || return 0
+	started="${UPDATE_STATUS_STARTED:-}"
+	UPDATE_STATUS_STARTED="$(
+		python3 - "$path" "$phase" "$ok_flag" "$TAG" "$msg" "$started" "${MPC_AUTH_UPDATE_ATTEMPT:-}" <<'PY'
+import datetime, json, os, sys
+path, phase, ok_flag, tag, msg, started, attempt = sys.argv[1:8]
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+if not started:
+    started = now
+doc = {
+    "phase": phase,
+    "ok": ok_flag == "1",
+    "tag": tag,
+    "startedAt": started,
+    "message": msg,
+}
+if attempt:
+    doc["attemptId"] = attempt
+if phase == "finished":
+    doc["finishedAt"] = now
+tmp = path + ".tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    json.dump(doc, f)
+os.chmod(tmp, 0o640)
+os.replace(tmp, path)
+print(started)
+PY
+	)" || true
+}
+
+mpc_auth_note_companion_problem() {
+	local sentence="$1"
+	echo "error: ${sentence}" >&2
+	if [[ -n "$COMPANION_PROBLEMS" ]]; then
+		COMPANION_PROBLEMS="${COMPANION_PROBLEMS} ${sentence}"
+	else
+		COMPANION_PROBLEMS="$sentence"
+	fi
+}
+
+# Pull failed or the digest did not match. Do not remove the running container or its image.
+# Recreate with --pull never so maintenance draining clears and the previous image keeps running.
+mpc_auth_keep_previous_image() {
+	local msg="$1" svc workdir
+	mpc_auth_write_update_status finished 0 "$msg"
+	echo "error: ${msg}" >&2
+	svc="$(mpc_auth_trim "${MPC_AUTH_COMPOSE_SERVICE:-app}")"
+	[[ -z "$svc" ]] && svc="app"
+	workdir="$(mpc_auth_compose_workdir_resolve)"
+	if [[ -n "$workdir" && -d "$workdir" ]] && docker compose version &>/dev/null 2>&1; then
+		echo "Recreating $(printf %q "$svc") without pulling, so the previous image keeps running."
+		(cd "$workdir" && docker compose up -d --no-deps --force-recreate --pull never "$svc") || \
+			(cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc") || true
+	elif docker container inspect "$CONTAINER" &>/dev/null; then
+		docker start "$CONTAINER" || true
+	fi
+	exit 1
+}
+
 if [[ "$RESTART_ONLY" == "1" ]]; then
 	echo "MPC_AUTH_PENDING_RESTART_ONLY=1 — mpc-config git pull (if configured), then restart/recreate without Docker image pull/rmi (tag=$TAG)."
 	mpc_auth_git_pull_compose_repo
@@ -363,26 +439,18 @@ mpc_auth_git_pull_compose_repo
 mpc_auth_sync_libexec_from_compose_repo
 mpc_auth_sync_compose_role_if_needed || true
 
-OLD_IMAGE=""
-if docker container inspect "$CONTAINER" &>/dev/null; then
-	OLD_IMAGE="$(docker inspect -f '{{.Config.Image}}' "$CONTAINER")"
-	echo "Stopping container $CONTAINER"
-	docker stop "$CONTAINER"
-	echo "Removing container $CONTAINER"
-	docker rm "$CONTAINER"
-else
-	echo "WARNING: container $(printf %q "$CONTAINER") not found — stop/rm skipped. If this name does not match your Compose service," >&2
-	echo "  set MPC_AUTH_CONTAINER_NAME in /etc/default/mpc-auth-docker. Post-pull compose still runs up -d --no-deps --force-recreate for the app service only." >&2
-fi
-
-if [[ -n "$OLD_IMAGE" ]]; then
-	echo "Removing image (force): $OLD_IMAGE"
-	docker rmi --force "$OLD_IMAGE" || true
-fi
+mpc_auth_write_update_status running 0 "Downloading the new image. This node is still running the previous image until that download succeeds."
 
 NEW_REF="${REPO}:${TAG}"
-echo "Pulling $NEW_REF"
-docker pull "$NEW_REF"
+OLD_RUNNING_ID=""
+if docker container inspect "$CONTAINER" &>/dev/null; then
+	OLD_RUNNING_ID="$(docker inspect -f '{{.Image}}' "$CONTAINER")"
+fi
+
+echo "Pulling $NEW_REF (running container is left in place until this succeeds)"
+if ! docker pull "$NEW_REF"; then
+	mpc_auth_keep_previous_image "The mpc-auth image did not update. Docker could not download ${NEW_REF}. This node is still running the previous image."
+fi
 
 if [[ -n "${EXPECTED_DIGEST:-}" ]]; then
 	exp="${EXPECTED_DIGEST#sha256:}"
@@ -401,12 +469,27 @@ if [[ -n "${EXPECTED_DIGEST:-}" ]]; then
 	done <"$tmp_rd"
 	rm -f "$tmp_rd"
 	if [[ "$FOUND" -ne 1 ]]; then
-		echo "error: pulled image $NEW_REF does not match expected digest (sha256:${exp}). Refusing post-update compose." >&2
 		docker image inspect "$NEW_REF" --format '{{json .RepoDigests}}' >&2 || true
-		exit 1
+		if [[ -n "$OLD_RUNNING_ID" ]]; then
+			echo "Restoring ${NEW_REF} to the image the container is already running."
+			docker tag "$OLD_RUNNING_ID" "$NEW_REF" || true
+		fi
+		mpc_auth_keep_previous_image "The mpc-auth image did not update. The downloaded image ${NEW_REF} did not match the expected checksum, so it was not installed. This node is still running the previous image."
 	fi
 else
 	echo "WARNING: no EXPECTED_DIGEST/MPC_AUTH_EXPECTED_DIGEST — skipping digest check (set from POST /updateMpcAuth registryDigest before production use)."
+fi
+
+OLD_IMAGE=""
+if docker container inspect "$CONTAINER" &>/dev/null; then
+	OLD_IMAGE="$(docker inspect -f '{{.Config.Image}}' "$CONTAINER")"
+	echo "Stopping container $CONTAINER"
+	docker stop "$CONTAINER"
+	echo "Removing container $CONTAINER"
+	docker rm "$CONTAINER"
+else
+	echo "WARNING: container $(printf %q "$CONTAINER") not found — stop/rm skipped. If this name does not match your Compose service," >&2
+	echo "  set MPC_AUTH_CONTAINER_NAME in /etc/default/mpc-auth-docker. Post-pull compose still runs up -d --no-deps --force-recreate for the app service only." >&2
 fi
 
 # mpc-config compose defaults to image: ${REPO}:latest. We pull and verify ${REPO}:${TAG} (e.g. v1.1.1);
@@ -622,7 +705,7 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 
 	echo "Companion (continuumdao-node-app): pulling ${ref}"
 	docker pull "$ref" || {
-		echo "warning: companion continuumdao-node-app docker pull failed: ${ref}" >&2
+		mpc_auth_note_companion_problem "The node app image did not update. Docker could not download ${ref}. The node app is still running the previous image."
 		return 0
 	}
 	echo "Companion (continuumdao-node-app): pulled ${ref} id=$(docker image inspect -f '{{.Id}}' "$ref" 2>/dev/null || echo unknown)"
@@ -635,7 +718,7 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 		return 0
 	fi
 	if ! mpc_auth_companion_compose_recreate "$workdir" "$svc" "$ref"; then
-		echo "warning: continuumdao-node-app compose recreate failed (ContinuumdaoNodeApp disabled or compose has no '${svc}' service?)." >&2
+		mpc_auth_note_companion_problem "The node app image did not update. The new image could not be started, so the node app is still running the previous image."
 		return 0
 	fi
 
@@ -648,7 +731,7 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 			echo "Removing previous companion continuumdao-node-app image (force): ${old_img_id}"
 			docker rmi --force "$old_img_id" || true
 		elif [[ -n "$new_img_id" && "$new_img_id" == "$old_img_id" ]]; then
-			echo "warning: companion continuumdao-node-app still on ${old_img_id} after pulling ${ref}." >&2
+			mpc_auth_note_companion_problem "The node app image did not update. The container is still running the previous image."
 		fi
 	fi
 	return 0
@@ -676,7 +759,7 @@ mpc_auth_companion_mcp_server_pull_and_recreate() {
 
 	echo "Companion (continuum-mcp-server): pulling ${ref}"
 	docker pull "$ref" || {
-		echo "warning: companion MCP server docker pull failed: ${ref}" >&2
+		mpc_auth_note_companion_problem "The MCP server image did not update. Docker could not download ${ref}. The MCP server is still running the previous image."
 		return 0
 	}
 	echo "Companion (continuum-mcp-server): pulled ${ref} id=$(docker image inspect -f '{{.Id}}' "$ref" 2>/dev/null || echo unknown)"
@@ -689,7 +772,7 @@ mpc_auth_companion_mcp_server_pull_and_recreate() {
 		return 0
 	fi
 	if ! mpc_auth_companion_compose_recreate "$workdir" "$svc" "$ref"; then
-		echo "warning: MCP server compose recreate failed (ContinuumMcpServer disabled or compose has no '${svc}' service?)." >&2
+		mpc_auth_note_companion_problem "The MCP server image did not update. The new image could not be started, so the MCP server is still running the previous image."
 		return 0
 	fi
 
@@ -702,26 +785,34 @@ mpc_auth_companion_mcp_server_pull_and_recreate() {
 			echo "Removing previous companion MCP server image (force): ${old_img_id}"
 			docker rmi --force "$old_img_id" || true
 		elif [[ -n "$new_img_id" && "$new_img_id" == "$old_img_id" ]]; then
-			echo "warning: companion MCP server still on ${old_img_id} after pulling ${ref}." >&2
+			mpc_auth_note_companion_problem "The MCP server image did not update. The container is still running the previous image."
 		fi
 	fi
 	return 0
+}
+
+mpc_auth_restore_previous_image_tags() {
+	[[ -z "${OLD_RUNNING_ID:-}" ]] && return 0
+	docker tag "$OLD_RUNNING_ID" "$NEW_REF" || true
+	if [[ -n "${retag_target:-}" ]]; then
+		docker tag "$OLD_RUNNING_ID" "$retag_target" || true
+	fi
 }
 
 explicit="$(mpc_auth_trim "${MPC_AUTH_POST_UPDATE_CMD:-}")"
 if [[ -n "$explicit" ]]; then
 	echo "Running MPC_AUTH_POST_UPDATE_CMD: $explicit"
 	if ! env TAG="$TAG" MPC_AUTH_CONTAINER_NAME="$CONTAINER" MPC_AUTH_IMAGE="$REPO" MPC_AUTH_EXPECTED_DIGEST="${EXPECTED_DIGEST:-}" bash -lc "$explicit"; then
-		echo "error: MPC_AUTH_POST_UPDATE_CMD exited with an error." >&2
-		exit 1
+		mpc_auth_restore_previous_image_tags
+		mpc_auth_keep_previous_image "The mpc-auth image did not update. The host update command failed, so this node is still running the previous image."
 	fi
 elif [[ "${MPC_AUTH_COMPOSE_NEEDS_FULL_STACK:-0}" == "1" ]] && mpc_auth_run_full_compose_up; then
 	:
 elif mpc_auth_run_default_compose_up; then
 	:
 else
-	echo "error: MPC_AUTH_POST_UPDATE_CMD unset and neither 'docker compose' nor docker-compose is available; cannot bring stack up." >&2
-	exit 1
+	mpc_auth_restore_previous_image_tags
+	mpc_auth_keep_previous_image "The mpc-auth image did not update. The new container could not be started, so this node is still running the previous image."
 fi
 
 mpc_auth_companion_dashboard_pull_and_recreate || true
@@ -749,4 +840,10 @@ if [[ -n "$_mcp_server_image" ]]; then
 		"${COMPANION_MCP_COMPOSE_REF:-${_mcp_server_image}:latest}" || true
 fi
 
+if [[ -n "$COMPANION_PROBLEMS" ]]; then
+	mpc_auth_write_update_status finished 0 "mpc-auth updated to ${TAG}. ${COMPANION_PROBLEMS}"
+	echo "Update finished with image problems for $NEW_REF."
+	exit 1
+fi
+mpc_auth_write_update_status finished 1 "mpc-auth updated to ${TAG}."
 echo "Update complete for $NEW_REF."

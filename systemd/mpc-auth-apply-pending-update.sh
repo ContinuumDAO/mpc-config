@@ -42,6 +42,7 @@ run_update() {
 	echo "mpc-auth-apply-pending-update: applying tag=${_TAG:?} digest=${_DIG:-"(empty)"} restartOnly=${_RESTART_ONLY} forceRecreate=${_FORCE_RECREATE}"
 	export MPC_AUTH_PENDING_RESTART_ONLY="${_RESTART_ONLY}"
 	export MPC_AUTH_PENDING_FORCE_RECREATE="${_FORCE_RECREATE}"
+	export MPC_AUTH_UPDATE_ATTEMPT="${_ATTEMPT}"
 	if "$UPDATE_SCRIPT" "$_TAG" "$_DIG"; then
 		mv -f "$PROCESSING" "${DONE_DIR}/ok-$(_stamp).json" || rm -f "$PROCESSING"
 		exit 0
@@ -71,9 +72,10 @@ if dig and not dig.startswith("sha256:"):
         dig = "sha256:" + xs
 restart_only = bool(d.get("restartOnly") or d.get("restart_only"))
 force_recreate = bool(d.get("forceRecreate") or d.get("force_recreate"))
+attempt = (d.get("attemptId") or d.get("attempt_id") or "").strip()
 ro = "1" if restart_only else "0"
 fr = "1" if force_recreate else "0"
-sys.stdout.write(tag + "\n" + dig + "\n" + ro + "\n" + fr + "\n")
+sys.stdout.write(tag + "\n" + dig + "\n" + ro + "\n" + fr + "\n" + attempt + "\n")
 PY
 }
 
@@ -90,6 +92,10 @@ _TAG="${_lines[0]}"
 _DIG="${_lines[1]}"
 _RESTART_ONLY="${_lines[2]}"
 _FORCE_RECREATE="${_lines[3]}"
+_ATTEMPT=""
+if [[ "${#_lines[@]}" -ge 5 ]]; then
+	_ATTEMPT="${_lines[4]}"
+fi
 
 if [[ -z "${_TAG:-}" ]]; then
 	abort_bad_json

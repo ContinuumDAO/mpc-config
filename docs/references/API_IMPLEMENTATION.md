@@ -350,6 +350,7 @@ KeyGen messaging is documented in `./API_KEYGEN_MESSAGING.md`. Response format a
 Use these on the **same** `ManagementAPIsPort` listener as the rest of the management API (SSH tunnel forwards that port; **no separate listener**). `POST /maintenance/requestRestartPrep` requires a normal **management key** signature (`VerifyMgtKeySig`, same pattern as `POST /configUpdatePlan`). **`GET /maintenance/restartGate`** is read-only and exempt from JWT on the browser HTTPS / loopback listeners (for polling from scripts). MQTT-driven protocol continuation is **not** covered by the HTTP in-flight counter — see [Restart quiescence (maintenance)](#restart-quiescence-maintenance-detail).
 - [`POST /maintenance/requestRestartPrep`](#post-maintenance-requestrestartprep) — enter draining mode so new tracked mutations return `503` until `GET /maintenance/restartGate` reports `readyForProcessExit` (then restart the process from the host/docker).
 - [`GET /maintenance/restartGate`](#get-maintenance-restartgate) — returns `draining`, `inFlight`, `readyForProcessExit`, and a hint list of tracked POST paths.
+- [`GET /maintenance/dockerUpdateStatus`](#get-maintenance-dockerupdatestatus) — latest host image-update result for the browser. Read-only. The host update keeps running if the operator leaves the page; poll again later with the same **`attemptId`**.
 - [`POST /reboot`](#post-reboot) — while **draining**, signed `{"nonce", "sig"}`; writes **`pending-reboot.json`** for **`mpc-auth-docker-pending-reboot.path`** when **`MPC_AUTH_PENDING_REBOOT_FILE`** / **`MpcAuthPendingRebootPath`** is set (same bind mount as pending Docker updates); host runs **`systemctl reboot`**. See **`systemd/README.md`**.
 - [`POST /updateMpcAuth`](#post-updatempcauth) — while **draining**, signed request with target **tag** (e.g. `latest`, `v1.1`, or another published tag); node queries **Docker Hub** for **`registryDigest`** (`sha256:…`) for **`MpcAuthDockerRepo`**. Response includes **`previousVersion`** / **`previousVersionDate`** and **`newVersionRequested`**. The API does **not** run Docker on the host; apply the digest with **`mpc-auth-docker-update.sh TAG digest`** (no `/etc/default` edit required for one shot)—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host) and **`systemd/README.md`**.
 - [`POST /backupDatabase`](#post-backupdatabase) — encrypted MongoDB backup file under `database_backups/` (**deterministic** `nodeKey` + `bootstrap_key` only; management-signed). Requires **`mongodump`** on the node host.
@@ -443,7 +444,33 @@ Returns **`draining`**, **`inFlight`**, **`readyForProcessExit`**, and a hint li
 <a id="post-updatempcauth"></a>
 #### `POST /updateMpcAuth`
 
-**Docker image upgrade (tag digest):** `POST /updateMpcAuth` (management-signed JSON `{ nonce, sig, tag }`) may be called **only while draining** (`requestRestartPrep` already applied). The node resolves the image via **Docker Hub** (`registry-1.docker.io`) and returns **`registryDigest`** aligned with **`MpcAuthDockerRepo`** (optional in `configs.yaml`, default **`continuumdao/mpc-auth`**), plus **`previousVersion`** / **`previousVersionDate`** (matches **`GET /version`** for the **current** process) and **`newVersionRequested`** (= requested **image tag**). The running container image is **not** changed by the API itself—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host).
+**Docker image upgrade (tag digest):** `POST /updateMpcAuth` (management-signed JSON `{ nonce, sig, tag }`) may be called **only while draining** (`requestRestartPrep` already applied). The node resolves the image via **Docker Hub** (`registry-1.docker.io`) and returns **`registryDigest`** aligned with **`MpcAuthDockerRepo`** (optional in `configs.yaml`, default **`continuumdao/mpc-auth`**), plus **`previousVersion`** / **`previousVersionDate`** (matches **`GET /version`** for the **current** process), **`newVersionRequested`** (= requested **image tag**), and **`attemptId`** (correlates this call with [`GET /maintenance/dockerUpdateStatus`](#get-maintenance-dockerupdatestatus)). The running container image is **not** changed by the API itself—see [Host apply (digest)—not the same process as the HTTP API](#post-updatempc-auth-host).
+
+<a id="get-maintenance-dockerupdatestatus"></a>
+#### `GET /maintenance/dockerUpdateStatus`
+
+Read-only status of the latest host image update. Exempt from the read JWT on the browser HTTPS / loopback listeners, same as **`GET /maintenance/restartGate`**. No management signature.
+
+The host script writes **`update-status.json`** next to **`pending-update.json`** (default directory **`/var/lib/mpc-auth-docker`**). This endpoint returns that file. A missing file is **`phase: idle`**.
+
+**Response `data`:**
+
+| Field | Meaning |
+| --- | --- |
+| **`phase`** | **`idle`** (nothing recorded), **`running`** (download in progress; the previous image is still the one running), **`finished`**, or **`unknown`** (status file unreadable). |
+| **`ok`** | **`true`** when **`phase`** is **`finished`** and the requested images were installed. **`false`** when the pull failed, the digest did not match, or a companion image stayed on its previous build. |
+| **`attemptId`** | Same value **`POST /updateMpcAuth`** returned for this attempt. Ignore a **`finished`** record whose **`attemptId`** does not match the call you are waiting on. |
+| **`tag`** | Tag requested for this attempt. |
+| **`message`** | Plain-language result, including when Docker could not download a new image and the node kept the previous one. |
+| **`startedAt`** / **`finishedAt`** | UTC timestamps. **`finishedAt`** is set only when **`phase`** is **`finished`**. |
+| **`runningVersion`** / **`runningVersionDate`** | mpc-auth build running in this process (same as **`GET /version`**). |
+| **`imageRepository`** / **`runningImage`** | Docker Hub repository (default **`continuumdao/mpc-auth`**) and **`repository:runningVersion`**. **`tag`** is the tag the last update requested, which can differ from **`runningImage`** when the pull did not replace the running container. |
+
+The built-in agent exposes this as the top-level MCP tool **`get_docker_update_status`** (pinned in **`node_info`**, same visibility as **`version`** and **`get_health`**). It does not start an update.
+
+Leaving the Maintenance page does **not** cancel the host update and does **not** discard this result. **`POST /updateMpcAuth`** only writes **`pending-update.json`**; **`systemd`** runs the pull on the host after the HTTP call has returned. Poll this endpoint again later — when **`phase`** is **`finished`** and **`attemptId`** matches, **`message`** is the outcome (success, or a human-readable reason the new image was not installed).
+
+A failed **`docker pull`** does not stop or delete the running container. The host recreates mpc-auth with **`--pull never`** so draining can clear while the previous image keeps running. A failed companion pull (node app or MCP server) does not retag or recreate that companion.
 
 <a id="post-updatempc-auth-host"></a>
 ##### Host apply (digest) — why SSH or a host helper is still involved

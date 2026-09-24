@@ -334,7 +334,7 @@
         },
         "/signLocalEd25519Message": {
             "post": {
-                "description": "Management listener only. Read JWT on Browser HTTPS / loopback HTTP; loopback client on plain :8080. Signs only management JSON for this nodeKey with the requested allowed Ed25519 that has a private file. Does not consume a nonce. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /signLocalEd25519Message). Schema: #/definitions/node.SignLocalEd25519MessagePost.",
+                "description": "Management listener only. Read JWT on Browser HTTPS / loopback HTTP; loopback RemoteAddr or Host (127.0.0.1/localhost) on plain :8080 (Docker published localhost). Signs only management JSON for this nodeKey with the requested allowed Ed25519 that has a private file. Does not consume a nonce. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /signLocalEd25519Message). Schema: #/definitions/node.SignLocalEd25519MessagePost.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4176,7 +4176,7 @@
         },
         "/getHostYamlConfig": {
             "get": {
-                "description": "Get host YAML config by kind (trade-desk, orchestration-plan, agent-intent-rules, cron-trade, continuum-dao-vote-policy) with upgrade metadata Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getHostYamlConfig).",
+                "description": "Get host YAML config by kind (trade-desk, orchestration-plan, agent-intent-rules, cron-trade) with upgrade metadata Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getHostYamlConfig).",
                 "consumes": [
                     "application/json"
                 ],
@@ -4186,7 +4186,7 @@
                 "tags": [
                     "Management API"
                 ],
-                "summary": "Get host YAML config by kind (trade-desk, orchestration-plan, agent-intent-rules, cron-trade, continuum-dao-vote-policy) with upgrade metadata",
+                "summary": "Get host YAML config by kind (trade-desk, orchestration-plan, agent-intent-rules, cron-trade) with upgrade metadata",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -4205,8 +4205,7 @@
                             "trade-desk",
                             "orchestration-plan",
                             "agent-intent-rules",
-                            "cron-trade",
-                            "continuum-dao-vote-policy"
+                            "cron-trade"
                         ],
                         "description": "Host YAML kind"
                     }
@@ -5307,6 +5306,40 @@
                 ]
             }
         },
+        "/agent/transcribe": {
+            "post": {
+                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /agent/transcribe).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "POST agent transcribe",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                        }
+                    }
+                ]
+            }
+        },
         "/getMSQTTKey": {
             "get": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /getMSQTTKey).",
@@ -5557,6 +5590,29 @@
                     "Management API"
                 ],
                 "summary": "GET maintenance restartGate",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/maintenance/dockerUpdateStatus": {
+            "get": {
+                "description": "Latest host image-update result (phase, ok, attemptId, human-readable message). Read-only; the host update continues if the browser leaves this page Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /maintenance/dockerUpdateStatus).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Latest host image-update result (phase, ok, attemptId, human-readable message). Read-only; the host update continues if the browser leaves this page",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -8404,8 +8460,7 @@
                         "trade-desk",
                         "orchestration-plan",
                         "agent-intent-rules",
-                        "cron-trade",
-                        "continuum-dao-vote-policy"
+                        "cron-trade"
                     ]
                 },
                 "content": {
@@ -8471,8 +8526,7 @@
                                 "trade-desk",
                                 "orchestration-plan",
                                 "agent-intent-rules",
-                                "cron-trade",
-                                "continuum-dao-vote-policy"
+                                "cron-trade"
                             ]
                         },
                         "content": {
@@ -8502,8 +8556,7 @@
                                 "trade-desk",
                                 "orchestration-plan",
                                 "agent-intent-rules",
-                                "cron-trade",
-                                "continuum-dao-vote-policy"
+                                "cron-trade"
                             ]
                         }
                     }
@@ -8577,7 +8630,7 @@
         },
         "node.SignLocalEd25519MessagePost": {
             "type": "object",
-            "description": "POST /signLocalEd25519Message. Sign the exact UTF-8 management JSON (clientSig empty, nodeKey = this node) with the requested allowed Ed25519 key when its private file is on disk. Read JWT on Browser HTTPS / loopback HTTP; loopback client on plain :8080. No VerifyMgtKeySig on this route; does not consume a nonce. See mpc-config docs/references/API_IMPLEMENTATION.md (POST /signLocalEd25519Message).",
+            "description": "POST /signLocalEd25519Message. Sign the exact UTF-8 management JSON (clientSig empty, nodeKey = this node) with the requested allowed Ed25519 key when its private file is on disk. Read JWT on Browser HTTPS / loopback HTTP; loopback RemoteAddr or Host (127.0.0.1/localhost) on plain :8080 (Docker published localhost). No VerifyMgtKeySig on this route; does not consume a nonce. See mpc-config docs/references/API_IMPLEMENTATION.md (POST /signLocalEd25519Message).",
             "required": [
                 "message",
                 "publicKey"
