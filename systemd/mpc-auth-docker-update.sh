@@ -639,7 +639,7 @@ mpc_auth_companion_retag_compose() {
 	local pulled="$1"
 	local compose_ref="$2"
 	pulled="$(mpc_auth_trim "$pulled")"
-	compose_ref="$(mpc_auth_trim "$compose_ref")"
+	compose_ref="$(mpc_auth_image_ref_bare "$compose_ref")"
 	[[ -z "$pulled" || -z "$compose_ref" ]] && return 0
 	if [[ "$pulled" == "$compose_ref" ]]; then
 		return 0
@@ -653,36 +653,211 @@ mpc_auth_companion_retag_compose() {
 	fi
 }
 
+# docker compose config can append @sha256:<digest of the image already running>.
+# docker tag refuses that form, so the compose-file name stays on the previous image.
+mpc_auth_image_ref_bare() {
+	local ref
+	ref="$(mpc_auth_trim "${1:-}")"
+	ref="${ref%@sha256:*}"
+	printf '%s' "$ref"
+}
+
+mpc_auth_image_ref_ok() {
+	local ref="$1"
+	[[ "$ref" =~ ^[A-Za-z0-9_./:-]+$ ]]
+}
+
+# True when both refs are the same local image (id or shared repo digest).
+mpc_auth_same_image() {
+	local left="$1" right="$2" id_left id_right digests_left digests_right line
+	[[ -z "$left" || -z "$right" ]] && return 1
+	id_left="$(docker image inspect -f '{{.Id}}' "$left" 2>/dev/null || true)"
+	id_right="$(docker image inspect -f '{{.Id}}' "$right" 2>/dev/null || true)"
+	if [[ -n "$id_left" && "$id_left" == "$id_right" ]]; then
+		return 0
+	fi
+	digests_left="$(docker image inspect -f '{{range .RepoDigests}}{{println .}}{{end}}' "$left" 2>/dev/null || true)"
+	digests_right="$(docker image inspect -f '{{range .RepoDigests}}{{println .}}{{end}}' "$right" 2>/dev/null || true)"
+	[[ -z "$digests_left" || -z "$digests_right" ]] && return 1
+	while IFS= read -r line; do
+		[[ -z "$line" ]] && continue
+		if grep -Fxq -- "$line" <<<"$digests_right"; then
+			return 0
+		fi
+	done <<<"$digests_left"
+	return 1
+}
+
+mpc_auth_companion_service_container() {
+	local workdir="$1" svc="$2" configured="$3" id
+	configured="$(mpc_auth_trim "$configured")"
+	if [[ -n "$configured" ]] && docker container inspect "$configured" &>/dev/null; then
+		printf '%s' "$configured"
+		return 0
+	fi
+	id="$(
+		cd "$workdir" && docker compose ps -aq "$svc" 2>/dev/null | head -n 1 || true
+	)"
+	printf '%s' "$(mpc_auth_trim "$id")"
+}
+
+mpc_auth_container_has_image() {
+	local container="$1" ref="$2" image_id
+	[[ -z "$container" || -z "$ref" ]] && return 1
+	docker container inspect "$container" &>/dev/null || return 1
+	image_id="$(docker inspect -f '{{.Image}}' "$container" 2>/dev/null || true)"
+	mpc_auth_same_image "$image_id" "$ref"
+}
+
+# Compose --pull never recreates a container from the image id it already has when the
+# compose-file tag string does not change. Pin the pulled tag in a one-shot override so
+# the new container is that image, without pulling :latest again.
+mpc_auth_compose_up_service() {
+	local workdir="$1" override="$2"
+	shift 2
+	(
+		cd "$workdir" || exit 1
+		local -a files=()
+		local file
+		if [[ -n "${COMPOSE_FILE:-}" ]]; then
+			local part
+			IFS=':' read -ra part <<<"$COMPOSE_FILE"
+			files+=("${part[@]}")
+		elif [[ -f compose.yaml ]]; then
+			files+=(compose.yaml)
+			[[ -f compose.override.yaml ]] && files+=(compose.override.yaml)
+		elif [[ -f compose.yml ]]; then
+			files+=(compose.yml)
+			[[ -f compose.override.yml ]] && files+=(compose.override.yml)
+		elif [[ -f docker-compose.yml ]]; then
+			files+=(docker-compose.yml)
+			[[ -f docker-compose.override.yml ]] && files+=(docker-compose.override.yml)
+		fi
+		if [[ -n "$override" && -f "$override" ]]; then
+			files+=("$override")
+		fi
+		if [[ ${#files[@]} -gt 0 ]]; then
+			local -a args=()
+			for file in "${files[@]}"; do
+				[[ -n "$file" ]] || continue
+				args+=(-f "$file")
+			done
+			docker compose "${args[@]}" "$@"
+		else
+			docker compose "$@"
+		fi
+	)
+}
+
 # Recreate one companion service from the image already pulled. Do not pull again: compose pull
 # and --pull always re-fetch the compose-file tag and can put a stale local :latest back.
 mpc_auth_companion_compose_recreate() {
 	local workdir="$1"
 	local svc="$2"
 	local pulled="${3:-}"
-	local compose_image
+	local compose_image bare override rc
 	compose_image="$(mpc_auth_compose_service_image "$workdir" "$svc")"
-	if [[ -n "$pulled" && -n "$compose_image" && "$pulled" != "$compose_image" ]]; then
-		echo "Companion ${svc}: compose file image is ${compose_image}; tagging pulled ${pulled} onto it."
-		docker tag "$pulled" "$compose_image" || true
+	bare="$(mpc_auth_image_ref_bare "$compose_image")"
+	if [[ -n "$pulled" && -n "$bare" && "$pulled" != "$bare" ]]; then
+		echo "Companion ${svc}: compose file image is ${bare}; tagging pulled ${pulled} onto it."
+		docker tag "$pulled" "$bare" || echo "warning: docker tag ${pulled} ${bare} failed." >&2
 	fi
+	override=""
+	if [[ -n "$pulled" ]] && mpc_auth_image_ref_ok "$pulled" && mpc_auth_image_ref_ok "$svc"; then
+		override="$(mktemp)"
+		cat >"$override" <<EOF
+services:
+  ${svc}:
+    image: ${pulled}
+EOF
+	fi
+	rc=1
 	if docker compose version &>/dev/null 2>&1; then
-		echo "Running: cd $(printf %q "$workdir") && docker compose up -d --no-deps --force-recreate --pull never $(printf %q "$svc")"
-		if (cd "$workdir" && docker compose up -d --no-deps --force-recreate --pull never "$svc"); then
-			return 0
+		echo "Running companion recreate for $(printf %q "$svc") from $(printf %q "${pulled:-the compose file image}")"
+		if mpc_auth_compose_up_service "$workdir" "$override" up -d --no-deps --force-recreate --pull never "$svc"; then
+			rc=0
+		else
+			echo "warning: docker compose up --pull never failed for ${svc}; retrying with the pulled tag still pinned." >&2
+			if mpc_auth_compose_up_service "$workdir" "$override" up -d --no-deps --force-recreate --pull missing "$svc"; then
+				rc=0
+			fi
 		fi
-		echo "warning: docker compose up --pull never failed for ${svc}; retrying without --pull." >&2
-		if (cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc"); then
-			return 0
-		fi
-		return 1
-	fi
-	if command -v docker-compose &>/dev/null 2>&1; then
+	elif command -v docker-compose &>/dev/null 2>&1; then
 		echo "WARNING: using legacy docker-compose (v1) for companion recreate." >&2
 		echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --no-deps --force-recreate $(printf %q "$svc")"
-		(cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc")
-		return $?
+		if (cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc"); then
+			rc=0
+		fi
+	fi
+	[[ -n "$override" ]] && rm -f "$override"
+	return "$rc"
+}
+
+# Start the pulled image. If that container does not come up on it, put the previous image back.
+# Returns 0 when the service is running the pulled image (including when it already was).
+mpc_auth_companion_install_image() {
+	local workdir="$1" svc="$2" container="$3" pulled="$4" compose_ref="$5"
+	local old_id current bare
+	container="$(mpc_auth_companion_service_container "$workdir" "$svc" "$container")"
+	old_id=""
+	if [[ -n "$container" ]]; then
+		old_id="$(docker inspect -f '{{.Image}}' "$container" 2>/dev/null || true)"
+	fi
+	if [[ -n "$old_id" ]] && mpc_auth_same_image "$old_id" "$pulled"; then
+		echo "Companion ${svc}: already running ${pulled} (${old_id})."
+		return 0
+	fi
+	echo "Companion ${svc}: container ${container:-unknown} image ${old_id:-none}; want ${pulled}."
+	if ! mpc_auth_companion_compose_recreate "$workdir" "$svc" "$pulled"; then
+		echo "warning: compose recreate failed for ${svc}." >&2
+	fi
+	container="$(mpc_auth_companion_service_container "$workdir" "$svc" "$container")"
+	if mpc_auth_container_has_image "$container" "$pulled"; then
+		mpc_auth_companion_drop_old_image "$old_id" "$pulled" "$svc"
+		return 0
+	fi
+	# The running container still pins the previous image. Remove it and create from the pulled tag.
+	if [[ -n "$container" ]]; then
+		echo "Companion ${svc}: removing ${container} so it can start ${pulled}."
+		docker rm -f "$container" || true
+	fi
+	if mpc_auth_companion_compose_recreate "$workdir" "$svc" "$pulled"; then
+		container="$(mpc_auth_companion_service_container "$workdir" "$svc" "$container")"
+		if mpc_auth_container_has_image "$container" "$pulled"; then
+			mpc_auth_companion_drop_old_image "$old_id" "$pulled" "$svc"
+			return 0
+		fi
+	fi
+	current=""
+	if [[ -n "$container" ]] && docker container inspect "$container" &>/dev/null; then
+		current="$(docker inspect -f '{{.Image}}' "$container" 2>/dev/null || true)"
+	fi
+	echo "error: ${svc} is on ${current:-no container}, not ${pulled}. Restoring the previous image." >&2
+	bare="$(mpc_auth_image_ref_bare "$(mpc_auth_compose_service_image "$workdir" "$svc")")"
+	if [[ -n "$old_id" && -n "$bare" ]]; then
+		docker tag "$old_id" "$bare" || true
+	fi
+	compose_ref="$(mpc_auth_image_ref_bare "$compose_ref")"
+	if [[ -n "$old_id" && -n "$compose_ref" && "$compose_ref" != "$bare" ]]; then
+		docker tag "$old_id" "$compose_ref" || true
+	fi
+	if docker compose version &>/dev/null 2>&1; then
+		(cd "$workdir" && docker compose up -d --no-deps --force-recreate --pull never "$svc") || \
+			(cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc") || true
+	elif command -v docker-compose &>/dev/null 2>&1; then
+		(cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc") || true
 	fi
 	return 1
+}
+
+mpc_auth_companion_drop_old_image() {
+	local old_id="$1" pulled="$2" svc="$3"
+	[[ -z "$old_id" ]] && return 0
+	if mpc_auth_same_image "$old_id" "$pulled"; then
+		return 0
+	fi
+	echo "Removing previous companion ${svc} image (force): ${old_id}"
+	docker rmi --force "$old_id" || true
 }
 
 # After mpc-auth pulls and compose recreates app: pull continuumdao-node-app (configs ContinuumdaoNodeApp) if MPC_AUTH_UPDATE_NODE_APP=1.
@@ -690,7 +865,7 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 	case "${MPC_AUTH_UPDATE_NODE_APP:-1}" in
 	0 | false | FALSE | no | NO) return 0 ;;
 	esac
-	local img svc tag ref compose_ref workdir dash_container old_img_id new_img_id
+	local img svc tag ref compose_ref workdir dash_container
 	img="$(mpc_auth_trim "${NODE_APP_IMAGE:-}")"
 	svc="$(mpc_auth_trim "${MPC_AUTH_NODE_APP_COMPOSE_SERVICE:-dashboard}")"
 	[[ -z "$img" ]] && return 0
@@ -699,11 +874,6 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 	ref="$(mpc_auth_companion_pull_ref "$img" "$tag")"
 	compose_ref="$(mpc_auth_trim "${NODE_APP_COMPOSE_IMAGE_REF:-${img}:latest}")"
 	dash_container="$(mpc_auth_trim "${NODE_APP_CONTAINER_NAME:-}")"
-
-	old_img_id=""
-	if [[ -n "$dash_container" ]] && docker container inspect "$dash_container" &>/dev/null; then
-		old_img_id="$(docker inspect -f '{{.Image}}' "$dash_container")"
-	fi
 
 	echo "Companion (continuumdao-node-app): pulling ${ref}"
 	docker pull "$ref" || {
@@ -719,22 +889,8 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 		echo "warning: MPC_AUTH_COMPOSE_WORKDIR (or MPC_AUTH_COMPOSE_DIR) unset or missing — skipping continuumdao-node-app recreate." >&2
 		return 0
 	fi
-	if ! mpc_auth_companion_compose_recreate "$workdir" "$svc" "$ref"; then
-		mpc_auth_note_companion_problem "The node app image did not update. The new image could not be started, so the node app is still running the previous image."
-		return 0
-	fi
-
-	if [[ -n "$old_img_id" ]]; then
-		new_img_id=""
-		if [[ -n "$dash_container" ]] && docker container inspect "$dash_container" &>/dev/null; then
-			new_img_id="$(docker inspect -f '{{.Image}}' "$dash_container")"
-		fi
-		if [[ -n "$new_img_id" && "$new_img_id" != "$old_img_id" ]]; then
-			echo "Removing previous companion continuumdao-node-app image (force): ${old_img_id}"
-			docker rmi --force "$old_img_id" || true
-		elif [[ -n "$new_img_id" && "$new_img_id" == "$old_img_id" ]]; then
-			mpc_auth_note_companion_problem "The node app image did not update. The container is still running the previous image."
-		fi
+	if ! mpc_auth_companion_install_image "$workdir" "$svc" "$dash_container" "$ref" "$compose_ref"; then
+		mpc_auth_note_companion_problem "The node app image did not update to ${ref}. The container is still running the previous image."
 	fi
 	return 0
 }
@@ -744,7 +900,7 @@ mpc_auth_companion_mcp_server_pull_and_recreate() {
 	case "${MPC_AUTH_UPDATE_MCP_SERVER:-1}" in
 	0 | false | FALSE | no | NO) return 0 ;;
 	esac
-	local img svc tag ref compose_ref workdir mcp_container old_img_id new_img_id
+	local img svc tag ref compose_ref workdir mcp_container
 	img="$(mpc_auth_trim "${MCP_SERVER_IMAGE:-}")"
 	svc="$(mpc_auth_trim "${MPC_AUTH_MCP_SERVER_COMPOSE_SERVICE:-continuum-mcp}")"
 	[[ -z "$img" ]] && return 0
@@ -753,11 +909,6 @@ mpc_auth_companion_mcp_server_pull_and_recreate() {
 	ref="$(mpc_auth_companion_pull_ref "$img" "$tag")"
 	compose_ref="$(mpc_auth_trim "${MCP_SERVER_COMPOSE_IMAGE_REF:-${img}:latest}")"
 	mcp_container="$(mpc_auth_trim "${MCP_SERVER_CONTAINER_NAME:-}")"
-
-	old_img_id=""
-	if [[ -n "$mcp_container" ]] && docker container inspect "$mcp_container" &>/dev/null; then
-		old_img_id="$(docker inspect -f '{{.Image}}' "$mcp_container")"
-	fi
 
 	echo "Companion (continuum-mcp-server): pulling ${ref}"
 	docker pull "$ref" || {
@@ -773,22 +924,8 @@ mpc_auth_companion_mcp_server_pull_and_recreate() {
 		echo "warning: MPC_AUTH_COMPOSE_WORKDIR (or MPC_AUTH_COMPOSE_DIR) unset or missing — skipping MCP server recreate." >&2
 		return 0
 	fi
-	if ! mpc_auth_companion_compose_recreate "$workdir" "$svc" "$ref"; then
-		mpc_auth_note_companion_problem "The MCP server image did not update. The new image could not be started, so the MCP server is still running the previous image."
-		return 0
-	fi
-
-	if [[ -n "$old_img_id" ]]; then
-		new_img_id=""
-		if [[ -n "$mcp_container" ]] && docker container inspect "$mcp_container" &>/dev/null; then
-			new_img_id="$(docker inspect -f '{{.Image}}' "$mcp_container")"
-		fi
-		if [[ -n "$new_img_id" && "$new_img_id" != "$old_img_id" ]]; then
-			echo "Removing previous companion MCP server image (force): ${old_img_id}"
-			docker rmi --force "$old_img_id" || true
-		elif [[ -n "$new_img_id" && "$new_img_id" == "$old_img_id" ]]; then
-			mpc_auth_note_companion_problem "The MCP server image did not update. The container is still running the previous image."
-		fi
+	if ! mpc_auth_companion_install_image "$workdir" "$svc" "$mcp_container" "$ref" "$compose_ref"; then
+		mpc_auth_note_companion_problem "The MCP server image did not update to ${ref}. The container is still running the previous image."
 	fi
 	return 0
 }
