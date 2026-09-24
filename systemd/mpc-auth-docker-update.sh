@@ -451,41 +451,84 @@ mpc_auth_run_default_compose_up() {
 # Hub newest vMAJOR.MINOR.PATCH for a docker.io repo (continuumdao/continuum-mcp-server).
 # Compose defaults to :latest; pulling only that alias can no-op on a stale local latest while Hub already moved.
 mpc_auth_dockerhub_latest_semver_tag() {
-	local repo="$1"
+	local repo="$1" attempt tag
 	repo="$(mpc_auth_trim "$repo")"
 	[[ -z "$repo" ]] && return 0
 	if ! command -v python3 &>/dev/null; then
+		echo "warning: python3 missing — cannot resolve Hub semver for ${repo}." >&2
 		return 0
 	fi
-	python3 - "$repo" <<'PY' 2>/dev/null || true
+	for attempt in 1 2 3; do
+		if tag="$(python3 - "$repo" <<'PY'
 import json, re, sys, urllib.request
 
 repo = sys.argv[1].strip().lstrip("/")
 pat = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 best = None
-url = f"https://hub.docker.com/v2/repositories/{repo}/tags?page_size=100"
-for _ in range(10):
-    req = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        data = json.load(resp)
-    for row in data.get("results") or []:
-        name = str(row.get("name") or "")
-        m = pat.match(name)
-        if not m:
-            continue
-        key = tuple(int(x) for x in m.groups())
-        updated = str(row.get("last_updated") or "")
-        if best is None or key > best[0] or (key == best[0] and updated > best[1]):
-            best = (key, updated, name)
-    url = data.get("next")
-    if not url:
-        break
-if best:
-    print(best[2])
+url = f"https://hub.docker.com/v2/repositories/{repo}/tags?page_size=100&ordering=last_updated"
+try:
+    for _ in range(10):
+        req = urllib.request.Request(
+            url,
+            headers={"Accept": "application/json", "User-Agent": "mpc-auth-docker-update"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.load(resp)
+        for row in data.get("results") or []:
+            name = str(row.get("name") or "")
+            m = pat.match(name)
+            if not m:
+                continue
+            key = tuple(int(x) for x in m.groups())
+            updated = str(row.get("last_updated") or "")
+            if best is None or key > best[0] or (key == best[0] and updated > best[1]):
+                best = (key, updated, name)
+        url = data.get("next")
+        if not url:
+            break
+except Exception as exc:
+    print(f"hub tag lookup {repo}: {exc}", file=sys.stderr)
+    sys.exit(1)
+if not best:
+    print(f"hub tag lookup {repo}: no vX.Y.Z tags", file=sys.stderr)
+    sys.exit(1)
+print(best[2])
 PY
+		)"; then
+			tag="$(mpc_auth_trim "$tag")"
+			if [[ -n "$tag" ]]; then
+				printf '%s' "$tag"
+				return 0
+			fi
+		fi
+		echo "warning: Docker Hub semver lookup failed for ${repo} (attempt ${attempt}/3)." >&2
+		sleep $((attempt * 2))
+	done
+	return 0
 }
 
-# When configs pin latest, pull Hub's newest semver (and latest), then point compose's :latest at it.
+# Image name compose will start for this service (docker-compose.yml), empty if unreadable.
+mpc_auth_compose_service_image() {
+	local workdir="$1" svc="$2" img
+	[[ -z "$workdir" || -z "$svc" ]] && return 0
+	img="$(
+		cd "$workdir" && docker compose config --format json 2>/dev/null | python3 -c '
+import json, sys
+svc = sys.argv[1]
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+item = (data.get("services") or {}).get(svc) or {}
+image = item.get("image")
+if isinstance(image, str):
+    sys.stdout.write(image.strip())
+' "$svc"
+	)" || true
+	printf '%s' "$(mpc_auth_trim "$img")"
+}
+
+# When configs pin latest, pull Hub's newest semver, then point compose's image tag at it.
 mpc_auth_companion_pull_ref() {
 	local img="$1"
 	local tag="$2"
@@ -525,24 +568,31 @@ mpc_auth_companion_retag_compose() {
 	fi
 }
 
+# Recreate one companion service from the image already pulled. Do not pull again: compose pull
+# and --pull always re-fetch the compose-file tag and can put a stale local :latest back.
 mpc_auth_companion_compose_recreate() {
 	local workdir="$1"
 	local svc="$2"
+	local pulled="${3:-}"
+	local compose_image
+	compose_image="$(mpc_auth_compose_service_image "$workdir" "$svc")"
+	if [[ -n "$pulled" && -n "$compose_image" && "$pulled" != "$compose_image" ]]; then
+		echo "Companion ${svc}: compose file image is ${compose_image}; tagging pulled ${pulled} onto it."
+		docker tag "$pulled" "$compose_image" || true
+	fi
 	if docker compose version &>/dev/null 2>&1; then
-		echo "Running: cd $(printf %q "$workdir") && docker compose pull --policy always $(printf %q "$svc")"
-		(cd "$workdir" && docker compose pull --policy always "$svc") || \
-			(cd "$workdir" && docker compose pull "$svc") || true
-		echo "Running: cd $(printf %q "$workdir") && docker compose up -d --no-deps --force-recreate $(printf %q "$svc")"
-		if (cd "$workdir" && docker compose up -d --no-deps --force-recreate --pull always "$svc" 2>/dev/null) || \
-			(cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc"); then
+		echo "Running: cd $(printf %q "$workdir") && docker compose up -d --no-deps --force-recreate --pull never $(printf %q "$svc")"
+		if (cd "$workdir" && docker compose up -d --no-deps --force-recreate --pull never "$svc"); then
+			return 0
+		fi
+		echo "warning: docker compose up --pull never failed for ${svc}; retrying without --pull." >&2
+		if (cd "$workdir" && docker compose up -d --no-deps --force-recreate "$svc"); then
 			return 0
 		fi
 		return 1
 	fi
 	if command -v docker-compose &>/dev/null 2>&1; then
 		echo "WARNING: using legacy docker-compose (v1) for companion recreate." >&2
-		echo "Running: cd $(printf %q "$workdir") && docker-compose pull $(printf %q "$svc")"
-		(cd "$workdir" && docker-compose pull "$svc") || true
 		echo "Running: cd $(printf %q "$workdir") && docker-compose up -d --no-deps --force-recreate $(printf %q "$svc")"
 		(cd "$workdir" && docker-compose up -d --no-deps --force-recreate "$svc")
 		return $?
@@ -575,9 +625,7 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 		echo "warning: companion continuumdao-node-app docker pull failed: ${ref}" >&2
 		return 0
 	}
-	if [[ "$ref" != "${img}:latest" ]]; then
-		docker pull "${img}:latest" || true
-	fi
+	echo "Companion (continuumdao-node-app): pulled ${ref} id=$(docker image inspect -f '{{.Id}}' "$ref" 2>/dev/null || echo unknown)"
 	mpc_auth_companion_retag_compose "$ref" "$compose_ref"
 	COMPANION_NODE_APP_PULLED_REF="$ref"
 	COMPANION_NODE_APP_COMPOSE_REF="$compose_ref"
@@ -586,7 +634,7 @@ mpc_auth_companion_dashboard_pull_and_recreate() {
 		echo "warning: MPC_AUTH_COMPOSE_WORKDIR (or MPC_AUTH_COMPOSE_DIR) unset or missing — skipping continuumdao-node-app recreate." >&2
 		return 0
 	fi
-	if ! mpc_auth_companion_compose_recreate "$workdir" "$svc"; then
+	if ! mpc_auth_companion_compose_recreate "$workdir" "$svc" "$ref"; then
 		echo "warning: continuumdao-node-app compose recreate failed (ContinuumdaoNodeApp disabled or compose has no '${svc}' service?)." >&2
 		return 0
 	fi
@@ -631,9 +679,7 @@ mpc_auth_companion_mcp_server_pull_and_recreate() {
 		echo "warning: companion MCP server docker pull failed: ${ref}" >&2
 		return 0
 	}
-	if [[ "$ref" != "${img}:latest" ]]; then
-		docker pull "${img}:latest" || true
-	fi
+	echo "Companion (continuum-mcp-server): pulled ${ref} id=$(docker image inspect -f '{{.Id}}' "$ref" 2>/dev/null || echo unknown)"
 	mpc_auth_companion_retag_compose "$ref" "$compose_ref"
 	COMPANION_MCP_PULLED_REF="$ref"
 	COMPANION_MCP_COMPOSE_REF="$compose_ref"
@@ -642,7 +688,7 @@ mpc_auth_companion_mcp_server_pull_and_recreate() {
 		echo "warning: MPC_AUTH_COMPOSE_WORKDIR (or MPC_AUTH_COMPOSE_DIR) unset or missing — skipping MCP server recreate." >&2
 		return 0
 	fi
-	if ! mpc_auth_companion_compose_recreate "$workdir" "$svc"; then
+	if ! mpc_auth_companion_compose_recreate "$workdir" "$svc" "$ref"; then
 		echo "warning: MCP server compose recreate failed (ContinuumMcpServer disabled or compose has no '${svc}' service?)." >&2
 		return 0
 	fi
