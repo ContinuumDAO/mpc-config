@@ -499,7 +499,8 @@ mpc_auth_companion_pull_ref() {
 	fi
 	hub="$(mpc_auth_trim "$(mpc_auth_dockerhub_latest_semver_tag "$img")")"
 	if [[ -n "$hub" ]]; then
-		echo "Companion ${img}: configs tag is latest; pulling Hub ${hub} (then retag onto :latest for compose)."
+		# Status must go to stderr. Callers capture stdout as the image ref for docker pull.
+		echo "Companion ${img}: configs tag is latest; pulling Hub ${hub} (then retag onto :latest for compose)." >&2
 		printf '%s' "${img}:${hub}"
 		return 0
 	fi
