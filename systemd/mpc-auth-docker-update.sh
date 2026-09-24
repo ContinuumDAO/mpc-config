@@ -611,7 +611,9 @@ if isinstance(image, str):
 	printf '%s' "$(mpc_auth_trim "$img")"
 }
 
-# When configs pin latest, pull Hub's newest semver, then point compose's image tag at it.
+# Pull Docker Hub's newest vX.Y.Z. NODE_APP_TAG / MCP_SERVER_TAG (from configs) are not the
+# update target — a stale pin such as v1.3.14 must not be pulled. The configured tag is only
+# used when Hub cannot be reached. Callers capture stdout as the image ref; status goes to stderr.
 mpc_auth_companion_pull_ref() {
 	local img="$1"
 	local tag="$2"
@@ -619,18 +621,18 @@ mpc_auth_companion_pull_ref() {
 	img="$(mpc_auth_trim "$img")"
 	tag="$(mpc_auth_trim "$tag")"
 	[[ -z "$tag" ]] && tag="latest"
-	if [[ "$tag" != "latest" ]]; then
-		printf '%s' "${img}:${tag}"
-		return 0
-	fi
 	hub="$(mpc_auth_trim "$(mpc_auth_dockerhub_latest_semver_tag "$img")")"
 	if [[ -n "$hub" ]]; then
-		# Status must go to stderr. Callers capture stdout as the image ref for docker pull.
-		echo "Companion ${img}: configs tag is latest; pulling Hub ${hub} (then retag onto :latest for compose)." >&2
+		if [[ "$tag" != "latest" && "$tag" != "$hub" ]]; then
+			echo "Companion ${img}: configured tag ${tag} is stale; pulling Docker Hub ${hub}." >&2
+		else
+			echo "Companion ${img}: pulling Docker Hub ${hub}." >&2
+		fi
 		printf '%s' "${img}:${hub}"
 		return 0
 	fi
-	printf '%s' "${img}:latest"
+	echo "warning: Docker Hub semver lookup failed for ${img}; falling back to configured tag ${tag}." >&2
+	printf '%s' "${img}:${tag}"
 }
 
 mpc_auth_companion_retag_compose() {
