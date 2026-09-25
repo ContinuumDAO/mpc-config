@@ -4028,6 +4028,40 @@ https://<public-hook-host>/telegram/chart/<token>
 
 **Operator notes:** CoinGecko-sourced **`live`** bindings may remain static in the Mini App until a browser proxy exists; Hyperliquid / GMX / Arcus use direct browser API calls from the viewer.
 
+<a id="post-telegram-handoff"></a>
+##### `POST /telegram/handoff`
+
+Generic handoff from any Telegram Mini App back into the chat that opened it. Served on the **same hook listener** as the chart routes (default **`127.0.0.1:18090`**). Not on the management port.
+
+Telegram only delivers **`WebApp.sendData`** when the Mini App was opened from a **reply keyboard**. Mini Apps opened from an **inline** **`web_app`** button (chart, market, and the other viewers) cannot use that. They **`POST`** here instead. The chart viewer does not call this route; its chat buttons stay inline callbacks.
+
+When mpc-auth sends the button that opens a Mini App, it binds that app's opaque **`token`** to the conversation and chat. The bind lasts **7 days** in memory and is lost on process restart.
+
+**Auth:** None. The unguessable **`token`** is the capability. It must already be bound to a chat.
+
+**Request body:** a flat JSON object. **`token`** and **`kind`** are required. Other scalar fields are passed to that kind. Nested objects and arrays are ignored.
+
+```json
+{
+  "token": "<opaque mini app token>",
+  "kind": "prediction_bet",
+  "side": "yes"
+}
+```
+
+**Registered kinds:**
+
+| Kind | Fields | Chat turn |
+|------|--------|-----------|
+| **`prediction_bet`** | **`side`**: **`yes`** or **`no`** | Same bet prompt as the chat **Buy Yes** / **Buy No** button |
+| **`prediction_my_markets`** | none | Same holdings prompt as **Your markets** |
+
+Another Mini App registers its own **`kind`** in mpc-auth and posts to this same route. It does not add a new path.
+
+**Success:** **200** `{ "code": 0 }`. The agent turn starts in the bound chat (same work spinner as an inline button). The Mini App should then close.
+
+**Errors:** **400** missing **`token`** or **`kind`**, unknown **`kind`**, or the kind refuses (for example no selected market). **404** token not bound or expired. **405** for non-POST. **503** when the Telegram bot token is not configured. Error bodies are `{ "code": 1, "error": "…" }`.
+
 <a id="post-agentplanstart"></a>
 #### `POST /agent/plan/start`
 

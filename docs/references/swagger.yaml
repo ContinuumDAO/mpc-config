@@ -4310,6 +4310,42 @@ paths:
           description: Unknown asset path
         '405':
           description: Method not allowed
+  /telegram/handoff:
+    post:
+      tags:
+      - Agent hook listener
+      summary: POST telegram/handoff
+      description: 'Generic Mini App handoff back into the Telegram chat that opened the app. Served on AgentHookListenAddr:AgentHookListenPort
+        (default 127.0.0.1:18090), not the management port (8080) or Browser HTTPS (8443). Expose via tunnel, relay, or reverse
+        proxy like inbound webhooks. See mpc-config docs/references/API_IMPLEMENTATION.md (Inbound HTTP; Telegram chart Mini
+        App). The node binds the Mini App token to that chat when it sends the open button. A registered kind turns the flat
+        fields into the chat turn. Inline web_app buttons cannot use Telegram sendData, so Mini Apps POST here instead. Registered
+        kinds: prediction_bet (field side=yes|no), prediction_my_markets. 7-day in-memory TTL; lost on process restart.'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.TelegramMiniAppHandoffRequest'
+      responses:
+        '200':
+          description: Handoff accepted; agent turn started in the bound chat
+          schema: *id001
+        '400':
+          description: Missing token or kind, unknown kind, or the kind refused (for example no selected market)
+          schema: *id001
+        '404':
+          description: Token is not bound or has expired
+          schema: *id001
+        '405':
+          description: Method not allowed
+        '503':
+          description: Telegram bot token is not configured
+          schema: *id001
 definitions:
   node.APIResponse:
     type: object
@@ -5862,3 +5898,22 @@ definitions:
       localPrivateKeyAvailable:
         type: boolean
         description: True only if publicKey is allowed and has a readable private file on this node.
+  node.TelegramMiniAppHandoffRequest:
+    type: object
+    required:
+    - token
+    - kind
+    description: Flat JSON object. token and kind are required. Any other scalar fields are passed to the registered kind.
+      Nested objects and arrays are ignored.
+    properties:
+      token:
+        type: string
+        description: Opaque Mini App session token, bound to a chat when the open button was sent
+      kind:
+        type: string
+        description: Registered handoff kind (prediction_bet, prediction_my_markets, or a kind added by another Mini App)
+      side:
+        type: string
+        description: 'prediction_bet only: yes or no'
+    additionalProperties:
+      type: string
