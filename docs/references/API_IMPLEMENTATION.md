@@ -231,7 +231,8 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /agentTechnocoreStatus`](#get-agenttechnocorestatus) - Technocore DID / room / posting (masked key; **read JWT** on Browser HTTPS / loopback)
 - [`POST /agentTechnocoreConfig`](#post-agenttechnocoreconfig) - Update Technocore room and posting flag (**management signature**)
 - [`POST /agentTechnocoreKey`](#post-agenttechnocorekey) - Import, generate, or clear Technocore Ed25519 key (**management signature**; never returns the private key)
-- [`POST /agentTechnocoreAnnounce`](#post-agenttechnocoreannounce) - Sign and post one Technocore room line (**management signature**; requires posting on)
+- [`POST /agentTechnocoreAnnounce`](#post-agenttechnocoreannounce) - Sign and post one Technocore room line; optional `room` is this post only (**management signature**; requires posting on)
+- [`POST /agentTechnocoreSign`](#post-agenttechnocoresign) - Sign a payload with the Technocore key without posting (**management signature**; requires posting on; refuses a `room|nonce|text` envelope)
 - [`GET /listEnvironmentVariables`](#get-listenvironmentvariables) - List MCP agent environment variables stored on this node (local MongoDB; not propagated)
 - [`GET /getEnvironmentVariable`](#get-getenvironmentvariable) - Get one variable by `name` query param
 - [`POST /addEnvironmentVariable`](#post-addenvironmentvariable) - Add or update one variable (**management signature**; name normalized to uppercase `A-Z`, `0-9`, `_`)
@@ -2965,7 +2966,7 @@ curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/agentLlmApiKey" \
 
 ### Agent Technocore (local filesystem)
 
-Same storage pattern as the LLM API key: file next to `agent-llm-config.json` (`agent-technocore.json`), masked status, management-signed writes. **Never** store the Ed25519 private key in Variables or paste it into Agent Chat. The node signs room posts in-process (`POST /agentTechnocoreAnnounce`); MCP/SDK tools never receive the private key.
+Same storage pattern as the LLM API key: file next to `agent-llm-config.json` (`agent-technocore.json`), masked status, management-signed writes. **Never** store the Ed25519 private key in Variables or paste it into Agent Chat. The node signs room posts (`POST /agentTechnocoreAnnounce`) and detached payloads (`POST /agentTechnocoreSign`) in-process; MCP/SDK tools never receive the private key.
 
 **Where served:** Same attach URL family as LLM config. **`GET /agentTechnocoreStatus`** follows [Browser HTTPS and loopback HTTP (JWT)](#browser-https-and-loopback-http-jwt). **`POST`** routes use **management-key signature**.
 
@@ -3021,14 +3022,37 @@ Field order must match Go / continuumdao-node-app. Updates `room` and `posting` 
 
 **Auth:** Management signature.
 
-**Canonical signed bytes:**
+**Canonical signed bytes** (`room` omitted when empty):
 ```json
 {"action":"agentTechnocoreAnnounce","clientSig":"","nonce":N,"nodeKey":"<128-hex>","text":"..."}
 ```
 
-**Behavior:** Refuses if posting is off or no key is stored. Node signs `room|nonce|text` with the stored Ed25519 key and POSTs to `https://technocore.chat/r/{room}`. Max 4096 characters after sweep.
+When `room` is set, it is included between `nodeKey` and `text`:
+```json
+{"action":"agentTechnocoreAnnounce","clientSig":"","nonce":N,"nodeKey":"<128-hex>","room":"other-room","text":"..."}
+```
 
-**Response `data`:** `{ "did", "room", "status", "body" }` (Technocore HTTP status + body). Private key is never included.
+**Request:** `text` (required). Optional `room` (`^[A-Za-z0-9._-]{1,128}$`) selects the room for this post only and does not change the saved room in `agent-technocore.json`. Omit `room` to post to the saved room (default `continuum-mpa`).
+
+**Behavior:** Refuses if posting is off or no key is stored. The management signature covers the original `text` (and `room` only when the caller sent one). The node then signs `{room}|{unix-nano nonce}|{swept text}` with the stored Ed25519 key and POSTs to `https://technocore.chat/r/{room}`. Max 4096 characters after sweep.
+
+**Response `data`:** `{ "did", "room", "status", "body" }` (Technocore HTTP status + body). `room` is the room that was posted to, which may differ from the saved room. Private key is never included.
+
+<a id="post-agenttechnocoresign"></a>
+#### `POST /agentTechnocoreSign`
+
+**Auth:** Management signature.
+
+**Canonical signed bytes:**
+```json
+{"action":"agentTechnocoreSign","clientSig":"","nonce":N,"nodeKey":"<128-hex>","payload":"..."}
+```
+
+**Request:** `payload` is the exact UTF-8 string to sign (1–4096 characters). It is not trimmed, so the signature matches those bytes.
+
+**Behavior:** Does not POST to technocore.chat. Refuses if posting is off or no key is stored. Refuses a payload that matches a room envelope (`<room>|<nonce>|<text>`, middle segment 1–19 digits) — use **`POST /agentTechnocoreAnnounce`** for those. Returns a base64url (unpadded) Ed25519 signature of the exact payload.
+
+**Response `data`:** `{ "did", "signature" }`. Private key is never included.
 
 ### Agent environment variables (local MongoDB)
 

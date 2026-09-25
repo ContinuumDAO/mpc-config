@@ -19,6 +19,7 @@ Bundled jobs in `jobs.json`:
 | `appraise-and-vote-proposals` | no | ContinuumDAO **vote only** (never propose; never load `continuum-dao-compose-proposal`). See **`continuum_dao_vote_policy.example.md`** |
 | `notify-forum-replies` | no | Read-only: new replies to **your** Forum posts → Telegram with the formatted post. Set `forumWatch.forumUsername`. See **`forum_replies_cron.example.md`** |
 | `conditional-accept-governance-vote` | no | ContinuumDAO **governor Join** only. Reject propose/execute/cancel. See **`continuum_dao_vote_policy.example.md`** |
+| `close-call` | no | Close Call on technocore.chat. UTC minutes 1,6,11,… Load skill **`close-call`**. Watch each sweep, register once in room `close1`, hold unless a slow target needs one adjusting trade. |
 | `trade_analysis_cron.example.md` | Copy-paste template for multi-analysis (patterns, **momentum + candlestick confirmation**, trend, key levels, fib, Elliott waves) + optional **`tradeConsensus`** / **`tradeBuild`** YAML; supports **hyperliquid**, **arcus**, **gmx**, **uniswap** execution. **Pattern C** documents optional cron supervisor spawn strands (`agent_spawn_sub_agent` / join) for multi-analyze jobs |
 
 See skill **`scheduled-automation`** for schedule kinds, non-interactive rules, orchestration threading, cron supervisor spawn, and **`telegramNotify`** (host delivers the final assistant message to Telegram).

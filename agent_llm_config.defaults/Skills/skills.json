@@ -179,6 +179,11 @@
       "name": "continuum-dao-mpa-wallet-chat",
       "filename": "continuum-dao-mpa-wallet-chat/SKILL.md",
       "initialLoad": false
+    },
+    {
+      "name": "close-call",
+      "filename": "close-call/SKILL.md",
+      "initialLoad": false
     }
   ]
 }
