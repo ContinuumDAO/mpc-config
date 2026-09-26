@@ -4029,6 +4029,39 @@
                 ]
             }
         },
+        "/resetSkillFromDefaults": {
+            "post": {
+                "description": "Overwrite one bundled default agent skill and update applied-defaults sidecar (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /resetSkillFromDefaults).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "Overwrite one bundled default agent skill and update applied-defaults sidecar (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.ResetSkillFromDefaultsPost"
+                        }
+                    }
+                ]
+            }
+        },
         "/listUserFolder": {
             "get": {
                 "description": "List entries under MPC_AUTH_USER_FOLDER (jailed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /listUserFolder).",
@@ -8660,6 +8693,27 @@
                 }
             ]
         },
+        "node.AgentTechnocoreSignPost": {
+            "type": "object",
+            "description": "POST /agentTechnocoreSign. Sign canonical JSON {\"action\":\"agentTechnocoreSign\",\"clientSig\":\"\",\"nonce\":N,\"nodeKey\":\"<128-hex>\",\"payload\":\"...\"}. Signs the exact payload; does not POST to technocore.chat. Refuses a room|nonce|text envelope (middle segment 1–19 digits).",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "payload"
+                    ],
+                    "properties": {
+                        "payload": {
+                            "type": "string",
+                            "description": "Exact UTF-8 bytes to sign (1–4096 characters; not trimmed). Not a room|nonce|text envelope."
+                        }
+                    }
+                }
+            ]
+        },
         "node.AgentTechnocoreKeyPost": {
             "type": "object",
             "description": "POST /agentTechnocoreKey. Sign canonical JSON {\"action\":\"agentTechnocoreKey\",\"clientSig\":\"\",\"generate\":false,\"nonce\":N,\"nodeKey\":\"<128-hex>\",\"privateKey\":\"...\"}.",
@@ -8744,6 +8798,27 @@
             "additionalProperties": {
                 "type": "string"
             }
+        },
+        "node.ResetSkillFromDefaultsPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "name"
+                    ],
+                    "description": "POST /resetSkillFromDefaults. Canonical JSON to sign: {\"name\":\"<skill>\",\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"}. Copies one bundled default skill into agent_llm_config/Skills/ and writes SKILL.*.meta.json sidecar.",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Bundled catalog skill name"
+                        }
+                    }
+                }
+            ]
         }
     }
 }

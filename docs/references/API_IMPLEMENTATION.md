@@ -253,6 +253,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /addSkill`](#post-addskill) - Add or update a skill file (**management signature**)
 - [`POST /removeSkill`](#post-removeskill) - Remove a skill by name (**management signature**)
 - [`POST /resetSkillsFromDefaults`](#post-resetskillsfromdefaults) - Overwrite bundled default skill files from **`agent_llm_config.defaults/Skills/`** (**management signature**; custom skills preserved)
+- [`POST /resetSkillFromDefaults`](#post-resetskillfromdefaults) - Overwrite **one** bundled default skill and update its sidecar (**management signature**)
 - [`GET /getHostYamlConfig`](#get-gethostyamlconfig) - Get editable host YAML by **`kind`** (installed runtime file or bundled defaults preview; upgrade metadata)
 - [`POST /upsertHostYamlConfig`](#post-upserthostyamlconfig) - Write host YAML after validation (**management signature**; preserves submitted bytes)
 - [`POST /resetHostYamlFromDefaults`](#post-resethostyamlfromdefaults) - Install or reset host YAML from **`agent_llm_config.defaults/`** (**management signature**; writes sidecar)
@@ -3281,14 +3282,52 @@ Each skill: **`initialLoad`** — when true, content is injected as a **system**
 
 **Auth:** Management API (same as **GET /listMcpServers**).
 
-**Response data:** `{ "names": ["skill-a", "skill-b"] }` — names only (no file content).
+**Response data:**
+```json
+{
+  "names": ["skill-a", "skill-b"],
+  "availableCatalog": [{ "name", "initialLoad", "format", "description"? }],
+  "defaultsSync": [
+    {
+      "name": "skill-a",
+      "fromBundledDefault": true,
+      "upgradeAvailable": false,
+      "userModified": true,
+      "defaultsUpdatedAt": "2026-08-26T09:00:00Z",
+      "appliedAt": "2026-08-20T14:30:00Z"
+    }
+  ]
+}
+```
+
+| Field | Notes |
+|-------|--------|
+| `names` | Installed skill names (no file content) |
+| `availableCatalog` | Bundled skills not yet installed on this node |
+| `defaultsSync` | Per installed skill: bundled-default sync flags (no content). Omitted entries behave as custom skills when `fromBundledDefault` is false |
 
 <a id="get-getskill"></a>
 #### `GET /getSkill`
 
 **Query:** `name` (required).
 
-**Response data:** `{ "name", "content", "initialLoad", "format": "md"|"txt", "updatedAt"? }`.
+**Response data:** `{ "name", "content", "initialLoad", "format": "md"|"txt", "updatedAt"? }` plus bundled-default metadata when the skill name exists in **`agent_llm_config.defaults/Skills/skills.json`**:
+
+| Field | Notes |
+|-------|--------|
+| `fromBundledDefault` | `true` when the name is in the bundled catalog |
+| `defaultContent` | Current bundled skill body |
+| `defaultsUpdatedAt` | RFC3339 mtime of bundled **`SKILL.md`** / **`SKILL.txt`** |
+| `installedUpdatedAt` | RFC3339 mtime of installed skill file |
+| `appliedDefaultsHash` | SHA-256 hex from **`{skill-dir}/SKILL.*.meta.json`** sidecar |
+| `appliedAt` | From sidecar |
+| `upgradeAvailable` | Sidecar hash ≠ SHA-256(**`defaultContent`**) |
+| `userModified` | SHA-256(**`content`**) ≠ **`appliedDefaultsHash`** |
+| `filename` | Manifest relative path (e.g. **`chart-defaults/SKILL.md`**) |
+
+**Sidecar:** On **`POST /addSkillFromCatalog`**, **`POST /resetSkillFromDefaults`**, **`POST /resetSkillsFromDefaults`**, and first install of a catalog skill via **`POST /addSkill`**, mpc-auth writes **`SKILL.md.meta.json`** (or **`.txt.meta.json`**) beside the skill file with **`appliedDefaultsHash`** and **`appliedAt`**. Sidecar is **not** updated on later **`POST /addSkill`** edits (same as host YAML upsert).
+
+**Upgrade workflow:** When **`upgradeAvailable`** is true, download backup / diff, call **`POST /resetSkillFromDefaults`**, then re-apply operator edits via **`POST /addSkill`**. There is no merge UI.
 
 <a id="post-addskill"></a>
 #### `POST /addSkill`
@@ -3314,6 +3353,17 @@ Each skill: **`initialLoad`** — when true, content is injected as a **system**
 **Behavior:** Copies each bundled default skill file from **`agent_llm_config.defaults/Skills/`** over the matching runtime file under **`agent_llm_config/Skills/`**, and updates matching **`skills.json`** manifest entries (`initialLoad`, `filename`, etc.). Skills you added that are **not** in the defaults catalog are **unchanged** (files and manifest entries preserved).
 
 **Response data:** `{ "skillCount": <int> }` — count of default skills refreshed.
+
+<a id="post-resetskillfromdefaults"></a>
+#### `POST /resetSkillFromDefaults`
+
+**Auth:** Management signature.
+
+**Body:** `{ "name", "nonce", "clientSig", "nodeKey" }` — **`name`** must be a skill in the bundled defaults catalog. Canonical JSON to sign: `{"name":"<skill>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}` with **`clientSig` cleared** before signing.
+
+**Behavior:** Copies the bundled default file into **`agent_llm_config/Skills/`**, updates **`skills.json`** (`initialLoad`, `filename`), and writes the applied-defaults sidecar. Custom skills not in the catalog cannot use this endpoint.
+
+**Response data:** Same shape as **`GET /getSkill`** (including sync metadata).
 
 ### Host YAML configs (editable)
 
