@@ -11,7 +11,8 @@ tasks:
     prompt: |
       Inventory KeyGen balances on every configured chainId via agent_get_balance
       (native + key ERC-20s/LSTs/stables). Discover and read open perps (HL / GMX / Arcus),
-      Derive options, Aave/Morpho/Euler loans + HF, Morpho Earn shares + Exposure,
+      Derive options, Trueo YES/NO (load_defi_protocol trueo), Hyperliquid Outcome shares
+      (load_defi_protocol hyperliquidOutcome), Aave/Morpho/Euler loans + HF, Morpho Earn shares + Exposure,
       Euler curated Earn + Strategies, Uniswap v4 / Curve / Aerodrome / Pendle LP,
       Pendle PT/YT. Report units, venues, wrappers. Do not invent positions, IL, or PnL.
       As-of dating. No tradeIdeas.
@@ -26,7 +27,10 @@ tasks:
     prompt: |
       For the inherited hedge asset(s): mark, funding, open interest, 2% depth vs the
       planned notional on Hyperliquid / GMX / Arcus as relevant. If options are in scope:
-      Derive IV/skew, listed expiries, premium as % of notional. If Pendle is in scope:
+      Derive IV/skew, listed expiries, premium as % of notional. If Trueo or Hyperliquid
+      Outcomes are in scope: search/list markets for the inherited asset (BTC/ETH/HYPE or
+      named catalyst); mid/spread vs planned stake, chance series, trading end and resolution.
+      If Pendle is in scope:
       market, expiry, implied APY vs floating. If curated Earn is opted in: Morpho
       Exposure and Euler Strategies (labels + % of TVL). Cite sources. No tradeIdeas.
     mcpServers: ["continuum"]
@@ -54,7 +58,7 @@ tasks:
 
 ### Synthesis
 
-`orchestratorOnReply` ranks **one primary overlay** plus a fallback (e.g. Pendle PT if HL depth fails), cites inventory + venue + risk leaves, preserves as-of dating, and posts a KeyGen **REPLY** via `send_key_gen_message`. Execution / MultiSign stay for **Continue in Orchestrator** or a follow-on plan.
+`orchestratorOnReply` ranks **one primary overlay** plus a fallback (e.g. Pendle PT if HL perp depth fails; Trueo or HL Outcome if Derive IV fails but a listed market exists), cites inventory + venue + risk leaves, preserves as-of dating, and posts a KeyGen **REPLY** via `send_key_gen_message`. Execution / MultiSign stay for **Continue in Orchestrator** or a follow-on plan.
 
 ```yaml
 synthesis:

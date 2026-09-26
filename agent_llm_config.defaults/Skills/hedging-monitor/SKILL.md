@@ -21,6 +21,7 @@ Copy from `plans/<planId>.md` **Unwind** + **Hedge design** into the cron `messa
 
 - Venue, asset, side, target size, isolated vs cross
 - Invalidation / TP, max funding/day, min HF, Pendle market + expiry, option DTE
+- Trueo marketAddress + side + stake cap + trading end; or HL Outcome market id + side + limit + sz
 - Morpho and/or Euler Earn vault id/address, allowed asset-class tags (vanilla vs curated/RWA/reinsurance), min exit liquidity
 - Derive instrument, strike, expiry, premium cap, roll vs expire
 - Preferred action per trigger: hold / tighten (reduce notional or move SL) / close / roll
@@ -31,7 +32,7 @@ Thread the job on the **same `[Orchestrator]`** conversation (`agent_schedule_or
 ## Each monitor turn
 
 1. Discover live tools (`continuum__search_continuum_tools` / `load_defi_protocol`) — do not hardcode fetch names.
-2. Read open hedge + supporting book: perp position, Derive options, Pendle PT/YT/LP, Morpho Earn Exposure + Euler Earn Strategies, Aave/Morpho/Euler HF, margin.
+2. Read open hedge + supporting book: perp position, Derive options, Trueo/HL Outcome shares, Pendle PT/YT/LP, Morpho Earn Exposure + Euler Earn Strategies, Aave/Morpho/Euler HF, margin.
 3. Compare to the frozen contract. Pick **one** recommendation: hold / tighten / close / roll.
 4. If **hold**: short KeyGen/Telegram summary; no MultiSign.
 5. If **tighten / close / roll**: compose **unwind** MultiSign — one theme per leg, one `requestId` per Accept round. Stop at proposal. **`autoSubmitMultisign: false`**. Do not Accept, Get Sig, or broadcast unless the frozen message already embeds that authorization (v1 default: **never** auto-accept unwind).
@@ -43,6 +44,7 @@ Thread the job on the **same `[Orchestrator]`** conversation (`agent_schedule_or
 |--------------|----------------|
 | Perp short | Reduce or close on HL / GMX / Arcus (limit first; market only if frozen depth rule allows) |
 | Derive put/collar/call | Close or roll expiry/strike |
+| Trueo YES/NO or HL Outcome | Sell / cancel limits before trading end; hold to resolution only if Unwind says so |
 | Pendle PT | Hold to expiry **or** sell PT; never unwrap unless the contract says so |
 | Pendle YT | Sell YT; optional rate-hedge roll |
 | Uniswap v4 / Curve / Aerodrome / Pendle LP overlay | Close or tighten the **perp/put overlay** first. Remove LP only if Unwind says exit the pool (out of range, expiry, or operator asked) |

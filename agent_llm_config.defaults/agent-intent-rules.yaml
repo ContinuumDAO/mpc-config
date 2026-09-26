@@ -217,6 +217,9 @@ rules:
         - euler earn
         - reinsurance vault
         - rwa vault
+        - prediction market
+        - trueo
+        - hyperliquid outcome
     hint: |
       Operator wants a hedge, not an unhedged directional trade. Steer them to Plan mode
       Hedging strategies (mode hedging). Load skill hedging-trade. Interview first; write
