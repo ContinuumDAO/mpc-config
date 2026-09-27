@@ -61,10 +61,11 @@ usage() {
 Usage:
   sudo ./scripts/install-node-linux-docker-desktop.sh [options]
 
-Linux Docker Desktop profile (Debian/Ubuntu or a systemd Arch derivative).
+Linux Docker Desktop profile (Debian/Ubuntu, a systemd Arch derivative, or Fedora Workstation/Server).
 Requires docker + docker compose v2 from Docker Desktop.
-Installs distro packages except Docker; enables UFW and systemd via provision-node.sh.
+Installs distro packages except Docker; enables the host firewall and systemd via provision-node.sh.
 Arch-family hosts: Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux.
+Fedora: Workstation and Server (firewalld). Not Silverblue, Kinoite, or Bazzite.
 Not supported: Artix, Obarun, SteamOS.
 
 Provision options (at least one management key required):
@@ -150,10 +151,22 @@ require_supported_linux() {
             fi
             return 0
             ;;
+        fedora)
+            if ! command -v dnf >/dev/null 2>&1; then
+                die "Fedora host has no dnf"
+            fi
+            if ! command -v systemctl >/dev/null 2>&1; then
+                die "systemd (systemctl) is required."
+            fi
+            if [ -f /run/ostree-booted ]; then
+                die "immutable Fedora (Silverblue, Kinoite, Atomic) is not supported."
+            fi
+            return 0
+            ;;
     esac
     # shellcheck source=/dev/null
     . /etc/os-release
-    die "unsupported OS: ${PRETTY_NAME:-unknown}. Supported: Ubuntu/Debian and systemd Arch derivatives (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux). Not supported: Artix, Obarun, SteamOS."
+    die "unsupported OS: ${PRETTY_NAME:-unknown}. Supported: Ubuntu/Debian, systemd Arch derivatives, and Fedora Workstation or Server. Not supported: Artix, Obarun, SteamOS, Fedora Silverblue, Kinoite, Bazzite."
 }
 
 run_or_dry() {
@@ -408,7 +421,8 @@ if [ "$SKIP_PACKAGES" = false ]; then
     install_progress_topic_begin packages
     install_progress_spinner_start
     install_progress_topic_set packages 40
-    if [ "$(continuum_linux_family_from_release /etc/os-release)" = "arch" ]; then
+    _linux_family="$(continuum_linux_family_from_release /etc/os-release)"
+    if [ "$_linux_family" = "arch" ]; then
         continuum_pacman_install \
             ca-certificates \
             curl \
@@ -428,6 +442,27 @@ if [ "$SKIP_PACKAGES" = false ]; then
             iproute2 \
             ufw \
             jq
+    elif [ "$_linux_family" = "fedora" ]; then
+        continuum_dnf_install \
+            ca-certificates \
+            curl \
+            wget \
+            git \
+            openssl \
+            gnupg2 \
+            iptables \
+            sudo \
+            unzip \
+            python3 \
+            python3-pip \
+            python3-ruamel-yaml \
+            python3-cryptography \
+            wireguard-tools \
+            socat \
+            iproute \
+            firewalld \
+            jq \
+            policycoreutils-python-utils
     else
         wait_for_apt_lock
         install_progress_topic_set packages 15

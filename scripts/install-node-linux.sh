@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Linux entry point for the Continuum MPA node one-shot install.
-# Reads /etc/os-release and runs the Debian/Ubuntu or Arch-family installer
+# Reads /etc/os-release and runs the Debian/Ubuntu, Arch-family, or Fedora installer
 # with the same arguments.
 #
 #   curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-linux.sh" \
 #     | bash -s -- --node-mgt-key "0xYour40Hex..." --ip "203.0.113.50"
 #
 # Supported: Ubuntu, Debian, and derivatives (apt); systemd Arch derivatives
-# (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux) via pacman.
-# Refused: Artix, Obarun (no systemd), SteamOS (immutable root).
+# (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux) via pacman;
+# Fedora Workstation and Fedora Server via dnf.
+# Refused: Artix, Obarun (no systemd), SteamOS (immutable root), Fedora
+# Silverblue, Kinoite, Atomic, and Bazzite.
 #
 set -euo pipefail
 
@@ -54,10 +56,22 @@ arch)
 	fi
 	target_name="install-node-arch.sh"
 	;;
+fedora)
+	if ! command -v dnf >/dev/null 2>&1; then
+		die "Fedora host has no dnf — cannot install packages"
+	fi
+	if ! command -v systemctl >/dev/null 2>&1; then
+		die "systemd (systemctl) is required."
+	fi
+	if [ -f /run/ostree-booted ]; then
+		die "immutable Fedora (Silverblue, Kinoite, Atomic) is not supported. Use Fedora Workstation or Fedora Server."
+	fi
+	target_name="install-node-fedora.sh"
+	;;
 *)
 	# shellcheck source=/dev/null
 	. /etc/os-release
-	die "unsupported OS: ${PRETTY_NAME:-unknown}. Supported: Ubuntu/Debian (apt) and systemd Arch derivatives (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux). Not supported: Artix, Obarun, SteamOS."
+	die "unsupported OS: ${PRETTY_NAME:-unknown}. Supported: Ubuntu/Debian (apt), systemd Arch derivatives (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux), and Fedora Workstation or Server (dnf). Not supported: Artix, Obarun, SteamOS, Fedora Silverblue, Kinoite, Atomic, Bazzite."
 	;;
 esac
 

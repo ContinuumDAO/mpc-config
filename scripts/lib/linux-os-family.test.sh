@@ -30,10 +30,20 @@ expect_family debian $'NAME="Debian GNU/Linux"\nID=debian\n' debian
 expect_family artix $'NAME="Artix Linux"\nID=artix\nID_LIKE=arch\n' unsupported
 expect_family steamos $'NAME="SteamOS"\nID=steamos\nID_LIKE=arch\n' unsupported
 expect_family obarun $'NAME="Obarun"\nID=obarun\nID_LIKE=arch\n' unsupported
+expect_family fedora-workstation $'NAME="Fedora Linux"\nID=fedora\nVARIANT_ID=workstation\n' fedora
+expect_family fedora-server $'NAME="Fedora Linux"\nID=fedora\nVARIANT_ID=server\n' fedora
+expect_family fedora-cloud $'NAME="Fedora Linux"\nID=fedora\nVARIANT_ID=cloud\n' fedora
+expect_family silverblue $'NAME="Fedora Linux"\nID=fedora\nVARIANT_ID=silverblue\nOSTREE_VERSION=41.20250101.0\n' unsupported
+expect_family kinoite $'NAME="Fedora Linux"\nID=fedora\nVARIANT_ID=kinoite\n' unsupported
+expect_family bazzite $'NAME="Bazzite"\nID=bazzite\nID_LIKE=fedora\n' unsupported
+expect_family rhel $'NAME="Red Hat Enterprise Linux"\nID=rhel\nID_LIKE="fedora"\n' unsupported
+expect_family nobara $'NAME="Nobara Linux"\nID=nobara\nID_LIKE=fedora\n' unsupported
 
 script="$(continuum_linux_install_script_for_family arch)"
 [ "$script" = "scripts/install-node-arch.sh" ] || fail "arch script: ${script}"
 script="$(continuum_linux_install_script_for_family debian)"
 [ "$script" = "scripts/install-node-debian-ubuntu.sh" ] || fail "debian script: ${script}"
+script="$(continuum_linux_install_script_for_family fedora)"
+[ "$script" = "scripts/install-node-fedora.sh" ] || fail "fedora script: ${script}"
 
 printf 'linux-os-family.test.sh: ok\n'

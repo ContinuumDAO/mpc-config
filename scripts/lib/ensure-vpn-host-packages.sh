@@ -13,6 +13,8 @@ ensure_vpn_host_packages() {
 	if [ "$dry_run" = true ]; then
 		if command -v pacman >/dev/null 2>&1; then
 			printf '[dry-run] pacman -S --needed --noconfirm wireguard-tools socat iproute2\n' >&2
+		elif command -v dnf >/dev/null 2>&1; then
+			printf '[dry-run] dnf install -y wireguard-tools socat iproute\n' >&2
 		else
 			printf '[dry-run] apt-get install -y wireguard socat iproute2\n' >&2
 		fi
@@ -23,6 +25,9 @@ ensure_vpn_host_packages() {
 		if ! pacman -S --needed --noconfirm wireguard-tools socat iproute2; then
 			pacman -Sy --needed --noconfirm wireguard-tools socat iproute2 || return 1
 		fi
+	elif command -v dnf >/dev/null 2>&1; then
+		printf '==> Installing wireguard-tools, socat, and iproute (VPN host automation + egress rate limits)\n' >&2
+		dnf install -y wireguard-tools socat iproute || return 1
 	elif command -v apt-get >/dev/null 2>&1; then
 		printf '==> Installing wireguard, socat, and iproute2 (VPN host automation + egress rate limits)\n' >&2
 		apt-get update -qq || return 1

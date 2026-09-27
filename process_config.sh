@@ -6349,7 +6349,59 @@ print(f"{wg_admin}|{ss_admin}|{wg_egress}|{ss_egress}|{wo_egress}|{u2_egress}")
 PYFWVPNPORTS
 }
 
+# firewalld when it is the host firewall (Fedora). ufw when that is installed and firewalld is not the active choice.
+_host_firewall_backend() {
+    if command -v firewall-cmd >/dev/null 2>&1; then
+        if systemctl is-active --quiet firewalld 2>/dev/null; then
+            printf 'firewalld\n'
+            return 0
+        fi
+        if ! command -v ufw >/dev/null 2>&1; then
+            printf 'firewalld\n'
+            return 0
+        fi
+    fi
+    if command -v ufw >/dev/null 2>&1; then
+        printf 'ufw\n'
+        return 0
+    fi
+    printf 'none\n'
+}
+
+# Drop non-root TCP to Compose Mongo on localhost. firewalld has no uid match in rich rules; a direct rule is the same owner match UFW stores in after.rules.
+_apply_loopback_mongodb_owner_firewall_via_firewalld() {
+    local mongo_port="${MONGO_LOOPBACK_FW_PORT:-27017}"
+    local skip_firewall="$1"
+
+    case "${APPLY_LOOPBACK_MONGO_OWNER_FW:-1}" in
+        0 | false | FALSE | no | NO) return 0 ;;
+    esac
+
+    if [ "$skip_firewall" = "true" ]; then
+        return 0
+    fi
+
+    if ! command -v firewall-cmd >/dev/null 2>&1; then
+        print_warning "firewall-cmd missing — skipping Mongo loopback owner rule."
+        return 0
+    fi
+
+    print_step "firewalld: non-root outbound to localhost Mongo (${mongo_port}/tcp)"
+
+    if sudo firewall-cmd --permanent --direct --query-rule ipv4 filter OUTPUT 0 \
+        -d 127.0.0.1/32 -p tcp --dport "$mongo_port" -m owner '!' --uid-owner 0 -j DROP >/dev/null 2>&1; then
+        return 0
+    fi
+    if ! sudo firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 0 \
+        -d 127.0.0.1/32 -p tcp --dport "$mongo_port" -m owner '!' --uid-owner 0 -j DROP; then
+        print_warning "Could not add firewalld direct rule for localhost Mongo ${mongo_port}/tcp."
+        return 0
+    fi
+    print_success "Queued firewalld direct rule: drop non-root TCP to 127.0.0.1:${mongo_port}."
+}
+
 # Enable UFW before config processing / firewall rules (--no-firewall skips entirely).
+# On Fedora, firewalld is already the host firewall; this does not install or enable ufw.
 ensure_ufw_active_early() {
     local skip_firewall="$1"
 
@@ -6358,6 +6410,23 @@ ensure_ufw_active_early() {
     fi
 
     require_sudo_capable
+
+    if [ "$(_host_firewall_backend)" = firewalld ]; then
+        print_step "firewalld: ensure firewall is active (use --no-firewall to skip)"
+        if ! systemctl is-active --quiet firewalld 2>/dev/null; then
+            print_info "firewalld is inactive — enabling it. The default zone already allows SSH."
+            if ! sudo systemctl enable --now firewalld; then
+                print_error "systemctl enable --now firewalld failed."
+                exit 1
+            fi
+        fi
+        if ! sudo firewall-cmd --state >/dev/null 2>&1; then
+            print_error "firewalld is not running."
+            exit 1
+        fi
+        print_success "firewalld is active (SSH allowed by the default zone)."
+        return 0
+    fi
 
     print_step "UFW: ensure firewall is active (use --no-firewall to skip)"
 
@@ -6614,6 +6683,9 @@ apply_process_config_firewall() {
 
     print_step "Host firewall (recommended for financial / MPC nodes)"
 
+    local fw_backend
+    fw_backend="$(_host_firewall_backend)"
+
     local mgt_port pub_port bh_port sr_port
     local _pl
     if _pl=$(_firewall_read_listener_ports_from_configs_yaml "$config_file" 2>/dev/null) && [ -n "$_pl" ]; then
@@ -6652,25 +6724,44 @@ apply_process_config_firewall() {
         print_info "Relay node: MQTT broker TLS typically uses 8883/tcp (docker-compose)."
     fi
 
-    if ! command -v ufw >/dev/null 2>&1; then
+    if [ "$fw_backend" = firewalld ]; then
+        if ! command -v firewall-cmd >/dev/null 2>&1; then
+            print_error "firewall-cmd is not installed. Install with: sudo dnf install firewalld"
+            exit 1
+        fi
+    elif ! command -v ufw >/dev/null 2>&1; then
         print_error "ufw is not installed (expected active UFW). Install with: sudo apt install ufw"
         exit 1
     fi
 
     local ufw_state ufw_full
-    # Capture stderr too — sudo may fail silently with 2>/dev/null and leave status empty.
-    ufw_full=$(sudo ufw status 2>&1) || true
-    ufw_state=$(printf '%s\n' "$ufw_full" | head -1)
-    print_info "UFW: ${ufw_state:-<no output>}"
-    if [ -z "$ufw_state" ]; then
-        print_warning "Could not read UFW status (sudo may need a password, or ufw failed). Run: sudo ufw status"
+    if [ "$fw_backend" != firewalld ]; then
+        # Capture stderr too — sudo may fail silently with 2>/dev/null and leave status empty.
+        ufw_full=$(sudo ufw status 2>&1) || true
+        ufw_state=$(printf '%s\n' "$ufw_full" | head -1)
+        print_info "UFW: ${ufw_state:-<no output>}"
+        if [ -z "$ufw_state" ]; then
+            print_warning "Could not read UFW status (sudo may need a password, or ufw failed). Run: sudo ufw status"
+        fi
     fi
 
     apply_one_ufw() {
         local port="$1"
         local note="$2"
         if [ -z "$port" ] || [ "$port" = "0" ]; then
-            print_warning "Skipping UFW rule for invalid port (${port:-empty}) ($note)"
+            print_warning "Skipping firewall rule for invalid port (${port:-empty}) ($note)"
+            return 0
+        fi
+        if [ "$fw_backend" = firewalld ]; then
+            if sudo firewall-cmd --permanent --query-port="${port}/tcp" >/dev/null 2>&1; then
+                print_info "firewalld already allows ${port}/tcp ($note)"
+                return 0
+            fi
+            if sudo firewall-cmd --permanent --add-port="${port}/tcp" >/dev/null; then
+                print_success "firewalld: allowed ${port}/tcp ($note)"
+            else
+                print_warning "Could not add firewalld rule for ${port}/tcp"
+            fi
             return 0
         fi
         # Anchor to start of line so e.g. port 0 does not match 18080/tcp; ufw status lists as "8080/tcp ..."
@@ -6689,7 +6780,19 @@ apply_process_config_firewall() {
         local port="$1"
         local note="$2"
         if [ -z "$port" ] || [ "$port" = "0" ]; then
-            print_warning "Skipping UFW rule for invalid UDP port (${port:-empty}) ($note)"
+            print_warning "Skipping firewall rule for invalid UDP port (${port:-empty}) ($note)"
+            return 0
+        fi
+        if [ "$fw_backend" = firewalld ]; then
+            if sudo firewall-cmd --permanent --query-port="${port}/udp" >/dev/null 2>&1; then
+                print_info "firewalld already allows ${port}/udp ($note)"
+                return 0
+            fi
+            if sudo firewall-cmd --permanent --add-port="${port}/udp" >/dev/null; then
+                print_success "firewalld: allowed ${port}/udp ($note)"
+            else
+                print_warning "Could not add firewalld rule for ${port}/udp"
+            fi
             return 0
         fi
         if sudo ufw status 2>/dev/null | grep -qE "^[[:space:]]*${port}/udp"; then
@@ -6733,13 +6836,24 @@ apply_process_config_firewall() {
     if [ -n "$sr_port" ] && [ "$sr_port" != "0" ] && [ "$sr_port" != "null" ] \
         && [ "$sr_port" != "$pub_port" ] && [ "$sr_port" != "$mgt_port" ] && [ "$sr_port" != "$bh_port" ]; then
         if command -v python3 >/dev/null 2>&1; then
-            local _sr_sources _sr_line _applied_sr
+            local _sr_sources _sr_line _applied_sr _rich
             _applied_sr=false
             _sr_sources=$(_firewall_collect_scanner_relayer_sources "$config_file") || _sr_sources=""
             if [[ -n "${_sr_sources//[[:space:]]/}" ]]; then
                 while IFS= read -r _sr_line || [[ -n "${_sr_line:-}" ]]; do
                     [[ -z "${_sr_line//[[:space:]]/}" ]] && continue
-                    if sudo ufw allow from "$_sr_line" to any port "$sr_port" proto tcp comment "mpc-auth ScannerRelayer scoped" 2>/dev/null; then
+                    if [ "$fw_backend" = firewalld ]; then
+                        _rich="rule family=\"ipv4\" source address=\"${_sr_line}\" port port=\"${sr_port}\" protocol=\"tcp\" accept"
+                        if sudo firewall-cmd --permanent --query-rich-rule="${_rich}" >/dev/null 2>&1; then
+                            print_info "firewalld rich rule already present for ${_sr_line} -> ${sr_port}/tcp"
+                            _applied_sr=true
+                        elif sudo firewall-cmd --permanent --add-rich-rule="${_rich}" >/dev/null; then
+                            print_success "firewalld: allow from ${_sr_line} to ${sr_port}/tcp (ScannerRelayer)"
+                            _applied_sr=true
+                        else
+                            print_warning "Could not add firewalld rich rule from ${_sr_line} to port ${sr_port}"
+                        fi
+                    elif sudo ufw allow from "$_sr_line" to any port "$sr_port" proto tcp comment "mpc-auth ScannerRelayer scoped" 2>/dev/null; then
                         print_success "UFW: allow from $_sr_line to ${sr_port}/tcp (ScannerRelayer)"
                         _applied_sr=true
                     else
@@ -6788,6 +6902,21 @@ apply_process_config_firewall() {
     print_warning "Provider firewall: when using wg-obfuscator egress, also allow inbound UDP ${wo_egress_port}."
     print_warning "Provider firewall: when using udp2raw egress, also allow inbound TCP ${u2_egress_port}."
     print_info "See systemd/README.md (WireGuard VPN — host firewall) and API_IMPLEMENTATION.md (peer egress VPN)."
+
+    if [ "$fw_backend" = firewalld ]; then
+        _apply_loopback_mongodb_owner_firewall_via_firewalld "$skip_firewall"
+        if ! sudo firewall-cmd --reload; then
+            print_error "firewall-cmd --reload failed after applying rules."
+            exit 1
+        fi
+        if ! sudo firewall-cmd --state >/dev/null 2>&1; then
+            print_error "firewalld is not running after reload."
+            exit 1
+        fi
+        print_info "firewalld active — inbound mpc-auth rules apply."
+        sudo firewall-cmd --list-ports 2>/dev/null || true
+        return 0
+    fi
 
     _apply_loopback_mongodb_owner_firewall_via_ufw_after_rules "$skip_firewall"
 
