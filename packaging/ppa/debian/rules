@@ -1,0 +1,9 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_install:
+	dh_install
+	find debian/mpa-wallet/usr/share/mpa-wallet/scripts -type f \( -name '*.sh' -o -name '*.py' \) -exec chmod 755 {} +
+	chmod 755 debian/mpa-wallet/usr/bin/mpa-wallet-install debian/mpa-wallet/usr/bin/mpa-wallet-uninstall

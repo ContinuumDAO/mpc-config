@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = configure ]; then
+	cat <<'EOF'
+MPA wallet host tools are installed. This did not create a node.
+
+Create a node as root (management key and this machine's public IPv4):
+
+  sudo mpa-wallet-install --node-mgt-key 0xYour40Hex... --ip YOUR_PUBLIC_IPV4
+
+Then set the mpcnode login password:
+
+  sudo passwd mpcnode
+
+Remove a node later with: sudo mpa-wallet-uninstall --help
+EOF
+fi
+
+#DEBHELPER#
+
+exit 0

@@ -1,0 +1,6 @@
+mpa-wallet (1.0.0) noble; urgency=medium
+
+  * Initial release. Installs host packages and the Ubuntu node installer.
+    Does not create a node.
+
+ -- ContinuumDAO <continuumdao@proton.me>  Sun, 27 Sep 2026 12:20:00 +0100

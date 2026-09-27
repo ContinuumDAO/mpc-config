@@ -1,0 +1,7 @@
+bin/mpa-wallet-install usr/bin
+bin/mpa-wallet-uninstall usr/bin
+scripts/install-node-debian-ubuntu.sh usr/share/mpa-wallet/scripts
+scripts/uninstall-node-debian-ubuntu.sh usr/share/mpa-wallet/scripts
+scripts/verify-node-install.sh usr/share/mpa-wallet/scripts
+scripts/lib usr/share/mpa-wallet/scripts
+LICENSE usr/share/doc/mpa-wallet

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Remove a Continuum MPA wallet node. Does not remove Docker or distro packages.
+# Root only. Pass the same flags as scripts/uninstall-node-debian-ubuntu.sh.
+set -euo pipefail
+exec /usr/share/mpa-wallet/scripts/uninstall-node-debian-ubuntu.sh "$@"
