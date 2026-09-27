@@ -1,6 +1,5 @@
 # Maintainer: Your Name <you@example.com>
 # Replace the Maintainer line with your name and email before publishing to the AUR.
-# Publishing steps: docs/AUR_MPA_WALLET.md
 
 pkgname=mpa-wallet-git
 _pkgname=mpc-config
@@ -9,7 +8,7 @@ pkgrel=1
 pkgdesc="Host installer for a ContinuumDAO MPA wallet node on systemd Arch derivatives"
 arch=('any')
 url="https://github.com/ContinuumDAO/mpc-config"
-license=('unknown')
+license=('BUSL-1.1')
 install=mpa-wallet-git.install
 makedepends=('git')
 depends=(
