@@ -10,15 +10,15 @@ This repository configures and installs **mpc-auth** MPC / MPA wallet nodes.
 |--|--|
 | **Full playbook (provision + configure)** | https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision |
 | **Canonical install guide** | [`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md) |
-| **One-shot script** | [`scripts/install-node-debian-ubuntu.sh`](scripts/install-node-debian-ubuntu.sh) |
-| **Raw URL** | `https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh` |
+| **One-shot script** | [`scripts/install-node-linux.sh`](scripts/install-node-linux.sh) (apt: [`install-node-debian-ubuntu.sh`](scripts/install-node-debian-ubuntu.sh); pacman: [`install-node-arch.sh`](scripts/install-node-arch.sh)) |
+| **Raw URL** | `https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-linux.sh` |
 | **README section** | [One-shot VPS install](README.md#one-shot-vps-install) |
 | **Published user docs** | https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Install |
 
-**Default action on Ubuntu/Debian VPS (as root):**
+**Default action on a Linux host as root.** Supported: Ubuntu/Debian, or a systemd Arch derivative (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux). Refused: Artix, Obarun, SteamOS. Prefer Ubuntu or Debian when renting a new cloud VPS.
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" \
+curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-linux.sh" \
   | bash -s -- \
       --node-mgt-key "0xYour40HexCharacters..." \
       --ip "YOUR_VPS_PUBLIC_IP"

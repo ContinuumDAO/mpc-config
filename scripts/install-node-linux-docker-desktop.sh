@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Local MPC node install for Docker Desktop on native Linux (Debian/Ubuntu).
+# Local MPC node install for Docker Desktop on native Linux.
+# Debian/Ubuntu: apt packages (except Docker). Arch-family (Arch, Omarchy, Manjaro,
+# EndeavourOS, Garuda, CachyOS, ArcoLinux): the same host packages via pacman.
 # Installs system packages (except Docker), enables UFW + systemd, provisions, compose up.
-# Docker Engine + compose v2 come from Docker Desktop — not apt.
+# Docker Engine + compose v2 come from Docker Desktop — not the distro docker package.
 #
 # Run via the Continuum extension (host CLI → desktop-local-orchestrate.sh --profile linux)
 # or manually after clone to ~/mpc-config:
@@ -26,6 +28,18 @@ else
     export CONTINUUM_INSTALL_PROGRESS
 fi
 
+if [ -n "${CONTINUUM_INSTALL_SCRIPT_DIR:-}" ] && [ -f "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/linux-os-family.sh" ]; then
+    # shellcheck source=lib/linux-os-family.sh
+    . "${CONTINUUM_INSTALL_SCRIPT_DIR}/lib/linux-os-family.sh"
+else
+    _family_tmp="$(mktemp)"
+    _raw_base="https://raw.githubusercontent.com/ContinuumDAO/mpc-config/${MPC_CONFIG_REF:-main}"
+    curl -fsSL "${_raw_base}/scripts/lib/linux-os-family.sh" -o "$_family_tmp"
+    # shellcheck source=/dev/null
+    . "$_family_tmp"
+    rm -f "$_family_tmp"
+fi
+
 INSTALL_SCRIPT_VERSION="0.1.0"
 INSTALL_LOG="${INSTALL_LOG:-/var/log/continuumdao-mpc-linux-desktop-install.log}"
 
@@ -47,8 +61,11 @@ usage() {
 Usage:
   sudo ./scripts/install-node-linux-docker-desktop.sh [options]
 
-Linux Docker Desktop profile (Debian/Ubuntu). Requires docker + docker compose v2 from Docker Desktop.
-Installs apt packages except docker.io; enables UFW and systemd via provision-node.sh.
+Linux Docker Desktop profile (Debian/Ubuntu or a systemd Arch derivative).
+Requires docker + docker compose v2 from Docker Desktop.
+Installs distro packages except Docker; enables UFW and systemd via provision-node.sh.
+Arch-family hosts: Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux.
+Not supported: Artix, Obarun, SteamOS.
 
 Provision options (at least one management key required):
   -k, --node-mgt-key ADDR     Ethereum NodeMgtKey (0x + 40 hex)
@@ -64,7 +81,7 @@ Install options:
       --ref REF                 Git branch (default: main)
       --repo-url URL            Git remote
       --skip-clone              Use existing repo at --repo-dir
-      --skip-packages           Skip apt install
+      --skip-packages           Skip distro package install
       --no-start                Provision only; skip docker compose up -d
       --dry-run                 Print actions without executing
       --force-fresh-install     Continue if MPC Docker containers are running
@@ -111,23 +128,32 @@ require_root() {
     fi
 }
 
-require_debian_ubuntu() {
-    if ! command -v apt-get >/dev/null 2>&1; then
-        die "this installer only supports Debian/Ubuntu (apt-based systems)"
-    fi
+require_supported_linux() {
     if [ ! -r /etc/os-release ]; then
         die "cannot read /etc/os-release"
     fi
+    local family
+    family="$(continuum_linux_family_from_release /etc/os-release)"
+    case "$family" in
+        debian)
+            if ! command -v apt-get >/dev/null 2>&1; then
+                die "Debian/Ubuntu host has no apt-get"
+            fi
+            return 0
+            ;;
+        arch)
+            if ! command -v pacman >/dev/null 2>&1; then
+                die "Arch-family host has no pacman"
+            fi
+            if ! command -v systemctl >/dev/null 2>&1; then
+                die "systemd (systemctl) is required. Artix and Obarun are not supported."
+            fi
+            return 0
+            ;;
+    esac
     # shellcheck source=/dev/null
     . /etc/os-release
-    local id="${ID:-}" id_like="${ID_LIKE:-}"
-    case "$id" in
-        debian | ubuntu | linuxmint) return 0 ;;
-    esac
-    if [[ "$id_like" == *"ubuntu"* || "$id_like" == *"debian"* ]]; then
-        return 0
-    fi
-    die "unsupported OS: ${PRETTY_NAME:-unknown} (need Ubuntu or Debian)"
+    die "unsupported OS: ${PRETTY_NAME:-unknown}. Supported: Ubuntu/Debian and systemd Arch derivatives (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux). Not supported: Artix, Obarun, SteamOS."
 }
 
 run_or_dry() {
@@ -196,7 +222,7 @@ maybe_auto_skip_packages() {
         return 0
     fi
     if packages_already_installed; then
-        warn "Required packages already installed — skipping apt"
+        warn "Required packages already installed — skipping distro packages"
         SKIP_PACKAGES=true
     fi
 }
@@ -208,8 +234,20 @@ ensure_vpn_host_packages() {
         && command -v ip >/dev/null 2>&1; then
         return 0
     fi
+    local family
+    family="$(continuum_linux_family_from_release /etc/os-release)"
     if [ "$DRY_RUN" = true ]; then
-        printf '[dry-run] apt-get install -y wireguard socat iproute2\n'
+        if [ "$family" = "arch" ]; then
+            printf '[dry-run] pacman -S --needed --noconfirm wireguard-tools socat iproute2\n'
+        else
+            printf '[dry-run] apt-get install -y wireguard socat iproute2\n'
+        fi
+        return 0
+    fi
+    if [ "$family" = "arch" ]; then
+        log "Installing wireguard-tools, socat, and iproute2 (VPN host automation + egress rate limits)"
+        continuum_pacman_install wireguard-tools socat iproute2 \
+            || warn "wireguard-tools/socat/iproute2 install failed — VPN enable from the node app will fail until packages are installed"
         return 0
     fi
     log "Installing wireguard, socat, and iproute2 (VPN host automation + egress rate limits)"
@@ -339,7 +377,7 @@ if [ "$FORCE_BROWSER" = true ]; then
 fi
 
 require_root
-require_debian_ubuntu
+require_supported_linux
 trap on_err ERR
 
 if [ "$DRY_RUN" = false ]; then
@@ -366,30 +404,53 @@ if [ "$SKIP_PACKAGES" = true ]; then
 fi
 
 if [ "$SKIP_PACKAGES" = false ]; then
-    log "Installing system packages (Docker Desktop provides docker — skipping docker.io)"
+    log "Installing system packages (Docker Desktop provides docker — skipping the distro docker engine)"
     install_progress_topic_begin packages
     install_progress_spinner_start
-    wait_for_apt_lock
-    install_progress_topic_set packages 15
-    run_or_dry apt-get -o "DPkg::Lock::Timeout=${APT_LOCK_WAIT_SECS:-300}" update -qq
-    wait_for_apt_lock
     install_progress_topic_set packages 40
-    run_or_dry apt-get -o "DPkg::Lock::Timeout=${APT_LOCK_WAIT_SECS:-300}" install -y \
-        ca-certificates \
-        curl \
-        wget \
-        git \
-        openssl \
-        gnupg \
-        iptables \
-        python3 \
-        python3-pip \
-        python3-ruamel.yaml \
-        python3-cryptography \
-        wireguard \
-        socat \
-        iproute2 \
-        jq
+    if [ "$(continuum_linux_family_from_release /etc/os-release)" = "arch" ]; then
+        continuum_pacman_install \
+            ca-certificates \
+            curl \
+            wget \
+            git \
+            openssl \
+            gnupg \
+            iptables \
+            sudo \
+            unzip \
+            python \
+            python-pip \
+            python-ruamel-yaml \
+            python-cryptography \
+            wireguard-tools \
+            socat \
+            iproute2 \
+            ufw \
+            jq
+    else
+        wait_for_apt_lock
+        install_progress_topic_set packages 15
+        run_or_dry apt-get -o "DPkg::Lock::Timeout=${APT_LOCK_WAIT_SECS:-300}" update -qq
+        wait_for_apt_lock
+        install_progress_topic_set packages 40
+        run_or_dry apt-get -o "DPkg::Lock::Timeout=${APT_LOCK_WAIT_SECS:-300}" install -y \
+            ca-certificates \
+            curl \
+            wget \
+            git \
+            openssl \
+            gnupg \
+            iptables \
+            python3 \
+            python3-pip \
+            python3-ruamel.yaml \
+            python3-cryptography \
+            wireguard \
+            socat \
+            iproute2 \
+            jq
+    fi
     install_progress_spinner_stop
     install_progress_topic_done packages
 fi

@@ -24,6 +24,7 @@ const onVps = buildProvisionCommand({
 });
 
 assert(onVps.includes('raw.githubusercontent.com/ContinuumDAO/mpc-config/main/'));
+assert(onVps.includes('scripts/install-node-linux.sh'));
 assert(onVps.includes('--node-mgt-key'));
 assert(onVps.includes(sample));
 assert(onVps.includes('--ip'));

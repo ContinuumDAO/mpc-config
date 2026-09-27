@@ -1,0 +1,84 @@
+# Maintainer: Your Name <you@example.com>
+# Replace the Maintainer line with your name and email before publishing to the AUR.
+# Publishing steps: docs/AUR_MPA_WALLET.md
+
+pkgname=mpa-wallet-git
+_pkgname=mpc-config
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Host installer for a ContinuumDAO MPA wallet node on systemd Arch derivatives"
+arch=('any')
+url="https://github.com/ContinuumDAO/mpc-config"
+license=('unknown')
+install=mpa-wallet-git.install
+makedepends=('git')
+depends=(
+	'ca-certificates'
+	'curl'
+	'docker'
+	'docker-compose'
+	'git'
+	'gnupg'
+	'iptables'
+	'iproute2'
+	'jq'
+	'openssl'
+	'python'
+	'python-cryptography'
+	'python-pip'
+	'python-ruamel-yaml'
+	'socat'
+	'sudo'
+	'ufw'
+	'unzip'
+	'wget'
+	'wireguard-tools'
+)
+source=(
+	"git+https://github.com/ContinuumDAO/mpc-config.git"
+	"mpa-wallet-install"
+	"mpa-wallet-uninstall"
+)
+sha256sums=(
+	'SKIP'
+	'ad43bab16501e448b3b2dc7bcc0ce0f8801b5b7779948c09a3b64c0e3258b1af'
+	'a24c8324b3737d41643673fc9ba05fbc7c8765a014882e0f222fba153484a57a'
+)
+
+pkgver() {
+	cd "${_pkgname}"
+	printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+package() {
+	local dest="${pkgdir}/usr/share/mpa-wallet/scripts"
+	local script lib
+
+	install -dm755 "${dest}/lib"
+
+	for script in install-node-arch.sh install-node-linux.sh uninstall-node-debian-ubuntu.sh verify-node-install.sh; do
+		if [[ ! -f "${srcdir}/${_pkgname}/scripts/${script}" ]]; then
+			printf 'error: scripts/%s is missing from this mpc-config checkout.\n' "${script}" >&2
+			printf 'Push ContinuumDAO/mpc-config (branch main) so the Arch installer is in the clone, then rebuild.\n' >&2
+			return 1
+		fi
+		install -Dm755 "${srcdir}/${_pkgname}/scripts/${script}" "${dest}/${script}"
+	done
+
+	shopt -s nullglob
+	for lib in "${srcdir}/${_pkgname}/scripts/lib/"*; do
+		[[ -f "${lib}" ]] || continue
+		case "${lib}" in
+		*.pyc) continue ;;
+		esac
+		if [[ -x "${lib}" || "${lib}" == *.sh ]]; then
+			install -Dm755 "${lib}" "${dest}/lib/$(basename "${lib}")"
+		else
+			install -Dm644 "${lib}" "${dest}/lib/$(basename "${lib}")"
+		fi
+	done
+	shopt -u nullglob
+
+	install -Dm755 "${srcdir}/mpa-wallet-install" "${pkgdir}/usr/bin/mpa-wallet-install"
+	install -Dm755 "${srcdir}/mpa-wallet-uninstall" "${pkgdir}/usr/bin/mpa-wallet-uninstall"
+}

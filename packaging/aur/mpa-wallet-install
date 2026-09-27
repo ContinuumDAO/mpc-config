@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Run the Continuum MPA wallet node installer shipped by the mpa-wallet-git package.
+# Root only. Pass the same flags as scripts/install-node-arch.sh.
+set -euo pipefail
+exec /usr/share/mpa-wallet/scripts/install-node-arch.sh "$@"

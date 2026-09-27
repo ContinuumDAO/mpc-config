@@ -6,11 +6,13 @@ keywords:
   - one-shot
   - install node
   - provision VPS
+  - install-node-linux.sh
   - install-node-debian-ubuntu.sh
+  - install-node-arch.sh
   - mpcnode
   - MPA wallet
-primary_script: scripts/install-node-debian-ubuntu.sh
-raw_url: https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh
+primary_script: scripts/install-node-linux.sh
+raw_url: https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-linux.sh
 repo: https://github.com/ContinuumDAO/mpc-config
 user_docs: https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Install
 agent_playbook: https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision
@@ -20,22 +22,24 @@ agent_playbook: https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvis
 
 **If your task is to provision and configure a node (topology, peers, MQTT, Group, KeyGen), start at [Agent provision and configure](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision)** — this page is the **install script only**.
 
-**If your task is only to create / install containers on an Ubuntu/Debian VPS, use this page.** Do not start from the long interactive `process_config.sh` walkthrough unless the one-shot script cannot run.
+**If your task is only to create / install containers on a Linux VPS, use this page.** Supported hosts: Ubuntu/Debian (apt), or a systemd Arch derivative (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux) via pacman. Artix, Obarun, and SteamOS are not supported. New cloud VPS images should still be Ubuntu or Debian. Do not start from the long interactive `process_config.sh` walkthrough unless the one-shot script cannot run.
 
 ## Canonical one-shot script
 
 | Item | Value |
 |------|--------|
-| **Script (repo)** | [`scripts/install-node-debian-ubuntu.sh`](../scripts/install-node-debian-ubuntu.sh) |
-| **Raw URL (pipe to bash)** | `https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh` |
-| **Who runs it** | **root** on the target Ubuntu/Debian VPS |
-| **What it does** | apt packages → user `mpcnode` → clone mpc-config → `scripts/provision-node.sh` → `docker compose up -d` |
-| **Help** | `./scripts/install-node-debian-ubuntu.sh --help` |
+| **Script (repo)** | [`scripts/install-node-linux.sh`](../scripts/install-node-linux.sh) |
+| **Raw URL (pipe to bash)** | `https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-linux.sh` |
+| **Who runs it** | **root** on the target Linux host |
+| **What it does** | Detects apt vs pacman, then packages → user `mpcnode` → clone mpc-config → `scripts/provision-node.sh` → `docker compose up -d` |
+| **Ubuntu/Debian implementation** | [`scripts/install-node-debian-ubuntu.sh`](../scripts/install-node-debian-ubuntu.sh) |
+| **Arch-family implementation** | [`scripts/install-node-arch.sh`](../scripts/install-node-arch.sh) |
+| **Help** | `./scripts/install-node-linux.sh` delegates; `./scripts/install-node-debian-ubuntu.sh --help` or `./scripts/install-node-arch.sh --help` |
 
-## Minimal command (run on the VPS as root)
+## Minimal command (run on the host as root)
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" \
+curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-linux.sh" \
   | bash -s -- \
       --node-mgt-key "0xYour40HexCharacters..." \
       --ip "YOUR_VPS_PUBLIC_IP"
@@ -45,7 +49,7 @@ From an operator PC (curl still runs **on** the VPS):
 
 ```bash
 ssh -o StrictHostKeyChecking=accept-new root@YOUR_VPS_PUBLIC_IP \
-  'curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" | bash -s -- --node-mgt-key "0xYour40HexCharacters..." --ip "YOUR_VPS_PUBLIC_IP"'
+  'curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-linux.sh" | bash -s -- --node-mgt-key "0xYour40HexCharacters..." --ip "YOUR_VPS_PUBLIC_IP"'
 ```
 
 **Required:** at least one of `--node-mgt-key` / `-k` (Ethereum `0x` + 40 hex) or `--public-mgt-key` (Ed25519 64 hex or `ssh-ed25519 …` line).  

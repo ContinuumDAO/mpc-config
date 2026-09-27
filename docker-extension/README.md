@@ -1,6 +1,6 @@
 # Continuum Node — Docker Desktop Extension
 
-Install a local Continuum MPC node on **Windows**, **Linux**, or **macOS** using Docker Desktop. This is the **primary** path for local installs from the [Continuum node app](https://github.com/ContinuumDAO/continuumdao-node-app). Remote VPS installs use the [VPS one-shot script](../scripts/install-node-debian-ubuntu.sh).
+Install a local Continuum MPC node on **Windows**, **Linux**, or **macOS** using Docker Desktop. This is the **primary** path for local installs from the [Continuum node app](https://github.com/ContinuumDAO/continuumdao-node-app). Remote VPS installs use the [Linux one-shot script](../scripts/install-node-linux.sh) (Ubuntu/Debian via apt, or a systemd Arch derivative via pacman).
 
 **Windows 11 end-user guide:** [`docs/INSTALL_NODE_WINDOWS_DOCKER_DESKTOP.md`](../docs/INSTALL_NODE_WINDOWS_DOCKER_DESKTOP.md) (router NAT: [`docs/PORT_FORWARDING_HOME_NETWORK.md`](../docs/PORT_FORWARDING_HOME_NETWORK.md)).
 
@@ -28,7 +28,7 @@ The extension **backend image is UI-only** (no baked `/mpc-config`, no `docker.s
 
 **Windows profile:** no apt docker, no UFW, no systemd; pip/venv Python deps in WSL; WSL pending-update watcher.
 
-**Linux profile:** apt packages (except `docker.io`), UFW + systemd via provision; requires **passwordless sudo** for the install step (extension cannot enter a password).
+**Linux profile:** distro packages except Docker (apt on Ubuntu/Debian; pacman on Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, and ArcoLinux), UFW + systemd via provision; requires **passwordless sudo** for the install step (extension cannot enter a password). Artix, Obarun, and SteamOS are not supported.
 
 **macOS profile:** Homebrew packages (`wireguard-tools`, `socat`, `yq`); no UFW/systemd; **passwordless sudo** for `/var/lib/mpc-auth-docker`; macos-desktop pending watcher + launchd LaunchAgent.
 
@@ -38,7 +38,7 @@ The extension **backend image is UI-only** (no baked `/mpc-config`, no `docker.s
 2. **Settings → Extensions** — enable **Docker Extensions** (disabled by default).
 3. For unpublished builds: disable **Allow only Marketplace extensions**.
 4. **Windows:** WSL 2 + Docker Desktop WSL integration. Python provision deps via `pip --target` when possible.
-5. **Linux:** Debian/Ubuntu host with passwordless `sudo` recommended for extension-driven install.
+5. **Linux:** Ubuntu/Debian, or a systemd Arch derivative (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux), with passwordless `sudo` recommended for extension-driven install.
 6. **macOS:** Homebrew; passwordless `sudo` recommended for extension-driven install.
 
 ## Install the extension (sideload)

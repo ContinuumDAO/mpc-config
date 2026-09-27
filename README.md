@@ -6,7 +6,7 @@ This README is an **install index** plus operator notes that are easy to get wro
 
 | Who | Start here |
 |-----|------------|
-| **AI agent — greenfield Ubuntu/Debian VPS** | [`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md) then [Agent provision and configure](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision) |
+| **AI agent — greenfield Linux VPS** | [`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md) then [Agent provision and configure](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision) |
 | **Human — easiest** | [Install a node](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Install) (node map **`+`**) |
 | **Human — Windows / macOS home PC** | Docker Desktop + **Continuum Node** extension (below). Agents **coach only** — [Agent install anti-patterns](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentInstallAntiPatterns) |
 | **Advanced interactive VPS** | [Node Running Instructions](https://docs.continuumdao.org/ContinuumDAO/RunningInstructions/NodeRunningInstruction) |
@@ -21,18 +21,19 @@ Wrong install (root-only tree, custom folder, remapped ports): [Agent install an
 - **`configs.yaml`** / **`configs-original.yaml`** — node config; copy the original to revert. `process_config.sh` copies it to `configs.yaml` if missing.
 - **`process_config.sh`** — validator, certs, UFW, generates **`docker-compose.yml`** from **`docker-compose.relay.yml`** (first / relay node) or **`docker-compose.client.yml`**.
 - **`scripts/provision-node.sh`** — non-interactive **fresh** `configs.yaml` then `process_config.sh`. Used by the VPS one-shot. Full flags: **`--help`**.
-- **`scripts/install-node-debian-ubuntu.sh`** — **one-shot VPS** (root on Ubuntu/Debian): packages, **`mpcnode`**, clone, provision, **`docker compose up -d`**.
+- **`scripts/install-node-linux.sh`** — **one-shot** entry (root). Detects the host and runs the apt or pacman installer: Ubuntu/Debian, or a systemd Arch derivative (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux). Artix, Obarun, and SteamOS are refused. Implementations: **`scripts/install-node-debian-ubuntu.sh`**, **`scripts/install-node-arch.sh`**. Packages, **`mpcnode`**, clone, provision, **`docker compose up -d`**.
 - **`scripts/install-node-docker-desktop.sh`**, **`install-node-macos-docker-desktop.sh`**, **`install-node-linux-docker-desktop.sh`** — Docker Desktop profiles (used by the extension / orchestrator).
 - **`scripts/desktop-local-orchestrate.sh`** — clone **`~/mpc-config`** then run the matching desktop installer.
 - **`scripts/verify-node-install.sh`** / **`verify-node-install-macos-desktop.sh`** — read-only layout checks after install.
 - **`scripts/uninstall-node-debian-ubuntu.sh`**, **`uninstall-node-docker-desktop.sh`**, **`uninstall-node-macos-docker-desktop.sh`**.
+- **`packaging/aur/`** — AUR package **`mpa-wallet-git`** (host packages + install scripts). Publish steps: [`docs/AUR_MPA_WALLET.md`](docs/AUR_MPA_WALLET.md).
 - **`tools/provision-command.js`** — MPA frontend curl/SSH command builder.
 - **`tools/bootstrap_key_provision.py`** — Ed25519 bootstrap / **`DeterministicNodeKey`**.
 - **`mosquitto/config/`**, **`webTLS/config/certs/`** — MQTT TLS and browser HTTPS material.
 
 ## One-shot VPS install
 
-**AI agents:** this is the install step only. Mesh (peers, MQTT, Group, KeyGen): [Agent provision](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision). Script: **`scripts/install-node-debian-ubuntu.sh`**. Guide: **[`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md)**. Repo entry: **[`AGENTS.md`](AGENTS.md)**.
+**AI agents:** this is the install step only. Mesh (peers, MQTT, Group, KeyGen): [Agent provision](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision). Script: **`scripts/install-node-linux.sh`** (Ubuntu/Debian via apt, or Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, and ArcoLinux via pacman). Guide: **[`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md)**. Repo entry: **[`AGENTS.md`](AGENTS.md)**.
 
 Run **as root on the VPS** (or pipe over SSH from your PC). The MPA app at [https://mpa.continuumdao.org](https://mpa.continuumdao.org) can generate this command. No wallet signing is required at install time.
 
@@ -40,14 +41,14 @@ The clone tracks **`main`**. After the node is running, update from the node app
 
 ```bash
 # A) On the VPS (ssh root@YOUR_VPS_IP, then paste):
-curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" \
+curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-linux.sh" \
   | bash -s -- \
       --node-mgt-key "0xYour40HexCharacters..." \
       --ip "YOUR_VPS_PUBLIC_IP"
 
 # B) From your PC (curl still runs ON the VPS):
 ssh -o StrictHostKeyChecking=accept-new root@YOUR_VPS_PUBLIC_IP \
-  'curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-debian-ubuntu.sh" | bash -s -- --node-mgt-key "0xYour40HexCharacters..." --ip "YOUR_VPS_PUBLIC_IP"'
+  'curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-linux.sh" | bash -s -- --node-mgt-key "0xYour40HexCharacters..." --ip "YOUR_VPS_PUBLIC_IP"'
 ```
 
 **Required:** at least one of `--node-mgt-key` / `-k` (`0x` + 40 hex) or `--public-mgt-key` (64 hex or `ssh-ed25519 …` line). **`--ip`** is the public IPv4 peers will use.
@@ -68,7 +69,7 @@ ssh root@YOUR_VPS_PUBLIC_IP 'passwd mpcnode'
 curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/verify-node-install.sh" | bash -s
 ```
 
-Systemd helpers are installed by default (`--no-systemd` to skip). Full flags: **`./scripts/install-node-debian-ubuntu.sh --help`**.
+Systemd helpers are installed by default (`--no-systemd` to skip). Full flags: **`./scripts/install-node-debian-ubuntu.sh --help`** or **`./scripts/install-node-arch.sh --help`**.
 
 Then attach at [https://mpa.continuumdao.org](https://mpa.continuumdao.org) — loopback ports **3333 / 8080 / 18080 / 8446** only; one node at a time from this PC. See [Attach your node](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AttachYourNode).
 
@@ -105,7 +106,7 @@ curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scrip
 
 Before you delete a node: **back up** bootstrap + encrypted database (store them separately), **or Eject** KeyGens, **or transfer** assets. Other KeyGen members may drop below the TSS threshold (a 2-of-2 wallet freezes).
 
-Ubuntu/Debian VPS as **root**. Agents pass **`--yes`**:
+Linux VPS as **root** (Ubuntu/Debian, or a systemd Arch derivative: Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux). The same script does not remove distro packages. Agents pass **`--yes`**:
 
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/uninstall-node-debian-ubuntu.sh" \

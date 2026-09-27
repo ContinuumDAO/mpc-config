@@ -6,7 +6,7 @@ This directory contains reference docs for node APIs, agent workflows, and local
 
 | File | Description |
 |------|-------------|
-| [`../CREATE_NODE_ONESHOT.md`](../CREATE_NODE_ONESHOT.md) | **AI agents — create a node:** canonical one-shot VPS script (`scripts/install-node-debian-ubuntu.sh`). Also [`../../AGENTS.md`](../../AGENTS.md). |
+| [`../CREATE_NODE_ONESHOT.md`](../CREATE_NODE_ONESHOT.md) | **AI agents — create a node:** canonical one-shot script (`scripts/install-node-linux.sh`; apt or pacman). Also [`../../AGENTS.md`](../../AGENTS.md). |
 | [`../UNINSTALL_NODE.md`](../UNINSTALL_NODE.md) | **AI agents — uninstall a node:** OS skills under [`../skills/`](../skills/) + `scripts/uninstall-node-*.sh`. User page: [Uninstall](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Uninstall). |
 | `../CONFIGURING_ED25519_KEYS.md` | Technical lifecycle: bootstrap + added Ed25519 management keys, on-disk paths, preferred signer. User UI: [Default Ed25519 signer](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/DefaultEd25519Signer). Operational signing: `./ED25519_MANAGEMENT_KEY_SIGNING.md`. |
 | `./ED25519_MANAGEMENT_KEY_SIGNING.md` | Ed25519 management API signing for agents (allow-list, nonces, KeyGen `ClientKeys`). |

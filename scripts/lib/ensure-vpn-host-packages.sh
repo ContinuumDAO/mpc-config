@@ -11,16 +11,26 @@ ensure_vpn_host_packages() {
 		return 0
 	fi
 	if [ "$dry_run" = true ]; then
-		printf '[dry-run] apt-get install -y wireguard socat iproute2\n' >&2
+		if command -v pacman >/dev/null 2>&1; then
+			printf '[dry-run] pacman -S --needed --noconfirm wireguard-tools socat iproute2\n' >&2
+		else
+			printf '[dry-run] apt-get install -y wireguard socat iproute2\n' >&2
+		fi
 		return 0
 	fi
-	if ! command -v apt-get >/dev/null 2>&1; then
+	if command -v pacman >/dev/null 2>&1; then
+		printf '==> Installing wireguard-tools, socat, and iproute2 (VPN host automation + egress rate limits)\n' >&2
+		if ! pacman -S --needed --noconfirm wireguard-tools socat iproute2; then
+			pacman -Sy --needed --noconfirm wireguard-tools socat iproute2 || return 1
+		fi
+	elif command -v apt-get >/dev/null 2>&1; then
+		printf '==> Installing wireguard, socat, and iproute2 (VPN host automation + egress rate limits)\n' >&2
+		apt-get update -qq || return 1
+		apt-get install -y wireguard socat iproute2 || return 1
+	else
 		printf 'warning: wireguard, socat, and/or iproute2 missing — install distro packages for VPN (wg-quick, socat, tc, ip)\n' >&2
 		return 1
 	fi
-	printf '==> Installing wireguard, socat, and iproute2 (VPN host automation + egress rate limits)\n' >&2
-	apt-get update -qq || return 1
-	apt-get install -y wireguard socat iproute2 || return 1
 	command -v wg-quick >/dev/null 2>&1 \
 		&& command -v socat >/dev/null 2>&1 \
 		&& command -v tc >/dev/null 2>&1 \
