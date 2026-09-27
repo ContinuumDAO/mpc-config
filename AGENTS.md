@@ -10,12 +10,12 @@ This repository configures and installs **mpc-auth** MPC / MPA wallet nodes.
 |--|--|
 | **Full playbook (provision + configure)** | https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision |
 | **Canonical install guide** | [`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md) |
-| **One-shot script** | [`scripts/install-node-linux.sh`](scripts/install-node-linux.sh) (apt: [`install-node-debian-ubuntu.sh`](scripts/install-node-debian-ubuntu.sh); pacman: [`install-node-arch.sh`](scripts/install-node-arch.sh); dnf: [`install-node-fedora.sh`](scripts/install-node-fedora.sh)) |
+| **One-shot script** | [`scripts/install-node-linux.sh`](scripts/install-node-linux.sh) (apt: [`install-node-debian-ubuntu.sh`](scripts/install-node-debian-ubuntu.sh); pacman: [`install-node-arch.sh`](scripts/install-node-arch.sh); dnf: [`install-node-fedora.sh`](scripts/install-node-fedora.sh); zypper: [`install-node-opensuse.sh`](scripts/install-node-opensuse.sh)) |
 | **Raw URL** | `https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-linux.sh` |
 | **README section** | [One-shot VPS install](README.md#one-shot-vps-install) |
 | **Published user docs** | https://docs.continuumdao.org/ContinuumDAO/MPAWallet/Install |
 
-**Default action on a Linux host as root.** Supported: Ubuntu/Debian, a systemd Arch derivative (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux), or Fedora Workstation or Server. Refused: Artix, Obarun, SteamOS, Fedora Silverblue, Kinoite, and Bazzite. Prefer Ubuntu or Debian when renting a new cloud VPS.
+**Default action on a Linux host as root.** Supported: Ubuntu/Debian, a systemd Arch derivative (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux), Fedora Workstation or Server, or openSUSE Leap or Tumbleweed. Refused: Artix, Obarun, SteamOS, Fedora Silverblue, Kinoite, Bazzite, openSUSE MicroOS, Aeon, and Kalpa. Prefer Ubuntu or Debian when renting a new cloud VPS.
 
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-linux.sh" \

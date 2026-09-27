@@ -3,18 +3,22 @@
 # Source this file; do not execute it directly.
 #
 # continuum_linux_family_from_release [os-release-path]
-#   Prints "debian", "arch", "fedora", or "unsupported".
+#   Prints "debian", "arch", "fedora", "opensuse", or "unsupported".
 #   debian: Ubuntu, Debian, Linux Mint, and ID_LIKE debian/ubuntu.
 #   arch: systemd Arch derivatives (Arch, Omarchy, Manjaro, EndeavourOS,
 #         Garuda, CachyOS, ArcoLinux, and other ID_LIKE=arch hosts).
 #   fedora: mutable Fedora (Workstation, Server, Cloud). ID must be fedora.
 #         ID_LIKE=fedora is not enough (that would include RHEL and Nobara).
+#   opensuse: openSUSE Leap and Tumbleweed. ID must be opensuse-leap or
+#         opensuse-tumbleweed. ID_LIKE=opensuse is not enough (that would
+#         include SLES). MicroOS, Aeon, and Kalpa are refused.
 #   unsupported: Artix, Obarun, SteamOS, Fedora Silverblue/Kinoite/Atomic
 #         (OSTREE_VERSION or an atomic VARIANT_ID), Bazzite, RHEL clones,
-#         and anything else.
+#         openSUSE MicroOS/Aeon/Kalpa, and anything else.
 #   This function only reads os-release. Callers that select the pacman
 #   installer must also require pacman and systemctl. Callers that select
-#   the dnf installer must also require dnf and systemctl.
+#   the dnf installer must also require dnf and systemctl. Callers that
+#   select the zypper installer must also require zypper and systemctl.
 
 continuum_linux_family_from_release() {
 	local release_file="${1:-/etc/os-release}"
@@ -27,7 +31,7 @@ continuum_linux_family_from_release() {
 		. "$release_file"
 		local id="${ID:-}" id_like="${ID_LIKE:-}"
 		case "$id" in
-		steamos | artix | obarun | bazzite | silverblue | kinoite | rhel | centos | rocky | almalinux | amzn)
+		steamos | artix | obarun | bazzite | silverblue | kinoite | rhel | centos | rocky | almalinux | amzn | opensuse-microos | opensuse-aeon | opensuse-kalpa)
 			printf 'unsupported\n'
 			return 0
 			;;
@@ -56,6 +60,10 @@ continuum_linux_family_from_release() {
 			esac
 			return 0
 			;;
+		opensuse-leap | opensuse-tumbleweed)
+			printf 'opensuse\n'
+			return 0
+			;;
 		esac
 		if [[ "$id_like" == *debian* || "$id_like" == *ubuntu* ]]; then
 			printf 'debian\n'
@@ -80,6 +88,9 @@ continuum_linux_install_script_for_family() {
 		;;
 	fedora)
 		printf 'scripts/install-node-fedora.sh\n'
+		;;
+	opensuse)
+		printf 'scripts/install-node-opensuse.sh\n'
 		;;
 	*)
 		return 1
@@ -115,4 +126,17 @@ continuum_dnf_install() {
 		return 0
 	fi
 	dnf install -y "$@"
+}
+
+# zypper install. Does not run zypper dup.
+# Honors CONTINUUM_INSTALL_DRY_RUN=true.
+continuum_zypper_install() {
+	if [ "$#" -eq 0 ]; then
+		return 0
+	fi
+	if [ "${CONTINUUM_INSTALL_DRY_RUN:-false}" = true ]; then
+		printf '[dry-run] zypper --non-interactive install %s\n' "$*" >&2
+		return 0
+	fi
+	zypper --non-interactive install "$@"
 }

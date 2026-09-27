@@ -22,7 +22,7 @@ agent_playbook: https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvis
 
 **If your task is to provision and configure a node (topology, peers, MQTT, Group, KeyGen), start at [Agent provision and configure](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision)** — this page is the **install script only**.
 
-**If your task is only to create / install containers on a Linux VPS, use this page.** Supported hosts: Ubuntu/Debian (apt), a systemd Arch derivative (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux) via pacman, or Fedora Workstation or Server via dnf. Artix, Obarun, SteamOS, Fedora Silverblue, Kinoite, and Bazzite are not supported. New cloud VPS images should still be Ubuntu or Debian. Do not start from the long interactive `process_config.sh` walkthrough unless the one-shot script cannot run.
+**If your task is only to create / install containers on a Linux VPS, use this page.** Supported hosts: Ubuntu/Debian (apt), a systemd Arch derivative (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux) via pacman, Fedora Workstation or Server via dnf, or openSUSE Leap or Tumbleweed via zypper. Artix, Obarun, SteamOS, Fedora Silverblue, Kinoite, Bazzite, openSUSE MicroOS, Aeon, and Kalpa are not supported. New cloud VPS images should still be Ubuntu or Debian. Do not start from the long interactive `process_config.sh` walkthrough unless the one-shot script cannot run.
 
 ## Canonical one-shot script
 
@@ -31,7 +31,7 @@ agent_playbook: https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvis
 | **Script (repo)** | [`scripts/install-node-linux.sh`](../scripts/install-node-linux.sh) |
 | **Raw URL (pipe to bash)** | `https://raw.githubusercontent.com/ContinuumDAO/mpc-config/main/scripts/install-node-linux.sh` |
 | **Who runs it** | **root** on the target Linux host |
-| **What it does** | Detects apt, pacman, or dnf, then packages → user `mpcnode` → clone mpc-config → `scripts/provision-node.sh` → `docker compose up -d` |
+| **What it does** | Detects apt, pacman, dnf, or zypper, then packages → user `mpcnode` → clone mpc-config → `scripts/provision-node.sh` → `docker compose up -d` |
 | **Ubuntu/Debian implementation** | [`scripts/install-node-debian-ubuntu.sh`](../scripts/install-node-debian-ubuntu.sh) |
 | **Arch-family implementation** | [`scripts/install-node-arch.sh`](../scripts/install-node-arch.sh) |
 | **Help** | `./scripts/install-node-linux.sh` delegates; `./scripts/install-node-debian-ubuntu.sh --help` or `./scripts/install-node-arch.sh --help` |

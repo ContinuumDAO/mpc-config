@@ -61,11 +61,12 @@ usage() {
 Usage:
   sudo ./scripts/install-node-linux-docker-desktop.sh [options]
 
-Linux Docker Desktop profile (Debian/Ubuntu, a systemd Arch derivative, or Fedora Workstation/Server).
+Linux Docker Desktop profile (Debian/Ubuntu, a systemd Arch derivative, Fedora Workstation/Server, or openSUSE Leap/Tumbleweed).
 Requires docker + docker compose v2 from Docker Desktop.
 Installs distro packages except Docker; enables the host firewall and systemd via provision-node.sh.
 Arch-family hosts: Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux.
 Fedora: Workstation and Server (firewalld). Not Silverblue, Kinoite, or Bazzite.
+openSUSE: Leap and Tumbleweed (firewalld). Not MicroOS, Aeon, or Kalpa.
 Not supported: Artix, Obarun, SteamOS.
 
 Provision options (at least one management key required):
@@ -163,10 +164,19 @@ require_supported_linux() {
             fi
             return 0
             ;;
+        opensuse)
+            if ! command -v zypper >/dev/null 2>&1; then
+                die "openSUSE host has no zypper"
+            fi
+            if ! command -v systemctl >/dev/null 2>&1; then
+                die "systemd (systemctl) is required."
+            fi
+            return 0
+            ;;
     esac
     # shellcheck source=/dev/null
     . /etc/os-release
-    die "unsupported OS: ${PRETTY_NAME:-unknown}. Supported: Ubuntu/Debian, systemd Arch derivatives, and Fedora Workstation or Server. Not supported: Artix, Obarun, SteamOS, Fedora Silverblue, Kinoite, Bazzite."
+    die "unsupported OS: ${PRETTY_NAME:-unknown}. Supported: Ubuntu/Debian, systemd Arch derivatives, Fedora Workstation or Server, and openSUSE Leap or Tumbleweed. Not supported: Artix, Obarun, SteamOS, Fedora Silverblue, Kinoite, Bazzite, openSUSE MicroOS, Aeon, Kalpa."
 }
 
 run_or_dry() {
@@ -463,6 +473,26 @@ if [ "$SKIP_PACKAGES" = false ]; then
             firewalld \
             jq \
             policycoreutils-python-utils
+    elif [ "$_linux_family" = "opensuse" ]; then
+        continuum_zypper_install \
+            ca-certificates \
+            curl \
+            wget \
+            git \
+            openssl \
+            gpg2 \
+            iptables \
+            sudo \
+            unzip \
+            python3 \
+            python3-pip \
+            python3-ruamel.yaml \
+            python3-cryptography \
+            wireguard-tools \
+            socat \
+            iproute2 \
+            firewalld \
+            jq
     else
         wait_for_apt_lock
         install_progress_topic_set packages 15

@@ -21,7 +21,7 @@ Wrong install (root-only tree, custom folder, remapped ports): [Agent install an
 - **`configs.yaml`** / **`configs-original.yaml`** — node config; copy the original to revert. `process_config.sh` copies it to `configs.yaml` if missing.
 - **`process_config.sh`** — validator, certs, UFW, generates **`docker-compose.yml`** from **`docker-compose.relay.yml`** (first / relay node) or **`docker-compose.client.yml`**.
 - **`scripts/provision-node.sh`** — non-interactive **fresh** `configs.yaml` then `process_config.sh`. Used by the VPS one-shot. Full flags: **`--help`**.
-- **`scripts/install-node-linux.sh`** — **one-shot** entry (root). Detects the host and runs the apt, pacman, or dnf installer: Ubuntu/Debian, a systemd Arch derivative (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux), or Fedora Workstation or Server. Artix, Obarun, SteamOS, Fedora Silverblue, Kinoite, and Bazzite are refused. Implementations: **`scripts/install-node-debian-ubuntu.sh`**, **`scripts/install-node-arch.sh`**, **`scripts/install-node-fedora.sh`**. Packages, **`mpcnode`**, clone, provision, **`docker compose up -d`**.
+- **`scripts/install-node-linux.sh`** — **one-shot** entry (root). Detects the host and runs the apt, pacman, dnf, or zypper installer: Ubuntu/Debian, a systemd Arch derivative (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux), Fedora Workstation or Server, or openSUSE Leap or Tumbleweed. Artix, Obarun, SteamOS, Fedora Silverblue, Kinoite, Bazzite, openSUSE MicroOS, Aeon, and Kalpa are refused. Implementations: **`scripts/install-node-debian-ubuntu.sh`**, **`scripts/install-node-arch.sh`**, **`scripts/install-node-fedora.sh`**, **`scripts/install-node-opensuse.sh`**. Packages, **`mpcnode`**, clone, provision, **`docker compose up -d`**.
 - **`scripts/install-node-docker-desktop.sh`**, **`install-node-macos-docker-desktop.sh`**, **`install-node-linux-docker-desktop.sh`** — Docker Desktop profiles (used by the extension / orchestrator).
 - **`scripts/desktop-local-orchestrate.sh`** — clone **`~/mpc-config`** then run the matching desktop installer.
 - **`scripts/verify-node-install.sh`** / **`verify-node-install-macos-desktop.sh`** — read-only layout checks after install.
@@ -34,7 +34,7 @@ Wrong install (root-only tree, custom folder, remapped ports): [Agent install an
 
 ## One-shot VPS install
 
-**AI agents:** this is the install step only. Mesh (peers, MQTT, Group, KeyGen): [Agent provision](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision). Script: **`scripts/install-node-linux.sh`** (Ubuntu/Debian via apt, Arch-family via pacman, or Fedora Workstation/Server via dnf). Guide: **[`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md)**. Repo entry: **[`AGENTS.md`](AGENTS.md)**.
+**AI agents:** this is the install step only. Mesh (peers, MQTT, Group, KeyGen): [Agent provision](https://docs.continuumdao.org/ContinuumDAO/MPAWallet/AgentProvision). Script: **`scripts/install-node-linux.sh`** (Ubuntu/Debian via apt, Arch-family via pacman, Fedora Workstation/Server via dnf, or openSUSE Leap/Tumbleweed via zypper). Guide: **[`docs/CREATE_NODE_ONESHOT.md`](docs/CREATE_NODE_ONESHOT.md)**. Repo entry: **[`AGENTS.md`](AGENTS.md)**.
 
 Run **as root on the VPS** (or pipe over SSH from your PC). The MPA app at [https://mpa.continuumdao.org](https://mpa.continuumdao.org) can generate this command. No wallet signing is required at install time.
 

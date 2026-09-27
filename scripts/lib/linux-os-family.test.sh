@@ -38,6 +38,12 @@ expect_family kinoite $'NAME="Fedora Linux"\nID=fedora\nVARIANT_ID=kinoite\n' un
 expect_family bazzite $'NAME="Bazzite"\nID=bazzite\nID_LIKE=fedora\n' unsupported
 expect_family rhel $'NAME="Red Hat Enterprise Linux"\nID=rhel\nID_LIKE="fedora"\n' unsupported
 expect_family nobara $'NAME="Nobara Linux"\nID=nobara\nID_LIKE=fedora\n' unsupported
+expect_family leap $'NAME="openSUSE Leap"\nID=opensuse-leap\nID_LIKE="opensuse suse"\n' opensuse
+expect_family tumbleweed $'NAME="openSUSE Tumbleweed"\nID=opensuse-tumbleweed\nID_LIKE="opensuse suse"\n' opensuse
+expect_family microos $'NAME="openSUSE MicroOS"\nID=opensuse-microos\nID_LIKE="opensuse suse"\n' unsupported
+expect_family aeon $'NAME="openSUSE Aeon"\nID=opensuse-aeon\nID_LIKE="opensuse suse"\n' unsupported
+expect_family kalpa $'NAME="openSUSE Kalpa"\nID=opensuse-kalpa\nID_LIKE="opensuse suse"\n' unsupported
+expect_family sles $'NAME="SLES"\nID=sles\nID_LIKE="suse opensuse"\n' unsupported
 
 script="$(continuum_linux_install_script_for_family arch)"
 [ "$script" = "scripts/install-node-arch.sh" ] || fail "arch script: ${script}"
@@ -45,5 +51,7 @@ script="$(continuum_linux_install_script_for_family debian)"
 [ "$script" = "scripts/install-node-debian-ubuntu.sh" ] || fail "debian script: ${script}"
 script="$(continuum_linux_install_script_for_family fedora)"
 [ "$script" = "scripts/install-node-fedora.sh" ] || fail "fedora script: ${script}"
+script="$(continuum_linux_install_script_for_family opensuse)"
+[ "$script" = "scripts/install-node-opensuse.sh" ] || fail "opensuse script: ${script}"
 
 printf 'linux-os-family.test.sh: ok\n'

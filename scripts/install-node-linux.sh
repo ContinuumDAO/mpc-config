@@ -8,9 +8,10 @@
 #
 # Supported: Ubuntu, Debian, and derivatives (apt); systemd Arch derivatives
 # (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux) via pacman;
-# Fedora Workstation and Fedora Server via dnf.
+# Fedora Workstation and Fedora Server via dnf; openSUSE Leap and Tumbleweed
+# via zypper.
 # Refused: Artix, Obarun (no systemd), SteamOS (immutable root), Fedora
-# Silverblue, Kinoite, Atomic, and Bazzite.
+# Silverblue, Kinoite, Atomic, Bazzite, openSUSE MicroOS, Aeon, and Kalpa.
 #
 set -euo pipefail
 
@@ -68,10 +69,19 @@ fedora)
 	fi
 	target_name="install-node-fedora.sh"
 	;;
+opensuse)
+	if ! command -v zypper >/dev/null 2>&1; then
+		die "openSUSE host has no zypper — cannot install packages"
+	fi
+	if ! command -v systemctl >/dev/null 2>&1; then
+		die "systemd (systemctl) is required."
+	fi
+	target_name="install-node-opensuse.sh"
+	;;
 *)
 	# shellcheck source=/dev/null
 	. /etc/os-release
-	die "unsupported OS: ${PRETTY_NAME:-unknown}. Supported: Ubuntu/Debian (apt), systemd Arch derivatives (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux), and Fedora Workstation or Server (dnf). Not supported: Artix, Obarun, SteamOS, Fedora Silverblue, Kinoite, Atomic, Bazzite."
+	die "unsupported OS: ${PRETTY_NAME:-unknown}. Supported: Ubuntu/Debian (apt), systemd Arch derivatives (Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, ArcoLinux), Fedora Workstation or Server (dnf), and openSUSE Leap or Tumbleweed (zypper). Not supported: Artix, Obarun, SteamOS, Fedora Silverblue, Kinoite, Atomic, Bazzite, openSUSE MicroOS, Aeon, Kalpa."
 	;;
 esac
 

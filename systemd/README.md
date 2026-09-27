@@ -89,7 +89,7 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 
 **Docker Desktop (Windows / macOS):** systemd path units are skipped. The Continuum Desktop installers copy the same apply/enable/disable scripts into **`wsl-desktop/libexec`** or **`macos-desktop/libexec`** and the pending watcher applies **`pending-update.json`**, **`pending-vpn.json`**, and **`pending-telegram-ngrok.json`**. See **`docs/TELEGRAM_WEBHOOK_NGROK.md`** and the Desktop install guides.
 
-**Host packages (VPS / Linux Docker Desktop):** **`wg-quick`** and **`socat`** must be installed on the host. Fresh installs via **`scripts/install-node-linux.sh`** include them (`wireguard` on apt; `wireguard-tools` on pacman and dnf). **`install-mpc-auth-docker-systemd.sh`** runs **`scripts/lib/ensure-vpn-host-packages.sh`**, which installs the same tools with apt, pacman, or dnf when they are missing. **Shadowsocks obfuscation** optionally installs **`shadowsocks-rust`** via **`ensure_shadowsocks_host_packages`** (warn-only — VPN works without it).
+**Host packages (VPS / Linux Docker Desktop):** **`wg-quick`** and **`socat`** must be installed on the host. Fresh installs via **`scripts/install-node-linux.sh`** include them (`wireguard` on apt; `wireguard-tools` on pacman, dnf, and zypper). **`install-mpc-auth-docker-systemd.sh`** runs **`scripts/lib/ensure-vpn-host-packages.sh`**, which installs the same tools with apt, pacman, dnf, or zypper when they are missing. **Shadowsocks obfuscation** optionally installs **`shadowsocks-rust`** via **`ensure_shadowsocks_host_packages`** (warn-only — VPN works without it).
 
 ### WireGuard VPN — host firewall (UFW + Docker)
 
