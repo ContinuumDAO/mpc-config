@@ -26,7 +26,7 @@ Wrong install (root-only tree, custom folder, remapped ports): [Agent install an
 - **`scripts/desktop-local-orchestrate.sh`** — clone **`~/mpc-config`** then run the matching desktop installer.
 - **`scripts/verify-node-install.sh`** / **`verify-node-install-macos-desktop.sh`** — read-only layout checks after install.
 - **`scripts/uninstall-node-debian-ubuntu.sh`**, **`uninstall-node-docker-desktop.sh`**, **`uninstall-node-macos-docker-desktop.sh`**.
-- **`packaging/aur/`** — AUR package **`mpa-wallet-git`** (host packages + install scripts). Publish steps: [`docs/AUR_MPA_WALLET.md`](docs/AUR_MPA_WALLET.md).
+- **`packaging/aur/`** — AUR package **`mpa-wallet-git`** (host packages + install scripts). Installing the package does not create a node.
 - **`tools/provision-command.js`** — MPA frontend curl/SSH command builder.
 - **`tools/bootstrap_key_provision.py`** — Ed25519 bootstrap / **`DeterministicNodeKey`**.
 - **`mosquitto/config/`**, **`webTLS/config/certs/`** — MQTT TLS and browser HTTPS material.
