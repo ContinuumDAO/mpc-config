@@ -233,6 +233,9 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /agentTechnocoreKey`](#post-agenttechnocorekey) - Import, generate, or clear Technocore Ed25519 key (**management signature**; never returns the private key)
 - [`POST /agentTechnocoreAnnounce`](#post-agenttechnocoreannounce) - Sign and post one Technocore room line; optional `room` is this post only (**management signature**; requires posting on)
 - [`POST /agentTechnocoreSign`](#post-agenttechnocoresign) - Sign a payload with the Technocore key without posting (**management signature**; requires posting on; refuses a `room|nonce|text` envelope)
+- [`GET /getForumSession`](#get-getforumsession) - Read the local ContinuumDAO forum ticket for a KeyGen address (not propagated; **read JWT** on Browser HTTPS / loopback)
+- [`POST /setForumSession`](#post-setforumsession) - Store that ticket (**read JWT**, loopback, or management signature)
+- [`POST /clearForumSession`](#post-clearforumsession) - Delete that ticket by address and/or ticket (**read JWT**, loopback, or management signature)
 - [`GET /listEnvironmentVariables`](#get-listenvironmentvariables) - List MCP agent environment variables stored on this node (local MongoDB; not propagated)
 - [`GET /getEnvironmentVariable`](#get-getenvironmentvariable) - Get one variable by `name` query param
 - [`POST /addEnvironmentVariable`](#post-addenvironmentvariable) - Add or update one variable (**management signature**; name normalized to uppercase `A-Z`, `0-9`, `_`)
@@ -3054,6 +3057,50 @@ When `room` is set, it is included between `nodeKey` and `text`:
 **Behavior:** Does not POST to technocore.chat. Refuses if posting is off or no key is stored. Refuses a payload that matches a room envelope (`<room>|<nonce>|<text>`, middle segment 1–19 digits) — use **`POST /agentTechnocoreAnnounce`** for those. Returns a base64url (unpadded) Ed25519 signature of the exact payload.
 
 **Response `data`:** `{ "did", "signature" }`. Private key is never included.
+
+### ContinuumDAO forum session (local MongoDB)
+
+Stored in **`LocalForumSession`**, one document per KeyGen address (local node only; not propagated). Web chat and Telegram webhook turns share this row. The continuum MCP server reads it with **`GET /getForumSession`** on the **management port** (no read JWT). Browser HTTPS and loopback-read HTTP require a read JWT on GET and on these POSTs. Other callers send a management signature. Forum sign-out deletes the row so a revoked ticket is not reused.
+
+<a id="get-getforumsession"></a>
+#### `GET /getForumSession`
+
+**Auth:** None on the management port. **Read JWT** on Browser HTTPS / loopback-read HTTP.
+
+**Query:** `address` (required). Normalized to lowercase `0x` + 40 hex.
+
+**Response `data`:** `{ "found": false }` or `{ "found": true, "address", "ticket", "username"?, "uid"?, "updatedAt" }`.
+
+<a id="post-setforumsession"></a>
+#### `POST /setForumSession`
+
+**Auth:** Read JWT or loopback on Browser HTTPS / loopback-read HTTP. Otherwise a management signature over canonical JSON with **`clientSig` cleared**.
+
+**Canonical signed bytes** (optional `uid` / `username` omitted when empty; field order is struct order):
+```json
+{"nonce":1,"clientSig":"","nodeKey":"<128-hex>","address":"0x…","ticket":"…"}
+```
+
+**Request:** `address` (required), `ticket` (required, max 256 characters). Optional `username` (max 16) and `uid`.
+
+**Response `data`:** `{ "ok": true, "address" }`.
+
+<a id="post-clearforumsession"></a>
+#### `POST /clearForumSession`
+
+**Auth:** Same as **`POST /setForumSession`**.
+
+**Canonical signed bytes** — include `address`, `ticket`, or both. Empty fields are omitted:
+```json
+{"nonce":1,"clientSig":"","nodeKey":"<128-hex>","address":"0x…"}
+```
+```json
+{"nonce":1,"clientSig":"","nodeKey":"<128-hex>","ticket":"…"}
+```
+
+**Behavior:** Deletes the row for `address` and/or every row whose `ticket` matches. Missing rows are success. `ctm_continuum_dao_forum_sign_out` calls this after the Forum logout so the node copy is gone. The node-app Sign out button does the same.
+
+**Response `data`:** `{ "ok": true }`.
 
 ### Agent environment variables (local MongoDB)
 

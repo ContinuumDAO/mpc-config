@@ -2389,6 +2389,78 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.AgentTechnocoreAnnouncePost'
+  /getForumSession:
+    get:
+      description: 'Read the local ContinuumDAO forum ticket for a KeyGen address (not propagated) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (GET /getForumSession).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Read the local ContinuumDAO forum ticket for a KeyGen address (not propagated)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: address
+        in: query
+        required: true
+        description: KeyGen ethereum address (0x + 40 hex)
+      - type: string
+        name: Authorization
+        in: header
+        required: false
+        description: Bearer read JWT required on Browser HTTPS and BrowserLoopbackReadHTTP GET. Not required on the management
+          port (continuum-mcp and Telegram webhook turns).
+  /setForumSession:
+    post:
+      description: 'Store the local ContinuumDAO forum ticket for a KeyGen address (read JWT, loopback, or management signature)
+        Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /setForumSession).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Store the local ContinuumDAO forum ticket for a KeyGen address (read JWT, loopback, or management signature)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.SetForumSessionPost'
+  /clearForumSession:
+    post:
+      description: 'Delete the local ContinuumDAO forum ticket by address and/or ticket (read JWT, loopback, or management
+        signature) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /clearForumSession).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Delete the local ContinuumDAO forum ticket by address and/or ticket (read JWT, loopback, or management signature)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.ClearForumSessionPost'
   /listEnvironmentVariables:
     get:
       description: 'List MCP agent environment variables stored on this node (local MongoDB) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
@@ -5965,3 +6037,44 @@ definitions:
         name:
           type: string
           description: Bundled catalog skill name
+  node.SetForumSessionPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      description: 'POST /setForumSession. Sign canonical JSON with clientSig cleared. Field order: {"nonce":N,"clientSig":"","nodeKey":"<128-hex>","address":"0x…","ticket":"…"}
+        then optional uid and username. Local MongoDB LocalForumSession; not propagated. Browser HTTPS accepts a read JWT
+        or loopback; other callers need the management signature. Web chat and Telegram webhook turns read this row via GET
+        /getForumSession.'
+      required:
+      - address
+      - ticket
+      properties:
+        address:
+          type: string
+          description: KeyGen ethereum address (0x + 40 hex)
+        ticket:
+          type: string
+          description: Forum Bearer ticket (max 256 characters)
+        uid:
+          type: integer
+          description: Optional NodeBB user id
+        username:
+          type: string
+          description: Optional forum username (max 16 characters)
+  node.ClearForumSessionPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      description: 'POST /clearForumSession. Sign canonical JSON with clientSig cleared. Include address, ticket, or both.
+        Empty fields are omitted. Address only: {"nonce":N,"clientSig":"","nodeKey":"<128-hex>","address":"0x…"}. Ticket only:
+        {"nonce":N,"clientSig":"","nodeKey":"<128-hex>","ticket":"…"}. Forum sign-out deletes this row so a revoked ticket
+        is not reused from Telegram or web chat.'
+      properties:
+        address:
+          type: string
+          description: KeyGen ethereum address
+        ticket:
+          type: string
+          description: Forum ticket to delete, used when address is omitted

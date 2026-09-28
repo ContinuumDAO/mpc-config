@@ -27,8 +27,8 @@ Ticket writes allowed in Ideas, Governance (if `canPropose`), and MPA public sec
 
 Same EIP-712 ticket as Forum Ideas (wallet login; no proposal threshold for MPA).
 
-1. `continuum__ctm_continuum_dao_forum_sign_in_eligible({ address })`. If `eligible` is false, stop.
-2. If no ticket: `continuum__ctm_continuum_dao_build_forum_sign_in_multisign`. After Get Sig, pass the `ticket`.
+1. `continuum__get_forum_session({ address })`. If `found` is true, `continuum__ctm_continuum_dao_forum_me({ ticket })`. If `loggedIn` is true, reuse that ticket. Do **not** call `build_forum_sign_in_multisign`.
+2. If there is no session or `loggedIn` is false: `continuum__ctm_continuum_dao_forum_sign_in_eligible({ address })`. If `eligible` is false, stop. Otherwise `continuum__ctm_continuum_dao_build_forum_sign_in_multisign`. After Get Sig, Execute stores the ticket on the node. Call `get_forum_session` again. Pass `address` and that `ticket` on listing, reply, mailbox, and other writes. The write tool reloads the node session and posts only when `forum_me` `loggedIn` is true.
 3. `continuum__ctm_continuum_dao_forum_me` — confirm `canPostMpa`.
 
 ## Listings

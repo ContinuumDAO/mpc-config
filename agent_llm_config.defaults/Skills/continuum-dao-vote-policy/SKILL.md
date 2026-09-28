@@ -58,9 +58,9 @@ A proposal should have a real `forumKey` (`/topic/:tid` or `/t/:tid`). Reads do 
 
 **Interactive write** (operator asked to comment or react — not from cron):
 
-1. `forum_sign_in_eligible` then `build_forum_sign_in_multisign` if there is no ticket (veCTM login gate; no EVM tx). Pass `ticket` on writes.
+1. `get_forum_session` then `forum_me` with that ticket. If `loggedIn` is true, reuse it. Only if there is no session or `loggedIn` is false: `forum_sign_in_eligible` then `build_forum_sign_in_multisign` (veCTM login gate; no EVM tx). Pass `address` and `ticket` on writes. The write tool reloads the node session and posts only when `forum_me` `loggedIn` is true.
 2. `forum_reply` (English, ≤ 8000) or `forum_react` (`+1` `-1` `heart` `tada` `eyes`). Confirm before posting.
-3. `forum_sign_out({ ticket })` when done.
+3. `forum_sign_out({ address, ticket })` when done. That deletes the node ticket. `clear_forum_session({ address })` is the same delete.
 
 **Cron:** read the thread only. Do **not** `forum_create_topic`, `forum_create_idea`, sign in, reply, or react. Never propose.
 

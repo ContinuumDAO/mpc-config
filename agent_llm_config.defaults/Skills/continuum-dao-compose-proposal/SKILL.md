@@ -86,16 +86,17 @@ If yes, sequential execute must be a **Foundry forge script** on a Linea fork. I
 
 ### Forum login / logout / write
 
-Reads do not need a ticket. Writes (`forum_create_topic`, `forum_create_idea`, `forum_reply`, `forum_react`) need a ticket from KeyGen **EIP-712** sign-in (no EVM tx).
+Reads do not need a ticket. Writes (`forum_create_topic`, `forum_create_idea`, `forum_reply`, `forum_react`) need a ticket from KeyGen **EIP-712** sign-in (no EVM tx). The ticket is stored on this node (`LocalForumSession`). Web chat and Telegram webhook turns both read it with `get_forum_session`. There is no browser copy.
 
-1. `continuum__ctm_continuum_dao_forum_sign_in_eligible({ address })` — holder or attach-key veCTM vs `veCtmThresholdPower`. If `eligible` is false, **stop**. Do not start a multi-sign request.
-2. If there is no ticket: `continuum__ctm_continuum_dao_build_forum_sign_in_multisign` with `nodeKey` (username = first 16 chars) or `username` on first login. Follow **`execution-policy`**. After Get Sig, the node-app exchanges the signature for a ticket (`/api/continuum/eip712/ticket`). Pass that `ticket` on write tools.
-3. `continuum__ctm_continuum_dao_forum_me` to confirm session. `canPostIdea` is enough for Ideas; `canPropose` (`getVotes >= proposalThreshold()`) is required for Governance threads.
-4. `continuum__ctm_continuum_dao_forum_sections`. Then:
+1. `continuum__get_forum_session({ address })` for the proposing KeyGen. If `found` is true, `continuum__ctm_continuum_dao_forum_me({ ticket })`.
+2. If `loggedIn` is true, reuse that `ticket`. Do **not** call `build_forum_sign_in_multisign`.
+3. If there is no session or `loggedIn` is false: `continuum__ctm_continuum_dao_forum_sign_in_eligible({ address })` — holder or attach-key veCTM vs `veCtmThresholdPower`. If `eligible` is false, **stop**. Do not start a multi-sign request. Otherwise `continuum__ctm_continuum_dao_build_forum_sign_in_multisign` with `nodeKey` (username = first 16 chars) or `username` on first login. Follow **`execution-policy`**. After Get Sig, Execute stores the ticket on the node. Call `get_forum_session` again. On every write (`forum_create_topic`, `forum_create_idea`, `forum_reply`, `forum_react`) pass `address` and that `ticket`. The write tool reloads the node session and posts only when `forum_me` `loggedIn` is true.
+4. `continuum__ctm_continuum_dao_forum_me` to confirm session. `canPostIdea` is enough for Ideas; `canPropose` (`getVotes >= proposalThreshold()`) is required for Governance threads.
+5. `continuum__ctm_continuum_dao_forum_sections`. Then:
    - **Idea:** **`continuum__ctm_continuum_dao_forum_create_idea`**. Stop. Do not propose. Do not use the URL as `forumKey`.
    - **Proposal:** **`continuum__ctm_continuum_dao_forum_create_topic`** with the matching `section` from the type table. Title/body must be English. Body = formatted proposal (≤ 6200) **plus** the standards appendix if the operator insisted after a failed check. Keep the returned **`url`**.
-5. Optional: `forum_reply` / `forum_react` (`+1` `-1` `heart` `tada` `eyes`) on that thread. To check Unread / mark threads read, load **`continuum-dao-forum-inbox`**.
-6. When finished, `continuum__ctm_continuum_dao_forum_sign_out({ ticket })` — no multi-sign.
+6. Optional: `forum_reply` / `forum_react` (`+1` `-1` `heart` `tada` `eyes`) on that thread. To check Unread / mark threads read, load **`continuum-dao-forum-inbox`**.
+7. When finished, `continuum__ctm_continuum_dao_forum_sign_out({ address, ticket })`. That deletes the node ticket. `continuum__clear_forum_session({ address })` is the same delete if sign-out already ran. No multi-sign.
 
 Never call `build_propose_*` or `register_proposal` until `forum_create_topic` has returned a Governance topic URL. Never pass an Ideas URL as `forumKey`.
 
@@ -105,7 +106,7 @@ Print a briefing in the same shape as `explain_proposal` would: title, type, Bra
 
 ## Submit (KeyGen, confirmed only)
 
-1. Forum sign-in (if needed) → `forum_create_topic` (Governance `section`) → keep `url` as `forumKey`.
+1. Forum session check (sign-in only if `forum_me` is not `loggedIn`) → `forum_create_topic` (Governance `section`) → keep `url` as `forumKey`.
 2. `continuum__ctm_continuum_dao_build_propose_bravo_multisign` or `…_propose_delta_multisign` with that **`forumKey`** and the encoded actions from compose. No billing legs. Follow **`execution-policy`**.
 3. After the propose tx is **mined**, `continuum__ctm_continuum_dao_register_proposal` with the **same** `forumKey`, plus `onchainId` from `hashProposal` / `ProposalCreated`, title, description, proposer (KeyGen ETH), `type` 0–4, `configuration` 0|1, and user `actions` / `options` (empty arrays for signaling). If the POST fails, retry — do not revert the chain tx.
 4. Offer `forum_sign_out`.

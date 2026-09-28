@@ -15,8 +15,8 @@ Reads of public posts do not need a ticket. **Unread and mark-read need a ticket
 
 ## Login
 
-1. `continuum__ctm_continuum_dao_forum_sign_in_eligible({ address })`. If `eligible` is false, stop.
-2. If there is no ticket: `continuum__ctm_continuum_dao_build_forum_sign_in_multisign` (interactive). After Get Sig, the node-app exchanges the signature for a ticket. Pass that `ticket` on inbox tools.
+1. `continuum__get_forum_session({ address })`. If `found` is true, `continuum__ctm_continuum_dao_forum_me({ ticket })`. If `loggedIn` is true, reuse that ticket. Do **not** call `build_forum_sign_in_multisign`.
+2. If there is no session or `loggedIn` is false: `continuum__ctm_continuum_dao_forum_sign_in_eligible({ address })`. If `eligible` is false, stop. Otherwise `continuum__ctm_continuum_dao_build_forum_sign_in_multisign` (interactive). After Get Sig, Execute stores the ticket on the node. Call `get_forum_session` again. Pass `address` and that `ticket` on inbox tools. Those tools reload the node session and continue only when `forum_me` `loggedIn` is true.
 3. `continuum__ctm_continuum_dao_forum_me` — confirm `loggedIn` and `username`.
 
 ## Check messages
