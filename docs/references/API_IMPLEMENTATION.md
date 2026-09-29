@@ -4,7 +4,7 @@
 
 The Distributed Auth Management API provides a RESTful interface for managing MPC (Multi-Party Computation) nodes, key generation, signing operations, and system monitoring. The API is implemented using the Gin web framework and follows a consistent response format.
 
-**CGGMP24 / FROST (givre) / Rust:** For **`ecdsaMpcProtocol`** on **`POST /keyGenRequest`**, **`GET /version`** (`cggmp24UpstreamGitRev`, **`givreUpstreamGitRev`**), FROST **ed25519** / **bitcoin-taproot** keygen/sign/presign, **`POST /keyGenEjectRequest`** (secp256k1 CGGMP24, FROST **ed25519**, FROST **bitcoin-taproot**), and export routes **`POST /getEthereumPrivateKey`**, **`POST /getBitcoinPrivateKey`**, **`POST /getEd25519PrivateKey`**, **`POST /getTaprootPrivateKey`**, and optional **`-tags rust`** builds, see **[`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)** and sibling repo **mpc-auth** `docs-internal/FROST_ROADMAP.md`.
+**CGGMP24 / FROST (givre) / Rust:** For **`ecdsaMpcProtocol`** on **`POST /keyGenRequest`**, **`GET /version`** (`cggmp24UpstreamGitRev`, **`givreUpstreamGitRev`**), FROST **ed25519** / **bitcoin-taproot** keygen/sign, **`POST /keyGenEjectRequest`** (secp256k1 CGGMP24, FROST **ed25519**, FROST **bitcoin-taproot**), and export routes **`POST /getEthereumPrivateKey`**, **`POST /getBitcoinPrivateKey`**, **`POST /getEd25519PrivateKey`**, **`POST /getTaprootPrivateKey`**, and optional **`-tags rust`** builds, see **[`CGGMP24_AND_RUST_BUILD.md`](./CGGMP24_AND_RUST_BUILD.md)** and sibling repo **mpc-auth** `docs-internal/FROST_ROADMAP.md`.
 
 ## Architecture
 
@@ -32,7 +32,7 @@ If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`
 When split, this port carries:
 
 - **Scanner governance GETs:** `GET /getKeyGenResultById`, `GET /getNewGroupRequestById`, `GET /listNewGroupRequests`, `GET /getNewGroupResultById`, `GET /getGroupResultById`
-- **Relayer signing/admin:** `POST /signRequest`, sign polling GETs, `POST /updateRelayer`, `POST /admin/registerRelayer`, relayer admin GETs, `GET /getPresigningStatus`
+- **Relayer signing/admin:** `POST /signRequest`, sign polling GETs, `POST /updateRelayer`, `POST /admin/registerRelayer`, relayer admin GETs
 
 The full management API (including the same routes for local admin) remains on **`ManagementAPIsPort`**. **`PublicDiscoveryPort`** never serves scanner/relayer routes (legacy bundling on discovery was removed).
 
@@ -58,7 +58,7 @@ All endpoints return a standardized `APIResponse` structure:
 Keygen and sign **GET** responses include **`effectiveEcdsaMpcProtocol`** when the implementation can classify the key’s secp256k1 MPC stack:
 
 - **`"cggmp24"`** for **secp256k1** (default for new keys; omit `ecdsaMpcProtocol` or set `"cggmp24"` at keygen).
-- **`"gg18"`** only for **legacy Mongo rows** created before GG18 removal — new keygen rejects `"gg18"`; signing/presign on legacy keys fail closed (mandatory re-key).
+- **`"gg18"`** only for **legacy Mongo rows** created before GG18 removal — new keygen rejects `"gg18"`; signing on legacy keys fails closed (mandatory re-key).
 
 **Omitted or empty** for **ed25519**, **bitcoin-taproot**, and other non-ECDSA key types.
 
@@ -384,15 +384,6 @@ Enable/disable a host WireGuard server from the Node page **VPN Panel** on **rel
 - [`GET /checkDatabase`](#get-checkdatabase) — MongoDB integrity report for configured group shards and local collections (**no** management signature; **no** deterministic-node / backup eligibility gate). See [MongoDB integrity](#mongodb-integrity-report-read-only).
 - [`POST /fixDatabase`](#post-fixdatabase) — Apply **automated** Mongo repairs from the integrity scan (**management-signed**; same deterministic-node eligibility as backup; **maintenance quiescence** until **`GET /maintenance/restartGate`** reports **`readyForProcessExit`**). See [MongoDB integrity](#mongodb-integrity-report-read-only).
 
-### Pre-Signing
-- [`POST /presignRequest`](#post-presignrequest) - Create presign request (requires mgt key)
-- [`GET /listPresignRequests`](#get-listpresignrequests) - List presign requests
-- [`GET /getPresignRequestById`](#get-getpresignrequestbyid) - Get presign request by ID
-- [`POST /presignRequestAgree`](#post-presignrequestagree) - Agree to presign request (requires mgt key)
-- [`GET /listPresignResults`](#get-listpresignresults) - List presign results
-- [`GET /getPresignResultById`](#get-getpresignresultbyid) - Get presign result by ID
-- [`GET /getPresigningStatus`](#get-getpresigningstatus) - Get presigning status
-
 ### Signing
 - [`POST /signRequest`](#post-signrequest) - Create sign request (requires relayer auth)
 - [`POST /multiSignRequest`](#post-multisignrequest) - Create multi-agree sign request (no relayer)
@@ -437,7 +428,7 @@ Enable/disable a host WireGuard server from the Node page **VPN Panel** on **rel
 
 Returns **`draining`**, **`inFlight`**, **`readyForProcessExit`**, and a hint list of tracked POST paths. Read-only; exempt from JWT on the browser HTTPS / loopback listeners where configured (for polling from scripts).
 
-**Flow:** (1) Sign and `POST /maintenance/requestRestartPrep`. (2) Poll `GET /maintenance/restartGate` until **`readyForProcessExit`** is `true` (`draining` is `true` and **`inFlight`** is `0`). (3) Restart the container or process on the host. Tracked paths include group/subgroup agree flows, keyGen, presign, sign/multiSign and related agrees/triggers/status/shelve, **KeyGen messaging** (`sendMessage`, read/delete variants), **`configUpdatePlan` / `configUpdateImplement`**, database backup routes **`POST /backupDatabase`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, **`POST /fetchDatabaseBackup`**, **`POST /fetchBootstrapKey`**, **`POST /fetchAddedManagementKey`**, and **`POST /fixDatabase`** (automated integrity repairs under quiescence). **`POST /postBootstrapKey`**, **`POST /removeBootstrapKey`**, **`POST /postAddedManagementKey`**, and **`POST /removeAddedManagementKey`** are **not** tracked — they stay available while **`draining`** and do not increment **`inFlight`**.
+**Flow:** (1) Sign and `POST /maintenance/requestRestartPrep`. (2) Poll `GET /maintenance/restartGate` until **`readyForProcessExit`** is `true` (`draining` is `true` and **`inFlight`** is `0`). (3) Restart the container or process on the host. Tracked paths include group/subgroup agree flows, keyGen, sign/multiSign and related agrees/triggers/status/shelve, **KeyGen messaging** (`sendMessage`, read/delete variants), **`configUpdatePlan` / `configUpdateImplement`**, database backup routes **`POST /backupDatabase`**, **`POST /postDatabaseBackup`**, **`POST /restoreDatabase`**, **`POST /fetchDatabaseBackup`**, **`POST /fetchBootstrapKey`**, **`POST /fetchAddedManagementKey`**, and **`POST /fixDatabase`** (automated integrity repairs under quiescence). **`POST /postBootstrapKey`**, **`POST /removeBootstrapKey`**, **`POST /postAddedManagementKey`**, and **`POST /removeAddedManagementKey`** are **not** tracked — they stay available while **`draining`** and do not increment **`inFlight`**.
 
 **MQTT caveat:** In-flight work that continues only over **MQTT** (without a matching management POST on this node) is **not** included in the HTTP ref-count. Pause clients or wait briefly if needed.
 
@@ -657,7 +648,7 @@ These checks from **`GET /checkDatabase`** are **reports only** — that handler
 - **`summary`:** counts of **`error`** / **`warning`** / **`info`** issues, **`configuredGroupCount`**, **`groupDatabaseScanned`**
 - **`issues`:** array of findings; each item has **`severity`**, **`scope`**, **`code`**, **`detail`**, optional **`hint`**, optional **`ref`** (e.g. `groupId`, `requestId`, collection name)
 - **`baseCollectionSampleCounts`:** document counts for principal **base** database collections (Group, NewGroup, local chain/token/known-addresses, node key, etc.)
-- **`perGroup`:** for each configured **GroupId**, counts and cross-checks for that shard’s **`KeyGen`**, **`KeyGenRequest`**, **`SignRequest`**, **`Sign`**, presign collections, **`KeyGenMessage`**, plus a map of **`pubkeyhex` → keygen `requestid`** and sign requests that reference a missing keygen
+- **`perGroup`:** for each configured **GroupId**, counts and cross-checks for that shard’s **`KeyGen`**, **`KeyGenRequest`**, **`SignRequest`**, **`Sign`**, **`KeyGenMessage`**, plus a map of **`pubkeyhex` → keygen `requestid`** and sign requests that reference a missing keygen
 - **`orphanGroupDatabases`**, **`otherMongoDatabasesMatchingBasePrefix`:** Mongo database names that look like per-group shards (`{DBName}_…`) but do not match any configured group’s resolved DB name (stale shard, truncation, or restore mismatch)
 
 **What it validates (high level):**
@@ -1453,7 +1444,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/getMessageToSign \
 
 ### Using an Ethereum wallet or Ed25519 for Management API Authentication
 
-Management API endpoints (like `/keyGenRequest`, `/keyGenRequestRetry`, `/newGroupRequest`, `/newGroupRequestRetry`, `/presignRequest`, etc.) require authentication. The node accepts **either** of the following:
+Management API endpoints (like `/keyGenRequest`, `/keyGenRequestRetry`, `/newGroupRequest`, `/newGroupRequestRetry`, etc.) require authentication. The node accepts **either** of the following:
 
 - **NodeMgtKey (Ethereum wallet)**: Ethereum address in config; sign with `personal_sign` (EIP-191).
 - **PublicMgtKey (Ed25519)**: Bootstrap **`PublicMgtKey`** in config plus keys added via **`POST /addManagementKey`** (and soft-removed via **`POST /removeManagementKey`** for **Added key N** rows only — see headings). Typical management POST bodies use **`sig`**; **add**/ **remove extra Ed25519 management keys** also accept **`signedMessage` + `clientSig`** (**EIP‑191** from **`NodeMgtKey`**) alongside the **`sig`** (Ed25519) path — canonical JSON documented under each endpoint (**Swagger**: **`#/definitions/node.AddManagementKeyPost`**, **`RemoveManagementKeyPost`**).
@@ -4920,9 +4911,9 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/keyGenRequest \
 
 **Deduplication:** Nodes treat duplicate `KEYGENREQUEST` MQTT deliveries for the same `requestId` within a short window as a single processed message for throughput; a later delivery (e.g. operator [`POST /keyGenRequestRetry`](#post-keygenrequestretry)) still **merges** into the same DB row without wiping `SigList` / `ClientKeys` entries peers already stored.
 
-**CGGMP24 secp256k1:** Default for new keys. Signing requires a completed distributed **KeyShare** (aux_info_gen + merge). **Presign is not supported** for CGGMP24 ECDSA keys.
+**CGGMP24 secp256k1:** Default for new keys. Signing requires a completed distributed **KeyShare** (aux_info_gen + merge).
 
-**FROST (ed25519 / bitcoin-taproot):** Requires mpc-auth built with **`-tags rust`**. Supports interactive sign, batch sign (via `multiSignRequest`), and **presign** (see [Pre-Signing](#7-pre-signing)).
+**FROST (ed25519 / bitcoin-taproot):** Requires mpc-auth built with **`-tags rust`**. Supports interactive sign and batch sign (via `multiSignRequest`).
 
 **Optional recovery:** If a peer never received **`KEYGENREQUEST`** after [`POST /keyGenRequest`](#post-keygenrequest), the initiator may call [`POST /keyGenRequestRetry`](#post-keygenrequestretry) for that peer’s public key (see that section for guards). If the first delivery was processed very recently, MQTT dedupe may drop a duplicate until a later retry or until the short window passes.
 
@@ -5631,166 +5622,6 @@ Deletes a message and its reply tree; originator only. **Requires management key
 #### `POST /multiDeleteMessages`
 Deletes multiple messages (and trees); originator-only per message. **Requires management key signature.** See [`API_KEYGEN_MESSAGING.md` → `POST /multiDeleteMessages`](./API_KEYGEN_MESSAGING.md#post-multideletemessages).
 
-### 7. Pre-Signing
-
-Presign accelerates **FROST** signing for **`ed25519`** and **`bitcoin-taproot`** keys (givre). Each presignature stores a **round-1 nonce commitment** locally at generation time; at sign time the node runs a **presign-finish** worker (commitments + partial signatures + aggregate) instead of a full interactive FROST sign.
-
-**Not supported:** **CGGMP24 secp256k1** keys (`presign is not implemented for CGGMP24 (ecdsa) keys`). **Legacy GG18** keys fail closed.
-
-When **`InitiatePreSigning: true`** in `configs.yaml`, the background worker auto-creates presign requests only for eligible FROST key groups.
-
-<a id="post-presignrequest"></a>
-#### `POST /presignRequest`
-Creates a new pre-signing request. **Requires management key authentication.** **FROST keys only** (`ed25519`, `bitcoin-taproot`).
-
-**Request Body:**
-```json
-{
-  "nonce": 1,
-  "sig": "<NodeMgtKey signature over request body>",
-  "pubKey": "08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de",
-  "keyList": ["node1_key", "node2_key", "node3_key"],
-  "presignAmt": 5
-}
-```
-
-**Field Descriptions:**
-- `nonce` (required): Current nonce from `/getNodeMgtKeyNonce`
-- `sig` (required): Management key signature over the request body (excluding `sig` field)
-- `pubKey` (required): Public key from key generation (128 hex characters)
-- `keyList` (required): Array of node keys that will participate in presigning
-- `presignAmt` (required): Number of presignatures to generate
-
-**CGGMP24 secp256k1 keys:** **`POST /presignRequest`** returns an error. Use FROST keys for presign, or sign interactively without `presignId`.
-
-**Sign with presign:** Pass the presign result id as **`presignId`** on **`POST /signRequest`** or **`POST /multiSignRequest`** (single-message only). **`keyList`** must be **`null`**. Batch **`multiSignRequest`** does **not** use presign — each batch leg runs a full interactive sign in parallel.
-
-**Response:**
-```json
-{
-  "code": 0,
-  "error": "",
-  "data": "Presign20260111003720999cf104d0f"
-}
-```
-
-**Example:**
-```bash
-curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/presignRequest \
-  -H "Content-Type: application/json" \
-  -d '{
-    "nonce": 1,
-    "sig": "0x...",
-    "pubKey": "08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de",
-    "keyList": ["node1_key", "node2_key", "node3_key"],
-    "presignAmt": 5
-  }'
-```
-
-<a id="get-listpresignrequests"></a>
-#### `GET /listPresignRequests`
-Lists all pre-signing requests with filtering and pagination.
-
-**Query Parameters:**
-- `filter` (optional): `all`, `pending`, `success`, `failed` (default: `all`)
-- `pagenum` (optional, default: 0)
-- `pagesize` (optional, default: 10)
-
-**Example:**
-```bash
-curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listPresignRequests?filter=all&pagenum=0&pagesize=10"
-```
-
-<a id="get-getpresignrequestbyid"></a>
-#### `GET /getPresignRequestById`
-Gets a specific pre-signing request by ID.
-
-**Query Parameters:**
-- `id` (required): Presign request ID
-
-**Example:**
-```bash
-curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPresignRequestById?id=Presign20260111003720999cf104d0f"
-```
-
-<a id="post-presignrequestagree"></a>
-#### `POST /presignRequestAgree`
-Agrees to a pre-signing request. **Requires management key authentication.**
-
-**Request Body:**
-```json
-{
-  "requestId": "Presign20260111003720999cf104d0f",
-  "nonce": 1,
-  "sig": "<NodeMgtKey signature>"
-}
-```
-
-**Response:**
-```json
-{
-  "code": 0,
-  "error": "",
-  "data": "success to aggree presignrequest with requestid Presign20260111003720999cf104d0f"
-}
-```
-
-<a id="get-listpresignresults"></a>
-#### `GET /listPresignResults`
-Lists all pre-signing results with pagination.
-
-**Query Parameters:**
-- `pagenum` (optional, default: 0)
-- `pagesize` (optional, default: 10)
-- `afterId` (optional): Get results after this ID (for pagination)
-
-**Example:**
-```bash
-curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listPresignResults?pagenum=0&pagesize=10"
-```
-
-<a id="get-getpresignresultbyid"></a>
-#### `GET /getPresignResultById`
-Gets a specific pre-signing result by ID.
-
-**Query Parameters:**
-- `id` (required): Presign request ID
-
-**Example:**
-```bash
-curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPresignResultById?id=Presign20260111003720999cf104d0f"
-```
-
-<a id="get-getpresigningstatus"></a>
-#### `GET /getPresigningStatus`
-Returns presigning status including configuration and cache levels for all key groups.
-
-**Response:**
-```json
-{
-  "code": 0,
-  "error": "",
-  "data": {
-    "enabled": true,
-    "targetCacheSize": 100,
-    "minCacheSize": 50,
-    "keyGroups": [
-      {
-        "pubKey": "08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de",
-        "currentCache": 75,
-        "targetCache": 100,
-        "status": "healthy"
-      }
-    ]
-  }
-}
-```
-
-**Example:**
-```bash
-curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getPresigningStatus"
-```
-
 ### 8. Signing
 
 <a id="post-signrequest"></a>
@@ -5802,7 +5633,6 @@ Creates a new signing request. **Requires relayer authentication.**
 {
   "clientSig": "<client signature over message>",
   "keyList": ["node1_key", "node2_key", "node3_key"],
-  "presignId": "",
   "pubKey": "08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de",
   "msgHash": "751f68b43977269a16128143fa15e0e7ab3c15ba52484fe8278796561505698b",
   "msgRaw": "<raw message bytes>",
@@ -5819,8 +5649,7 @@ Creates a new signing request. **Requires relayer authentication.**
 
 **Field Descriptions:**
 - `clientSig` (required): Client signature over the message
-- `keyList` (required for normal signing): Array of node keys. For normal signing, can be empty array `[]` (mpc-auth will use the keyList from KeyGenResult). For presign mode, must be `null`.
-- `presignId` (optional): Presign ID for faster signing. If provided, `keyList` must be `null`.
+- `keyList` (required): Array of node keys. Can be an empty array `[]` (mpc-auth will use the keyList from KeyGenResult) or a specific subset. Must not be `null`.
 - `pubKey` (required): Public key (128 hex characters) from key generation
 - `msgHash` (required): Keccak256 hash of the message to sign
 - `msgRaw` (optional): Raw message bytes (hex encoded)
@@ -5836,16 +5665,13 @@ Creates a new signing request. **Requires relayer authentication.**
 - `purpose` (optional): Free text from the creator, max 256 characters; visible to nodes when they list or get the sign request so they can read it before calling `signRequestAgree`
 
 **Important Notes:**
-- **KeyList Handling:**
-  - For **normal signing** (`presignId` empty): `keyList` should be `[]` (empty array) or a specific node key list
-  - For **presign signing** (`presignId` provided): `keyList` must be `null` (not `[]`)
+- **KeyList Handling:** `keyList` should be `[]` (empty array) or a specific node key list. It is required (not `null`).
 - **Relayer Authentication:**
   - Relayer must be whitelisted and active
   - Signature verification uses exact JSON structure matching mpc-auth's `SignRequestPost`
   - Case-sensitive: `relayerPublicKey` must match exactly what's stored in the database
 - **Key type:** SignRequest only accepts keys with MsgCheck type `tx-check`. For keys with MsgCheck `multi-agree`, use `POST /multiSignRequest` instead.
-- **CGGMP24 secp256k1 keys:** Signing requires a completed distributed **KeyShare**. If aux merge is incomplete, sign creation returns an error (see **`docs-internal/CGGMP24_ROADMAP.md`** in mpc-auth). **Presign is not available** for CGGMP24 ECDSA.
-- **FROST presign:** When **`presignId`** is set, signing uses presign-finish (see [Pre-Signing](#7-pre-signing)).
+- **CGGMP24 secp256k1 keys:** Signing requires a completed distributed **KeyShare**. If aux merge is incomplete, sign creation returns an error (see **`docs-internal/CGGMP24_ROADMAP.md`** in mpc-auth).
 - **Client sig for tx-check:** For `tx-check` (relayer) keys, `clientSig` is **not** verified. Relayer authentication (relayerPublicKey + relayerSignature) is sufficient. Tx-check keys are often created with a placeholder client key at keygen; the relayer is the authorized party. You may send an empty or placeholder `clientSig` for SignRequest. For `multi-agree` keys (multiSignRequest), client sig is still verified.
 
 **Relayer-facing endpoints (no client-sig failure for tx-check flow):**
@@ -5857,9 +5683,8 @@ Creates a new signing request. **Requires relayer authentication.**
 | `GET /getSignRequestById` | None | Query by request id. |
 | `GET /getSignResultById` | None | Query by request id. |
 | `GET /listSignRequests` | None | List with filter/pagination. |
-| `GET /getPresignRequestById`, `GET /getPresignResultById`, `GET /listPresignRequests` | None | No signature required. |
 
-Management-key endpoints (`keyGenRequest`, `keyGenRequestRetry`, `presignRequest`, `newGroupRequest`, `newGroupRequestRetry`, etc.) are used by the node operator/frontend, not by the relayer; they require NodeMgtKey or PublicMgtKey signature.
+Management-key endpoints (`keyGenRequest`, `keyGenRequestRetry`, `newGroupRequest`, `newGroupRequestRetry`, etc.) are used by the node operator/frontend, not by the relayer; they require NodeMgtKey or PublicMgtKey signature.
 
 **Response:**
 ```json
@@ -5877,8 +5702,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/signRequest \
   -d '{
     "clientSig": "0x...",
     "keyList": [],
-    "presignId": "",
-    "pubKey": "08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de",
+      "pubKey": "08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de",
     "msgHash": "751f68b43977269a16128143fa15e0e7ab3c15ba52484fe8278796561505698b",
     "msgRaw": "",
     "relayerPublicKey": "ed8639ee02b0e0cb8caade8ea24c71b1c60c55fa241032767e67c4da6e691f5fd08a36b005a2c1fd68c9b5a04137c406d458ba73b562aa269f52ceb6a285e41a",
@@ -5890,7 +5714,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/signRequest \
 ```
 
 **Error Responses:**
-- `400 Bad Request`: Invalid parameters (e.g., `presignId` and `keyList` combination), or key is not tx-check type
+- `400 Bad Request`: Invalid parameters, or key is not tx-check type
 - `401 Unauthorized`: Relayer not whitelisted or invalid signature
 - `403 Forbidden`: Relayer inactive or chain access denied
 - `500 Internal Server Error`: Internal processing error
@@ -5899,10 +5723,9 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/signRequest \
 #### `POST /multiSignRequest`
 Creates a new signing request for **multi-agree keys only**. No relayer authentication; uses the same internal sign flow as `signRequest`. Nodes in the same GroupId must agree via `POST /signRequestAgree`; when enough nodes have agreed, the message(s) are signed. Supports **single** (one message) and **batch** (N messages in one request: one agree, one trigger, one SignResult with N signatures). Supports **gas token (native transfer) requests**: use optional `sendGas` and `value` for "Send gas" flows; they are part of the signed payload and stored in `ExtraJSON` so all nodes see them in `getSignRequestById` and `listSignRequests`.
 
-**CGGMP24 secp256k1:** Same KeyShare completion requirement as `POST /signRequest`. **Presign is not used** for batch requests — N parallel full-sign workers run (one per batch index).
+**CGGMP24 secp256k1:** Same KeyShare completion requirement as `POST /signRequest`. N parallel sign workers run (one per batch index).
 
-**Single vs batch:** For a **single** message, send `msgHash` (required) and optional `msgRaw`. For a **batch** of N messages (e.g. a sequence of transactions), send `messageHashes` (array of N hex strings, length ≥ 2) and optionally `messageRawBatch` (length 0 or N); do not send `msgHash`/`msgRaw` for batch. One agree and one trigger then produce one SignResult whose `batchSignatures` array holds the N signatures (see `GET /getSignResultById`). Optional **`presignId`** applies to **single-message** requests only.
-
+**Single vs batch:** For a **single** message, send `msgHash` (required) and optional `msgRaw`. For a **batch** of N messages (e.g. a sequence of transactions), send `messageHashes` (array of N hex strings, length ≥ 2) and optionally `messageRawBatch` (length 0 or N); do not send `msgHash`/`msgRaw` for batch. One agree and one trigger then produce one SignResult whose `batchSignatures` array holds the N signatures (see `GET /getSignResultById`). 
 **Management signature (`nonce`, `nodeKey`, `clientSig`), and `purpose` in the signed payload:**
 
 Requires **management key authentication** (Ethereum **`NodeMgtKey`** / **`personal_sign`** or Ed25519 **`PublicMgtKey`** / added keys). Fetch the current nonce from **`GET /getPublicMgtKeyNonce`** (Ed25519) or **`GET /getNodeMgtKeyNonce`** (Ethereum) immediately before building the body. The signed message is **`json.Marshal`** of the full POST body with **`clientSig`** and **`signedMessage`** cleared (same pattern as **`POST /triggerSignRequestById`**). **`nodeKey`** (128 hex from **`GET /getNodeKey`**) is **required** and binds the signature to this MPC node.
@@ -6038,7 +5861,6 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
       "MessageHash": "751f68b43977269a16128143fa15e0e7ab3c15ba52484fe8278796561505698b",
       "MessageRaw": "",
       "KeyList": ["node1_key", "node2_key", "node3_key"],
-      "PresignId": "",
       "ClientSigs": {
         "node1_key": "0x...",
         "node2_key": ""
@@ -6074,7 +5896,6 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
 - `MessageHashes` (optional): When batch, array of N message hashes (hex), in order.
 - `MessageRawBatch` (optional): When batch, array of N raw messages (hex) for display/audit; may be empty.
 - `KeyList`: Node keys that may participate in signing (same GroupId as the key)
-- `PresignId`: If set, this request uses a presign; otherwise normal signing
 - `ClientSigs`: Map of node key → client signature (from the node when agreeing); empty or missing means that node has not agreed yet
 - `SigList`: Map of node key → agreement signature for nodes that have agreed. **If a node is in KeyList but missing from SigList or has an empty value, that node can call `POST /signRequestAgree`.**
 - `IsTestTransaction`: Whether the request was created without source tx verification
@@ -6127,7 +5948,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSignRequestById?id=Sign20260111003720999
 
 <a id="post-signrequestagree"></a>
 #### `POST /signRequestAgree`
-Agrees to or rejects a signing request. **Requires management key authentication** for **multi-agree** keys (same **`nonce` + `nodeKey` + `clientSig`** pattern as **`POST /triggerSignRequestById`**, **`POST /presignRequestAgree`**, etc.). **tx-check (relayer)** keys are unchanged: request body may be `requestId` only; no management signature is verified.
+Agrees to or rejects a signing request. **Requires management key authentication** for **multi-agree** keys (same **`nonce` + `nodeKey` + `clientSig`** pattern as **`POST /triggerSignRequestById`**, **`POST /keyGenRequestAgree`**, etc.). **tx-check (relayer)** keys are unchanged: request body may be `requestId` only; no management signature is verified.
 
 - **tx-check (relayer):** Unchanged. Request body is `requestId` (+ optional `clientSig`); no `accept` or `thoughts` field. Relayer flow is not affected.
 - **multi-agree:** Optional `accept` (boolean). Omitted or `true` = agree to sign (same as before). `false` = reject: this node is recorded as having declined in **RejectedBy**. The client must sign the canonical JSON body (including `requestId`, `nonce`, `nodeKey`, `clientSig` empty, `accept`, and `thoughts` when present). Other nodes may still agree; rejection is per-node.
@@ -6947,8 +6768,7 @@ curl -X POST $MPC_AUTH_URL:$MANAGEMENT_PORT/signRequest \
   -d '{
     "clientSig": "0x...",
     "keyList": [],
-    "presignId": "",
-    "pubKey": "08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de",
+      "pubKey": "08caf50811eb4c2bed7b3f8dc9c292b5cf521ba3774ea49dcd949e8235a48b22e8c1f16b356710aae4095e498bfff8385eada1e53a47dbdd984d32ae4d20a5de",
     "msgHash": "751f68b43977269a16128143fa15e0e7ab3c15ba52484fe8278796561505698b",
     "relayerPublicKey": "ed8639ee02b0e0cb8caade8ea24c71b1c60c55fa241032767e67c4da6e691f5fd08a36b005a2c1fd68c9b5a04137c406d458ba73b562aa269f52ceb6a285e41a",
     "relayerSignature": "0x...",
@@ -6970,7 +6790,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getSignResultById?id=Sign20260111003720999c
 
 For **multi-agree** keys, nodes agree via `POST /signRequestAgree`. Once **SigList** reaches the **MPC quorum** for this key (**t** parties for CGGMP24 and FROST), **only the originator** (the node whose key is the key in the Purpose map, i.e. the one that created the request via multiSignRequest) may call `POST /triggerSignRequestById` to trigger signature generation. Use `GET /getSignResultById` to poll for the signature. The originator can then call `POST /updateSignResultStatusById` to set status to `"executed"` (with transaction hash) or `"shelved"` (transaction will not be broadcast); these fields appear in `getSignResultById`. The originator can also call `POST /shelveSignRequest` to set the **sign request** status to `"shelved"` (e.g. to cancel or defer the request before triggering); this status appears in `getSignRequestById` and `listSignRequests` and is propagated to all nodes.
 
-**Batch sign request:** To request N signatures in one go (e.g. a sequence of transactions), call `POST /multiSignRequest` with `messageHashes` (array of N hex hashes) and optionally `messageRawBatch`. One `POST /signRequestAgree` agrees to the entire batch. After trigger, `GET /getSignResultById` returns one result with `batchSignResult: true`, `batchSize: N`, and `batchSignatures` (array of N entries: `messagehash`, `sigr`, `sigs`, `sigrecover`, `signaturehex`, `ethereumsignature`). Use `data.batchSignatures[i]` for the i-th signature and execute transactions in order (e.g. consecutive nonces on EVM). Batch signing does **not** use presign; each message runs a full interactive sign worker in parallel.
+**Batch sign request:** To request N signatures in one go (e.g. a sequence of transactions), call `POST /multiSignRequest` with `messageHashes` (array of N hex hashes) and optionally `messageRawBatch`. One `POST /signRequestAgree` agrees to the entire batch. After trigger, `GET /getSignResultById` returns one result with `batchSignResult: true`, `batchSize: N`, and `batchSignatures` (array of N entries: `messagehash`, `sigr`, `sigs`, `sigrecover`, `signaturehex`, `ethereumsignature`). Use `data.batchSignatures[i]` for the i-th signature and execute transactions in order (e.g. consecutive nonces on EVM). Each message in a batch runs an interactive sign worker in parallel.
 
 ```bash
 # Step 1: Create multi-agree sign request (e.g. from dApp)

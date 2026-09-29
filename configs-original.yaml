@@ -19,7 +19,7 @@ NodeMgtKey: "0x1234567890ABCDEF1234567890ABCDEF12345678"
 PublicMgtKey: ""
 
 # Ignore management key signature check (for testing/development only)
-# Controls signature verification for MANAGEMENT API endpoints (e.g., /newGroupRequest, /presignRequest)
+# Controls signature verification for MANAGEMENT API endpoints (e.g., /newGroupRequest, /keyGenRequest)
 # These endpoints are used by node operators/administrators to manage the node
 # If true, skips signature verification on management API requests
 # WARNING: Set to false in production for security
@@ -355,28 +355,6 @@ PreSigningVerification:
 
   # Note: Test transactions are automatically whitelisted when SourceTxHash or SourceChainID is empty
   # This allows test transactions from the relayer (when new MPC signers are added) to bypass pre-validation
-
-# Automatic presigning configuration
-# Controls whether the MPC group automatically creates and maintains presign requests
-# Enable automatic presign request creation
-# If true, the background worker will automatically create presign requests
-# for FROST key groups (ed25519, bitcoin-taproot) when cache is low.
-# CGGMP24 secp256k1 keys are skipped (presign not supported for ECDSA).
-# If false, presign requests must be created manually via /presignRequest API
-# Default: false
-InitiatePreSigning: false
-
-# Target number of presignatures to maintain per key group
-# The background worker will generate presignatures up to this amount
-# Must be between 1 and 50 (inclusive)
-# Default: 5
-PreSigningCacheSize: 5
-
-# Minimum threshold before creating new presignatures
-# When the cache drops below this number, new presignatures will be generated
-# Must be less than PreSigningCacheSize
-# Default: 2
-PreSigningMinThreshold: 2
 
 # CGGMP24 aux_info_gen: in-memory pool of PregeneratedPrimes (heavy CPU). See mpc-auth docs-internal/CGGMP24_ROADMAP.md.
 # If Cggmp24AuxPrimePoolMaxSize is omitted, default is 2. If Cggmp24AuxPrimePoolMaxAge is omitted and pool size > 0, default is "1h".
