@@ -41,6 +41,15 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 | **`continuum-dao-forum-replies`** | Read-only watch for replies to the operator’s Forum posts; cron **`notify-forum-replies`** |
 | **`continuum-dao-forum-inbox`** | Interactive: list NodeBB Unread, present posts, mark threads read |
 | **`continuum-dao-mpa-wallet-chat`** | MPA Wallet Chat listings, Agent Mail, Technocore discovery. Never ads in Ideas/Governance |
+| **`stock-research`** | US stock research menu: MCP ladder, Hyperliquid / Arcus / Uniswap / Aerodrome venue map, social reads. Load before the recipe skills |
+| **`stock-research-screener`** | Breakout hunter and Quality at a discount |
+| **`stock-research-calendar`** | Week-ahead risk map from a saved watchlist |
+| **`stock-research-fundamentals`** | Earnings preview and peer showdown |
+| **`stock-research-news`** | Why a name is moving, with sources |
+| **`stock-research-filings`** | SEC filing red flags (risk factors, debt, share count) |
+| **`stock-research-sectors`** | 11 S&P sector ETFs over 1 week, 1 month, and 3 months |
+| **`stock-research-watchlist`** | Draft a watchlist and write it only after yes |
+| **`stock-research-alerts`** | 52-week-high price alerts as cron jobs, after yes. No trade submit |
 
 Machine-editable host YAML is **not** under **`Skills/`**. Those files live at **`agent_llm_config.defaults/*.yaml`** (and **`cron/trade-cron.yaml`**) and appear on the Skills / Cron tabs as **Host YAML configs**.
 

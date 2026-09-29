@@ -435,18 +435,18 @@ KeyGen message bodies support up to **16 384** UTF-8 bytes. Orchestration mani
 
 **Plan mode** is for **designing** a multi-workstream plan in private agent chat, then executing it on KeyGen. While drafting, the plan thread does **not** spawn sub-agents by itself.
 
-**Source of truth:** `user_folder/plans/<planId>.md` — YAML frontmatter (`planId`, `mode`, `status`, …) + human markdown body + trailing fenced **`mpc-orchestrate v1`** (machine tasks). Modes: **`trade`**, **`yield`**, **`research`**, **`portfolio`**, **`dao`** (stub), **`hedging`**, **`custom`**.
+**Source of truth:** `user_folder/plans/<planId>.md` — YAML frontmatter (`planId`, `mode`, `status`, …) + human markdown body + trailing fenced **`mpc-orchestrate v1`** (machine tasks). Modes: **`trade`**, **`yield`**, **`research`**, **`portfolio`**, **`dao`** (stub), **`hedging`**, **`stock-research`**, **`custom`**.
 
-Existing nodes keep runtime **`orchestration-plan.yaml`** until **AI Agent → Skills → orchestration-plan.yaml → reset from defaults** (or **`POST /resetHostYamlFromDefaults`** with `kind=orchestration-plan`). New skill files (`hedging-trade`, `hedging-monitor`) install on next `process_config.sh` only if missing.
+Existing nodes keep runtime **`orchestration-plan.yaml`** until **AI Agent → Skills → orchestration-plan.yaml → reset from defaults** (or **`POST /resetHostYamlFromDefaults`** with `kind=orchestration-plan`). New skill files (`hedging-trade`, `hedging-monitor`, `stock-research` and the `stock-research-*` recipes) install on next `process_config.sh` only if missing.
 
 ### Setup
 
 1. Set a **preferred KeyGen** (node app **Settings** or **`POST /postPreferredKeyGen`**) so **Execute in KeyGen** knows where to post.
 2. Start a **Plan** conversation:
    - UI: **New plan** (calls **`POST /agent/plan/start`** with `mode`, creates skeleton under `plans/`), or
-   - UI: starter chips (market / yield / conditions / DAO / portfolio / **Hedging strategies** / something else), or
+   - UI: starter chips (market / yield / conditions / DAO / portfolio / **Hedging strategies** / **Stock research** / something else), or
    - UI: **Plan follow-on** — pick a prior **`[Orchestrator] …`** thread (see [Finding orchestrator threads](#finding-orchestrator-threads)), or
-   - Telegram: **New plan** beside **New chat** (mode buttons including **Hedging strategies** + title; Mini App view/edit when paid ngrok is configured, else text fallback). Telegram inline buttons are hardwired in **mpc-auth** — if New plan modes are a static list, add `mode=hedging` there; if mpc-auth iterates `orchestration-plan.yaml` `modes:`, the YAML add is enough. `callback_query` must stay in `setWebhook` `allowed_updates` (see [`TELEGRAM_WEBHOOK_NGROK.md`](TELEGRAM_WEBHOOK_NGROK.md)), or
+   - Telegram: **New plan** beside **New chat** (mode buttons including **Hedging strategies** and **Stock research** + title; Mini App view/edit when paid ngrok is configured, else text fallback). Telegram inline buttons are hardwired in **mpc-auth** — if New plan modes are a static list, add `mode=hedging` and `mode=stock-research` there; if mpc-auth iterates `orchestration-plan.yaml` `modes:`, the YAML add is enough. `callback_query` must stay in `setWebhook` `allowed_updates` (see [`TELEGRAM_WEBHOOK_NGROK.md`](TELEGRAM_WEBHOOK_NGROK.md)), or
    - API: **`POST /agent/plan/start`** with `mode` / `title` and/or prior refs (rollup injected), or
    - API: **`POST /agent/chat`** with `"conversationPurpose": "plan"` and optional `"keyGenId"` override.
 

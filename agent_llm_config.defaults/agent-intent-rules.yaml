@@ -239,6 +239,36 @@ rules:
       Unwind / close / roll / monitor a live hedge is hedging-monitor, not this rule.
     modes: [interactive]
 
+  - id: stock_research
+    tier: work
+    match:
+      anySubstring:
+        - stock research
+        - breakout hunter
+        - quality at a discount
+        - earnings preview
+        - filing red flags
+        - sector scorecard
+        - peer showdown
+        - why is it moving
+        - week-ahead
+        - week ahead risk
+        - 52-week
+        - 52 week high
+        - build a watchlist
+        - stock watchlist
+    hint: |
+      Operator wants US stock research, not an unhedged crypto trade. Load skill stock-research,
+      then the one recipe skill that matches the ask (screener, calendar, fundamentals, news,
+      filings, sectors, watchlist, alerts). Prefer free or free-allowance MCP servers; recommend
+      brave-search when no search path is set. Map names to Hyperliquid, Arcus, Uniswap, and
+      Aerodrome only when load_defi_protocol lists them. Continuum social search (Reddit,
+      Telegram, Discord) and catalog server x are read-only narrative when configured; recommend
+      adding them and let the operator pick accounts. Watchlist files and alert crons wait for
+      an explicit yes. If they are already in a plan thread, set/keep mode stock-research.
+      A named ticker plus a chart or a trade idea stays on trade mode.
+    modes: [interactive]
+
   - id: hedging_monitor_unwind
     tier: work
     match:

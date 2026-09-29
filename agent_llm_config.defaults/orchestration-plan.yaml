@@ -163,11 +163,38 @@ modes:
         label: "**hedge-protocol-risk** — one short note per named protocol / curator / asset class"
         always: true
 
+  stock-research:
+    starterPrompt: |
+      Research US stocks: a screen, a week-ahead risk map, a single-name briefing, or a sector scorecard. Ask which desk. Do not run every recipe. Watchlists and price alerts stay in chat after Execute.
+    systemPrefixExtra: |
+      Current mode: stock-research. Load skill stock-research, then the one recipe skill for the chosen desk. Ask which desk if they have not picked: (1) single name — fundamentals + news + filings, then map the ticker to Hyperliquid, Arcus, Uniswap, and Aerodrome in the plan markdown (plan-time, not a KeyGen task); news includes Continuum social search (Reddit, Telegram, Discord) and catalog server x when those reads are configured, (2) screen — one screener leaf, breakout hunter or quality at a discount; watchlist is a chat follow-on, (3) week ahead — one calendar leaf, only if user_folder/data/stock-research/watchlists/ already has a list, (4) sectors — one sector leaf. Write ONLY the chosen desk's leaves into Workstreams and the mpc-orchestrate fence. Delete every other leaf before Execute. Do not run all ten cards. Always continuum on mcpServers, plus only the AI Ready ids that leaf needs (menu skill MCP ladder: prefer no-key servers, then free-key alphavantage / financial-modeling-prep / massive / alpaca; search defaults to brave-search when no search path is set). Watchlist write and alert cron stay out of the fence. No broadcast, no build_trade_from_trade_idea in this fence. A tradable name hands off to trade mode.
+    workstreams:
+      # Menu of leaves. The planner copies only the chosen desk into the fence.
+      # always: false so a host that injects always:true workstreams does not run every card.
+      - idSuffix: stock-research-fundamentals
+        label: "**stock-research-fundamentals** — *(single-name desk)* earnings preview or peer showdown from an equity MCP; venue map stays in the plan file"
+        always: false
+      - idSuffix: stock-research-news
+        label: "**stock-research-news** — *(single-name desk)* why the name is moving; RSS plus Continuum social search and x when configured"
+        always: false
+      - idSuffix: stock-research-filings
+        label: "**stock-research-filings** — *(single-name desk)* latest filing vs the previous one (risk factors, debt, share count) via edgartools"
+        always: false
+      - idSuffix: stock-research-screener
+        label: "**stock-research-screener** — *(screen desk only)* breakout hunter or quality at a discount; intersect hits with HL / Arcus / Uniswap / Aerodrome"
+        always: false
+      - idSuffix: stock-research-calendar
+        label: "**stock-research-calendar** — *(week-ahead desk only)* earnings and macro events that touch the saved watchlist; flag three risks"
+        always: false
+      - idSuffix: stock-research-sectors
+        label: "**stock-research-sectors** — *(sectors desk only)* 11 S&P sector ETFs over 1 week, 1 month, and 3 months"
+        always: false
+
   custom:
     starterPrompt: |
       Help me design a multi-workstream plan for my goal. Ask clarifying questions if needed.
     systemPrefixExtra: |
-      Current mode: custom. On a new empty plan, offer starter options: market research, stablecoin yield, market conditions, ContinuumDAO proposals (stub), portfolio assessment, hedging strategies, or something else.
+      Current mode: custom. On a new empty plan, offer starter options: market research, stablecoin yield, market conditions, ContinuumDAO proposals (stub), portfolio assessment, hedging strategies, stock research, or something else.
     workstreams:
       - idSuffix: research
         label: "**research** — gather facts for the operator goal"

@@ -313,7 +313,7 @@ curl -sS "https://api.telegram.org/bot<BOT_TOKEN>/deleteWebhook"
 
 ## Plan mode in Telegram
 
-**New plan** sits beside **New chat**. Mode buttons include **Hedging strategies** (`mode=hedging`) plus trade / yield / research / portfolio / dao / custom. Same APIs as the node app: **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, then chat with `conversationPurpose: "plan"`.
+**New plan** sits beside **New chat**. Mode buttons include **Hedging strategies** (`mode=hedging`) and **Stock research** (`mode=stock-research`) plus trade / yield / research / portfolio / dao / custom. Same APIs as the node app: **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, then chat with `conversationPurpose: "plan"`.
 
 | Step | How |
 |------|-----|
@@ -324,7 +324,7 @@ curl -sS "https://api.telegram.org/bot<BOT_TOKEN>/deleteWebhook"
 | Compose | Follow-on or **Continue in Orchestrator** — one MultiSign per open-hedge leg |
 | Unwind | After the hedge is live, monitor cron with **`telegramNotify: true`** on triggers. Accept close/roll MultiSign in the bot the same way as a trade build |
 
-`callback_query` must stay in `setWebhook` **`allowed_updates`**. Telegram inline buttons are hardwired in **mpc-auth**. If New plan modes are a static list, add the seventh button (`mode=hedging`) in mpc-auth; if mpc-auth iterates `orchestration-plan.yaml` `modes:`, the YAML add is enough.
+`callback_query` must stay in `setWebhook` **`allowed_updates`**. Telegram inline buttons are hardwired in **mpc-auth**. If New plan modes are a static list, add `mode=hedging` and `mode=stock-research` in mpc-auth; if mpc-auth iterates `orchestration-plan.yaml` `modes:`, the YAML add is enough.
 
 Skills: **`hedging-trade`** (design), **`hedging-monitor`** (watch + unwind). Do not auto-Accept or broadcast.
 

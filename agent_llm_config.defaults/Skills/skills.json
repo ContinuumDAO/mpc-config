@@ -184,6 +184,51 @@
       "name": "close-call",
       "filename": "close-call/SKILL.md",
       "initialLoad": false
+    },
+    {
+      "name": "stock-research",
+      "filename": "stock-research/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "stock-research-screener",
+      "filename": "stock-research-screener/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "stock-research-calendar",
+      "filename": "stock-research-calendar/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "stock-research-fundamentals",
+      "filename": "stock-research-fundamentals/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "stock-research-news",
+      "filename": "stock-research-news/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "stock-research-filings",
+      "filename": "stock-research-filings/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "stock-research-sectors",
+      "filename": "stock-research-sectors/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "stock-research-watchlist",
+      "filename": "stock-research-watchlist/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "stock-research-alerts",
+      "filename": "stock-research-alerts/SKILL.md",
+      "initialLoad": false
     }
   ]
 }
