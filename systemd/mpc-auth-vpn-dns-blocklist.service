@@ -1,0 +1,6 @@
+[Unit]
+Description=Refresh Continuum VPN DNS blocklist for dnsmasq
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-vpn-dns-filter.sh refresh-list

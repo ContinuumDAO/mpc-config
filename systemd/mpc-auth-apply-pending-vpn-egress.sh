@@ -36,15 +36,21 @@ with open(path) as f:
     d = json.load(f)
 action = (d.get("action") or "").strip().lower()
 obfuscation = (d.get("obfuscation") or "none").strip().lower()
+dns_filter = (d.get("dnsFilter") or "none").strip().lower()
+dns_upstream = (d.get("dnsUpstream") or "1.1.1.1").strip()
 rate = d.get("defaultRateLimitMbps") or 0
-if action not in ("enable", "disable", "sync"):
+if action not in ("enable", "disable", "sync", "dnsfilter"):
     sys.stderr.write(f"unexpected action {action!r}\n")
     sys.exit(2)
 if obfuscation not in ("none", "shadowsocks", "wg_obfuscator", "lwo", "udp2raw"):
     obfuscation = "none"
+if dns_filter not in ("none", "blocky", "dnsmasq"):
+    dns_filter = "none"
 print(f"export MPC_AUTH_VPN_EGRESS_ACTION={shlex.quote(action)}")
 print(f"export MPC_AUTH_VPN_EGRESS_OBFUSCATION={shlex.quote(obfuscation)}")
 print(f"export MPC_AUTH_VPN_EGRESS_DEFAULT_RATE_MBPS={shlex.quote(str(rate))}")
+print(f"export MPC_AUTH_VPN_DNS_FILTER={shlex.quote(dns_filter)}")
+print(f"export MPC_AUTH_VPN_DNS_UPSTREAM={shlex.quote(dns_upstream)}")
 PY
 )" || {
 	echo "mpc-auth-apply-pending-vpn-egress: invalid JSON" >&2
@@ -67,10 +73,20 @@ run_script() {
 }
 
 case "$MPC_AUTH_VPN_EGRESS_ACTION" in
+dnsfilter)
+	export MPC_AUTH_VPN_DNS_FILTER MPC_AUTH_VPN_DNS_UPSTREAM
+	if [[ -x "${LIBEXEC}/mpc-auth-vpn-dns-filter.sh" ]] && ! "${LIBEXEC}/mpc-auth-vpn-dns-filter.sh"; then
+		echo "mpc-auth-apply-pending-vpn-egress: dns filter failed" >&2
+		mv -f "$PROCESSING" "${DONE_DIR}/failed-$(_stamp).apply.json" || true
+		exit 1
+	fi
+	;;
 enable | sync)
+	export MPC_AUTH_VPN_DNS_FILTER MPC_AUTH_VPN_DNS_UPSTREAM
 	run_script "$ENABLE_SCRIPT"
 	;;
 disable)
+	export MPC_AUTH_VPN_DNS_FILTER MPC_AUTH_VPN_DNS_UPSTREAM
 	run_script "$DISABLE_SCRIPT"
 	;;
 esac

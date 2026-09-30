@@ -3740,6 +3740,104 @@ paths:
         schema:
           type: object
           description: Request JSON — see in mpc-config repo docs/references/API_IMPLEMENTATION.md
+  /vpn/status:
+    get:
+      description: 'WireGuard admin VPN status, including dnsFilter (none, blocky, dnsmasq) and availableDnsFilters Full detail:
+        mpc-config docs/references/API_IMPLEMENTATION.md (GET /vpn/status).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - WireGuard VPN
+      summary: WireGuard admin VPN status, including dnsFilter (none, blocky, dnsmasq) and availableDnsFilters
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+  /vpn/setEnabled:
+    post:
+      description: 'Enable or disable host WireGuard wg0 (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /vpn/setEnabled).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - WireGuard VPN
+      summary: Enable or disable host WireGuard wg0 (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.VpnSetEnabledPost'
+  /vpn/setDnsFilter:
+    post:
+      description: 'Set node DNS ad-blocking engine without restarting WireGuard (management-signed) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (POST /vpn/setDnsFilter).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - WireGuard VPN
+      summary: Set node DNS ad-blocking engine without restarting WireGuard (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.VpnSetDnsFilterPost'
+  /vpn/clientConfig:
+    post:
+      description: 'Download WireGuard client config (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /vpn/clientConfig).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - WireGuard VPN
+      summary: Download WireGuard client config (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.VpnClientConfigPost'
+  /vpn/egress/status:
+    get:
+      description: 'Peer egress status; dnsFilter matches GET /vpn/status (read JWT when JWT applies) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (GET /vpn/egress/status).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - WireGuard VPN
+      summary: Peer egress status; dnsFilter matches GET /vpn/status (read JWT when JWT applies)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
   /backupDatabase:
     post:
       description: 'Create encrypted MongoDB backup (partial: shards + scrub base group/ping rows by scope) Full detail: mpc-config
@@ -5897,3 +5995,63 @@ definitions:
         ticket:
           type: string
           description: Forum ticket to delete, used when address is omitted
+  node.VpnSetEnabledPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - enabled
+      description: 'POST /vpn/setEnabled. Canonical JSON to sign: {"enabled":true,"profile":"split","obfuscation":"none","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
+        with clientSig cleared before signing. Writes pending-vpn.json. The pending file also carries the current dnsFilter
+        and dnsUpstream; changing the resolver is POST /vpn/setDnsFilter, not this route.'
+      properties:
+        enabled:
+          type: boolean
+          description: true = bring up wg0; false = tear it down
+        profile:
+          type: string
+          enum:
+          - split
+          - full
+          description: split = VPN subnet only; full = 0.0.0.0/0
+        obfuscation:
+          type: string
+          description: Transport id; none or a host-available obfuscation
+  node.VpnSetDnsFilterPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - engine
+      description: 'POST /vpn/setDnsFilter. Canonical JSON to sign: {"engine":"blocky","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
+        with clientSig cleared before signing. engine is none, blocky, or dnsmasq. Does not restart WireGuard. blocky and
+        dnsmasq require the engine in availableDnsFilters and the same veCTM billing gate as VPN enable. Full-tunnel and egress
+        client DNS becomes the WireGuard gateway; split-tunnel configs have no DNS line. Re-download the client config only
+        when crossing none and an engine. Pending action is dnsFilter.'
+      properties:
+        engine:
+          type: string
+          enum:
+          - none
+          - blocky
+          - dnsmasq
+          description: none keeps FullTunnelDns; blocky or dnsmasq binds a resolver on WG gateway IPs
+  node.VpnClientConfigPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      description: 'POST /vpn/clientConfig. Canonical JSON to sign: {"profile":"full","obfuscation":"none","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}
+        with clientSig cleared before signing. Full profile DNS is the wg0 gateway when dnsFilter is blocky or dnsmasq, otherwise
+        WireGuard.FullTunnelDns. Split profile has no DNS line.'
+      properties:
+        profile:
+          type: string
+          enum:
+          - split
+          - full
+        obfuscation:
+          type: string
+          description: Optional override; otherwise host state

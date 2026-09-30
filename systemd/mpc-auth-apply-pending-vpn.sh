@@ -48,16 +48,22 @@ with open(path) as f:
 action = (d.get("action") or "").strip().lower()
 profile = (d.get("profile") or "split").strip().lower()
 obfuscation = (d.get("obfuscation") or "none").strip().lower()
-if action not in ("enable", "disable"):
+dns_filter = (d.get("dnsFilter") or "none").strip().lower()
+dns_upstream = (d.get("dnsUpstream") or "1.1.1.1").strip()
+if action not in ("enable", "disable", "dnsfilter"):
     sys.stderr.write(f"mpc-auth-apply-pending-vpn: unexpected action {action!r}\n")
     sys.exit(2)
 if profile not in ("split", "full"):
     profile = "split"
 if obfuscation not in ("none", "shadowsocks", "wg_obfuscator", "lwo", "udp2raw"):
     obfuscation = "none"
+if dns_filter not in ("none", "blocky", "dnsmasq"):
+    dns_filter = "none"
 print(f"export MPC_AUTH_VPN_ACTION={shlex.quote(action)}")
 print(f"export MPC_AUTH_VPN_PROFILE={shlex.quote(profile)}")
 print(f"export MPC_AUTH_VPN_OBFUSCATION={shlex.quote(obfuscation)}")
+print(f"export MPC_AUTH_VPN_DNS_FILTER={shlex.quote(dns_filter)}")
+print(f"export MPC_AUTH_VPN_DNS_UPSTREAM={shlex.quote(dns_upstream)}")
 PY
 )" || abort_bad_json
 
@@ -80,6 +86,8 @@ run_script() {
 	fi
 	export MPC_AUTH_VPN_PROFILE
 	export MPC_AUTH_VPN_OBFUSCATION
+	export MPC_AUTH_VPN_DNS_FILTER
+	export MPC_AUTH_VPN_DNS_UPSTREAM
 	"$script" "$@"
 }
 
@@ -118,6 +126,16 @@ if not d.get("active"):
 print((d.get("obfuscation") or "none").strip().lower())
 PY
 }
+
+if [[ "$MPC_AUTH_VPN_ACTION" == "dnsfilter" ]]; then
+	export MPC_AUTH_VPN_DNS_FILTER MPC_AUTH_VPN_DNS_UPSTREAM
+	if [[ -x "${LIBEXEC}/mpc-auth-vpn-dns-filter.sh" ]]; then
+		if ! "${LIBEXEC}/mpc-auth-vpn-dns-filter.sh"; then
+			finalize_fail
+		fi
+	fi
+	finalize_ok
+fi
 
 if [[ "$MPC_AUTH_VPN_ACTION" == "enable" ]]; then
 	export STATE_FILE

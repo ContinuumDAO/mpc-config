@@ -1,0 +1,12 @@
+[Unit]
+Description=Blocky DNS ad blocking for Continuum VPN
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/blocky --config /var/lib/mpc-auth-docker/dns-filter/blocky.yml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

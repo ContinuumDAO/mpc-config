@@ -167,6 +167,8 @@ mpc_auth_vpn_egress_prepare_wg_conf() {
 		;;
 	esac
 
+	post_up_parts+=("/usr/local/libexec/mpc-auth/mpc-auth-vpn-dns-filter.sh || true")
+
 	if mpc_auth_vpn_ufw_active; then
 		case "$obfuscation" in
 		shadowsocks | wg_obfuscator | lwo | udp2raw)

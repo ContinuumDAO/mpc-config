@@ -37,17 +37,33 @@ if command -v tc >/dev/null 2>&1; then
 fi
 
 mkdir -p "$(dirname "$STATE_FILE")"
+export STATE_FILE
 python3 - <<'PY'
 import json, datetime, os
 path = os.environ.get("STATE_FILE", "/var/lib/mpc-auth-docker/vpn-egress-state.json")
+existing = {}
+if os.path.exists(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            existing = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        existing = {}
+dns_filter = str(existing.get("dnsFilter") or "none").strip().lower()
+if dns_filter not in ("none", "blocky", "dnsmasq"):
+    dns_filter = "none"
 payload = {
     "active": False,
     "sharingEnabled": False,
+    "dnsFilter": dns_filter,
     "updatedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }
 with open(path + ".tmp", "w") as f:
     json.dump(payload, f)
 os.rename(path + ".tmp", path)
 PY
+
+if [[ -x "${HERE}/mpc-auth-vpn-dns-filter.sh" ]]; then
+	"${HERE}/mpc-auth-vpn-dns-filter.sh" || true
+fi
 
 echo "mpc-auth-vpn-egress-disable: wg-egress disabled"

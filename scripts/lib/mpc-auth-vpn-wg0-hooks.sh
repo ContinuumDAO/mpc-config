@@ -159,6 +159,8 @@ mpc_auth_vpn_prepare_wg0_conf() {
 		;;
 	esac
 
+	post_up_parts+=("/usr/local/libexec/mpc-auth/mpc-auth-vpn-dns-filter.sh || true")
+
 	if mpc_auth_vpn_ufw_active; then
 		mpc_auth_vpn_apply_ufw_rules "$listen_port" "$vpn_cidr" "$mgmt_port" "$obfuscation" "$transport_port"
 		case "$obfuscation" in

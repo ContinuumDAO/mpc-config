@@ -48,6 +48,10 @@ REPO_ROOT="$(cd "$HERE/.." && pwd)"
 . "${REPO_ROOT}/scripts/lib/ensure-lwo-host-packages.sh"
 # shellcheck source=../scripts/lib/write-vpn-host-obfuscation-capabilities.sh
 . "${REPO_ROOT}/scripts/lib/write-vpn-host-obfuscation-capabilities.sh"
+# shellcheck source=../scripts/lib/ensure-vpn-dns-filter-packages.sh
+. "${REPO_ROOT}/scripts/lib/ensure-vpn-dns-filter-packages.sh"
+# shellcheck source=../scripts/lib/write-vpn-host-dns-filter-capabilities.sh
+. "${REPO_ROOT}/scripts/lib/write-vpn-host-dns-filter-capabilities.sh"
 LIBEXEC="/usr/local/libexec/mpc-auth"
 UNIT_DIR="/etc/systemd/system"
 DEFAULT_ENV="/etc/default/mpc-auth-docker"
@@ -65,6 +69,7 @@ install -m 0755 \
 	"$HERE/mpc-auth-apply-pending-vpn-egress.sh" \
 	"$HERE/mpc-auth-vpn-egress-enable.sh" \
 	"$HERE/mpc-auth-vpn-egress-disable.sh" \
+	"$HERE/mpc-auth-vpn-dns-filter.sh" \
 	"$HERE/mpc-auth-apply-pending-telegram-ngrok.sh" \
 	"$HERE/mpc-auth-telegram-ngrok-enable.sh" \
 	"$HERE/mpc-auth-telegram-ngrok-disable.sh" \
@@ -121,6 +126,10 @@ install -m 0644 \
 	"$HERE/mpc-auth-shadowsocks-egress.service" \
 	"$HERE/mpc-auth-wg-obfuscator-egress.service" \
 	"$HERE/mpc-auth-udp2raw-egress.service" \
+	"$HERE/mpc-auth-blocky.service" \
+	"$HERE/mpc-auth-dnsmasq.service" \
+	"$HERE/mpc-auth-vpn-dns-blocklist.service" \
+	"$HERE/mpc-auth-vpn-dns-blocklist.timer" \
 	"$HERE/mpc-auth-telegram-ngrok-pending.path" \
 	"$HERE/mpc-auth-telegram-ngrok-pending.service" \
 	"$HERE/mpc-auth-agent-llm-config.path" \
@@ -189,6 +198,14 @@ fi
 
 write_vpn_host_obfuscation_capabilities /var/lib/mpc-auth-docker || true
 
+if ! ensure_vpn_dns_filter_packages; then
+	echo "WARNING: blocky or dnsmasq missing — VPN DNS ad blocking unavailable until installed." >&2
+fi
+write_vpn_host_dns_filter_capabilities /var/lib/mpc-auth-docker || true
+
+systemctl enable mpc-auth-vpn-dns-blocklist.timer
+systemctl restart mpc-auth-vpn-dns-blocklist.timer || systemctl start mpc-auth-vpn-dns-blocklist.timer || true
+
 systemctl enable mpc-auth-vpn-pending.path
 systemctl restart mpc-auth-vpn-pending.path || systemctl start mpc-auth-vpn-pending.path
 
@@ -212,6 +229,7 @@ echo "  $LIBEXEC/mpc-auth-apply-pending-update.sh"
 echo "  $LIBEXEC/mpc-auth-apply-pending-reboot.sh"
 echo "  $LIBEXEC/mpc-auth-sync-compose-role.sh (relay/client docker-compose.yml sync before restart)"
 echo "  $LIBEXEC/mpc-auth-apply-pending-vpn.sh + mpc-auth-vpn-{enable,disable}.sh (POST /vpn/setEnabled — WireGuard VPN)"
+echo "  $LIBEXEC/mpc-auth-vpn-dns-filter.sh + mpc-auth-{blocky,dnsmasq}.service (POST /vpn/setDnsFilter)"
 echo "  $LIBEXEC/mpc-auth-apply-pending-vpn-egress.sh + mpc-auth-vpn-egress-{enable,disable}.sh (POST /vpn/egress/setSharing — wg-egress)"
 echo "  $UNIT_DIR/mpc-auth-vpn-pending.{path,service} (bind-mount /var/lib/mpc-auth-docker in compose)"
 echo "  $UNIT_DIR/mpc-auth-vpn-egress-pending.{path,service} (peer egress VPN)"

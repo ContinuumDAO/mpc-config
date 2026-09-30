@@ -1,0 +1,12 @@
+[Unit]
+Description=dnsmasq DNS ad blocking for Continuum VPN
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env dnsmasq --keep-in-foreground --conf-file=/var/lib/mpc-auth-docker/dns-filter/dnsmasq.conf
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

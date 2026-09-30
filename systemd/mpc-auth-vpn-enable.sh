@@ -124,17 +124,31 @@ fi
 
 mkdir -p "$(dirname "$STATE_FILE")"
 export STATE_FILE PROFILE LISTEN_PORT OBFUSCATION TRANSPORT_PORT
+export MPC_AUTH_VPN_DNS_FILTER="${MPC_AUTH_VPN_DNS_FILTER:-}"
 python3 - <<'PY'
 import json, datetime, os
 path = os.environ["STATE_FILE"]
 obfuscation = os.environ.get("OBFUSCATION", "none")
 transport_port = int(os.environ.get("TRANSPORT_PORT", "0") or "0")
+dns_filter = os.environ.get("MPC_AUTH_VPN_DNS_FILTER", "").strip().lower()
+existing = {}
+if os.path.exists(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            existing = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        existing = {}
+if dns_filter not in ("none", "blocky", "dnsmasq"):
+    dns_filter = str(existing.get("dnsFilter") or "none").strip().lower()
+if dns_filter not in ("none", "blocky", "dnsmasq"):
+    dns_filter = "none"
 payload = {
     "active": True,
     "profile": os.environ.get("PROFILE", "split"),
     "obfuscation": obfuscation,
     "listenPort": int(os.environ.get("LISTEN_PORT", "51820")),
     "directWireGuardBlocked": obfuscation in ("shadowsocks", "wg_obfuscator", "lwo", "udp2raw"),
+    "dnsFilter": dns_filter,
     "updatedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }
 if obfuscation == "shadowsocks" and transport_port > 0:
@@ -149,5 +163,9 @@ with open(path + ".tmp", "w") as f:
     json.dump(payload, f)
 os.rename(path + ".tmp", path)
 PY
+
+if [[ -x "${HERE}/mpc-auth-vpn-dns-filter.sh" ]]; then
+	"${HERE}/mpc-auth-vpn-dns-filter.sh" || true
+fi
 
 echo "mpc-auth-vpn-enable: WireGuard VPN enabled (profile=${PROFILE}, obfuscation=${OBFUSCATION})"

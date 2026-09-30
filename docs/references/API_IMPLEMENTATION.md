@@ -372,8 +372,9 @@ Use these on the **same** `ManagementAPIsPort` listener as the rest of the manag
 
 ### WireGuard admin VPN (VPS, Linux Docker Desktop, Windows WSL, macOS)
 Enable/disable a host WireGuard server from the Node page **VPN Panel** on **relay and client** nodes. Optional **Shadowsocks transport obfuscation** hides WireGuard UDP from DPI (see [Shadowsocks obfuscation](#shadowsocks-transport-obfuscation)). Requires **`MPC_AUTH_VPN_PENDING_FILE`** in **`docker-compose.relay.yml`** / **`docker-compose.client.yml`** (bind-mounted via generated **`docker-compose.yml`**) plus host automation: **`mpc-auth-vpn-pending.path`** on VPS and **Linux Docker Desktop** (systemd), or the **WSL / macOS pending watcher** on Docker Desktop. See **`systemd/README.md`** and **`docker-extension/README.md`**.
-- [`GET /vpn/status`](#get-vpn-status) — read JWT; host automation availability, active state, endpoint, profiles, obfuscation fields.
+- [`GET /vpn/status`](#get-vpn-status) — read JWT; host automation availability, active state, endpoint, profiles, obfuscation fields, DNS filter.
 - [`POST /vpn/setEnabled`](#post-vpn-setenabled) — management-signed **`{ nonce, clientSig, nodeKey, enabled, profile?, obfuscation? }`**; generates keys on first enable; writes **`pending-vpn.json`** for host **`wg-quick@wg0`** (+ **`ssserver`** when obfuscated).
+- [`POST /vpn/setDnsFilter`](#post-vpn-setdnsfilter) — management-signed **`{ nonce, clientSig, nodeKey, engine }`**; sets **`none`**, **`blocky`**, or **`dnsmasq`** without restarting WireGuard.
 - [`POST /vpn/clientConfig`](#post-vpn-clientconfig) — management-signed download of WireGuard client **`.conf`** (**`profile`**: **`split`** or **`full`**); when obfuscation is active, returns a bundle including **`sslocal`** tunnel JSON.
 
 **mpc-auth implementation:** see [`MPC_AUTH_VPN_SHADOWSOCKS.md`](./MPC_AUTH_VPN_SHADOWSOCKS.md). Reference config generator: **`scripts/lib/mpc-auth-vpn-shadowsocks-config.py`**.
@@ -513,6 +514,9 @@ Returns WireGuard VPN automation status for the **VPN Panel** in continuumdao-no
   "shadowsocksListenPort": 8388,
   "shadowsocksMethod": "chacha20-ietf-poly1305",
   "directWireGuardBlocked": false,
+  "dnsFilter": "none",
+  "availableDnsFilters": [],
+  "dnsFilterCapabilitiesPath": "",
   "privileged": true,
   "privilegeSource": "vectm_attach"
 }
@@ -527,7 +531,12 @@ Returns WireGuard VPN automation status for the **VPN Panel** in continuumdao-no
 - **`obfuscationAvailable`**: **`true`** when host has **`ssserver`** on **`PATH`** and host profile supports obfuscation (**VPS**, **Linux Docker Desktop**). **`false`** on WSL/macOS desktop profiles until fully validated (panel should hide the toggle).
 - **`shadowsocksListenPort`** / **`shadowsocksMethod`**: from **`configs.yaml`** **`Shadowsocks.*`** and persisted server config.
 - **`directWireGuardBlocked`**: **`true`** when obfuscation is active and host blocks public UDP **`51820`** (iptables **`! -i lo`** DROP).
+- **`dnsFilter`**: node-level resolver **`none`** (default), **`blocky`**, or **`dnsmasq`**. Applies to the operator full-tunnel profile and to peer egress. Split-tunnel client configs have no **`DNS`** line.
+- **`availableDnsFilters`**: engines the host can run (**`blocky`** and/or **`dnsmasq`**). Empty on desktop/WSL, when systemd automation is off, or until **`systemd/install-mpc-auth-docker-systemd.sh`** has written **`vpn-host-dns-filter.json`** and the binary is installed. **`none`** is always valid and is not listed.
+- **`dnsFilterCapabilitiesPath`**: that capabilities file (empty when unset).
 - **`endpointHost`**: public IP/hostname for the WireGuard client **`Endpoint`** on **this** node when **`obfuscation`** is **`none`**. When **`shadowsocks`**, client **`Endpoint`** is **`127.0.0.1:<localTunnelPort>`** (default **`51821`**) via **`sslocal`** tunnel — **`endpointHost`** still identifies the Shadowsocks server address for **`sslocal`** JSON.
+
+**`GET /vpn/egress/status`** returns the same **`dnsFilter`** and **`availableDnsFilters`**. Change them with **`POST /vpn/setDnsFilter`** (no separate egress route).
 
 **Host firewall:** on UFW + Docker VPS hosts, **`mpc-auth-vpn-enable.sh`** adds **`PostUp`** **`iptables`** rules so UDP **`51820`** reaches **`wg0`** when **`obfuscation`** is **`none`** (see **`systemd/README.md`**). With **`obfuscation: shadowsocks`**, public UDP **`51820`** is blocked and TCP/UDP **`Shadowsocks.ListenPort`** (default **`8388`**) must be open at UFW and the cloud provider. Some cloud panels also require **inbound UDP 51820** (direct mode) or **TCP+UDP 8388** (obfuscated mode) at the provider layer.
 
@@ -565,12 +574,40 @@ Management-signed JSON (canonical body with **`clientSig`** cleared for verifica
 On first enable, mpc-auth generates server/client WireGuard keypairs under **`/var/lib/mpc-auth-docker/wireguard/`**, writes **`wg0.conf`**, then atomically writes **`pending-vpn.json`**:
 
 ```json
-{ "action": "enable", "profile": "split", "obfuscation": "shadowsocks" }
+{ "action": "enable", "profile": "split", "obfuscation": "shadowsocks", "dnsFilter": "none", "dnsUpstream": "1.1.1.1" }
 ```
+
+**`dnsFilter`** and **`dnsUpstream`** are the current engine and **`WireGuard.FullTunnelDns`**. Host **`enable`** keeps the engine; it does not change it. Use **`POST /vpn/setDnsFilter`** to change the resolver without restarting WireGuard.
 
 Host automation runs **`mpc-auth-apply-pending-vpn.sh`** (**`mpc-auth-vpn-pending.path`** on systemd hosts, WSL/macOS watcher on Docker Desktop). Profile or obfuscation changes trigger disable-then-enable.
 
 **Response `data`:** **`pendingVpnWritten`**, **`pendingVpnFile`**, **`message`**, optional **`pendingVpnFileError`**.
+
+<a id="post-vpn-setdnsfilter"></a>
+#### `POST /vpn/setDnsFilter`
+
+Management-signed JSON (canonical body with **`clientSig`** cleared for verification):
+
+```json
+{
+  "nonce": 12,
+  "clientSig": "0x… or 128-hex-ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
+  "engine": "blocky"
+}
+```
+
+**`engine`**: **`none`**, **`blocky`**, or **`dnsmasq`**. Sets the node-level DNS ad-blocking resolver without restarting WireGuard.
+
+- **`none`** — full-tunnel and egress client configs use **`WireGuard.FullTunnelDns`** (default **`1.1.1.1`**). No local resolver.
+- **`blocky`** or **`dnsmasq`** — full-tunnel admin **`DNS`** is the **`wg0`** gateway (host from **`ServerAddressCidr`**); egress client **`DNS`** is the **`wg-egress`** gateway. The resolver forwards other names to **`FullTunnelDns`**. Split-tunnel configs still have no **`DNS`** line.
+- An engine other than **`none`** uses the same veCTM billing and **`peerTunnelCodecAligned`** gate as VPN enable. **`none`** does not.
+- Writes **`dnsFilter`** into **`vpn-state.json`** and the egress store, then pending JSON with **`"action":"dnsFilter"`** and **`dnsUpstream`**. Host automation runs only **`mpc-auth-vpn-dns-filter.sh`**.
+- One resolver, bound only to live WireGuard gateway IPv4s (**`mpc-auth-blocky.service`** or **`mpc-auth-dnsmasq.service`**). While filtering is on, iptables NAT redirects UDP/TCP **53** on **`wg0`** and **`wg-egress`** to local **:53**. DNS-over-HTTPS still bypasses that redirect.
+- Blocklist: HaGeZi domains light. **`dnsmasq`** refreshes on **`mpc-auth-vpn-dns-blocklist.timer`** (daily). Blocky refreshes itself.
+- Crossing **`none`** and an engine changes the **`DNS`** line; re-download the client config. Switching **`blocky`** and **`dnsmasq`** does not.
+- **`400`** when **`engine`** is not **`none`** and is not in **`availableDnsFilters`**.
+- Existing hosts must re-run **`systemd/install-mpc-auth-docker-systemd.sh`** to install binaries, units, and **`/var/lib/mpc-auth-docker/vpn-host-dns-filter.json`**.
 
 <a id="post-vpn-clientconfig"></a>
 #### `POST /vpn/clientConfig`
@@ -601,7 +638,7 @@ When **`obfuscation`** is **`shadowsocks`** (read from **`vpn-state.json`** or r
 
 Contains the **client private key** and **Shadowsocks password** — treat like secrets; only download over TLS or SSH tunnel.
 
-**Split profile:** **`AllowedIPs = 10.8.0.0/24`** (or **`WireGuard.VpnNetworkCidr`**). **Full profile:** **`AllowedIPs = 0.0.0.0/0, ::/0`**, **`DNS`** from **`WireGuard.FullTunnelDns`**.
+**Split profile:** **`AllowedIPs = 10.8.0.0/24`** (or **`WireGuard.VpnNetworkCidr`**). No **`DNS`** line. **Full profile:** **`AllowedIPs = 0.0.0.0/0, ::/0`**, and **`DNS`** is the **`wg0`** gateway when **`dnsFilter`** is **`blocky`** or **`dnsmasq`**, otherwise **`WireGuard.FullTunnelDns`** (default **`1.1.1.1`**). Egress client configs use the same rule with the **`wg-egress`** gateway when filtering is on.
 
 Logic reference: **`scripts/lib/mpc-auth-vpn-shadowsocks-config.py`** **`client`** subcommand.
 
@@ -612,7 +649,7 @@ Separate from admin **`wg0`**: optional **full-exit** routing through a configur
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/vpn/egress/status` | Read (**ManagementAPIsPort**, **localhost only**) | Local egress state, `countryCode`, `sharingEnabled`, rate limits |
+| GET | `/vpn/egress/status` | Read (**ManagementAPIsPort**, **localhost only**) | Local egress state, `countryCode`, `sharingEnabled`, rate limits, node-level `dnsFilter` |
 | GET | `/vpn/egress/availableExits` | Read | Configured peers offering active egress via **MQTT** (`VpnEgressStatusRequest` / `VpnEgressStatusReply`; peer pubkeys from **MQTT relay subscription topics** + **`nodeAddresses`**, or configs.yaml **`keyList`** when set — not HTTP to peer **8080**, PublicDiscoveryPort, or groupId DB lookups) |
 | GET | `/vpn/egress/myAccessStatuses` | Read | This node's egress access on each peer exit via **MQTT** (`VpnEgressConsumerAccessRequest` / `VpnEgressConsumerAccessReply`) |
 | POST | `/vpn/egress/setSharing` | Management sig | Enable/disable offering egress; `obfuscation`, `defaultRateLimitMbps` |
