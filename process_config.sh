@@ -4346,6 +4346,13 @@ _relay_mqtt_server_cert_has_mosquitto_san() {
         openssl x509 -in "$SERVER_CRT" -noout -text 2>/dev/null | grep -qE 'DNS:mosquitto([^a-zA-Z0-9_-]|$)'
 }
 
+# True when server.crt includes the relay's current public IP as a SAN.
+_relay_mqtt_server_cert_has_ip_san() {
+    local ip="$1"
+    [ -n "$ip" ] && [ -f "$SERVER_CRT" ] && command -v openssl >/dev/null 2>&1 && \
+        openssl x509 -in "$SERVER_CRT" -noout -text 2>/dev/null | grep -q "IP Address:${ip}"
+}
+
 # Relay app uses mqttBroker ssl://<WAN-ip>:8883; from inside Docker that often fails without NAT hairpin.
 # Map the relay WAN IP (first nodeAddresses host) to host-gateway so TLS still targets the public IP SAN.
 apply_docker_compose_relay_mqtt_hairpin_extra_hosts() {
@@ -4510,8 +4517,16 @@ print(1 if port > 0 else 0)
         MOSQUITTO_CONF=$(find_mosquitto_conf)
         local _gen_mqtt_certs=false
         local _regen_server_san_only=false
+        local _relay_ip_for_san=""
+        _relay_ip_for_san=$(extract_ip_from_url "$(get_first_node_address "$CONFIG_FILE" 2>/dev/null)" 2>/dev/null || true)
+        if [ "$_relay_ip_for_san" = "$NODE_ADDRESSES_RELAY_PLACEHOLDER_IPV4" ]; then
+            _relay_ip_for_san=""
+        fi
         if [ -n "$MOSQUITTO_CONF" ] && is_letsencrypt_configured "$MOSQUITTO_CONF"; then
             print_info "sync-compose-role: Let's Encrypt configured — skipping self-signed MQTT cert generation."
+        elif [ "$changed" -eq 1 ]; then
+            print_info "sync-compose-role: promoted to relay — generating a new MQTT CA and server certificate."
+            _gen_mqtt_certs=true
         elif ! _relay_mqtt_tls_certs_complete; then
             print_info "sync-compose-role: MQTT broker TLS files incomplete in $CERT_DIR — generating."
             _gen_mqtt_certs=true
@@ -4519,6 +4534,9 @@ print(1 if port > 0 else 0)
             _gen_mqtt_certs=true
         elif _relay_mqtt_tls_certs_complete && ! _relay_mqtt_server_cert_has_mosquitto_san; then
             print_info "sync-compose-role: server.crt missing DNS SAN mosquitto — regenerating server cert for ssl://mosquitto:8883."
+            _regen_server_san_only=true
+        elif [ -n "$_relay_ip_for_san" ] && ! _relay_mqtt_server_cert_has_ip_san "$_relay_ip_for_san"; then
+            print_info "sync-compose-role: server.crt IP SAN is not ${_relay_ip_for_san} — re-issuing server certificate."
             _regen_server_san_only=true
         fi
         if [ "$_gen_mqtt_certs" = true ]; then
