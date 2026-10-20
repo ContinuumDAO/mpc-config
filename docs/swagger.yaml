@@ -2302,6 +2302,259 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.ClearForumSessionPost'
+  /railgunPrivateBalances:
+    post:
+      description: 'Publish a Railgun private-balance scan for one chain (read JWT or loopback; forwarded to continuum-mcp
+        memory) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /railgunPrivateBalances).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Publish a Railgun private-balance scan for one chain (read JWT or loopback; forwarded to continuum-mcp memory)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: Authorization
+        in: header
+        required: false
+        description: Bearer read JWT required on Browser HTTPS and BrowserLoopbackReadHTTP. Loopback is accepted without a
+          JWT.
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.RailgunPrivateBalancesPost'
+  /getKeyGenRailgun:
+    get:
+      description: 'Read the Railgun wallet address and shielded balances stored on a KeyGen Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (GET /getKeyGenRailgun).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Read the Railgun wallet address and shielded balances stored on a KeyGen
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - type: string
+        name: id
+        in: query
+        required: true
+        description: KeyGen request id
+      - type: string
+        name: Authorization
+        in: header
+        required: false
+        description: Bearer read JWT required on Browser HTTPS and BrowserLoopbackReadHTTP.
+  /putKeyGenRailgunWallet:
+    post:
+      description: 'Store one Railgun spending share per KeyGen node and a viewing key (management signature) Full detail:
+        mpc-config docs/references/API_IMPLEMENTATION.md (POST /putKeyGenRailgunWallet).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Store one Railgun spending share per KeyGen node and a viewing key (management signature)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.PutKeyGenRailgunWalletPost'
+  /getKeyGenRailgunWallet:
+    post:
+      description: 'Return this node''s Railgun viewing key (management signature). A viewing key cannot spend Full detail:
+        mpc-config docs/references/API_IMPLEMENTATION.md (POST /getKeyGenRailgunWallet).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Return this node's Railgun viewing key (management signature). A viewing key cannot spend
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.GetKeyGenRailgunWalletPost'
+  /putKeyGenRailgunBalances:
+    post:
+      description: 'Write one chain''s shielded balances onto the KeyGen record (management signature or read JWT) Full detail:
+        mpc-config docs/references/API_IMPLEMENTATION.md (POST /putKeyGenRailgunBalances).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Write one chain's shielded balances onto the KeyGen record (management signature or read JWT)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.PutKeyGenRailgunBalancesPost'
+  /keyGenRailgunEnsure:
+    post:
+      description: 'Create a threshold Railgun wallet on this KeyGen if missing (read JWT; no mnemonic returned) Full detail:
+        mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunEnsure).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: Create a threshold Railgun wallet on this KeyGen if missing (read JWT; no mnemonic returned)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.KeyGenRailgunActionPost'
+  /keyGenRailgunScan:
+    post:
+      description: 'Scan shielded balances on the node and store them on the KeyGen (read JWT) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /keyGenRailgunScan).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: Scan shielded balances on the node and store them on the KeyGen (read JWT)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.KeyGenRailgunActionPost'
+  /keyGenRailgunPrivateTransfer:
+    post:
+      description: 'Start a threshold Railgun private transfer (read JWT) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /keyGenRailgunPrivateTransfer).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: Start a threshold Railgun private transfer (read JWT)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.KeyGenRailgunActionPost'
+  /keyGenRailgunUnshield:
+    post:
+      description: 'Start a threshold Railgun unshield (read JWT) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /keyGenRailgunUnshield).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: Start a threshold Railgun unshield (read JWT)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.KeyGenRailgunActionPost'
+  /keyGenRailgunSpendPropose:
+    post:
+      description: 'Record a pending Railgun spend that needs the KeyGen quorum (management signature) Full detail: mpc-config
+        docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunSpendPropose).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: Record a pending Railgun spend that needs the KeyGen quorum (management signature)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.KeyGenRailgunSpendProposePost'
+  /keyGenRailgunSpendAgree:
+    post:
+      description: 'Release this node''s Railgun spending share for a pending spend (read JWT or management signature) Full
+        detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunSpendAgree).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: Release this node's Railgun spending share for a pending spend (read JWT or management signature)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.KeyGenRailgunSpendAgreePost'
   /listEnvironmentVariables:
     get:
       description: 'List MCP agent environment variables stored on this node (local MongoDB) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
@@ -6055,3 +6308,200 @@ definitions:
         obfuscation:
           type: string
           description: Optional override; otherwise host state
+  node.RailgunPrivateBalanceRow:
+    type: object
+    required:
+    - tokenAddress
+    - spendable
+    - pending
+    properties:
+      tokenAddress:
+        type: string
+        description: ERC-20 address
+      spendable:
+        type: string
+        description: Spendable amount in wei (decimal integer string)
+      pending:
+        type: string
+        description: Pending amount in wei (decimal integer string)
+      symbol:
+        type: string
+  node.RailgunPrivateBalancesPost:
+    type: object
+    description: POST /railgunPrivateBalances. Read JWT on Browser HTTPS and BrowserLoopbackReadHTTP; loopback is accepted
+      without a JWT. No management signature and no nonce. Forwards chainId, scanStatus, balances, updatedAt, and notes to
+      continuum-mcp POST /internal/railgun-private-balances. One snapshot per chain id, in MCP process memory; not stored
+      in MongoDB and not propagated. mnemonic, encryptionKey, and viewingKey are rejected.
+    required:
+    - chainId
+    - scanStatus
+    properties:
+      chainId:
+        type: integer
+        description: EVM chain id
+      scanStatus:
+        type: string
+        enum:
+        - scanning
+        - ready
+        - empty
+        - error
+      balances:
+        type: array
+        items:
+          $ref: '#/definitions/node.RailgunPrivateBalanceRow'
+      updatedAt:
+        type: string
+        description: RFC 3339 timestamp; MCP fills this when empty
+      notes:
+        type: string
+  node.PutKeyGenRailgunWalletPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - keyGenId
+      - railgunAddress
+      - shares
+      - viewEncryptionKey
+      - viewingKey
+      description: POST /putKeyGenRailgunWallet. Management signature required. Stores one spending share per KeyGen node
+        and a viewing key. The mnemonic is not accepted.
+      properties:
+        keyGenId:
+          type: string
+        railgunAddress:
+          type: string
+        shares:
+          type: array
+          items:
+            type: object
+            required:
+            - nodeKey
+            - share
+            properties:
+              nodeKey:
+                type: string
+              share:
+                type: string
+        viewEncryptionKey:
+          type: string
+        viewingKey:
+          type: string
+  node.GetKeyGenRailgunWalletPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - keyGenId
+      description: POST /getKeyGenRailgunWallet. Management signature required. Returns this node's viewing key. A viewing
+        key cannot spend.
+      properties:
+        keyGenId:
+          type: string
+  node.PutKeyGenRailgunBalancesPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - keyGenId
+      - chainId
+      - scanStatus
+      - balances
+      - notes
+      - updatedAt
+      description: POST /putKeyGenRailgunBalances. Writes one chain onto the KeyGen railgun record and propagates it.
+      properties:
+        keyGenId:
+          type: string
+        chainId:
+          type: integer
+        scanStatus:
+          type: string
+          enum:
+          - scanning
+          - ready
+          - empty
+          - error
+        balances:
+          type: array
+          items:
+            $ref: '#/definitions/node.RailgunPrivateBalanceRow'
+        notes:
+          type: string
+        updatedAt:
+          type: string
+  node.KeyGenRailgunActionPost:
+    type: object
+    required:
+    - keyGenId
+    description: Browser dialogue body for POST /keyGenRailgunEnsure, /keyGenRailgunScan, /keyGenRailgunPrivateTransfer, /keyGenRailgunUnshield,
+      and /keyGenRailgunSpendAgree. Read JWT or loopback. The node runs the action and stores the result on the KeyGen.
+    properties:
+      keyGenId:
+        type: string
+      chainId:
+        type: integer
+      tokenAddress:
+        type: string
+      amountWei:
+        type: string
+      recipientAddress:
+        type: string
+      memoText:
+        type: string
+      spendId:
+        type: string
+  node.KeyGenRailgunSpendProposePost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - keyGenId
+      - spendId
+      - kind
+      - chainId
+      - tokenAddress
+      - amountWei
+      - recipientAddress
+      description: POST /keyGenRailgunSpendPropose. Management signature required. Records a pending spend. Does not include
+        a spending share.
+      properties:
+        amountWei:
+          type: string
+        chainId:
+          type: integer
+        keyGenId:
+          type: string
+        kind:
+          type: string
+          enum:
+          - transfer
+          - unshield
+        memoText:
+          type: string
+        recipientAddress:
+          type: string
+        spendId:
+          type: string
+        tokenAddress:
+          type: string
+  node.KeyGenRailgunSpendAgreePost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - keyGenId
+      - spendId
+      description: POST /keyGenRailgunSpendAgree. Read JWT, loopback, or management signature. Releases this node's share
+        encrypted to the originator. The response has no share.
+      properties:
+        keyGenId:
+          type: string
+        spendId:
+          type: string

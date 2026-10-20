@@ -154,7 +154,7 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on the paths listed in **`agentPathRequiresReadJWT`**. Other **`POST`**s on that listener use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same JWT rules when Browser HTTPS is configured.
 
-**JWT-protected agent / read paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, **`GET /telegramSearch/status`**, plus node-local Ed25519 sign **`POST /signLocalEd25519Message`** and **`GET /localEd25519PrivateKeyAvailable`** (see those headings). On the **plain management port**, those two routes require a **loopback client** instead of JWT.
+**JWT-protected agent / read paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, **`GET /telegramSearch/status`**, **`GET /getKeyGenRailgun`**, **`POST /keyGenRailgunEnsure`**, **`POST /keyGenRailgunScan`**, **`POST /keyGenRailgunPrivateTransfer`**, **`POST /keyGenRailgunUnshield`**, **`POST /keyGenRailgunSpendAgree`**, plus node-local Ed25519 sign **`POST /signLocalEd25519Message`** and **`GET /localEd25519PrivateKeyAvailable`** (see those headings). On the **plain management port**, those two routes require a **loopback client** instead of JWT.
 
 ## Quick Reference: All Endpoints
 
@@ -236,6 +236,12 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getForumSession`](#get-getforumsession) - Read the local ContinuumDAO forum ticket for a KeyGen address (not propagated; **read JWT** on Browser HTTPS / loopback)
 - [`POST /setForumSession`](#post-setforumsession) - Store that ticket (**read JWT**, loopback, or management signature)
 - [`POST /clearForumSession`](#post-clearforumsession) - Delete that ticket by address and/or ticket (**read JWT**, loopback, or management signature)
+- [`GET /getKeyGenRailgun`](#get-getkeygenrailgun) - Read the Railgun wallet address and shielded balances stored on a KeyGen (**read JWT** on Browser HTTPS)
+- [`POST /keyGenRailgunEnsure`](#post-keygenrailgunensure) - Create that wallet on the node if it is missing (**read JWT**)
+- [`POST /keyGenRailgunScan`](#post-keygenrailgunscan) - Scan shielded balances on the node and write them onto the KeyGen (**read JWT**)
+- [`POST /keyGenRailgunPrivateTransfer`](#post-keygenrailgunprivatetransfer) - Start a threshold private transfer (**read JWT**)
+- [`POST /keyGenRailgunSpendAgree`](#post-keygenrailgunspendagree) - Agree this node's Railgun spending share (**read JWT**)
+- [`POST /keyGenRailgunUnshield`](#post-keygenrailgununshield) - Unshield from the KeyGen wallet (**read JWT**)
 - [`GET /listEnvironmentVariables`](#get-listenvironmentvariables) - List MCP agent environment variables stored on this node (local MongoDB; not propagated)
 - [`GET /getEnvironmentVariable`](#get-getenvironmentvariable) - Get one variable by `name` query param
 - [`POST /addEnvironmentVariable`](#post-addenvironmentvariable) - Add or update one variable (**management signature**; name normalized to uppercase `A-Z`, `0-9`, `_`)
@@ -3129,6 +3135,72 @@ Stored in **`LocalForumSession`**, one document per KeyGen address (local node o
 **Behavior:** Deletes the row for `address` and/or every row whose `ticket` matches. Missing rows are success. `ctm_continuum_dao_forum_sign_out` calls this after the Forum logout so the node copy is gone. The node-app Sign out button does the same.
 
 **Response `data`:** `{ "ok": true }`.
+
+### Railgun wallet on the KeyGen record
+
+The Railgun viewing key, spending shares, and shielded balances for one KeyGen live on that key’s **`keygenresult`** document, field **`railgun`**. Each node can decrypt only its own viewing key and its own spending share. The viewing key scans balances and cannot spend. The spending key is recoverable only when the KeyGen signing quorum of shares is collected for one agreed spend. A **`KeyGenRailgunUpdate`** message copies the ciphertexts, spends, and balance rows to the other nodes. A **`KeyGenRailgunShare`** message carries one share, encrypted to the node that started the spend. The node agent and the Telegram bot call the same continuum-mcp tools (`ctm_railgun_ensure_wallet`, `ctm_railgun_fetch_private_balances`, `ctm_railgun_private_transfer`, `ctm_railgun_unshield`, `ctm_railgun_agree_spend`). Those tools sign **`POST /putKeyGenRailgunWallet`**, **`POST /getKeyGenRailgunWallet`**, **`POST /putKeyGenRailgunBalances`**, **`POST /keyGenRailgunSpendPropose`**, and **`POST /keyGenRailgunSpendAgree`**. The browser dialogue uses the routes below and does not keep a spending key.
+
+<a id="get-getkeygenrailgun"></a>
+#### `GET /getKeyGenRailgun`
+
+**Auth:** None on the management port. **Read JWT** on Browser HTTPS / loopback-read HTTP.
+
+**Query:** `id` (KeyGen request id).
+
+**Response `data`:** `{ "walletConfigured", "railgunAddress", "quorum", "chains", "spends", "updatedAt" }`. Each chain is `{ "chainId", "scanStatus", "balances", "notes", "updatedAt" }`. A balance is `{ "tokenAddress", "spendable", "pending", "symbol"? }` with amounts as decimal integer strings (wei). A spend is `{ "spendId", "originator", "kind", "chainId", "tokenAddress", "amountWei", "recipientAddress", "approvals", "status", "txHash"? }`. Viewing keys and spending shares are not included. `GET /getKeyGenResultById` also omits them.
+
+<a id="post-keygenrailgunensure"></a>
+#### `POST /keyGenRailgunEnsure`
+
+**Auth:** **Read JWT** or loopback.
+
+**Request:** `{ "keyGenId", "chainId"? }`.
+
+**Behavior:** Asks continuum-mcp to create the Railgun wallet when this KeyGen does not have one. Creation requires a signing quorum of at least 2. The spending key is split into one share per KeyGen node and only the viewing key is stored for scans. The response never includes a mnemonic or a spending key. Later calls return the existing `railgunAddress`.
+
+**Response `data`:** `{ "railgunAddress", "created" }`.
+
+<a id="post-keygenrailgunscan"></a>
+#### `POST /keyGenRailgunScan`
+
+**Auth:** **Read JWT** or loopback.
+
+**Request:** `{ "keyGenId", "chainId" }`.
+
+**Behavior:** continuum-mcp loads this node's viewing key, scans that chain through the node RPC gateway, and writes `scanStatus`, balances, and notes onto the KeyGen record. The viewing key cannot spend.
+
+**Response `data`:** `{ "railgunAddress", "walletConfigured", "chainId", "scanned", "scanStatus", "balances", "notes" }`.
+
+<a id="post-keygenrailgunprivatetransfer"></a>
+#### `POST /keyGenRailgunPrivateTransfer`
+
+**Auth:** **Read JWT** or loopback.
+
+**Request:** `{ "keyGenId", "chainId", "tokenAddress", "amountWei", "recipientAddress", "memoText"? }`. `recipientAddress` is a `0zk` address. `amountWei` is a decimal integer string.
+
+**Response `data`:** `{ "status", "spendId", "approvals", "quorum", "txHash"? }`. `status` is `pending` until other nodes call [`POST /keyGenRailgunSpendAgree`](#post-keygenrailgunspendagree). When `approvals` reaches `quorum`, the originator builds the proof, submits it, discards the spending key, and sets `status` to `submitted`.
+
+<a id="post-keygenrailgununshield"></a>
+#### `POST /keyGenRailgunUnshield`
+
+**Auth:** **Read JWT** or loopback.
+
+**Request:** `{ "keyGenId", "chainId", "tokenAddress", "amountWei", "recipientAddress"? }`. `recipientAddress` is a public address. When it is omitted, continuum-mcp uses the KeyGen Ethereum address.
+
+**Response `data`:** `{ "status", "spendId", "approvals", "quorum", "txHash"? }`.
+
+<a id="post-keygenrailgunspendagree"></a>
+#### `POST /keyGenRailgunSpendAgree`
+
+**Auth:** **Read JWT** or loopback. A management signature is also accepted on the management port.
+
+**Request:** `{ "keyGenId", "spendId" }`.
+
+**Behavior:** This node releases its spending share for that pending spend. The share is encrypted to the node that started the spend. The HTTP response does not contain the share.
+
+**Response `data`:** `{ "status", "spendId", "approvals", "quorum", "txHash"? }`.
+
+**Errors for these routes:** **401** `read JWT required` when the caller is not loopback and has no read JWT. **400** when `keyGenId` is missing, the KeyGen quorum is below 2, or this node has no share. **502** when continuum-mcp is unreachable or returns an error (no wallet on the KeyGen, no RPC gateway, no broadcaster).
 
 ### Agent environment variables (local MongoDB)
 
