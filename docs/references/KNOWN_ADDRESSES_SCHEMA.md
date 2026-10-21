@@ -19,6 +19,7 @@ Known addresses are stored per node in the `LocalKnownAddresses` collection. The
 | `chainIds` | []string | yes | Networks on which this entry is intended to apply; **empty** = **no restriction** (any network of this `chainType`). For Bitcoin, prefer the **`bitcoin-<network>`** convention below; other chains keep existing conventions (`"1"` for Ethereum mainnet, `"mainnet-beta"` for Solana, etc.). List elements trimmed; for **`chainType`** **`bitcoin`** they are stored **lowercase**. |
 | `isContract` | bool | yes | Ethereum-style: **`true`** = contract, **`false`** EOA. For **bitcoin simple payment recipients** normally **`false`**. Scripts / multisigs are not modeled as Solidity contracts — use **`addressSubtype`** + **`name`** instead of flipping this flag without product agreement. |
 | `addressSubtype` | string | no | Spend / encoding hint. **Mandatory for rich Bitcoin UX** once you differentiate SegWit vs Taproot; empty or omitted means “unspecified” (backward compatible). For **`chainType`** **`bitcoin`**, allowed values when set are: **`p2pkh`**, **`p2sh`**, **`p2sh-p2wpkh`**, **`p2wpkh-v0`**, **`p2tr`**, **`unknown`**. Invalid values are rejected by **`POST /addKnownAddress`**. Other **`chainType`** values **may reuse this field later**; today they are accepted as arbitrary trimmed strings without server validation. Stored as provided (bitcoin subtypes lowered). |
+| `railgunAddress` | string | no | Contact **`0zk`** address. Allowed only when **`chainType`** is **`ethereum`** and **`isContract`** is false. Must start with **`0zk`**. Empty string clears it. Omit the field on update to leave a stored value unchanged. Rejected for contract and non-Ethereum contacts. Omitted from **`GET /getKnownAddresses`** when empty. |
 | `updatedAt` | string | yes | ISO 8601 UTC timestamp of last upsert. |
 
 ## Address normalization (unique key correctness)
@@ -65,7 +66,7 @@ Use **`addressSubtype`** so frontends render icons / route to the right MPC sign
 
 ## Example documents
 
-### Ethereum (unchanged)
+### Ethereum
 
 ```json
 {
@@ -74,6 +75,7 @@ Use **`addressSubtype`** so frontends render icons / route to the right MPC sign
   "name": "My Wallet",
   "chainIds": ["1", "137"],
   "isContract": false,
+  "railgunAddress": "0zk1…",
   "updatedAt": "2025-03-10T12:00:00Z"
 }
 ```
@@ -121,9 +123,9 @@ Use **`addressSubtype`** so frontends render icons / route to the right MPC sign
 
 ## API
 
-- **`GET /getKnownAddresses`** — Returns known addresses **grouped by `chainType`**. Optional query params: **`chain_type`**, **`chain_id`**, **`is_contract`** (`0` or `1`). Each entry includes **`address`**, **`name`**, **`chainIds`**, **`isContract`**, **`updatedAt`**, and **`addressSubtype`** when present.
-- **`POST /addKnownAddress`** — Upsert (body: **`chainType`**, **`address`**, optional **`name`**, **`chainIds`**, **`isContract`**, optional **`addressSubtype`**, management auth). **`addressSubtype`** validated when **`chainType`** is **`bitcoin`**.
-- **`POST /removeKnownAddress`** — Remove by **`chainType`** + **`address`** (same normalization as add — use the same canonical string the UI got from **`GET`**).
+- **`GET /getKnownAddresses`** — Returns known addresses **grouped by `chainType`**. Optional query params: **`chain_type`**, **`chain_id`**, **`is_contract`** (`0` or `1`). Each entry includes **`address`**, **`name`**, **`chainIds`**, **`isContract`**, **`updatedAt`**, **`addressSubtype`** when present, and **`railgunAddress`** when set.
+- **`POST /addKnownAddress`** — Upsert (body: **`chainType`**, **`address`**, optional **`name`**, **`chainIds`**, **`isContract`**, optional **`addressSubtype`**, optional **`railgunAddress`**, management auth). **`addressSubtype`** validated when **`chainType`** is **`bitcoin`**. **`railgunAddress`** is a **`0zk`** address for an Ethereum contact that is not a contract; **`""`** clears it; omitting it leaves a stored value unchanged.
+- **`POST /removeKnownAddress`** — Remove by **`chainType`** + **`address`** (same normalization as add — use the same canonical string the UI got from **`GET`**). This removes the contact, including any stored **`0zk`** address.
 
 All endpoints are **local to the node**; no cross-node replication.
 

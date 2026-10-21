@@ -154,7 +154,7 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on the paths listed in **`agentPathRequiresReadJWT`**. Other **`POST`**s on that listener use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same JWT rules when Browser HTTPS is configured.
 
-**JWT-protected agent / read paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, **`GET /telegramSearch/status`**, **`GET /getKeyGenRailgun`**, **`POST /keyGenRailgunEnsure`**, **`POST /keyGenRailgunScan`**, **`POST /keyGenRailgunPrivateTransfer`**, **`POST /keyGenRailgunUnshield`**, **`POST /keyGenRailgunSpendAgree`**, plus node-local Ed25519 sign **`POST /signLocalEd25519Message`** and **`GET /localEd25519PrivateKeyAvailable`** (see those headings). On the **plain management port**, those two routes require a **loopback client** instead of JWT.
+**JWT-protected agent / read paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, **`GET /telegramSearch/status`**, **`GET /getKeyGenRailgun`**, **`POST /keyGenRailgunEnsure`**, **`POST /keyGenRailgunScan`**, **`POST /keyGenRailgunPrivateTransfer`**, **`POST /keyGenRailgunUnshield`**, **`POST /keyGenRailgunFeeQuote`**, **`POST /keyGenRailgunSpendAgree`**, plus node-local Ed25519 sign **`POST /signLocalEd25519Message`** and **`GET /localEd25519PrivateKeyAvailable`** (see those headings). On the **plain management port**, those two routes require a **loopback client** instead of JWT.
 
 ## Quick Reference: All Endpoints
 
@@ -212,9 +212,9 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getTokens`](#get-gettokens) - Get all token configs grouped by chain type; optional `chainType`, `chain_id` filter
 
 ### Known Addresses (local node only)
-- [`POST /addKnownAddress`](#post-addknownaddress) - Add or update a known address for a chain type (requires mgt key)
-- [`POST /removeKnownAddress`](#post-removeknownaddress) - Remove a known address (requires mgt key)
-- [`GET /getKnownAddresses`](#get-getknownaddresses) - Get all known addresses grouped by chain type; optional `chain_type`, `chain_id`, `is_contract` (0 or 1) filters
+- [`POST /addKnownAddress`](#post-addknownaddress) - Add or update a known address for a chain type, including an optional contact `0zk` on an Ethereum address that is not a contract (requires mgt key)
+- [`POST /removeKnownAddress`](#post-removeknownaddress) - Remove a known address and its contact `0zk` (requires mgt key)
+- [`GET /getKnownAddresses`](#get-getknownaddresses) - Get all known addresses grouped by chain type, including `railgunAddress` when set; optional `chain_type`, `chain_id`, `is_contract` (0 or 1) filters
 
 ### Agent preferred signer (local node only)
 - [`GET /getPreferredSigner`](#get-getpreferredsigner) - Get the default Ed25519 public key for agent signing if still an active management key. **Also on `PublicDiscoveryPort`** when split from **`ManagementAPIsPort`** (see [Public discovery HTTP](#public-discovery-http)).
@@ -242,6 +242,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /keyGenRailgunPrivateTransfer`](#post-keygenrailgunprivatetransfer) - Start a threshold private transfer (**read JWT**)
 - [`POST /keyGenRailgunSpendAgree`](#post-keygenrailgunspendagree) - Agree this node's Railgun spending share (**read JWT**)
 - [`POST /keyGenRailgunUnshield`](#post-keygenrailgununshield) - Unshield from the KeyGen wallet (**read JWT**)
+- [`POST /keyGenRailgunFeeQuote`](#post-keygenrailgunfeequote) - Quote the Railgun fee and broadcaster fee before a shield, private transfer, or unshield (**read JWT**)
 - [`GET /listEnvironmentVariables`](#get-listenvironmentvariables) - List MCP agent environment variables stored on this node (local MongoDB; not propagated)
 - [`GET /getEnvironmentVariable`](#get-getenvironmentvariable) - Get one variable by `name` query param
 - [`POST /addEnvironmentVariable`](#post-addenvironmentvariable) - Add or update one variable (**management signature**; name normalized to uppercase `A-Z`, `0-9`, `_`)
@@ -2692,7 +2693,7 @@ See `./TOKEN_STORAGE_SCHEMA.md` for the full JSON structure and CTMRWA1 transfer
 
 ### Known Addresses (local node only)
 
-Known addresses are stored on the local node only (not propagated). Each entry is scoped by chain type (e.g. `ethereum`, `solana`) and includes an address, optional `name`, optional `chainIds` (empty = valid on all chains of that type), and `isContract` (false = EOA). See `./KNOWN_ADDRESSES_SCHEMA.md`.
+Known addresses are stored on the local node only (not propagated). Each entry is scoped by chain type (e.g. `ethereum`, `solana`) and includes an address, optional `name`, optional `chainIds` (empty = valid on all chains of that type), `isContract` (false = EOA), and an optional `railgunAddress` (`0zk`) on Ethereum contacts that are not contracts. See `./KNOWN_ADDRESSES_SCHEMA.md`.
 
 <a id="post-addknownaddress"></a>
 #### `POST /addKnownAddress`
@@ -2708,7 +2709,8 @@ Adds or updates a known address for the given `chainType`. Requires management k
   "address": "0x1234567890123456789012345678901234567890",
   "name": "My Wallet",
   "chainIds": ["1", "137"],
-  "isContract": false
+  "isContract": false,
+  "railgunAddress": "0zk1…"
 }
 ```
 
@@ -2719,14 +2721,15 @@ Adds or updates a known address for the given `chainType`. Requires management k
 - `name` (optional): Display name for the address.
 - `chainIds` (optional): Array of chain IDs this address is valid on. **Omit or empty = no restrictions** (valid on all chains of that type).
 - `isContract` (optional, default false): `true` = contract address, `false` = EOA.
+- `railgunAddress` (optional): contact `0zk` address. Allowed only when `chainType` is `ethereum` and `isContract` is false. The value must start with `0zk`, contain no whitespace, and be at least 8 characters. It is stored as sent, aside from trimming. `""` clears a stored `0zk`. Omit the field on an Ethereum contact that is not a contract to leave a stored `0zk` unchanged. Omit the field when the contact is a contract or not Ethereum and any stored `0zk` is cleared. A non-empty value on a contract or a non-Ethereum contact is rejected before the management signature is checked, so the nonce is not consumed.
 
 **Response:** `{ "code": 0, "error": "", "data": "Known address added" }`
 
-**Errors:** `400` missing/invalid fields; `401` invalid signature; `500` database error.
+**Errors:** `400` missing/invalid fields, including `railgunAddress is only allowed on an Ethereum contact that is not a contract` and `railgunAddress must be a 0zk address`; `401` invalid signature; `500` database error.
 
 <a id="post-removeknownaddress"></a>
 #### `POST /removeKnownAddress`
-Removes the known address for the given `chainType` and `address`. Requires management key signature ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey)).
+Removes the known address for the given `chainType` and `address`, including any stored contact `0zk`. Requires management key signature ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey)). Clearing only the `0zk` is an [`POST /addKnownAddress`](#post-addknownaddress) upsert with `railgunAddress` set to `""`.
 
 **Request Body (RemoveKnownAddressPost):**
 - `nonce`, `clientSig`, `nodeKey`, `chainType`, `address` (all required).
@@ -2748,14 +2751,14 @@ Example:
 
 <a id="get-getknownaddresses"></a>
 #### `GET /getKnownAddresses`
-Returns all known addresses stored on this node, grouped by chain type. Each entry includes `address`, `name`, `chainIds`, `isContract`, and `updatedAt`. Optional query parameters filter the result set.
+Returns all known addresses stored on this node, grouped by chain type. Each entry includes `address`, `name`, `chainIds`, `isContract`, `updatedAt`, and `railgunAddress` when set. Optional query parameters filter the result set.
 
 **Query Parameters:**
 - `chain_type` (optional): Filter by chain type (e.g. `ethereum`, `solana`).
 - `chain_id` (optional): Filter by chain ID — only addresses that are valid on this chain are returned (i.e. documents where `chainIds` is empty or contains `chain_id`).
 - `is_contract` (optional): Filter by contract flag — `1` = contract addresses only, `0` = EOAs only. Omit to return both.
 
-**Response:** `{ "code": 0, "error": "", "data": { "ethereum": [ { "address": "0x...", "name": "My Wallet", "chainIds": ["1", "137"], "isContract": false, "updatedAt": "..." }, ... ], "solana": [ ... ], ... } }`
+**Response:** `{ "code": 0, "error": "", "data": { "ethereum": [ { "address": "0x...", "name": "My Wallet", "chainIds": ["1", "137"], "isContract": false, "railgunAddress": "0zk1…", "updatedAt": "..." }, ... ], "solana": [ ... ], ... } }`. `railgunAddress` is present only when that contact has a `0zk`. Contract and non-Ethereum entries omit it.
 
 See `./KNOWN_ADDRESSES_SCHEMA.md` for the full document shape.
 
@@ -3138,7 +3141,7 @@ Stored in **`LocalForumSession`**, one document per KeyGen address (local node o
 
 ### Railgun wallet on the KeyGen record
 
-The Railgun viewing key, spending shares, shielded balances, and shield-key signature for one KeyGen live on that key’s **`keygenresult`** document, field **`railgun`**. Each node can decrypt only its own viewing key and its own spending share. The viewing key scans balances and cannot spend. The spending key is recoverable only when the KeyGen signing quorum of shares is collected for one agreed spend. A **`KeyGenRailgunUpdate`** message copies the ciphertexts, the shield-key signature, spends, and balance rows to the other nodes. A **`KeyGenRailgunShare`** message carries one share, encrypted to the node that started the spend. The node agent and the Telegram bot call the same continuum-mcp tools (`ctm_railgun_ensure_wallet`, `ctm_railgun_fetch_private_balances`, `ctm_railgun_private_transfer`, `ctm_railgun_unshield`, `ctm_railgun_agree_spend`). Those tools sign **`POST /putKeyGenRailgunWallet`**, **`POST /getKeyGenRailgunWallet`**, **`POST /putKeyGenRailgunBalances`**, **`POST /keyGenRailgunSpendPropose`**, and **`POST /keyGenRailgunSpendAgree`**. The browser dialogue uses the routes below and does not keep a spending key.
+The Railgun viewing key, spending shares, shielded balances, and shield-key signature for one KeyGen live on that key’s **`keygenresult`** document, field **`railgun`**. Each node can decrypt only its own viewing key and its own spending share. The viewing key scans balances and cannot spend. The spending key is recoverable only when the KeyGen signing quorum of shares is collected for one agreed spend. A **`KeyGenRailgunUpdate`** message copies the ciphertexts, the shield-key signature, spends, and balance rows to the other nodes. A **`KeyGenRailgunShare`** message carries one share, encrypted to the node that started the spend. The node agent and the Telegram bot call the same continuum-mcp tools (`ctm_railgun_ensure_wallet`, `ctm_railgun_fetch_private_balances`, `ctm_railgun_fee_quote`, `ctm_railgun_private_transfer`, `ctm_railgun_unshield`, `ctm_railgun_agree_spend`). Those tools sign **`POST /putKeyGenRailgunWallet`**, **`POST /getKeyGenRailgunWallet`**, **`POST /putKeyGenRailgunBalances`**, **`POST /keyGenRailgunSpendPropose`**, and **`POST /keyGenRailgunSpendAgree`**. The browser dialogue uses the routes below and does not keep a spending key.
 
 The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign result is saved, the node writes `shieldSignature` onto the KeyGen (`0x` + `r` + `s` + `v`, with `v` `1b` or `1c`) and broadcasts it with the Railgun record. [`GET /getSignResultById`](#get-getsignresultbyid) for that request returns the same signature and the KeyGen `0zk` address.
 
@@ -3149,7 +3152,7 @@ The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign
 
 **Query:** `id` (KeyGen request id).
 
-**Response `data`:** `{ "walletConfigured", "railgunAddress", "shieldSignature", "quorum", "chains", "spends", "updatedAt" }`. `railgunAddress` is the `0zk` address. `shieldSignature` is the stored shield key (`0x` + `r` + `s` + `v`). It is an empty string until the shield-key `personal_sign` has been saved. If the field is empty, this GET looks up that sign result, stores the signature, and broadcasts it. Each chain is `{ "chainId", "scanStatus", "balances", "notes", "updatedAt" }`. A balance is `{ "tokenAddress", "spendable", "pending", "symbol"? }` with amounts as decimal integer strings (wei). A spend is `{ "spendId", "originator", "kind", "chainId", "tokenAddress", "amountWei", "recipientAddress", "approvals", "status", "txHash"? }`. Viewing keys and spending shares are not included. `GET /getKeyGenResultById` also omits them.
+**Response `data`:** `{ "walletConfigured", "railgunAddress", "shieldSignature", "quorum", "chains", "spends", "updatedAt" }`. `railgunAddress` is the `0zk` address. `shieldSignature` is the stored shield key (`0x` + `r` + `s` + `v`). It is an empty string until the shield-key `personal_sign` has been saved. If the field is empty, this GET looks up that sign result, stores the signature, and broadcasts it. Each chain is `{ "chainId", "scanStatus", "balances", "notes", "updatedAt" }`. A balance is `{ "tokenAddress", "spendable", "pending", "symbol"? }` with amounts as decimal integer strings (wei). A spend is `{ "spendId", "originator", "kind", "chainId", "tokenAddress", "amountWei", "recipientAddress", "memoText"?, "Purpose"?, "Thoughts"?, "approvals", "status", "txHash"? }`. `Purpose` is a node-key map. The originator’s entry is the purpose text, including an empty string. `Thoughts` is a node-key map of comments from accept and reject, the same shape as a normal sign request. Viewing keys and spending shares are not included. `GET /getKeyGenResultById` also omits them.
 
 <a id="post-keygenrailgunensure"></a>
 #### `POST /keyGenRailgunEnsure`
@@ -3178,29 +3181,58 @@ The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign
 
 **Auth:** **Read JWT** or loopback.
 
-**Request:** `{ "keyGenId", "chainId", "tokenAddress", "amountWei", "recipientAddress", "memoText"? }`. `recipientAddress` is a `0zk` address. `amountWei` is a decimal integer string.
+**Request:** `{ "keyGenId", "chainId", "tokenAddress", "amountWei", "recipientAddress", "memoText"?, "purpose"? }`. `recipientAddress` is a `0zk` address. `amountWei` is a decimal integer string. `purpose` is optional text, max 256 characters. It is stored as `Purpose[originator node key]` and shown on Join, Execute, and History the same way as a normal sign request.
 
-**Response `data`:** `{ "status", "spendId", "approvals", "quorum", "txHash"? }`. `status` is `pending` until other nodes call [`POST /keyGenRailgunSpendAgree`](#post-keygenrailgunspendagree). When `approvals` reaches `quorum`, the originator builds the proof, submits it, discards the spending key, and sets `status` to `submitted`.
+**Response `data`:** `{ "status", "spendId", "approvals", "quorum", "txHash"? }`. `status` is `pending` until other nodes call [`POST /keyGenRailgunSpendAgree`](#post-keygenrailgunspendagree). When `approvals` reaches `quorum`, `status` becomes `ready`. The originator then calls [`POST /keyGenRailgunSpendExecute`](#post-keygenrailgunspendexecute).
 
 <a id="post-keygenrailgununshield"></a>
 #### `POST /keyGenRailgunUnshield`
 
 **Auth:** **Read JWT** or loopback.
 
-**Request:** `{ "keyGenId", "chainId", "tokenAddress", "amountWei", "recipientAddress"? }`. `recipientAddress` is a public address. When it is omitted, continuum-mcp uses the KeyGen Ethereum address.
+**Request:** `{ "keyGenId", "chainId", "tokenAddress", "amountWei", "recipientAddress"?, "purpose"? }`. `recipientAddress` is a public address. When it is omitted, continuum-mcp uses the KeyGen Ethereum address. `purpose` is stored the same way as on a private transfer.
 
 **Response `data`:** `{ "status", "spendId", "approvals", "quorum", "txHash"? }`.
+
+<a id="post-keygenrailgunfeequote"></a>
+#### `POST /keyGenRailgunFeeQuote`
+
+**Auth:** **Read JWT** or loopback.
+
+**Request:** `{ "keyGenId", "chainId", "tokenAddress", "amountWei", "kind", "recipientAddress"?, "memoText"? }`. `kind` is `shield`, `transfer`, or `unshield`. `amountWei` is a decimal integer string and may be `0`.
+
+**Behavior:** Reads the live Railgun `shieldFee` or `unshieldFee` basis points. A private transfer has no protocol fee. For `transfer` and `unshield`, the node also estimates the broadcaster token fee from the KeyGen viewing key. That fee is extra and does not reduce the amount the recipient receives. The quote does not submit a transaction.
+
+**Response `data`:** `{ "kind", "amountWei", "protocolFeeBasisPoints", "protocolFeeWei", "receivedWei", "broadcasterFeeWei", "broadcasterTokenAddress", "totalDebitWei", "broadcasterError"? }`. `broadcasterError` is set when the broadcaster fee cannot be estimated; the protocol numbers are still returned.
 
 <a id="post-keygenrailgunspendagree"></a>
 #### `POST /keyGenRailgunSpendAgree`
 
 **Auth:** **Read JWT** or loopback. A management signature is also accepted on the management port.
 
-**Request:** `{ "keyGenId", "spendId" }`.
+**Request:** `{ "keyGenId", "spendId", "thoughts"? }`. `thoughts` is optional text, max 256 characters. It is stored as `Thoughts[this node key]` on accept. [`POST /keyGenRailgunSpendReject`](#post-keygenrailgunspendreject) accepts the same field and stores it on reject.
 
 **Behavior:** This node releases its spending share for that pending spend. The share is encrypted to the node that started the spend. The HTTP response does not contain the share.
 
 **Response `data`:** `{ "status", "spendId", "approvals", "quorum", "txHash"? }`.
+
+<a id="post-keygenrailgunspendreject"></a>
+#### `POST /keyGenRailgunSpendReject`
+
+**Auth:** **Read JWT** or loopback. A management signature is also accepted on the management port.
+
+**Request:** `{ "keyGenId", "spendId", "thoughts"? }`. `thoughts` is stored as `Thoughts[this node key]`.
+
+**Behavior:** Marks the spend `rejected`. A rejected spend cannot be agreed or executed.
+
+<a id="post-keygenrailgunspendexecute"></a>
+#### `POST /keyGenRailgunSpendExecute`
+
+**Auth:** **Read JWT** or loopback. A management signature is also accepted on the management port.
+
+**Request:** `{ "keyGenId", "spendId" }`.
+
+**Behavior:** The originator builds the Railgun proof and submits it. `status` becomes `executing`, then `submitted` with `txHash`, or `failed` and can be retried. Other nodes do not call this route.
 
 **Errors for these routes:** **401** `read JWT required` when the caller is not loopback and has no read JWT. **400** when `keyGenId` is missing, the KeyGen quorum is below 2, or this node has no share. **502** when continuum-mcp is unreachable or returns an error (no wallet on the KeyGen, no RPC gateway, no broadcaster).
 
@@ -6021,6 +6053,7 @@ Lists all signing requests with filtering and pagination. Use this (and `getSign
 - `expiryDate`: Unix seconds (UTC) when this sign request expires. Set at creation (default: **`timepoint + 7 days`** when omitted on POST). When past this time, status becomes **`expired`** and agree/trigger are rejected.
 - `status`: Sign request lifecycle status: `"live"` (default after creation), `"pending"` (set locally when this node has called `POST /signRequestAgree`; not propagated), `"shelved"` (set by the originator via `POST /shelveSignRequest`), `"blocked"` (set automatically when the **MPC quorum** can no longer be reached), `"expired"` (set when past **`expiryDate`**; terminal), or `"success"` (set when a sign result is created). Omitted or `"live"` until set.
 - `timepoint`: When the request was recorded
+- Railgun shield key: this sign-request object does not include `railgunAddress`. When `ExtraJSON` has `signRequestKind` `personal_sign` and `delivery.kind` `railgun_shield_signature`, [`GET /getSignResultById`](#get-getsignresultbyid) and each matching item in [`GET /listSignResults`](#get-listsignresults) add `railgunAddress` (the KeyGen `0zk` address) and `shieldSignature` (`0x` + `r` + `s` + `v`). [`GET /listSignRequests`](#get-listsignrequests), [`GET /getSignRequestById`](#get-getsignrequestbyid), and [`GET /listSignRequestsReady`](#get-listsignrequestsready) return that same `ExtraJSON` so the request can be recognized before the result exists.
 
 **Example:**
 ```bash
@@ -6035,7 +6068,7 @@ curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/listSignRequests?filter=all&pagenum=0&pages
 
 <a id="get-getsignrequestbyid"></a>
 #### `GET /getSignRequestById`
-Gets a specific signing request by ID. Returns the same structure as each item in `listSignRequests` (including `KeyGenRequestId`, `DestinationChainID`, `Purpose`, **`proposalTxParams`** / **`proposal_tx_params`** when set at **`multiSignRequest`**, **`TxParams`** / **`executeTxParams`** for **local** execute snapshots after trigger — field names match the JSON your **mpc-auth** build emits). Optional fields only appear if this node is running a build that includes them (see note under `listSignRequests`).
+Gets a specific signing request by ID. Returns the same structure as each item in `listSignRequests` (including `KeyGenRequestId`, `DestinationChainID`, `Purpose`, **`proposalTxParams`** / **`proposal_tx_params`** when set at **`multiSignRequest`**, **`TxParams`** / **`executeTxParams`** for **local** execute snapshots after trigger — field names match the JSON your **mpc-auth** build emits). Optional fields only appear if this node is running a build that includes them (see note under `listSignRequests`). A Railgun shield-key `personal_sign` is recognized from `ExtraJSON` (`signRequestKind` `personal_sign`, `delivery.kind` `railgun_shield_signature`). The KeyGen `0zk` address is `railgunAddress` on [`GET /getSignResultById`](#get-getsignresultbyid) and [`GET /listSignResults`](#get-listsignresults), not on this request.
 
 **Query Parameters:**
 - `id` (required): Sign request ID
@@ -6228,7 +6261,19 @@ Use `data.batchSignatures[i]` to get the signature for the i-th message (index 0
 - `railgunAddress`: Present on a Railgun shield-key `personal_sign`. The KeyGen `0zk` address. Omitted until that wallet exists.
 - `shieldSignature`: Present on the same result. `0x` + `r` + `s` + `v`, with `v` `1b` or `1c`. This is the shield key. It is built from `sigr`, `sigs`, and `sigrecover`. These fields are computed for the response and are not stored on the sign-result document. The same value is stored on the KeyGen and returned by [`GET /getKeyGenRailgun`](#get-getkeygenrailgun).
 
-**Railgun shield key:** `ExtraJSON` has `signRequestKind` `personal_sign` and `delivery.kind` `railgun_shield_signature`. The signed text is `RAILGUN_SHIELD`. `GET /getSignResultById` and each matching item in `GET /listSignResults` add `railgunAddress` and `shieldSignature` as above. `signaturehex` and `ethereumsignature` are still present. A later approve-and-shield batch does not use these two fields. Its signatures are the EVM transaction signatures in `batchSignatures`.
+**Railgun shield key:** `ExtraJSON` has `signRequestKind` `personal_sign` and `delivery.kind` `railgun_shield_signature`. The signed text is `RAILGUN_SHIELD`. `GET /getSignResultById` and each matching item in `GET /listSignResults` add `railgunAddress` and `shieldSignature` as above. `signaturehex` and `ethereumsignature` are still present. A later approve-and-shield batch does not use these two fields. Its signatures are the EVM transaction signatures in `batchSignatures`. Those two fields are omitted on every other sign result.
+
+```json
+{
+  "requestid": "Sign20260111003720999cf104d0f",
+  "ExtraJSON": "{\"signRequestKind\":\"personal_sign\",\"delivery\":{\"kind\":\"railgun_shield_signature\",\"message\":\"RAILGUN_SHIELD\"}}",
+  "KeyGenRequestId": "KeyGen20260217130529999704c2304",
+  "signaturehex": "…",
+  "ethereumsignature": "0x…",
+  "railgunAddress": "0zk1…",
+  "shieldSignature": "0x…1b"
+}
+```
 
 **When `status` is `"shelved"`:** The API does not return the signature. The fields `sigdata`, `sigr`, `sigs`, `sigrecover`, `signaturehex`, and `ethereumsignature` are omitted from the response for both `GET /getSignResultById` and each item in `GET /listSignResults`. For batch, each entry in `batchSignatures` is also redacted (signature fields cleared). A Railgun shield-key result is the exception: those signature fields stay, and `railgunAddress` and `shieldSignature` are still returned, because later shields reuse that personal_sign.
 
@@ -6269,7 +6314,7 @@ Lists **multi-agree** sign requests that are **ready to trigger**: this node is 
 - `pagenum` (optional): Page number (default `0`).
 - `pagesize` (optional): Page size (default `10`). Use `0` to return all.
 
-**Response:** Same structure as `GET /listSignRequests` (array of sign request objects, including `KeyGenRequestId`). Only includes requests that are ready and where this node is in **SigList**.
+**Response:** Same structure as `GET /listSignRequests` (array of sign request objects, including `KeyGenRequestId`). Only includes requests that are ready and where this node is in **SigList**. A Railgun shield-key row is recognized from `ExtraJSON`. Its KeyGen `0zk` address is `railgunAddress` on the sign result ([`GET /getSignResultById`](#get-getsignresultbyid), [`GET /listSignResults`](#get-listsignresults)), together with `shieldSignature`.
 
 **Rejections and keyGen:** Rejecting a sign request (`POST /signRequestAgree` with `accept: false`) only adds this node to **RejectedBy**; it does **not** remove or alter the keyGen request or keyGen result. "Ready" is based solely on **SigList** (agreeing nodes): if **SigList** reaches the **MPC quorum** for this key (**t** parties for CGGMP24 and FROST), the request is ready regardless of **RejectedBy** (unless blocked by remaining-participant logic). If a quorum-ready agreement does **not** appear in `listSignRequestsReady` or `triggerSignRequestById` fails with "keygen result for pubkey ... not found", the **keyGen result** is missing on this node. The keyGen result is only deleted when **keygen** failed: fewer than **MPC quorum** parties sent KEYGENRESULTCONFIRMSUCCESS within 7 days; then the result is deleted and the keyGen **request** is marked `"failed"` (the request document is not deleted). In that case the key is unusable for signing. The keyGen request remains in the DB with status `"failed"`; only the keyGen **result** (the actual key material) is removed.
 

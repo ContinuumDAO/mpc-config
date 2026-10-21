@@ -913,3 +913,37 @@ rules:
       Do not pick CoinGecko / CoinMarketCap / Coinbase / Binance by default. After the operator
       chooses, agent_load_mcp_server (or continuum__load_defi_protocol) then that provider's fetch tool.
     modes: [interactive, cron]
+
+  - id: railgun_private_transfer_contact
+    match:
+      anySubstring:
+        - use railgun to send
+        - use railgun to
+        - do a private transfer
+        - private transfer of
+        - private transfer to
+        - private transfer
+        - railgun send
+        - railgun transfer
+        - railgun private
+        - send privately
+        - private send
+        - shielded transfer
+        - transfer privately
+        - privately send
+        - privately transfer
+    hint: |
+      A private Railgun transfer to a named contact uses that contact’s saved 0zk address.
+      Call ctm_railgun_fee_quote first and tell them the broadcaster fee, then ctm_railgun_private_transfer with toContactName set to the name they said.
+      Pass purpose when they gave a reason. It is shown on Join like a normal sign request.
+      When another node accepts, ask for thoughts and pass them to sign_request_agree.
+      Do not pass the contact’s Ethereum address as recipientAddress.
+      If you need to look the contact up first, get_address_book_registry and use railgunAddress.
+      If that field is missing, say the contact has no 0zk address and do not invent one.
+      Save one with add_to_address_book_registry railgunAddress on an Ethereum contact that is not a contract.
+      An empty railgunAddress clears it. remove_from_address_book_registry removes the contact, including its 0zk address.
+      This node proposes the spend and agrees its own share. The other nodes accept on Join.
+      The originator executes with broadcast_sign_result and the RailgunSpend request id. There is no Get Sig.
+      Automated jobs must not execute agreementKind railgun_spend.
+    boostGroups: ["defi:railgun:trading", "registry_address_book"]
+    modes: [interactive, cron]
