@@ -2424,7 +2424,7 @@
         },
         "/getSignResultById": {
             "get": {
-                "description": "get sign result by id. Response data includes effectiveEcdsaMpcProtocol for secp256k1 (gg18/cggmp24); empty otherwise.",
+                "description": "get sign result by id. Response data includes effectiveEcdsaMpcProtocol for secp256k1 (gg18/cggmp24); empty otherwise. A Railgun shield-key personal_sign also includes railgunAddress (the KeyGen 0zk address) and shieldSignature (0x + r + s + v). See mpc-config docs/references/API_IMPLEMENTATION.md (GET /getSignResultById).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3476,7 +3476,7 @@
         },
         "/getKeyGenRailgun": {
             "get": {
-                "description": "Read the Railgun wallet address and shielded balances stored on a KeyGen Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getKeyGenRailgun).",
+                "description": "Read the Railgun 0zk address, shield-key signature, and shielded balances stored on a KeyGen Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getKeyGenRailgun).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3486,7 +3486,7 @@
                 "tags": [
                     "Agent automation"
                 ],
-                "summary": "Read the Railgun wallet address and shielded balances stored on a KeyGen",
+                "summary": "Read the Railgun 0zk address, shield-key signature, and shielded balances stored on a KeyGen",
                 "responses": {
                     "200": {
                         "description": "OK",

@@ -236,7 +236,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getForumSession`](#get-getforumsession) - Read the local ContinuumDAO forum ticket for a KeyGen address (not propagated; **read JWT** on Browser HTTPS / loopback)
 - [`POST /setForumSession`](#post-setforumsession) - Store that ticket (**read JWT**, loopback, or management signature)
 - [`POST /clearForumSession`](#post-clearforumsession) - Delete that ticket by address and/or ticket (**read JWT**, loopback, or management signature)
-- [`GET /getKeyGenRailgun`](#get-getkeygenrailgun) - Read the Railgun wallet address and shielded balances stored on a KeyGen (**read JWT** on Browser HTTPS)
+- [`GET /getKeyGenRailgun`](#get-getkeygenrailgun) - Read the Railgun 0zk address, shield-key signature, and shielded balances stored on a KeyGen (**read JWT** on Browser HTTPS)
 - [`POST /keyGenRailgunEnsure`](#post-keygenrailgunensure) - Create that wallet on the node if it is missing (**read JWT**)
 - [`POST /keyGenRailgunScan`](#post-keygenrailgunscan) - Scan shielded balances on the node and write them onto the KeyGen (**read JWT**)
 - [`POST /keyGenRailgunPrivateTransfer`](#post-keygenrailgunprivatetransfer) - Start a threshold private transfer (**read JWT**)
@@ -3138,7 +3138,9 @@ Stored in **`LocalForumSession`**, one document per KeyGen address (local node o
 
 ### Railgun wallet on the KeyGen record
 
-The Railgun viewing key, spending shares, and shielded balances for one KeyGen live on that key’s **`keygenresult`** document, field **`railgun`**. Each node can decrypt only its own viewing key and its own spending share. The viewing key scans balances and cannot spend. The spending key is recoverable only when the KeyGen signing quorum of shares is collected for one agreed spend. A **`KeyGenRailgunUpdate`** message copies the ciphertexts, spends, and balance rows to the other nodes. A **`KeyGenRailgunShare`** message carries one share, encrypted to the node that started the spend. The node agent and the Telegram bot call the same continuum-mcp tools (`ctm_railgun_ensure_wallet`, `ctm_railgun_fetch_private_balances`, `ctm_railgun_private_transfer`, `ctm_railgun_unshield`, `ctm_railgun_agree_spend`). Those tools sign **`POST /putKeyGenRailgunWallet`**, **`POST /getKeyGenRailgunWallet`**, **`POST /putKeyGenRailgunBalances`**, **`POST /keyGenRailgunSpendPropose`**, and **`POST /keyGenRailgunSpendAgree`**. The browser dialogue uses the routes below and does not keep a spending key.
+The Railgun viewing key, spending shares, shielded balances, and shield-key signature for one KeyGen live on that key’s **`keygenresult`** document, field **`railgun`**. Each node can decrypt only its own viewing key and its own spending share. The viewing key scans balances and cannot spend. The spending key is recoverable only when the KeyGen signing quorum of shares is collected for one agreed spend. A **`KeyGenRailgunUpdate`** message copies the ciphertexts, the shield-key signature, spends, and balance rows to the other nodes. A **`KeyGenRailgunShare`** message carries one share, encrypted to the node that started the spend. The node agent and the Telegram bot call the same continuum-mcp tools (`ctm_railgun_ensure_wallet`, `ctm_railgun_fetch_private_balances`, `ctm_railgun_private_transfer`, `ctm_railgun_unshield`, `ctm_railgun_agree_spend`). Those tools sign **`POST /putKeyGenRailgunWallet`**, **`POST /getKeyGenRailgunWallet`**, **`POST /putKeyGenRailgunBalances`**, **`POST /keyGenRailgunSpendPropose`**, and **`POST /keyGenRailgunSpendAgree`**. The browser dialogue uses the routes below and does not keep a spending key.
+
+The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign result is saved, the node writes `shieldSignature` onto the KeyGen (`0x` + `r` + `s` + `v`, with `v` `1b` or `1c`) and broadcasts it with the Railgun record. [`GET /getSignResultById`](#get-getsignresultbyid) for that request returns the same signature and the KeyGen `0zk` address.
 
 <a id="get-getkeygenrailgun"></a>
 #### `GET /getKeyGenRailgun`
@@ -3147,7 +3149,7 @@ The Railgun viewing key, spending shares, and shielded balances for one KeyGen l
 
 **Query:** `id` (KeyGen request id).
 
-**Response `data`:** `{ "walletConfigured", "railgunAddress", "quorum", "chains", "spends", "updatedAt" }`. Each chain is `{ "chainId", "scanStatus", "balances", "notes", "updatedAt" }`. A balance is `{ "tokenAddress", "spendable", "pending", "symbol"? }` with amounts as decimal integer strings (wei). A spend is `{ "spendId", "originator", "kind", "chainId", "tokenAddress", "amountWei", "recipientAddress", "approvals", "status", "txHash"? }`. Viewing keys and spending shares are not included. `GET /getKeyGenResultById` also omits them.
+**Response `data`:** `{ "walletConfigured", "railgunAddress", "shieldSignature", "quorum", "chains", "spends", "updatedAt" }`. `railgunAddress` is the `0zk` address. `shieldSignature` is the stored shield key (`0x` + `r` + `s` + `v`). It is an empty string until the shield-key `personal_sign` has been saved. If the field is empty, this GET looks up that sign result, stores the signature, and broadcasts it. Each chain is `{ "chainId", "scanStatus", "balances", "notes", "updatedAt" }`. A balance is `{ "tokenAddress", "spendable", "pending", "symbol"? }` with amounts as decimal integer strings (wei). A spend is `{ "spendId", "originator", "kind", "chainId", "tokenAddress", "amountWei", "recipientAddress", "approvals", "status", "txHash"? }`. Viewing keys and spending shares are not included. `GET /getKeyGenResultById` also omits them.
 
 <a id="post-keygenrailgunensure"></a>
 #### `POST /keyGenRailgunEnsure`
@@ -6098,7 +6100,7 @@ Agrees to or rejects a signing request. **Requires management key authentication
 
 <a id="get-listsignresults"></a>
 #### `GET /listSignResults`
-Lists sign results with optional filter and pagination. Each item in the response has the **same fields** as a single `GET /getSignResultById` result (requestid, messagehash, sigdata, sigr, sigs, sigrecover, timepoint, keylist, participatingkeys, signaturehex, keytype, signatureformat, DestinationChainID, DestinationAddress, ExtraJSON, RejectedBy, Purpose, Thoughts, KeyGenRequestId, status, transactionhash, shelved, and ethereumSignature when applicable). For **batch** sign results, each item also includes `batchSignResult`, `batchSize`, and `batchSignatures` (array of N signature entries); see `GET /getSignResultById` for the batch response shape.
+Lists sign results with optional filter and pagination. Each item in the response has the **same fields** as a single `GET /getSignResultById` result (requestid, messagehash, sigdata, sigr, sigs, sigrecover, timepoint, keylist, participatingkeys, signaturehex, keytype, signatureformat, DestinationChainID, DestinationAddress, ExtraJSON, RejectedBy, Purpose, Thoughts, KeyGenRequestId, status, transactionhash, shelved, and ethereumSignature when applicable). A Railgun shield-key result also includes `railgunAddress` and `shieldSignature`. For **batch** sign results, each item also includes `batchSignResult`, `batchSize`, and `batchSignatures` (array of N signature entries); see `GET /getSignResultById` for the batch response shape.
 
 **Query Parameters:**
 - `filter` (optional, default `"all"`): `"all"` — all sign results (including **`failed`** for History); `"active"` — status is not `"executed"` and not `"shelved"` (includes never-updated, **`failed`** single-tx awaiting retry, and batch **`failed`**); `"originator"` — only results where this node's key is the key in the **Purpose** map.
@@ -6223,8 +6225,12 @@ Use `data.batchSignatures[i]` to get the signature for the i-th message (index 0
 - `transactionhash` / `transactionHash`: Single-tx hash when executed; often last hash for display when batch executed server-side stores per-hash in `batchTransactionHashes`.
 - `batchtransactionhashes` / `batchTransactionHashes`: Batch only; all hashes when executed; partial list when failed mid-batch.
 - `shelved`: Boolean; `true` when the originator marked the result as shelved (not to be broadcast). Set when `status` is `"shelved"`. Omitted or false until set.
+- `railgunAddress`: Present on a Railgun shield-key `personal_sign`. The KeyGen `0zk` address. Omitted until that wallet exists.
+- `shieldSignature`: Present on the same result. `0x` + `r` + `s` + `v`, with `v` `1b` or `1c`. This is the shield key. It is built from `sigr`, `sigs`, and `sigrecover`. These fields are computed for the response and are not stored on the sign-result document. The same value is stored on the KeyGen and returned by [`GET /getKeyGenRailgun`](#get-getkeygenrailgun).
 
-**When `status` is `"shelved"`:** The API does not return the signature. The fields `sigdata`, `sigr`, `sigs`, `sigrecover`, `signaturehex`, and `ethereumsignature` are omitted from the response for both `GET /getSignResultById` and each item in `GET /listSignResults`. For batch, each entry in `batchSignatures` is also redacted (signature fields cleared).
+**Railgun shield key:** `ExtraJSON` has `signRequestKind` `personal_sign` and `delivery.kind` `railgun_shield_signature`. The signed text is `RAILGUN_SHIELD`. `GET /getSignResultById` and each matching item in `GET /listSignResults` add `railgunAddress` and `shieldSignature` as above. `signaturehex` and `ethereumsignature` are still present. A later approve-and-shield batch does not use these two fields. Its signatures are the EVM transaction signatures in `batchSignatures`.
+
+**When `status` is `"shelved"`:** The API does not return the signature. The fields `sigdata`, `sigr`, `sigs`, `sigrecover`, `signaturehex`, and `ethereumsignature` are omitted from the response for both `GET /getSignResultById` and each item in `GET /listSignResults`. For batch, each entry in `batchSignatures` is also redacted (signature fields cleared). A Railgun shield-key result is the exception: those signature fields stay, and `railgunAddress` and `shieldSignature` are still returned, because later shields reuse that personal_sign.
 
 **Example:**
 ```bash
