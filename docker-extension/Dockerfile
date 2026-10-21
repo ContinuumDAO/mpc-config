@@ -8,7 +8,8 @@
 #
 # syntax=docker/dockerfile:1
 
-FROM node:20-bookworm-slim AS ui-build
+# October 21, 2026 Node.js security release. Node 20 is end-of-life and unpatched.
+FROM node:22.23.4-bookworm-slim@sha256:5991875dfb80938dd8a6ba3fe3e96fd04929e70792762b3319d8caadbbe229bc AS ui-build
 WORKDIR /ui
 COPY docker-extension/ui/package.json ./
 RUN npm install
