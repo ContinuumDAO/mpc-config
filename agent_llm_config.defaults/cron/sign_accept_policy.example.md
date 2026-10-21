@@ -50,7 +50,7 @@ ctm1|{proto}|{L|S}|{setup}|eE={px}|pfE={px}|...|sz={coinUnits}|szUsd={usdNotiona
 
 ## Workflow (embed in cron message)
 
-1. `list_sign_requests_awaiting_join` — filter rows with `localAgreementPending: true`.
+1. `list_sign_requests_awaiting_join` — filter rows with `localAgreementPending: true`. Skip `agreementKind: railgun_spend`. Those are private Railgun transfers or unshields. This job must not accept or reject them. An operator does that in chat or Telegram with `sign_request_agree`.
 2. If none, stop.
 3. For each pending request (one at a time):
    - `get_sign_request_by_id({ requestId, compact: false })`

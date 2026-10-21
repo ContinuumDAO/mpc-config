@@ -91,8 +91,9 @@ On **cron** turns the host may expose **`agent_spawn_sub_agent`** / **`agent_joi
 
 | Catalog job | Behavior |
 |-------------|----------|
-| **`auto-accept-sign-request`** | Blind accept every pending Join request (`accept: true`) with timestamped thoughts. |
-| **`conditional-accept-sign-request`** | Evaluate embedded **`signAcceptPolicy`** YAML: parse ctm1 Purpose short codes (`proto`, `setup`, `sz=` / `szUsd=`, symbol) **and** additional Purpose prose after ` · `; accept or **reject** with full Purpose cited in thoughts. Template: **`cron/sign_accept_policy.example.md`**. |
+| **`auto-sign-and-broadcast`** | Get Sig and broadcast ready sign requests. Skip `agreementKind: railgun_spend`. An operator executes a private transfer from the Execute tab, or in chat or Telegram. |
+| **`auto-accept-sign-request`** | Blind accept every pending Join request (`accept: true`) with timestamped thoughts. Skip `agreementKind: railgun_spend`. |
+| **`conditional-accept-sign-request`** | Evaluate embedded **`signAcceptPolicy`** YAML: parse ctm1 Purpose short codes (`proto`, `setup`, `sz=` / `szUsd=`, symbol) **and** additional Purpose prose after ` · `; accept or **reject** with full Purpose cited in thoughts. Template: **`cron/sign_accept_policy.example.md`**. Skip `agreementKind: railgun_spend`. |
 | **`appraise-and-vote-proposals`** | ContinuumDAO **vote only**. Follow host YAML **`continuum-dao-vote-policy.yaml`**. Template: **`cron/continuum_dao_vote_policy.example.md`**. Never propose. |
 | **`conditional-accept-governance-vote`** | ContinuumDAO **governor Join** only (`sign_request_agree`). Same host YAML. Always reject propose/execute/cancel. |
 | **`notify-forum-replies`** | Read-only Forum reply watch + **`telegramNotify`**. Template: **`cron/forum_replies_cron.example.md`**. |

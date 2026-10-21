@@ -15,7 +15,7 @@ Telegram requires a **public HTTPS** URL for `setWebhook`. A stock node listens 
 - Bundled template: **`telegram_updates`** (`type: telegram`).
 - Inbound path: **`POST /hooks/inbound/{webhookId}`** on the hook port (default **18090**).
 
-To query **multiSignRequest** / sign queues from Telegram, edit the webhook **prompt** (or ask in chat) so the agent calls tools such as `list_sign_requests_awaiting_join` and `list_sign_requests_ready`. See **[`AGENT_HOOKS.md`](AGENT_HOOKS.md)** § Telegram.
+To query **multiSignRequest** / sign queues from Telegram, edit the webhook **prompt** (or ask in chat) so the agent calls tools such as `list_sign_requests_awaiting_join` and `list_sign_requests_ready`. `list_sign_requests_awaiting_join` also lists pending Railgun private transfers and unshields (`agreementKind: railgun_spend`). Show the asset, amount, destination 0zk address, memo, and deadline, then `sign_request_agree` with that row's `RailgunSpend:` request id. `accept: false` rejects it. After the other nodes accept, `list_sign_requests_ready` on the originator includes that row. Execute it with `broadcast_sign_result` and the same id. There is no Get Sig step. See **[`AGENT_HOOKS.md`](AGENT_HOOKS.md)** § Telegram.
 
 ---
 

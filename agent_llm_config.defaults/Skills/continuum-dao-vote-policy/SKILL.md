@@ -99,6 +99,7 @@ Governor `evm.type` values:
 | `continuum_dao_execute` | **Reject** |
 | `continuum_dao_cancel` | **Reject** |
 | anything else | **Skip** (leave for trade job or a human) |
+| `agreementKind: railgun_spend` | **Skip**. Private Railgun transfer or unshield. An operator accepts or rejects it in chat or Telegram with `sign_request_agree` |
 
 Also match `signatureText` JSON `kind: ContinuumDAO` and `name` `ContinuumDAO.propose` / `castVote` / `execute` / `cancel`.
 
