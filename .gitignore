@@ -31,6 +31,10 @@ agent_llm_config/
 user_folder/*
 !user_folder/README.md
 
+# Railgun note tree for this node (LevelDB). Not part of the KeyGen record.
+railgun_data/*
+!railgun_data/README.md
+
 # Ed25519 management private keys (POST /addManagementKey; bind-mounted into app + continuum-mcp)
 added_keys/
 bootstrap_key/

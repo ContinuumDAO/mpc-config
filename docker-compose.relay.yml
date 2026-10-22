@@ -156,11 +156,13 @@ services:
       MCP_HTTP_PATH: "/mcp"
       MPC_AUTH_URL: "http://app"
       MPC_AUTH_PORT: "8080"
+      RAILGUN_DATA_DIR: /app/railgun_data
     volumes:
       - ./added_keys:/app/added_keys
       # Bootstrap Ed25519 seed (PublicMgtKey); read-only — writes stay on app service (POST /postBootstrapKey).
       - ./bootstrap_key:/app/bootstrap_key:ro
       - ./user_folder:/app/user_folder
+      - ./railgun_data:/app/railgun_data
     ports:
       - "127.0.0.1:8446:8446"
     networks:

@@ -104,6 +104,7 @@ DEFAULT_AGENT_LLM_CONFIG_DEFAULTS_CONTAINER_DIR="/app/agent_llm_config.defaults"
 DEFAULT_AGENT_LLM_CONFIG_CONTAINER_FILE="/app/agent_llm_config/agent-llm-config.json"
 DEFAULT_USER_FOLDER_DIR="user_folder"
 DEFAULT_USER_FOLDER_CONTAINER_PATH="/app/user_folder"
+DEFAULT_RAILGUN_DATA_DIR="railgun_data"
 DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME="MCP_default_servers.json"
 DEFAULT_TRADE_DESK_BASENAME="trade-desk.yaml"
 DEFAULT_ORCHESTRATION_PLAN_BASENAME="orchestration-plan.yaml"
@@ -509,6 +510,8 @@ _process_config_finalize_repo_ownership_after_sudo() {
     _process_config_chown_repo_tree_if_sudo_root "$WEB_TLS_HOST_DIR"
     _process_config_ensure_path_owned_by_invoking_user "${compose_root}/${DEFAULT_AGENT_LLM_CONFIG_DIR}"
     _process_config_ensure_path_owned_by_invoking_user "${compose_root}/${DEFAULT_USER_FOLDER_DIR}"
+    _process_config_mkdir_owned_by_invoking_user "${compose_root}/${DEFAULT_RAILGUN_DATA_DIR}"
+    _process_config_ensure_path_owned_by_invoking_user "${compose_root}/${DEFAULT_RAILGUN_DATA_DIR}"
 }
 
 # Writes use ruamel.yaml (round-trip, preserves comments). Reads use yq when possible; Python fallbacks use ruamel.yaml only — not PyYAML (no python3-yaml package).
@@ -7445,6 +7448,10 @@ main() {
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_HOOKS_REL}"
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_AGENT_HOOKS_REL}/runs"
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
+        _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_RAILGUN_DATA_DIR}"
+        _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_RAILGUN_DATA_DIR}/engine"
+        _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_RAILGUN_DATA_DIR}/artifacts"
+        _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_RAILGUN_DATA_DIR}/keygens"
         _seed_agent_mcp_default_servers_file "${_cfg_parent}" || true
         _seed_trade_desk_yaml "${_cfg_parent}" || true
         _seed_orchestration_plan_yaml "${_cfg_parent}" || true
@@ -7457,6 +7464,7 @@ main() {
         _seed_agent_cron_catalog "${_cfg_parent}" || true
         _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}"
         _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
+        _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_RAILGUN_DATA_DIR}"
         case "$_agent_llm_merge_result" in
             merged)
                 print_success "configs.yaml: set AgentLlmConfigDir → ${DEFAULT_AGENT_LLM_CONFIG_DIR} (host: ${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/)"
