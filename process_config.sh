@@ -4957,6 +4957,7 @@ apply_docker_compose_continuum_mcp_server() {
     _mcp_action=$(
         MPC_MCP_COMPOSE_PATH="$file" MPC_MCP_CONFIG_PATH="$config_file" python3 <<'PYMCP'
 import os
+import re
 import sys
 
 try:
@@ -5053,31 +5054,43 @@ i0 = text.index(BEGIN)
 i1 = text.index(END) + len(END)
 
 if enabled:
-    block = (
-        f"{BEGIN}"
-        f"  continuum-mcp:\n"
-        f'    image: {yaml_sq(image + ":" + tag)}\n'
-        f"    restart: unless-stopped\n"
-        f"    depends_on:\n"
-        f"      app:\n"
-        f"        condition: service_started\n"
-        f"    environment:\n"
-        f'      MCP_HTTP_HOST: "0.0.0.0"\n'
-        f'      MCP_HTTP_PORT: "{container_port}"\n'
-        f'      MCP_HTTP_PATH: {yaml_sq(http_path)}\n'
-        f'      MPC_AUTH_URL: "http://app"\n'
-        f'      MPC_AUTH_PORT: "{mgt_port}"\n'
-        f'      RAILGUN_DATA_DIR: "/app/railgun_data"\n'
-        f"    volumes:\n"
-        f"      - ./added_keys:/app/added_keys\n"
-        f"      - ./bootstrap_key:/app/bootstrap_key:ro\n"
-        f"      - ./user_folder:/app/user_folder\n"
-        f"      - ./railgun_data:/app/railgun_data\n"
-        f"    ports:\n"
-        f'      - "127.0.0.1:{host_port}:{container_port}"\n'
-        f"    networks:\n"
-        f"      - local-network\n"
-        f"{END}"
+    # The template was copied onto this file just above. Keep its volumes, comments,
+    # and RAILGUN_DATA_DIR. configs.yaml only replaces the image, HTTP path, and ports.
+    block = text[i0:i1]
+
+    def replace_line(block, pattern, rendered):
+        pat = re.compile(pattern, re.M)
+        if not pat.search(block):
+            return block, False
+        return pat.sub(rendered, block, count=1), True
+
+    block, image_ok = replace_line(
+        block,
+        r"^(\s*)image:\s*.*$",
+        lambda m: f"{m.group(1)}image: {yaml_sq(image + ':' + tag)}",
+    )
+    if not image_ok:
+        print("error_write", flush=True)
+        sys.exit(1)
+
+    def set_env(block, key, rendered):
+        pat = re.compile(rf"^(\s*){re.escape(key)}:\s*.*$", re.M)
+        if pat.search(block):
+            return pat.sub(lambda m: f"{m.group(1)}{key}: {rendered}", block, count=1)
+        header = re.compile(r"^(\s*)environment:\s*$", re.M)
+        found = header.search(block)
+        if not found:
+            return block
+        indent = found.group(1) + "  "
+        return block[: found.end()] + f"\n{indent}{key}: {rendered}" + block[found.end() :]
+
+    block = set_env(block, "MCP_HTTP_PORT", f'"{container_port}"')
+    block = set_env(block, "MCP_HTTP_PATH", yaml_sq(http_path))
+    block = set_env(block, "MPC_AUTH_PORT", f'"{mgt_port}"')
+    block, _port_ok = replace_line(
+        block,
+        r'^(\s*)-\s*"127\.0\.0\.1:\d+:\d+"\s*$',
+        lambda m: f'{m.group(1)}- "127.0.0.1:{host_port}:{container_port}"',
     )
     new_text = text[:i0] + block + text[i1:]
     action = "ok_on"
