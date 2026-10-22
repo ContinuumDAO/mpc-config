@@ -110,6 +110,11 @@ def _sync_deterministic_config(
         )
         return 4
     changed = False
+    if data.get("DeterministicNodeKey") is False:
+        print(
+            f"DeterministicNodeKey is false in {cfg_path}; leaving it off so the nodeKey already in Mongo is kept."
+        )
+        return 0
     if data.get("DeterministicNodeKey") is not True:
         data["DeterministicNodeKey"] = True
         changed = True
@@ -176,6 +181,11 @@ def main() -> int:
     if existing_hex:
         if not keyfile.is_file():
             if args.defer_node_key_until_bootstrap:
+                if data.get("DeterministicNodeKey") is False:
+                    print(
+                        f"DeterministicNodeKey is false in {cfg_path}; leaving it off so the nodeKey already in Mongo is kept."
+                    )
+                    return 0
                 changed = False
                 if data.get("DeterministicNodeKey") is not True:
                     data["DeterministicNodeKey"] = True

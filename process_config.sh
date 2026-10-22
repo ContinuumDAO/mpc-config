@@ -4918,6 +4918,26 @@ PYNA
 }
 
 # Replace the marked continuum-mcp-server block in docker-compose.yml from ContinuumMcpServer in configs.yaml.
+_process_config_recreate_continuum_mcp() {
+    local compose_file="$1"
+    local compose_dir
+    compose_dir="$(cd "$(dirname "$compose_file")" && pwd)"
+    if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+        print_info "docker compose is not available. After this script: docker compose up -d --no-deps continuum-mcp"
+        return 0
+    fi
+    if ! docker ps >/dev/null 2>&1; then
+        print_info "Docker is not reachable. After this script: docker compose up -d --no-deps continuum-mcp"
+        return 0
+    fi
+    print_step "Recreating continuum-mcp so railgun_data is mounted..."
+    if (cd "$compose_dir" && docker compose up -d --no-deps continuum-mcp); then
+        print_success "continuum-mcp recreated with the Railgun note-tree directory."
+    else
+        print_warning "Could not recreate continuum-mcp. Run: docker compose up -d --no-deps continuum-mcp"
+    fi
+}
+
 apply_docker_compose_continuum_mcp_server() {
     local file="$1"
     local config_file="${2:-}"
@@ -5047,9 +5067,12 @@ if enabled:
         f'      MCP_HTTP_PATH: {yaml_sq(http_path)}\n'
         f'      MPC_AUTH_URL: "http://app"\n'
         f'      MPC_AUTH_PORT: "{mgt_port}"\n'
+        f'      RAILGUN_DATA_DIR: "/app/railgun_data"\n'
         f"    volumes:\n"
         f"      - ./added_keys:/app/added_keys\n"
         f"      - ./bootstrap_key:/app/bootstrap_key:ro\n"
+        f"      - ./user_folder:/app/user_folder\n"
+        f"      - ./railgun_data:/app/railgun_data\n"
         f"    ports:\n"
         f'      - "127.0.0.1:{host_port}:{container_port}"\n'
         f"    networks:\n"
@@ -5074,6 +5097,7 @@ PYMCP
     case "$_mcp_action" in
         ok_on)
             print_success "docker-compose.yml: continuum-mcp-server enabled from configs.yaml."
+            _process_config_recreate_continuum_mcp "$file"
             ;;
         ok_off)
             print_info "docker-compose.yml: continuum-mcp-server disabled (ContinuumMcpServer.Enabled: false)."
