@@ -2468,17 +2468,63 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.KeyGenRailgunActionPost'
-  /keyGenRailgunPrivateTransfer:
+  /keyGenRailgunPrivateTransferSign:
     post:
-      description: 'Start a threshold Railgun private transfer (read JWT) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /keyGenRailgunPrivateTransfer).'
+      description: 'Create a threshold Railgun private transfer with a management signature. The node app closes the dialog
+        after the signature is accepted Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunPrivateTransferSign).'
       consumes:
       - application/json
       produces:
       - application/json
       tags:
       - Key Generation
-      summary: Start a threshold Railgun private transfer (read JWT)
+      summary: Create a threshold Railgun private transfer with a management signature. The node app closes the dialog after
+        the signature is accepted
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.KeyGenRailgunPrivateTransferSignPost'
+  /keyGenRailgunUnshieldSign:
+    post:
+      description: 'Create a threshold Railgun unshield with a management signature. The node app closes the dialog after
+        the signature is accepted Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunUnshieldSign).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: Create a threshold Railgun unshield with a management signature. The node app closes the dialog after the signature
+        is accepted
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.KeyGenRailgunUnshieldSignPost'
+  /keyGenRailgunFeeQuote:
+    post:
+      description: 'Quote the Railgun fee and broadcaster fee for a shield, private transfer, or unshield (read JWT) Full
+        detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunFeeQuote).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: Quote the Railgun fee and broadcaster fee for a shield, private transfer, or unshield (read JWT)
       responses:
         '200':
           description: OK
@@ -2490,50 +2536,6 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.KeyGenRailgunActionPost'
-  /keyGenRailgunUnshield:
-    post:
-      description: 'Start a threshold Railgun unshield (read JWT) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
-        (POST /keyGenRailgunUnshield).'
-      consumes:
-      - application/json
-      produces:
-      - application/json
-      tags:
-      - Key Generation
-      summary: Start a threshold Railgun unshield (read JWT)
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/node.KeyGenRailgunActionPost'
-  /keyGenRailgunSpendPropose:
-    post:
-      description: 'Record a pending Railgun spend that needs the KeyGen quorum (management signature) Full detail: mpc-config
-        docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunSpendPropose).'
-      consumes:
-      - application/json
-      produces:
-      - application/json
-      tags:
-      - Key Generation
-      summary: Record a pending Railgun spend that needs the KeyGen quorum (management signature)
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/node.APIResponse'
-      parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/node.KeyGenRailgunSpendProposePost'
   /keyGenRailgunSpendAgree:
     post:
       description: 'Release this node''s Railgun spending share for a pending spend (read JWT or management signature) Full
@@ -6439,8 +6441,8 @@ definitions:
     type: object
     required:
     - keyGenId
-    description: Browser dialogue body for POST /keyGenRailgunEnsure, /keyGenRailgunScan, /keyGenRailgunPrivateTransfer, /keyGenRailgunUnshield,
-      and /keyGenRailgunSpendAgree. Read JWT or loopback. The node runs the action and stores the result on the KeyGen.
+    description: Browser dialogue body for POST /keyGenRailgunEnsure, /keyGenRailgunScan, /keyGenRailgunFeeQuote, and /keyGenRailgunSpendAgree.
+      Read JWT or loopback. The node runs the action and stores the result on the KeyGen.
     properties:
       keyGenId:
         type: string
@@ -6454,12 +6456,18 @@ definitions:
         type: string
       memoText:
         type: string
+      kind:
+        type: string
+        enum:
+        - shield
+        - transfer
+        - unshield
       spendId:
         type: string
   node.KeyGenRailgunSpendProposePost:
     type: object
     allOf:
-    - *id002
+    - $ref: '#/definitions/node.NodeMgtKeySig'
     - type: object
       required:
       - keyGenId
@@ -6469,8 +6477,8 @@ definitions:
       - tokenAddress
       - amountWei
       - recipientAddress
-      description: POST /keyGenRailgunSpendPropose. Management signature required. Records a pending spend. Does not include
-        a spending share.
+      description: POST /keyGenRailgunSpendPropose. Management signature required. Records a pending unshield. A private transfer
+        uses POST /keyGenRailgunPrivateTransferSign. Does not include a spending share.
       properties:
         amountWei:
           type: string
@@ -6481,7 +6489,6 @@ definitions:
         kind:
           type: string
           enum:
-          - transfer
           - unshield
         memoText:
           type: string
@@ -6505,4 +6512,60 @@ definitions:
         keyGenId:
           type: string
         spendId:
+          type: string
+  node.KeyGenRailgunPrivateTransferSignPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - keyGenId
+      - chainId
+      - tokenAddress
+      - amountWei
+      - recipientAddress
+      description: POST /keyGenRailgunPrivateTransferSign. Management signature required. Records a pending private transfer
+        and returns its spendId. The node app closes the Railgun dialog after this signature is accepted.
+      properties:
+        amountWei:
+          type: string
+        chainId:
+          type: integer
+        keyGenId:
+          type: string
+        memoText:
+          type: string
+        purpose:
+          type: string
+        recipientAddress:
+          type: string
+          description: 0zk address
+        tokenAddress:
+          type: string
+  node.KeyGenRailgunUnshieldSignPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      required:
+      - keyGenId
+      - chainId
+      - tokenAddress
+      - amountWei
+      - recipientAddress
+      description: POST /keyGenRailgunUnshieldSign. Management signature required. Records a pending unshield and returns
+        its spendId. The node app closes the Railgun dialog after this signature is accepted.
+      properties:
+        amountWei:
+          type: string
+        chainId:
+          type: integer
+        keyGenId:
+          type: string
+        purpose:
+          type: string
+        recipientAddress:
+          type: string
+          description: Public Ethereum address
+        tokenAddress:
           type: string

@@ -154,7 +154,7 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on the paths listed in **`agentPathRequiresReadJWT`**. Other **`POST`**s on that listener use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same JWT rules when Browser HTTPS is configured.
 
-**JWT-protected agent / read paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, **`GET /telegramSearch/status`**, **`GET /getKeyGenRailgun`**, **`POST /keyGenRailgunEnsure`**, **`POST /keyGenRailgunScan`**, **`POST /keyGenRailgunPrivateTransfer`**, **`POST /keyGenRailgunUnshield`**, **`POST /keyGenRailgunFeeQuote`**, **`POST /keyGenRailgunSpendAgree`**, plus node-local Ed25519 sign **`POST /signLocalEd25519Message`** and **`GET /localEd25519PrivateKeyAvailable`** (see those headings). On the **plain management port**, those two routes require a **loopback client** instead of JWT.
+**JWT-protected agent / read paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, **`GET /telegramSearch/status`**, **`GET /getKeyGenRailgun`**, **`POST /keyGenRailgunEnsure`**, **`POST /keyGenRailgunScan`**, **`POST /keyGenRailgunFeeQuote`**, **`POST /keyGenRailgunSpendAgree`**, plus node-local Ed25519 sign **`POST /signLocalEd25519Message`** and **`GET /localEd25519PrivateKeyAvailable`** (see those headings). On the **plain management port**, those two routes require a **loopback client** instead of JWT.
 
 ## Quick Reference: All Endpoints
 
@@ -239,9 +239,9 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`GET /getKeyGenRailgun`](#get-getkeygenrailgun) - Read the Railgun 0zk address, shield-key signature, and shielded balances stored on a KeyGen (**read JWT** on Browser HTTPS)
 - [`POST /keyGenRailgunEnsure`](#post-keygenrailgunensure) - Create that wallet on the node if it is missing (**read JWT**)
 - [`POST /keyGenRailgunScan`](#post-keygenrailgunscan) - Scan shielded balances on the node and write them onto the KeyGen (**read JWT**)
-- [`POST /keyGenRailgunPrivateTransfer`](#post-keygenrailgunprivatetransfer) - Start a threshold private transfer (**read JWT**)
+- [`POST /keyGenRailgunPrivateTransferSign`](#post-keygenrailgunprivatetransfersign) - Create a threshold private transfer (**management signature**)
 - [`POST /keyGenRailgunSpendAgree`](#post-keygenrailgunspendagree) - Agree this node's Railgun spending share (**read JWT**)
-- [`POST /keyGenRailgunUnshield`](#post-keygenrailgununshield) - Unshield from the KeyGen wallet (**read JWT**)
+- [`POST /keyGenRailgunUnshieldSign`](#post-keygenrailgununshieldsign) - Unshield from the KeyGen wallet (**management signature**)
 - [`POST /keyGenRailgunFeeQuote`](#post-keygenrailgunfeequote) - Quote the Railgun fee and broadcaster fee before a shield, private transfer, or unshield (**read JWT**)
 - [`GET /listEnvironmentVariables`](#get-listenvironmentvariables) - List MCP agent environment variables stored on this node (local MongoDB; not propagated)
 - [`GET /getEnvironmentVariable`](#get-getenvironmentvariable) - Get one variable by `name` query param
@@ -3141,7 +3141,7 @@ Stored in **`LocalForumSession`**, one document per KeyGen address (local node o
 
 ### Railgun wallet on the KeyGen record
 
-The Railgun viewing key, spending shares, shielded balances, and shield-key signature for one KeyGen live on that key’s **`keygenresult`** document, field **`railgun`**. Each node can decrypt only its own viewing key and its own spending share. The viewing key scans balances and cannot spend. The spending key is recoverable only when the KeyGen signing quorum of shares is collected for one agreed spend. A **`KeyGenRailgunUpdate`** message copies the ciphertexts, the shield-key signature, spends, and balance rows to the other nodes. A **`KeyGenRailgunShare`** message carries one share, encrypted to the node that started the spend. The node agent and the Telegram bot call the same continuum-mcp tools (`ctm_railgun_ensure_wallet`, `ctm_railgun_fetch_private_balances`, `ctm_railgun_fee_quote`, `ctm_railgun_private_transfer`, `ctm_railgun_unshield`, `ctm_railgun_agree_spend`). Those tools sign **`POST /putKeyGenRailgunWallet`**, **`POST /getKeyGenRailgunWallet`**, **`POST /putKeyGenRailgunBalances`**, **`POST /keyGenRailgunSpendPropose`**, and **`POST /keyGenRailgunSpendAgree`**. The browser dialogue uses the routes below and does not keep a spending key.
+The Railgun viewing key, spending shares, shielded balances, and shield-key signature for one KeyGen live on that key’s **`keygenresult`** document, field **`railgun`**. Each node can decrypt only its own viewing key and its own spending share. The viewing key scans balances and cannot spend. The spending key is recoverable only when the KeyGen signing quorum of shares is collected for one agreed spend. A **`KeyGenRailgunUpdate`** message copies the ciphertexts, the shield-key signature, spends, and balance rows to the other nodes. A **`KeyGenRailgunShare`** message carries one share, encrypted to the node that started the spend. The node agent and the Telegram bot call the same continuum-mcp tools (`ctm_railgun_ensure_wallet`, `ctm_railgun_fetch_private_balances`, `ctm_railgun_fee_quote`, `ctm_railgun_private_transfer`, `ctm_railgun_unshield`, `ctm_railgun_agree_spend`). Those tools sign **`POST /putKeyGenRailgunWallet`**, **`POST /getKeyGenRailgunWallet`**, **`POST /putKeyGenRailgunBalances`**, **`POST /keyGenRailgunPrivateTransferSign`** (private transfer), **`POST /keyGenRailgunUnshieldSign`** (unshield), and **`POST /keyGenRailgunSpendAgree`**. The browser dialogue uses the routes below and does not keep a spending key.
 
 The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign result is saved, the node writes `shieldSignature` onto the KeyGen (`0x` + `r` + `s` + `v`, with `v` `1b` or `1c`) and broadcasts it with the Railgun record. [`GET /getSignResultById`](#get-getsignresultbyid) for that request returns the same signature and the KeyGen `0zk` address.
 
@@ -3176,21 +3176,25 @@ The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign
 
 **Response `data`:** `{ "railgunAddress", "walletConfigured", "chainId", "scanned", "scanStatus", "balances", "notes" }`.
 
-<a id="post-keygenrailgunprivatetransfer"></a>
-#### `POST /keyGenRailgunPrivateTransfer`
+<a id="post-keygenrailgunprivatetransfersign"></a>
+#### `POST /keyGenRailgunPrivateTransferSign`
 
-**Auth:** **Read JWT** or loopback.
+**Auth:** Management signature (**Ed25519** or **EIP-191**). A read JWT is not accepted. The signature covers the JSON body with `clientSig` cleared. Omit empty `memoText` and `purpose`; the server omits those empty fields when it checks the signature.
 
-**Request:** `{ "keyGenId", "chainId", "tokenAddress", "amountWei", "recipientAddress", "memoText"?, "purpose"? }`. `recipientAddress` is a `0zk` address. `amountWei` is a decimal integer string. `purpose` is optional text, max 256 characters. It is stored as `Purpose[originator node key]` and shown on Join, Execute, and History the same way as a normal sign request.
+**Request:** `{ "nonce", "clientSig", "nodeKey", "keyGenId", "chainId", "tokenAddress", "amountWei", "recipientAddress", "memoText"?, "purpose"? }`. `recipientAddress` is a `0zk` address. `amountWei` is a positive decimal integer string. `chainId` is the chain of that token contract. `purpose` is optional text, max 256 characters. It is stored as `Purpose[originator node key]` and shown on Join, Execute, and History. When a private memo is set, send the same text as `memoText`. The server assigns `spendId`.
 
-**Response `data`:** `{ "status", "spendId", "approvals", "quorum", "txHash"? }`. `status` is `pending` until other nodes call [`POST /keyGenRailgunSpendAgree`](#post-keygenrailgunspendagree). When `approvals` reaches `quorum`, `status` becomes `ready`. The originator then calls [`POST /keyGenRailgunSpendExecute`](#post-keygenrailgunspendexecute).
+**Behavior:** Records a pending private transfer on the KeyGen and counts this node's approval. It does not build a proof. Other nodes accept with [`POST /keyGenRailgunSpendAgree`](#post-keygenrailgunspendagree). The node-app dialog and `ctm_railgun_private_transfer` both call this route. `POST /keyGenRailgunPrivateTransfer` and `POST /keyGenRailgunSpendPropose` are not routes. The dialog closes once the signature is accepted. Shield and unshield close that dialog after their own submit succeeds.
 
-<a id="post-keygenrailgununshield"></a>
-#### `POST /keyGenRailgunUnshield`
+**Response `data`:** `{ "status", "spendId", "approvals", "quorum", "txHash"? }`.
 
-**Auth:** **Read JWT** or loopback.
+<a id="post-keygenrailgununshieldsign"></a>
+#### `POST /keyGenRailgunUnshieldSign`
 
-**Request:** `{ "keyGenId", "chainId", "tokenAddress", "amountWei", "recipientAddress"?, "purpose"? }`. `recipientAddress` is a public address. When it is omitted, continuum-mcp uses the KeyGen Ethereum address. `purpose` is stored the same way as on a private transfer.
+**Auth:** Management signature (**Ed25519** or **EIP-191**). A read JWT is not accepted. The signature covers the JSON body with `clientSig` cleared. Omit an empty `purpose`; the server omits that empty field when it checks the signature.
+
+**Request:** `{ "nonce", "clientSig", "nodeKey", "keyGenId", "chainId", "tokenAddress", "amountWei", "recipientAddress", "purpose"? }`. `recipientAddress` is a public Ethereum address. `amountWei` is a positive decimal integer string. `purpose` is optional text, max 256 characters, stored as `Purpose[originator node key]`. The server assigns `spendId`. `POST /keyGenRailgunUnshield` is not a route.
+
+**Behavior:** Records a pending unshield on the KeyGen and counts this node's approval. It does not build a proof. Other nodes accept with [`POST /keyGenRailgunSpendAgree`](#post-keygenrailgunspendagree). The node-app dialog and `ctm_railgun_unshield` both call this route. The dialog closes once the signature is accepted. When the tool omits `recipientAddress`, it signs the KeyGen Ethereum address.
 
 **Response `data`:** `{ "status", "spendId", "approvals", "quorum", "txHash"? }`.
 
