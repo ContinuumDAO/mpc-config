@@ -154,7 +154,7 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on the paths listed in **`agentPathRequiresReadJWT`**. Other **`POST`**s on that listener use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same JWT rules when Browser HTTPS is configured.
 
-**JWT-protected agent / read paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, **`GET /telegramSearch/status`**, **`GET /getKeyGenRailgun`**, **`POST /keyGenRailgunEnsure`**, **`POST /keyGenRailgunScan`**, **`POST /keyGenRailgunFeeQuote`**, **`POST /keyGenRailgunSpendAgree`**, plus node-local Ed25519 sign **`POST /signLocalEd25519Message`** and **`GET /localEd25519PrivateKeyAvailable`** (see those headings). On the **plain management port**, those two routes require a **loopback client** instead of JWT.
+**JWT-protected agent / read paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, **`GET /telegramSearch/status`**, **`GET /getKeyGenRailgun`**, **`POST /keyGenRailgunEnsure`**, **`POST /keyGenRailgunScan`**, **`POST /keyGenRailgunFeeQuote`**, plus node-local Ed25519 sign **`POST /signLocalEd25519Message`** and **`GET /localEd25519PrivateKeyAvailable`** (see those headings). On the **plain management port**, those two routes require a **loopback client** instead of JWT.
 
 ## Quick Reference: All Endpoints
 
@@ -240,7 +240,10 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /keyGenRailgunEnsure`](#post-keygenrailgunensure) - Create that wallet on the node if it is missing (**read JWT**)
 - [`POST /keyGenRailgunScan`](#post-keygenrailgunscan) - Scan shielded balances on the node and write them onto the KeyGen (**read JWT**)
 - [`POST /keyGenRailgunPrivateTransferSign`](#post-keygenrailgunprivatetransfersign) - Create a threshold private transfer (**management signature**)
-- [`POST /keyGenRailgunSpendAgree`](#post-keygenrailgunspendagree) - Agree this node's Railgun spending share (**read JWT**)
+- [`POST /keyGenRailgunSpendAgree`](#post-keygenrailgunspendagree) - Agree this node's Railgun spending share (**management signature**)
+- [`POST /keyGenRailgunSpendReject`](#post-keygenrailgunspendreject) - Reject that spend (**management signature**)
+- [`POST /keyGenRailgunSpendExecute`](#post-keygenrailgunspendexecute) - Originator submits the private transfer or unshield (**management signature**)
+- [`POST /keyGenRailgunSpendShelve`](#post-keygenrailgunspendshelve) - Originator shelves that spend (**management signature**)
 - [`POST /keyGenRailgunUnshieldSign`](#post-keygenrailgununshieldsign) - Unshield from the KeyGen wallet (**management signature**)
 - [`POST /keyGenRailgunFeeQuote`](#post-keygenrailgunfeequote) - Quote the Railgun fee and broadcaster fee before a shield, private transfer, or unshield (**read JWT**)
 - [`GET /listEnvironmentVariables`](#get-listenvironmentvariables) - List MCP agent environment variables stored on this node (local MongoDB; not propagated)
@@ -3141,7 +3144,7 @@ Stored in **`LocalForumSession`**, one document per KeyGen address (local node o
 
 ### Railgun wallet on the KeyGen record
 
-The Railgun viewing key, spending shares, shielded balances, and shield-key signature for one KeyGen live on that key’s **`keygenresult`** document, field **`railgun`**. Each node can decrypt only its own viewing key and its own spending share. The viewing key scans balances and cannot spend. The spending key is recoverable only when the KeyGen signing quorum of shares is collected for one agreed spend. A **`KeyGenRailgunUpdate`** message copies the ciphertexts, the shield-key signature, spends, and balance rows to the other nodes. A **`KeyGenRailgunShare`** message carries one share, encrypted to the node that started the spend. The node agent and the Telegram bot call the same continuum-mcp tools (`ctm_railgun_ensure_wallet`, `ctm_railgun_fetch_private_balances`, `ctm_railgun_fee_quote`, `ctm_railgun_private_transfer`, `ctm_railgun_unshield`, `ctm_railgun_agree_spend`). Those tools sign **`POST /putKeyGenRailgunWallet`**, **`POST /getKeyGenRailgunWallet`**, **`POST /putKeyGenRailgunBalances`**, **`POST /keyGenRailgunPrivateTransferSign`** (private transfer), **`POST /keyGenRailgunUnshieldSign`** (unshield), and **`POST /keyGenRailgunSpendAgree`**. The browser dialogue uses the routes below and does not keep a spending key.
+The Railgun viewing key, spending shares, shielded balances, and shield-key signature for one KeyGen live on that key’s **`keygenresult`** document, field **`railgun`**. Each node can decrypt only its own viewing key and its own spending share. The viewing key scans balances and cannot spend. The spending key is recoverable only when the KeyGen signing quorum of shares is collected for one agreed spend. A **`KeyGenRailgunUpdate`** message copies the ciphertexts, the shield-key signature, spends, and balance rows to the other nodes. A **`KeyGenRailgunShare`** message carries one share, encrypted to the node that started the spend. The node agent and the Telegram bot call the same continuum-mcp tools (`ctm_railgun_ensure_wallet`, `ctm_railgun_fetch_private_balances`, `ctm_railgun_fee_quote`, `ctm_railgun_private_transfer`, `ctm_railgun_unshield`, `ctm_railgun_agree_spend`). Those tools sign **`POST /putKeyGenRailgunWallet`**, **`POST /getKeyGenRailgunWallet`**, **`POST /putKeyGenRailgunBalances`**, **`POST /keyGenRailgunPrivateTransferSign`** (private transfer), **`POST /keyGenRailgunUnshieldSign`** (unshield), **`POST /keyGenRailgunSpendAgree`**, and **`POST /keyGenRailgunSpendExecute`**. A shield is **`POST /multiSignRequest`** (management signature), including the shield-key `personal_sign` when `shieldSignature` is not stored yet. The browser dialogue uses the routes below and does not keep a spending key.
 
 The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign result is saved, the node writes `shieldSignature` onto the KeyGen (`0x` + `r` + `s` + `v`, with `v` `1b` or `1c`) and broadcasts it with the Railgun record. [`GET /getSignResultById`](#get-getsignresultbyid) for that request returns the same signature and the KeyGen `0zk` address.
 
@@ -3212,9 +3215,9 @@ The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign
 <a id="post-keygenrailgunspendagree"></a>
 #### `POST /keyGenRailgunSpendAgree`
 
-**Auth:** **Read JWT** or loopback. A management signature is also accepted on the management port.
+**Auth:** Management signature (**Ed25519** or **EIP-191**). A read JWT is not accepted. The signature covers `{ "nonce", "clientSig": "", "nodeKey", "keyGenId", "spendId", "thoughts"? }`. Omit an empty `thoughts`.
 
-**Request:** `{ "keyGenId", "spendId", "thoughts"? }`. `thoughts` is optional text, max 256 characters. It is stored as `Thoughts[this node key]` on accept. [`POST /keyGenRailgunSpendReject`](#post-keygenrailgunspendreject) accepts the same field and stores it on reject.
+**Request:** `{ "nonce", "clientSig", "nodeKey", "keyGenId", "spendId", "thoughts"? }`. `thoughts` is optional text, max 256 characters. It is stored as `Thoughts[this node key]` on accept. [`POST /keyGenRailgunSpendReject`](#post-keygenrailgunspendreject) accepts the same field and stores it on reject.
 
 **Behavior:** This node releases its spending share for that pending spend. The share is encrypted to the node that started the spend. The HTTP response does not contain the share.
 
@@ -3223,22 +3226,31 @@ The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign
 <a id="post-keygenrailgunspendreject"></a>
 #### `POST /keyGenRailgunSpendReject`
 
-**Auth:** **Read JWT** or loopback. A management signature is also accepted on the management port.
+**Auth:** Management signature (**Ed25519** or **EIP-191**). A read JWT is not accepted. Same signed fields as [`POST /keyGenRailgunSpendAgree`](#post-keygenrailgunspendagree).
 
-**Request:** `{ "keyGenId", "spendId", "thoughts"? }`. `thoughts` is stored as `Thoughts[this node key]`.
+**Request:** `{ "nonce", "clientSig", "nodeKey", "keyGenId", "spendId", "thoughts"? }`. `thoughts` is stored as `Thoughts[this node key]`.
 
 **Behavior:** Marks the spend `rejected`. A rejected spend cannot be agreed or executed.
 
 <a id="post-keygenrailgunspendexecute"></a>
 #### `POST /keyGenRailgunSpendExecute`
 
-**Auth:** **Read JWT** or loopback. A management signature is also accepted on the management port.
+**Auth:** Management signature (**Ed25519** or **EIP-191**). A read JWT is not accepted. The signature covers `{ "nonce", "clientSig": "", "nodeKey", "keyGenId", "spendId" }`.
 
-**Request:** `{ "keyGenId", "spendId" }`.
+**Request:** `{ "nonce", "clientSig", "nodeKey", "keyGenId", "spendId" }`.
 
 **Behavior:** The originator builds the Railgun proof and submits it. `status` becomes `executing`, then `submitted` with `txHash`, or `failed` and can be retried. Other nodes do not call this route.
 
-**Errors for these routes:** **401** `read JWT required` when the caller is not loopback and has no read JWT. **400** when `keyGenId` is missing, the KeyGen quorum is below 2, or this node has no share. **502** when continuum-mcp is unreachable or returns an error (no wallet on the KeyGen, no RPC gateway, no broadcaster).
+<a id="post-keygenrailgunspendshelve"></a>
+#### `POST /keyGenRailgunSpendShelve`
+
+**Auth:** Management signature (**Ed25519** or **EIP-191**). A read JWT is not accepted. Same signed fields as execute.
+
+**Request:** `{ "nonce", "clientSig", "nodeKey", "keyGenId", "spendId" }`.
+
+**Behavior:** The originator marks the spend `shelved`. A shelved spend is not agreed or executed. Other nodes do not call this route.
+
+**Errors for these routes:** Ensure, scan, and fee quote return **401** `read JWT required` when the caller is not loopback and has no read JWT. Private transfer, unshield, agree, reject, execute, and shelve return **401** when the management signature is missing or does not match the body. **400** when `keyGenId` is missing, the KeyGen quorum is below 2, or this node has no share. **502** when continuum-mcp is unreachable or returns an error (no wallet on the KeyGen, no RPC gateway, no broadcaster).
 
 ### Agent environment variables (local MongoDB)
 

@@ -3779,7 +3779,7 @@
         },
         "/keyGenRailgunSpendAgree": {
             "post": {
-                "description": "Release this node's Railgun spending share for a pending spend (read JWT or management signature) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunSpendAgree).",
+                "description": "Release this node's Railgun spending share for a pending spend (management signature) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunSpendAgree).",
                 "consumes": [
                     "application/json"
                 ],
@@ -3789,7 +3789,106 @@
                 "tags": [
                     "Key Generation"
                 ],
-                "summary": "Release this node's Railgun spending share for a pending spend (read JWT or management signature)",
+                "summary": "Release this node's Railgun spending share for a pending spend (management signature)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.KeyGenRailgunSpendAgreePost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/keyGenRailgunSpendReject": {
+            "post": {
+                "description": "Reject a pending Railgun private transfer or unshield (management signature) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunSpendReject).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Key Generation"
+                ],
+                "summary": "Reject a pending Railgun private transfer or unshield (management signature)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.KeyGenRailgunSpendAgreePost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/keyGenRailgunSpendExecute": {
+            "post": {
+                "description": "Originator builds and submits a Railgun private transfer or unshield (management signature) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunSpendExecute).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Key Generation"
+                ],
+                "summary": "Originator builds and submits a Railgun private transfer or unshield (management signature)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.KeyGenRailgunSpendAgreePost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/keyGenRailgunSpendShelve": {
+            "post": {
+                "description": "Originator shelves a Railgun private transfer or unshield (management signature) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunSpendShelve).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Key Generation"
+                ],
+                "summary": "Originator shelves a Railgun private transfer or unshield (management signature)",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -9500,7 +9599,7 @@
             "required": [
                 "keyGenId"
             ],
-            "description": "Browser dialogue body for POST /keyGenRailgunEnsure, /keyGenRailgunScan, /keyGenRailgunFeeQuote, and /keyGenRailgunSpendAgree. Read JWT or loopback. The node runs the action and stores the result on the KeyGen.",
+            "description": "Browser dialogue body for POST /keyGenRailgunEnsure, /keyGenRailgunScan, and /keyGenRailgunFeeQuote. Read JWT or loopback. The node runs the action and stores the result on the KeyGen.",
             "properties": {
                 "keyGenId": {
                     "type": "string"
@@ -9595,13 +9694,17 @@
                         "keyGenId",
                         "spendId"
                     ],
-                    "description": "POST /keyGenRailgunSpendAgree. Read JWT, loopback, or management signature. Releases this node's share encrypted to the originator. The response has no share.",
+                    "description": "Management-signed body for POST /keyGenRailgunSpendAgree, /keyGenRailgunSpendReject, /keyGenRailgunSpendExecute, and /keyGenRailgunSpendShelve. thoughts is stored on agree and reject. Execute and shelve omit it.",
                     "properties": {
                         "keyGenId": {
                             "type": "string"
                         },
                         "spendId": {
                             "type": "string"
+                        },
+                        "thoughts": {
+                            "type": "string",
+                            "description": "Optional comment, max 256 characters. Agree and reject only."
                         }
                     }
                 }
