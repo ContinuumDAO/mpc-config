@@ -1,0 +1,8 @@
+[Unit]
+Description=Apply mpc-auth pending-bitcoin-core.json (start or stop Bitcoin Core)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-apply-pending-bitcoin-core.sh

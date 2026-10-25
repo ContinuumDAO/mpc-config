@@ -12,6 +12,7 @@ POLL_SECS="${CONTINUUM_WATCHER_POLL_SECS:-2}"
 pending="$(macos_desktop_pending_file)"
 vpn_pending="$(macos_desktop_vpn_pending_file)"
 ngrok_pending="$(macos_desktop_telegram_ngrok_pending_file)"
+bitcoin_pending="$(macos_desktop_bitcoin_core_pending_file)"
 pending_dir="$(dirname "$pending")"
 logfile="$(macos_desktop_logfile)"
 
@@ -57,7 +58,19 @@ apply_once() {
 	fi
 }
 
-log "Continuum mpc-auth macOS pending watcher started (poll=${POLL_SECS}s, update=${pending}, vpn=${vpn_pending}, telegram-ngrok=${ngrok_pending})"
+apply_bitcoin_core_once() {
+	if [[ ! -f "$bitcoin_pending" ]]; then
+		return 0
+	fi
+	log "pending Bitcoin Core change detected — applying via mpc-auth-apply-pending-bitcoin-core.sh"
+	if macos_desktop_apply_pending_bitcoin_core; then
+		log "Bitcoin Core apply finished OK"
+	else
+		log "Bitcoin Core apply failed (see above)"
+	fi
+}
+
+log "Continuum mpc-auth macOS pending watcher started (poll=${POLL_SECS}s, update=${pending}, vpn=${vpn_pending}, telegram-ngrok=${ngrok_pending}, bitcoin-core=${bitcoin_pending})"
 
 if command -v fswatch >/dev/null 2>&1; then
 	log "using fswatch on ${pending_dir}"
@@ -66,6 +79,7 @@ if command -v fswatch >/dev/null 2>&1; then
 		apply_once
 		apply_vpn_once
 		apply_telegram_ngrok_once
+		apply_bitcoin_core_once
 	done
 else
 	log "fswatch not found — polling every ${POLL_SECS}s (optional: brew install fswatch)"
@@ -73,6 +87,7 @@ else
 		apply_once
 		apply_vpn_once
 		apply_telegram_ngrok_once
+		apply_bitcoin_core_once
 		sleep "$POLL_SECS"
 	done
 fi

@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch mpc-auth pending-bitcoin-core.json
+
+[Path]
+PathExists=/var/lib/mpc-auth-docker/pending-bitcoin-core.json
+PathChanged=/var/lib/mpc-auth-docker/pending-bitcoin-core.json
+
+[Install]
+WantedBy=multi-user.target

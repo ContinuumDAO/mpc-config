@@ -70,6 +70,11 @@ macos_desktop_telegram_ngrok_pending_file() {
 	printf '%s' "${MPC_AUTH_TELEGRAM_NGROK_PENDING_FILE:-/var/lib/mpc-auth-docker/pending-telegram-ngrok.json}"
 }
 
+macos_desktop_bitcoin_core_pending_file() {
+	macos_desktop_load_env
+	printf '%s' "${MPC_AUTH_BITCOIN_CORE_PENDING_FILE:-/var/lib/mpc-auth-docker/pending-bitcoin-core.json}"
+}
+
 macos_desktop_apply_pending() {
 	local libexec apply env_file
 	libexec="$(macos_desktop_libexec)"
@@ -103,6 +108,19 @@ macos_desktop_apply_pending_telegram_ngrok() {
 	local libexec apply env_file
 	libexec="$(macos_desktop_libexec)"
 	apply="${libexec}/mpc-auth-apply-pending-telegram-ngrok.sh"
+	env_file="$(macos_desktop_env_file)"
+	if [[ ! -x "$apply" ]]; then
+		echo "error: missing ${apply} — run install-macos-desktop-host-automation.sh" >&2
+		return 1
+	fi
+	export MPC_AUTH_MACOS_ENV_FILE="$env_file"
+	macos_desktop_sudo env MPC_AUTH_MACOS_ENV_FILE="$env_file" "$apply"
+}
+
+macos_desktop_apply_pending_bitcoin_core() {
+	local libexec apply env_file
+	libexec="$(macos_desktop_libexec)"
+	apply="${libexec}/mpc-auth-apply-pending-bitcoin-core.sh"
 	env_file="$(macos_desktop_env_file)"
 	if [[ ! -x "$apply" ]]; then
 		echo "error: missing ${apply} — run install-macos-desktop-host-automation.sh" >&2

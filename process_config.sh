@@ -5252,10 +5252,14 @@ pending_line = "      MPC_AUTH_VPN_PENDING_FILE: /var/lib/mpc-auth-docker/pendin
 state_line = "      MPC_AUTH_VPN_STATE_FILE: /var/lib/mpc-auth-docker/vpn-state.json\n"
 egress_pending_line = "      MPC_AUTH_VPN_EGRESS_PENDING_FILE: /var/lib/mpc-auth-docker/pending-vpn-egress.json\n"
 egress_state_line = "      MPC_AUTH_VPN_EGRESS_STATE_FILE: /var/lib/mpc-auth-docker/vpn-egress-state.json\n"
+bitcoin_pending_line = "      MPC_AUTH_BITCOIN_CORE_PENDING_FILE: /var/lib/mpc-auth-docker/pending-bitcoin-core.json\n"
+bitcoin_disk_line = "      BitcoinCoreDiskPath: /var/lib/mpc-auth-docker\n"
 pat_pending = re.compile(r"^\s*#?\s*MPC_AUTH_VPN_PENDING_FILE:\s*")
 pat_state = re.compile(r"^\s*#?\s*MPC_AUTH_VPN_STATE_FILE:\s*")
 pat_egress_pending = re.compile(r"^\s*#?\s*MPC_AUTH_VPN_EGRESS_PENDING_FILE:\s*")
 pat_egress_state = re.compile(r"^\s*#?\s*MPC_AUTH_VPN_EGRESS_STATE_FILE:\s*")
+pat_bitcoin_pending = re.compile(r"^\s*#?\s*MPC_AUTH_BITCOIN_CORE_PENDING_FILE:\s*")
+pat_bitcoin_disk = re.compile(r"^\s*#?\s*BitcoinCoreDiskPath:\s*")
 reboot_pat = re.compile(r"^\s*MPC_AUTH_PENDING_REBOOT_FILE:")
 
 if not path:
@@ -5275,6 +5279,8 @@ found_pending = False
 found_state = False
 found_egress_pending = False
 found_egress_state = False
+found_bitcoin_pending = False
+found_bitcoin_disk = False
 changed = False
 for line in lines:
     if pat_pending.match(line):
@@ -5301,9 +5307,21 @@ for line in lines:
             changed = True
         out.append(egress_state_line)
         continue
+    if pat_bitcoin_pending.match(line):
+        found_bitcoin_pending = True
+        if line != bitcoin_pending_line:
+            changed = True
+        out.append(bitcoin_pending_line)
+        continue
+    if pat_bitcoin_disk.match(line):
+        found_bitcoin_disk = True
+        if line != bitcoin_disk_line:
+            changed = True
+        out.append(bitcoin_disk_line)
+        continue
     out.append(line)
 
-if not found_pending or not found_state or not found_egress_pending or not found_egress_state:
+if not found_pending or not found_state or not found_egress_pending or not found_egress_state or not found_bitcoin_pending or not found_bitcoin_disk:
     insert_at = None
     for i, line in enumerate(out):
         if reboot_pat.match(line):
@@ -5321,6 +5339,10 @@ if not found_pending or not found_state or not found_egress_pending or not found
         block.append(egress_pending_line)
     if not found_egress_state:
         block.append(egress_state_line)
+    if not found_bitcoin_pending:
+        block.append(bitcoin_pending_line)
+    if not found_bitcoin_disk:
+        block.append(bitcoin_disk_line)
     out[insert_at:insert_at] = block
     changed = True
 
@@ -5330,7 +5352,7 @@ if not changed:
 
 with open(path, "w", encoding="utf-8") as f:
     f.writelines(out)
-print("insert" if not (found_pending and found_state and found_egress_pending and found_egress_state) else "set", flush=True)
+print("insert" if not (found_pending and found_state and found_egress_pending and found_egress_state and found_bitcoin_pending and found_bitcoin_disk) else "set", flush=True)
 PYCOMPOSEVPN
     )
     case "$_action" in

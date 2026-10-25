@@ -70,6 +70,11 @@ wsl_desktop_telegram_ngrok_pending_file() {
 	printf '%s' "${MPC_AUTH_TELEGRAM_NGROK_PENDING_FILE:-/var/lib/mpc-auth-docker/pending-telegram-ngrok.json}"
 }
 
+wsl_desktop_bitcoin_core_pending_file() {
+	wsl_desktop_load_env
+	printf '%s' "${MPC_AUTH_BITCOIN_CORE_PENDING_FILE:-/var/lib/mpc-auth-docker/pending-bitcoin-core.json}"
+}
+
 wsl_desktop_apply_pending() {
 	local libexec apply env_file
 	libexec="$(wsl_desktop_libexec)"
@@ -90,6 +95,19 @@ wsl_desktop_apply_pending_vpn() {
 	local libexec apply env_file
 	libexec="$(wsl_desktop_libexec)"
 	apply="${libexec}/mpc-auth-apply-pending-vpn.sh"
+	env_file="$(wsl_desktop_env_file)"
+	if [[ ! -x "$apply" ]]; then
+		echo "error: missing ${apply} — run install-wsl-desktop-host-automation.sh" >&2
+		return 1
+	fi
+	export MPC_AUTH_WSL_ENV_FILE="$env_file"
+	wsl_desktop_sudo env MPC_AUTH_WSL_ENV_FILE="$env_file" "$apply"
+}
+
+wsl_desktop_apply_pending_bitcoin_core() {
+	local libexec apply env_file
+	libexec="$(wsl_desktop_libexec)"
+	apply="${libexec}/mpc-auth-apply-pending-bitcoin-core.sh"
 	env_file="$(wsl_desktop_env_file)"
 	if [[ ! -x "$apply" ]]; then
 		echo "error: missing ${apply} — run install-wsl-desktop-host-automation.sh" >&2

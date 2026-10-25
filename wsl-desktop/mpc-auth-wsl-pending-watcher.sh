@@ -12,6 +12,7 @@ POLL_SECS="${CONTINUUM_WATCHER_POLL_SECS:-2}"
 pending="$(wsl_desktop_pending_file)"
 vpn_pending="$(wsl_desktop_vpn_pending_file)"
 ngrok_pending="$(wsl_desktop_telegram_ngrok_pending_file)"
+bitcoin_pending="$(wsl_desktop_bitcoin_core_pending_file)"
 pending_dir="$(dirname "$pending")"
 logfile="$(wsl_desktop_logfile)"
 
@@ -57,13 +58,26 @@ apply_once() {
 	fi
 }
 
+apply_bitcoin_core_once() {
+	if [[ ! -f "$bitcoin_pending" ]]; then
+		return 0
+	fi
+	log "pending Bitcoin Core change detected — applying via mpc-auth-apply-pending-bitcoin-core.sh"
+	if wsl_desktop_apply_pending_bitcoin_core; then
+		log "Bitcoin Core apply finished OK"
+	else
+		log "Bitcoin Core apply failed (see above)"
+	fi
+}
+
 apply_all() {
 	apply_once
 	apply_vpn_once
 	apply_telegram_ngrok_once
+	apply_bitcoin_core_once
 }
 
-log "Continuum mpc-auth WSL pending watcher started (poll=${POLL_SECS}s, update=${pending}, vpn=${vpn_pending}, telegram-ngrok=${ngrok_pending})"
+log "Continuum mpc-auth WSL pending watcher started (poll=${POLL_SECS}s, update=${pending}, vpn=${vpn_pending}, telegram-ngrok=${ngrok_pending}, bitcoin-core=${bitcoin_pending})"
 
 # Always poll so Docker Desktop bind-mount events that miss inotify still apply.
 # inotifywait -t wakes early on close_write/create; timeout falls through to poll.

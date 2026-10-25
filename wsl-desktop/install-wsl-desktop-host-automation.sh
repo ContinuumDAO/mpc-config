@@ -109,6 +109,10 @@ sed -i 's|^if \[\[ -r /etc/default/mpc-auth-docker \]\]; then|if [[ -n "${MPC_AU
 sed -i 's|/usr/local/libexec/mpc-auth/mpc-auth-sync-compose-role.sh|"$(cd "$(dirname "${BASH_SOURCE[0]}")" \&\& pwd)/mpc-auth-sync-compose-role.sh"|' \
 	"${LIBEXEC}/mpc-auth-docker-update.sh"
 
+if [[ -f "${SYSTEMD_ROOT}/mpc-auth-apply-pending-bitcoin-core.sh" ]]; then
+	install -m 0755 "${SYSTEMD_ROOT}/mpc-auth-apply-pending-bitcoin-core.sh" "${LIBEXEC}/mpc-auth-apply-pending-bitcoin-core.sh"
+fi
+
 if [[ -f "${SYSTEMD_ROOT}/mpc-auth-apply-pending-vpn.sh" ]]; then
 	install -m 0755 "${SYSTEMD_ROOT}/mpc-auth-apply-pending-vpn.sh" "${LIBEXEC}/mpc-auth-apply-pending-vpn.sh"
 	sed -i 's|LIBEXEC="/usr/local/libexec/mpc-auth"|LIBEXEC="'"${LIBEXEC}"'"|' \

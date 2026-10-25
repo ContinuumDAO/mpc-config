@@ -71,6 +71,7 @@ install -m 0755 \
 	"$HERE/mpc-auth-vpn-egress-disable.sh" \
 	"$HERE/mpc-auth-vpn-dns-filter.sh" \
 	"$HERE/mpc-auth-apply-pending-telegram-ngrok.sh" \
+	"$HERE/mpc-auth-apply-pending-bitcoin-core.sh" \
 	"$HERE/mpc-auth-telegram-ngrok-enable.sh" \
 	"$HERE/mpc-auth-telegram-ngrok-disable.sh" \
 	"$HERE/mpc-auth-apply-agent-llm-config.sh" \
@@ -114,6 +115,8 @@ install -m 0644 \
 	"$HERE/mpc-auth-docker-pending-reboot.service" \
 	"$HERE/mpc-auth-vpn-pending.path" \
 	"$HERE/mpc-auth-vpn-pending.service" \
+	"$HERE/mpc-auth-bitcoin-core-pending.path" \
+	"$HERE/mpc-auth-bitcoin-core-pending.service" \
 	"$HERE/mpc-auth-wireguard-wg0.service" \
 	"$HERE/mpc-auth-vpn-mgmt-proxy.service" \
 	"$HERE/mpc-auth-shadowsocks.service" \
@@ -214,6 +217,9 @@ systemctl restart mpc-auth-vpn-egress-pending.path || systemctl start mpc-auth-v
 
 systemctl enable mpc-auth-telegram-ngrok-pending.path
 systemctl restart mpc-auth-telegram-ngrok-pending.path || systemctl start mpc-auth-telegram-ngrok-pending.path
+
+systemctl enable mpc-auth-bitcoin-core-pending.path
+systemctl restart mpc-auth-bitcoin-core-pending.path || systemctl start mpc-auth-bitcoin-core-pending.path
 
 echo
 echo "Installed:"
