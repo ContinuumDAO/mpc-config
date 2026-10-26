@@ -3422,7 +3422,7 @@ The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign
 
 **Query:** `id` (KeyGen request id).
 
-**Response `data`:** `{ "walletConfigured", "railgunAddress", "shieldSignature", "quorum", "chains", "spends", "updatedAt" }`. `railgunAddress` is the `0zk` address. `shieldSignature` is the stored shield key (`0x` + `r` + `s` + `v`). It is an empty string until the shield-key `personal_sign` has been saved. If the field is empty, this GET looks up that sign result, stores the signature, and broadcasts it. Each chain is `{ "chainId", "scanStatus", "balances", "notes", "updatedAt" }`. A balance is `{ "tokenAddress", "spendable", "pending", "symbol"? }` with amounts as decimal integer strings (wei). A spend is `{ "spendId", "originator", "kind", "chainId", "tokenAddress", "amountWei", "recipientAddress", "memoText"?, "Purpose"?, "Thoughts"?, "approvals", "status", "txHash"? }`. `Purpose` is a node-key map. The originator’s entry is the purpose text, including an empty string. `Thoughts` is a node-key map of comments from accept and reject, the same shape as a normal sign request. Viewing keys and spending shares are not included. `GET /getKeyGenResultById` also omits them.
+**Response `data`:** `{ "walletConfigured", "railgunAddress", "shieldSignature", "quorum", "chains", "spends", "updatedAt" }`. `railgunAddress` is the `0zk` address. `shieldSignature` is the stored shield key (`0x` + `r` + `s` + `v`). It is an empty string until the shield-key `personal_sign` has been saved. If the field is empty, this GET looks up that sign result, stores the signature, and broadcasts it. Each chain is `{ "chainId", "scanStatus", "balances", "notes", "updatedAt" }`. A balance is `{ "tokenAddress", "spendable", "pending", "symbol"? }` with amounts as decimal integer strings (wei). A spend is `{ "spendId", "originator", "kind", "chainId", "tokenAddress", "amountWei", "recipientAddress", "memoText"?, "Purpose"?, "Thoughts"?, "approvals", "status", "txHash"? }`. A completed private transfer or unshield has `status` `executed` and `txHash`. A spend saved earlier as `submitted` is returned as `executed`. `Purpose` is a node-key map. The originator’s entry is the purpose text, including an empty string. `Thoughts` is a node-key map of comments from accept and reject, the same shape as a normal sign request. Viewing keys and spending shares are not included. `GET /getKeyGenResultById` also omits them.
 
 <a id="post-keygenrailgunensure"></a>
 #### `POST /keyGenRailgunEnsure`
@@ -3506,7 +3506,7 @@ The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign
 
 **Request:** `{ "nonce", "clientSig", "nodeKey", "keyGenId", "spendId" }`.
 
-**Behavior:** The originator builds the Railgun proof and submits it. `status` becomes `executing`, then `submitted` with `txHash`, or `failed` and can be retried. Other nodes do not call this route.
+**Behavior:** The originator builds the Railgun proof and submits it. `status` becomes `executing`, then `executed` with `txHash`, or `failed` and can be retried. Other nodes do not call this route.
 
 <a id="post-keygenrailgunspendshelve"></a>
 #### `POST /keyGenRailgunSpendShelve`
