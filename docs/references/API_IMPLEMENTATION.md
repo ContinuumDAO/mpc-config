@@ -3518,7 +3518,7 @@ The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign
 
 **Request:** `{ "nonce", "clientSig", "nodeKey", "keyGenId", "spendId", "broadcasterAddress"?, "broadcasterFeesId"? }`. Both broadcaster fields come from [`POST /keyGenRailgunBroadcasters`](#post-keygenrailgunbroadcasters).
 
-**Behavior:** The originator builds the Railgun proof for the chosen broadcaster and submits it. When those fields are omitted, the node uses the cheapest broadcaster whose fee ratio is at least 1:1. If that broadcaster refuses because the gas cost is too high, the node proves the next covering ratio, up to three broadcasters. `status` becomes `executing`, then `executed` with `txHash`, or `failed` and can be retried. Other nodes do not call this route.
+**Behavior:** The originator builds the Railgun proof for the chosen broadcaster and submits it. When those fields are omitted, the node uses the cheapest broadcaster whose fee ratio is at least 1:1. A fee advertisement expires while the spending wallet syncs. The node then uses that broadcaster's current advertisement, or the next covering ratio when that broadcaster is gone. If a broadcaster refuses because the gas cost is too high, the node proves the next covering ratio, up to three broadcasters. `status` becomes `executing`, then `executed` with `txHash`, or `failed` and can be retried. Other nodes do not call this route.
 
 <a id="post-keygenrailgunspendshelve"></a>
 #### `POST /keyGenRailgunSpendShelve`
