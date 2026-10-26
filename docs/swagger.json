@@ -145,6 +145,29 @@
                 }
             }
         },
+        "/getBitcoinSecurityDefault": {
+            "get": {
+                "description": "No management signature. Served on ManagementAPIsPort and on PublicDiscoveryPort when that port is split. data.enabled is the stored default. data.set is false when this node has never stored one. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getBitcoinSecurityDefault).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bitcoin Core"
+                ],
+                "summary": "Read this node's default for the optional Bitcoin transfer check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (GET /health).",
@@ -3096,6 +3119,238 @@
                         "schema": {
                             "$ref": "#/definitions/node.PostPreferredKeyGenPost"
                         }
+                    }
+                ]
+            }
+        },
+        "/setBitcoinSecurityDefault": {
+            "post": {
+                "description": "Store this node's default for the optional Bitcoin transfer check Management signature with clientSig cleared. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /setBitcoinSecurityDefault). Schema: #/definitions/node.SetBitcoinSecurityDefaultPost.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bitcoin Core"
+                ],
+                "summary": "Store this node's default for the optional Bitcoin transfer check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.SetBitcoinSecurityDefaultPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/getBitcoinCoreStatus": {
+            "get": {
+                "description": "No management signature. Reports free space, whether 100 GiB is free, the active source (external, local, config, or none), and getblockchaininfo when a Core answers. synced means not in initial block download, blocks > 0, blocks equals headers, verificationProgress >= 0.999, and the chain matches the network. The RPC password is never returned. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getBitcoinCoreStatus).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bitcoin Core"
+                ],
+                "summary": "Read this node's Bitcoin Core disk, source, and sync",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/startBitcoinCore": {
+            "post": {
+                "description": "Install and start the pruned Bitcoin Core container Management signature with clientSig cleared. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /startBitcoinCore). Schema: #/definitions/node.StartBitcoinCorePost.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bitcoin Core"
+                ],
+                "summary": "Install and start the pruned Bitcoin Core container",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.StartBitcoinCorePost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/stopBitcoinCore": {
+            "post": {
+                "description": "Stop the local Bitcoin Core container Management signature with clientSig cleared. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /stopBitcoinCore). Schema: #/definitions/node.StopBitcoinCorePost.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bitcoin Core"
+                ],
+                "summary": "Stop the local Bitcoin Core container",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.StopBitcoinCorePost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/setBitcoinSecurityRpc": {
+            "post": {
+                "description": "Save an external Bitcoin Core RPC address Management signature with clientSig cleared. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /setBitcoinSecurityRpc). Schema: #/definitions/node.SetBitcoinSecurityRpcPost.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bitcoin Core"
+                ],
+                "summary": "Save an external Bitcoin Core RPC address",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.SetBitcoinSecurityRpcPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/clearBitcoinSecurityRpc": {
+            "post": {
+                "description": "Clear the saved Bitcoin Core RPC address Management signature with clientSig cleared. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /clearBitcoinSecurityRpc). Schema: #/definitions/node.ClearBitcoinSecurityRpcPost.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bitcoin Core"
+                ],
+                "summary": "Clear the saved Bitcoin Core RPC address",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.ClearBitcoinSecurityRpcPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/getBitcoinSecurityAvailability": {
+            "get": {
+                "description": "No management signature. Uses this node's Core when it is caught up for the network. Otherwise asks other KeyGen members and returns the first that answers synced. The call can take about 20 seconds. HTTP 200 with data.available false when none is ready. Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getBitcoinSecurityAvailability).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Bitcoin Core"
+                ],
+                "summary": "Whether this KeyGen has a caught-up Bitcoin Core",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "type": "string",
+                        "name": "network",
+                        "in": "query",
+                        "required": true,
+                        "enum": [
+                            "mainnet",
+                            "testnet",
+                            "signet"
+                        ],
+                        "description": "mainnet, testnet, or signet. main and test are accepted aliases."
+                    },
+                    {
+                        "type": "string",
+                        "name": "keyGenId",
+                        "in": "query",
+                        "required": true,
+                        "description": "KeyGen request id. This node must be in that KeyList."
                     }
                 ]
             }
@@ -9790,6 +10045,106 @@
                             "type": "string"
                         }
                     }
+                }
+            ]
+        },
+        "node.SetBitcoinSecurityDefaultPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "description": "POST /setBitcoinSecurityDefault. Signed JSON field order is nonce, clientSig, nodeKey, enabled. clientSig is cleared before signing. Stores this node's default for the optional Bitcoin transfer check.",
+                    "required": [
+                        "enabled"
+                    ],
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "description": "When true, new Bitcoin transfers on this node opt into the check unless a transfer says otherwise."
+                        }
+                    }
+                }
+            ]
+        },
+        "node.StartBitcoinCorePost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "description": "POST /startBitcoinCore. Signed JSON field order is nonce, clientSig, nodeKey, network. HTML escaping is disabled. Asks the host to install and start the pruned Bitcoin Core container. Needs 100 GiB free on the chain-data disk. Chain data is kept on stop.",
+                    "required": [
+                        "network"
+                    ],
+                    "properties": {
+                        "network": {
+                            "type": "string",
+                            "enum": [
+                                "mainnet",
+                                "testnet",
+                                "signet"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "node.StopBitcoinCorePost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "description": "POST /stopBitcoinCore. Signed JSON field order is nonce, clientSig, nodeKey. HTML escaping is disabled. Stops the local container. Chain data is kept."
+                }
+            ]
+        },
+        "node.SetBitcoinSecurityRpcPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "description": "POST /setBitcoinSecurityRpc. Signed JSON field order is nonce, clientSig, nodeKey, password, rpcUser, url. HTML escaping is disabled. A saved address is used before the local container and before config.",
+                    "required": [
+                        "password",
+                        "rpcUser",
+                        "url"
+                    ],
+                    "properties": {
+                        "password": {
+                            "type": "string",
+                            "description": "RPC password. Not returned by GET /getBitcoinCoreStatus."
+                        },
+                        "rpcUser": {
+                            "type": "string"
+                        },
+                        "url": {
+                            "type": "string",
+                            "description": "http:// or https:// Bitcoin Core RPC URL"
+                        }
+                    }
+                }
+            ]
+        },
+        "node.ClearBitcoinSecurityRpcPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "description": "POST /clearBitcoinSecurityRpc. Signed JSON field order is nonce, clientSig, nodeKey. HTML escaping is disabled. Removes the saved RPC address on this node."
                 }
             ]
         }

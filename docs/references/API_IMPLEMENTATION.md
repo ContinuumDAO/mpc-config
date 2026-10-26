@@ -17,7 +17,7 @@ The Distributed Auth Management API provides a RESTful interface for managing MP
 
 <a id="public-discovery-http"></a>
 ### Public discovery HTTP
-If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API, **no scanner/relayer routes**, **no VPN egress routes**): **`GET /version`**, **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /getPreferredSigner`**, **`GET /getPreferredKeyGen`**, **`GET /health`**, **`GET /getNodeKey`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`$MANAGEMENT_PORT`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
+If **`PublicDiscoveryPort`** is set in `configs.yaml` (env `PublicDiscoveryPort`) **and** it differs from **`ManagementAPIsPort`**, the node starts an additional HTTP listener on that port with a **minimal** surface (no full management API, **no scanner/relayer routes**, **no VPN egress routes**): **`GET /version`**, **`GET /getNodeMgtKey`**, **`GET /getPublicMgtKey`**, **`GET /getAllowedEd25519MgtKeys`**, **`GET /getPreferredSigner`**, **`GET /getPreferredKeyGen`**, **`GET /getBitcoinSecurityDefault`**, **`GET /health`**, **`GET /getNodeKey`** (no JWT on this listener). This lets operators expose only discovery to the internet (e.g. port **18080**) while keeping **`$MANAGEMENT_PORT`** private. When **`PublicDiscoveryPort`** equals **`ManagementAPIsPort`**, a single listener serves the full API; **`GET /getPublicMgtKey`** is still available on that port.
 
 **Not on PublicDiscoveryPort:** scanner governance GETs (`GET /getKeyGenResultById`, `GET /listNewGroupRequests`, new-group result GETs, etc.), relayer signing/admin POSTs, and **peer egress VPN** routes (`GET /vpn/egress/status`, `GET /vpn/egress/consumerAccess`, etc.) — those use **`ManagementAPIsPort`** (see [Scanner/relayer HTTP](#scanner-relayer-http) and [Peer egress VPN](#peer-egress-vpn-wg-egress)).
 
@@ -223,6 +223,16 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 ### Agent preferred KeyGen (local node only)
 - [`GET /getPreferredKeyGen`](#get-getpreferredkeygen) - Get the default multi-agree KeyGen for agent **`POST /multiSignRequest`** if still eligible. **Also on `PublicDiscoveryPort`** when split from **`ManagementAPIsPort`** (see [Public discovery HTTP](#public-discovery-http)).
 - [`POST /postPreferredKeyGen`](#post-postpreferredkeygen) - Store a multi-agree KeyGen request id as the agent default for composing multiSignRequest payloads (requires mgt key)
+
+### Bitcoin Core and optional transfer check (local node)
+- [`GET /getBitcoinSecurityDefault`](#get-getbitcoinsecuritydefault) - Read this node's default for the optional Bitcoin transfer check. **Also on `PublicDiscoveryPort`** when split from **`ManagementAPIsPort`**.
+- [`POST /setBitcoinSecurityDefault`](#post-setbitcoinsecuritydefault) - Store that default (requires mgt key)
+- [`GET /getBitcoinCoreStatus`](#get-getbitcoincorestatus) - Disk space, active Bitcoin Core source, and sync on this node
+- [`POST /startBitcoinCore`](#post-startbitcoincore) - Install and start the pruned Bitcoin Core container (requires mgt key)
+- [`POST /stopBitcoinCore`](#post-stopbitcoincore) - Stop that container; chain data stays (requires mgt key)
+- [`POST /setBitcoinSecurityRpc`](#post-setbitcoinsecurityrpc) - Save an external Bitcoin Core RPC address (requires mgt key)
+- [`POST /clearBitcoinSecurityRpc`](#post-clearbitcoinsecurityrpc) - Remove the saved RPC address (requires mgt key)
+- [`GET /getBitcoinSecurityAvailability`](#get-getbitcoinsecurityavailability) - Whether this KeyGen has a caught-up Bitcoin Core for a network
 
 ### Agent LLM config (local filesystem)
 - [`GET /agentLlmConfigStatus`](#get-agentllmconfigstatus) - Read agent LLM settings for the node agent (masked API key; **read JWT** on Browser HTTPS / loopback)
@@ -2891,6 +2901,263 @@ curl "http://localhost:18080/getPreferredKeyGen"   # when PublicDiscoveryPort is
 curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/postPreferredKeyGen" \
   -H "Content-Type: application/json" \
   -d '{"nonce":1,"keyGenId":"KeyGen20260111003720999cf104d0f","clientSig":"...","nodeKey":"<128-hex>"}'
+```
+
+<a id="optional-bitcoin-security-check"></a>
+### Bitcoin Core and optional transfer check (local node)
+
+A Bitcoin transfer on a multi-agree key can ask a Bitcoin Core to check the coin before the group signs it, and to broadcast the signed transaction. The checker is this node's Core when it is caught up for that payment network. Otherwise it is the first other member of the KeyGen that answers caught up. The check is optional. `bitcoinSecurityCheck` on the transfer's `extraJSON` turns it on for that transfer. It is not its own HTTP route.
+
+These routes configure the Core and the local default. They are stored on this node only and are not copied to peers. Add, stop, save, and clear require a management signature. The reads do not.
+
+**Which Core this node uses** (`activeSource` on [`GET /getBitcoinCoreStatus`](#get-getbitcoincorestatus)):
+
+| Source | When |
+|--------|------|
+| `external` | A saved RPC address from [`POST /setBitcoinSecurityRpc`](#post-setbitcoinsecurityrpc) is set. This wins over the container and over config. |
+| `local` | The container on this node has an RPC file, and no saved address is set. |
+| `config` | `BitcoinSecurityRPCURL` in config, and only when the container is not installed. |
+| `none` | No address is configured. |
+
+**Caught up** (`synced`): Bitcoin Core is not in initial block download, `blocks` is greater than 0, `blocks` equals `headers`, `verificationProgress` is at least `0.999`, and `chain` matches the network (`main` / `test` / `signet`). There is no separate blocks-remaining field. Remaining against the current header tip is `headers - blocks`. `verificationProgress` is the fraction of the way through verification.
+
+<a id="get-getbitcoinsecuritydefault"></a>
+#### `GET /getBitcoinSecurityDefault`
+
+**Where served:** **`ManagementAPIsPort`** and, when **`PublicDiscoveryPort`** is split from it, the same handler on **`PublicDiscoveryPort`** (e.g. **18080**).
+
+**Auth:** None.
+
+**Response `data`:** `{ "enabled": false, "set": false }`
+
+| Field | Notes |
+|-------|--------|
+| `enabled` | Stored default. `false` when nothing has been stored. |
+| `set` | `true` after [`POST /setBitcoinSecurityDefault`](#post-setbitcoinsecuritydefault). `false` when this node has never stored a default. |
+
+**Example:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getBitcoinSecurityDefault"
+curl "http://localhost:18080/getBitcoinSecurityDefault"   # when PublicDiscoveryPort is split (e.g. 18080)
+```
+
+<a id="post-setbitcoinsecuritydefault"></a>
+#### `POST /setBitcoinSecurityDefault`
+
+**Auth:** Management key ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey)). Sign `json.Marshal` of the body with `clientSig` set to `""`. Field order is `nonce`, `clientSig`, `nodeKey`, `enabled`.
+
+**Request body (SetBitcoinSecurityDefaultPost):**
+```json
+{
+  "nonce": 1,
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
+  "enabled": true
+}
+```
+
+**Response `data`:** `{ "enabled": true, "set": true }`
+
+**Errors:** `400` invalid body; `401` invalid management signature; `500` database error.
+
+**Example:**
+```bash
+curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/setBitcoinSecurityDefault" \
+  -H "Content-Type: application/json" \
+  -d '{"nonce":1,"clientSig":"...","nodeKey":"<128-hex>","enabled":true}'
+```
+
+<a id="get-getbitcoincorestatus"></a>
+#### `GET /getBitcoinCoreStatus`
+
+**Auth:** None. Management port only. The RPC password is never returned.
+
+The handler probes the active Core for up to 8 seconds. When nothing is configured, or Core does not answer, `synced` is `false` and `blocks` and `headers` are `0`.
+
+**Response `data`:**
+```json
+{
+  "freeBytes": 214748364800,
+  "requiredBytes": 107374182400,
+  "canInstall": true,
+  "localInstalled": false,
+  "localRunning": false,
+  "network": "mainnet",
+  "activeSource": "none",
+  "externalPasswordSet": false,
+  "blocks": 0,
+  "headers": 0,
+  "verificationProgress": 0,
+  "synced": false,
+  "chain": "",
+  "image": "continuumdao/bitcoin-core:v28.4"
+}
+```
+
+| Field | Notes |
+|-------|--------|
+| `freeBytes` | Free bytes on the chain-data disk (`BitcoinCoreDiskPath`, default under `/var/lib/mpc-auth-docker`). `0` when the disk could not be read. |
+| `requiredBytes` | `107374182400` (100 GiB). Start is refused below this. |
+| `canInstall` | `true` when free space is at least `requiredBytes`. |
+| `diskError` | Present when free space could not be read. |
+| `diskMessage` | Present when the disk is short of 100 GB. The text says how many GB more are needed. |
+| `localInstalled` / `localRunning` | Whether the container is installed or running on this node. |
+| `network` | `mainnet`, `testnet`, or `signet`. Taken from the Core `chain` when a probe succeeds, otherwise from the host state, otherwise `mainnet`. |
+| `activeSource` | `external`, `local`, `config`, or `none`. See the table above. |
+| `externalUrl` / `externalUser` | Saved RPC address and user, when set. Omitted when empty. |
+| `externalPasswordSet` | `true` when a saved RPC password is stored. The password itself is not returned. |
+| `blocks` / `headers` | Verified height and header tip from `getblockchaininfo`. |
+| `verificationProgress` | `0` to `1`. |
+| `synced` | Caught up for `network`, as defined above. |
+| `chain` | Core's chain name (`main`, `test`, or `signet`). Empty when Core was not probed. |
+| `error` | Probe error, when Core did not answer. Omitted when empty. |
+| `image` | `continuumdao/bitcoin-core:v28.4`. |
+
+**Example:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getBitcoinCoreStatus"
+```
+
+<a id="post-startbitcoincore"></a>
+#### `POST /startBitcoinCore`
+
+**Auth:** Management key. Sign the body with `clientSig` cleared and HTML escaping disabled (`<`, `>`, and `&` stay literal). Field order is `nonce`, `clientSig`, `nodeKey`, `network`.
+
+Writes a pending start for the host helper. The HTTP call returns when that file is written. It does not wait for the container to finish syncing. The container is `continuumdao/bitcoin-core:v28.4`. Start needs **100 GiB** (`100 × 2^30` bytes) free on the chain-data disk. A short disk returns **`400`** and does not install.
+
+**Request body (StartBitcoinCorePost):**
+```json
+{
+  "nonce": 1,
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
+  "network": "mainnet"
+}
+```
+
+`network` is `mainnet`, `testnet`, or `signet`. `main` and `test` are accepted and stored as `mainnet` and `testnet`.
+
+**Response `data`:** `{ "action": "start", "network": "mainnet" }`
+
+**Errors:** `400` invalid body, unknown network, or not enough free disk; `401` invalid management signature; `500` the pending file could not be written (including when this process is not the Docker host layout).
+
+**Example:**
+```bash
+curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/startBitcoinCore" \
+  -H "Content-Type: application/json" \
+  -d '{"nonce":1,"clientSig":"...","nodeKey":"<128-hex>","network":"mainnet"}'
+```
+
+<a id="post-stopbitcoincore"></a>
+#### `POST /stopBitcoinCore`
+
+**Auth:** Management key. Sign the body with `clientSig` cleared and HTML escaping disabled. Field order is `nonce`, `clientSig`, `nodeKey`.
+
+Stops the local container. Chain data is kept.
+
+**Request body (StopBitcoinCorePost):**
+```json
+{
+  "nonce": 1,
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>"
+}
+```
+
+**Response `data`:** `{ "action": "stop", "network": "mainnet" }`
+
+`network` is the network already recorded for the container, or `mainnet` when none is recorded.
+
+**Errors:** `400` invalid body; `401` invalid management signature; `500` the pending file could not be written.
+
+**Example:**
+```bash
+curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/stopBitcoinCore" \
+  -H "Content-Type: application/json" \
+  -d '{"nonce":1,"clientSig":"...","nodeKey":"<128-hex>"}'
+```
+
+<a id="post-setbitcoinsecurityrpc"></a>
+#### `POST /setBitcoinSecurityRpc`
+
+**Auth:** Management key. Sign the body with `clientSig` cleared and HTML escaping disabled. Field order is `nonce`, `clientSig`, `nodeKey`, `password`, `rpcUser`, `url`.
+
+Saves an external Bitcoin Core address on this node. A saved address is used before the local container and before config. The password is stored and is not returned by status.
+
+**Request body (SetBitcoinSecurityRpcPost):**
+```json
+{
+  "nonce": 1,
+  "clientSig": "0x... or 128-hex Ed25519",
+  "nodeKey": "<128-hex from GET /getNodeKey>",
+  "password": "<rpc password>",
+  "rpcUser": "bitcoin",
+  "url": "http://bitcoind.example:8332"
+}
+```
+
+**Validation:**
+- `url` must be `http://` or `https://` and must include a host.
+- `rpcUser` and `password` are required.
+
+**Response `data`:** `{ "url": "http://bitcoind.example:8332", "rpcUser": "bitcoin", "passwordSet": true }`
+
+**Errors:** `400` invalid body, URL, or missing user or password; `401` invalid management signature; `500` database error.
+
+**Example:**
+```bash
+curl -X POST "$MPC_AUTH_URL:$MANAGEMENT_PORT/setBitcoinSecurityRpc" \
+  -H "Content-Type: application/json" \
+  -d '{"nonce":1,"clientSig":"...","nodeKey":"<128-hex>","password":"<rpc password>","rpcUser":"bitcoin","url":"http://bitcoind.example:8332"}'
+```
+
+<a id="post-clearbitcoinsecurityrpc"></a>
+#### `POST /clearBitcoinSecurityRpc`
+
+**Auth:** Management key. Sign the body with `clientSig` cleared and HTML escaping disabled. Field order is `nonce`, `clientSig`, `nodeKey`.
+
+Removes the saved RPC address. The local container, if installed, becomes the active source again.
+
+**Request body (ClearBitcoinSecurityRpcPost):** same shape as [`POST /stopBitcoinCore`](#post-stopbitcoincore).
+
+**Response `data`:** `{ "cleared": true }`
+
+**Errors:** `400` invalid body; `401` invalid management signature; `500` database error.
+
+<a id="get-getbitcoinsecurityavailability"></a>
+#### `GET /getBitcoinSecurityAvailability`
+
+**Auth:** None. Management port only.
+
+**Query:**
+
+| Name | Required | Notes |
+|------|----------|--------|
+| `network` | yes | `mainnet`, `testnet`, or `signet`. `main` and `test` are accepted. |
+| `keyGenId` | yes | KeyGen request id. This node must be in that key's **KeyList**. |
+
+This node is used when its active Core is caught up for `network`. Otherwise the node asks the other KeyGen members and returns the first that answers caught up. The handler waits up to about 20 seconds. A peer that does not answer is treated as not ready.
+
+**Response `data` when one is ready:**
+```json
+{
+  "available": true,
+  "network": "mainnet",
+  "providerNodeKey": "<128-hex node key>",
+  "providerLabel": "This node",
+  "message": ""
+}
+```
+
+`providerLabel` is `This node` when the provider is this node. For a peer it is a shortened node key.
+
+**Response `data` when none is ready:** HTTP **200**, `code` **0**, `available` **false**, and `message` `No node in this signing group has a Bitcoin Core that is online and caught up. Add Bitcoin Core on a node in the group and wait until it is up to date.`
+
+**Errors:** `400` missing or unknown network, missing `keyGenId`, or unknown KeyGen; `403` this node is not in that KeyList.
+
+**Example:**
+```bash
+curl "$MPC_AUTH_URL:$MANAGEMENT_PORT/getBitcoinSecurityAvailability?network=mainnet&keyGenId=KeyGen20260111003720999cf104d0f"
 ```
 
 ### Agent LLM config (local filesystem)
@@ -5939,7 +6206,7 @@ Requires **management key authentication** (Ethereum **`NodeMgtKey`** / **`perso
 - `messageRawBatch` (optional, **batch**): Array of N raw messages (hex encoded) for display/audit. Length must be 0 or equal to `messageHashes` length.
 - `destinationChainID` (required): Destination chain ID for the signed message (EVM signatures only; stored and returned in `listSignRequests` / `getSignRequestById` so the node key knows which chain the signature is destined for)
 - `destinationAddress` (optional): Destination address (EVM signatures only; stored and returned in `listSignRequests` / `getSignRequestById`)
-- `extraJSON` (optional): Arbitrary JSON string for node context; used for **Ed25519** key types (not secp256k1). Stored and returned in `listSignRequests` / `getSignRequestById`. For send-gas requests, the backend merges `sendGas` and `value` into this object before storing.
+- `extraJSON` (optional): Arbitrary JSON string for node context; used for **Ed25519** key types (not secp256k1). Stored and returned in `listSignRequests` / `getSignRequestById`. For send-gas requests, the backend merges `sendGas` and `value` into this object before storing. A Bitcoin transfer sets `bitcoinTransfer` inside this string. `bitcoinSecurityCheck: true` opts that transfer into the [optional Bitcoin Core check](#optional-bitcoin-security-check).
 - `signatureText` (optional): For EVM/secp256k1, a JSON string with structure `{"signature": "<function signature>", "names": ["<name1>", "<name2>", ...]}` where `signature` is the function selector text (e.g. `transfer(address,uint256)`) and `names` is an array of parameter names in order. Example: `{"signature": "transfer(address,uint256)", "names": ["to", "amount"]}`. Other chains: program name or custom text. Stored and returned in `listSignRequests` / `getSignRequestById`.
 - `purpose` (optional text, **required JSON key for signing**): Free text from the creator, max 256 characters; use `""` when there is no description. Visible to nodes considering `signRequestAgree` (stored and returned in list/get endpoints and `getSignResultById`). Stored as a map in `Purpose`: the creator node key (128 hex) is the key and the purpose text is the value, so the originator is identifiable even when the text is empty. The signed JSON / **`messageToSign`** **always** includes `"purpose"` (see signing rules above). Example response: `"Purpose": { "04a1b2c3...128hex": "Bridge transfer to L2" }`.
 - `sendGas` (optional, **multi-agree gas token only**): Set to `true` for native transfer requests created from the Assets "Send gas" dialog. Included in the signed payload when present. Stored in `ExtraJSON` and propagated; returned in `getSignRequestById` and `listSignRequests` via `ExtraJSON`.
