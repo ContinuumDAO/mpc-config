@@ -37,6 +37,26 @@ rules:
       continuum__load_defi_protocol, not a third-party market-data MCP.
     modes: [interactive, cron]
 
+  - id: bitcoin_core_for_keygen
+    tier: light
+    verify: lookup
+    match:
+      anySubstring:
+        - bitcoin core
+        - bitcoin node
+        - btc node
+        - pruned bitcoin
+        - extra security check
+    boostGroups: [compose:transfer]
+    hint: |
+      Whether this node or a KeyGen has Bitcoin Core for the extra BTC security check:
+      call continuum__get_bitcoin_core_status for this node and
+      continuum__get_bitcoin_security_availability for the KeyGen. Pass keyGenId when one
+      is named; otherwise the preferred KeyGen is used. network defaults to mainnet.
+      Do not use agent_fetch_url or agent_bash on nodeAddresses. Port 8081 is not a listener.
+      Those two tools already call the local management API.
+    modes: [interactive, cron, hook]
+
   - id: chart_analysis_catalog
     tier: light
     match:
