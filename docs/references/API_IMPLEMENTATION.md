@@ -154,7 +154,7 @@ Authenticated management **POST** bodies that embed **`NodeMgtKeySig`** use this
 
 When **`BrowserHTTPS`** is enabled, the TLS listener requires **`Authorization: Bearer <JWT>`** (**RS256**, **`JWKSURL`**) on the paths listed in **`agentPathRequiresReadJWT`**. Other **`POST`**s on that listener use management-key signatures where documented. The optional **`BrowserLoopbackReadHTTP`** listener follows the same JWT rules when Browser HTTPS is configured.
 
-**JWT-protected agent / read paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, **`GET /telegramSearch/status`**, **`GET /getKeyGenRailgun`**, **`POST /keyGenRailgunEnsure`**, **`POST /keyGenRailgunScan`**, **`POST /keyGenRailgunFeeQuote`**, plus node-local Ed25519 sign **`POST /signLocalEd25519Message`** and **`GET /localEd25519PrivateKeyAvailable`** (see those headings). On the **plain management port**, those two routes require a **loopback client** instead of JWT.
+**JWT-protected agent / read paths** include **`GET /agent/chat`**, **`POST /agent/chat`**, **`POST /agent/chat/cancel`**, **`POST /agent/chat/elicitation`**, **`GET /agent/conversations`**, **`GET /agent/conversations/:id`**, **`DELETE /agent/conversations/:id`**, **`GET /agent/mcp/tools`**, **`POST /agent/plan/start`**, **`POST /agent/plan/mode`**, **`POST /agent/plan/execute`**, **`POST /agent/orchestration/continue`**, cron read routes **`/listCronJobs`**, **`/getCronJob`**, **`/listCronJobRuns`**, webhook read routes **`/listWebhooks`**, **`/getWebhookById`**, **`GET /getTelegramWebhookNgrokGuide`**, **`GET /telegramNgrok/status`**, **`GET /telegramSearch/status`**, **`GET /getKeyGenRailgun`**, **`POST /keyGenRailgunEnsure`**, **`POST /keyGenRailgunScan`**, **`POST /keyGenRailgunFeeQuote`**, **`POST /keyGenRailgunBroadcasters`**, plus node-local Ed25519 sign **`POST /signLocalEd25519Message`** and **`GET /localEd25519PrivateKeyAvailable`** (see those headings). On the **plain management port**, those two routes require a **loopback client** instead of JWT.
 
 ## Quick Reference: All Endpoints
 
@@ -256,6 +256,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /keyGenRailgunSpendShelve`](#post-keygenrailgunspendshelve) - Originator shelves that spend (**management signature**)
 - [`POST /keyGenRailgunUnshieldSign`](#post-keygenrailgununshieldsign) - Unshield from the KeyGen wallet (**management signature**)
 - [`POST /keyGenRailgunFeeQuote`](#post-keygenrailgunfeequote) - Quote the Railgun fee and broadcaster fee before a shield, private transfer, or unshield (**read JWT**)
+- [`POST /keyGenRailgunBroadcasters`](#post-keygenrailgunbroadcasters) - List broadcasters for a pending private transfer or unshield, with fee ratio (**read JWT**)
 - [`GET /listEnvironmentVariables`](#get-listenvironmentvariables) - List MCP agent environment variables stored on this node (local MongoDB; not propagated)
 - [`GET /getEnvironmentVariable`](#get-getenvironmentvariable) - Get one variable by `name` query param
 - [`POST /addEnvironmentVariable`](#post-addenvironmentvariable) - Add or update one variable (**management signature**; name normalized to uppercase `A-Z`, `0-9`, `_`)
@@ -3477,7 +3478,18 @@ The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign
 
 **Behavior:** Reads the live Railgun `shieldFee` or `unshieldFee` basis points. A private transfer has no protocol fee. For `transfer` and `unshield`, the node also estimates the broadcaster token fee from the KeyGen viewing key. That fee is extra and does not reduce the amount the recipient receives. The quote does not submit a transaction.
 
-**Response `data`:** `{ "kind", "amountWei", "protocolFeeBasisPoints", "protocolFeeWei", "receivedWei", "broadcasterFeeWei", "broadcasterTokenAddress", "totalDebitWei", "broadcasterError"? }`. `broadcasterError` is set when the broadcaster fee cannot be estimated; the protocol numbers are still returned.
+**Response `data`:** `{ "kind", "amountWei", "protocolFeeBasisPoints", "protocolFeeWei", "receivedWei", "broadcasterFeeWei", "broadcasterTokenAddress", "totalDebitWei", "broadcasterError"? }`. `broadcasterError` is set when the broadcaster fee cannot be estimated; the protocol numbers are still returned. The broadcaster fee uses the cheapest advertisement whose fee ratio is at least 1:1.
+
+<a id="post-keygenrailgunbroadcasters"></a>
+#### `POST /keyGenRailgunBroadcasters`
+
+**Auth:** **Read JWT** or loopback.
+
+**Request:** `{ "keyGenId", "spendId" }`.
+
+**Behavior:** Reads the pending private transfer or unshield and asks the Railgun broadcaster network which advertisements accept that token. Each row has `feesId`, `railgunAddress`, `feeWei` (estimated from a standard gas limit), `ratio` (`"1.05"` means 1.05:1), `coversGas`, `reliability`, `expiration`, and `tokenDecimals`. Rows that cover gas come first, cheapest first. A ratio under 1:1 is a discount the broadcaster may refuse. The list does not submit a transaction. Execute passes the chosen `feesId` and `railgunAddress`.
+
+**Response `data`:** `{ "broadcasters": [ { "feesId", "railgunAddress", "feeWei", "ratio", "coversGas", "reliability", "expiration", "tokenDecimals" } ] }`. `ratio` is null when the token price is unavailable.
 
 <a id="post-keygenrailgunspendagree"></a>
 #### `POST /keyGenRailgunSpendAgree`
@@ -3502,11 +3514,11 @@ The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign
 <a id="post-keygenrailgunspendexecute"></a>
 #### `POST /keyGenRailgunSpendExecute`
 
-**Auth:** Management signature (**Ed25519** or **EIP-191**). A read JWT is not accepted. The signature covers `{ "nonce", "clientSig": "", "nodeKey", "keyGenId", "spendId" }`.
+**Auth:** Management signature (**Ed25519** or **EIP-191**). A read JWT is not accepted. The signature covers `{ "nonce", "clientSig": "", "nodeKey", "broadcasterAddress"?, "broadcasterFeesId"?, "keyGenId", "spendId" }`. Omit an empty broadcaster field.
 
-**Request:** `{ "nonce", "clientSig", "nodeKey", "keyGenId", "spendId" }`.
+**Request:** `{ "nonce", "clientSig", "nodeKey", "keyGenId", "spendId", "broadcasterAddress"?, "broadcasterFeesId"? }`. Both broadcaster fields come from [`POST /keyGenRailgunBroadcasters`](#post-keygenrailgunbroadcasters).
 
-**Behavior:** The originator builds the Railgun proof and submits it. `status` becomes `executing`, then `executed` with `txHash`, or `failed` and can be retried. Other nodes do not call this route.
+**Behavior:** The originator builds the Railgun proof for the chosen broadcaster and submits it. When those fields are omitted, the node uses the cheapest broadcaster whose fee ratio is at least 1:1. If that broadcaster refuses because the gas cost is too high, the node proves the next covering ratio, up to three broadcasters. `status` becomes `executing`, then `executed` with `txHash`, or `failed` and can be retried. Other nodes do not call this route.
 
 <a id="post-keygenrailgunspendshelve"></a>
 #### `POST /keyGenRailgunSpendShelve`
@@ -3517,7 +3529,7 @@ The shield key is a `personal_sign` of the text `RAILGUN_SHIELD`. When that sign
 
 **Behavior:** The originator marks the spend `shelved`. A shelved spend is not agreed or executed. Other nodes do not call this route.
 
-**Errors for these routes:** Ensure, scan, and fee quote return **401** `read JWT required` when the caller is not loopback and has no read JWT. Private transfer, unshield, agree, reject, execute, and shelve return **401** when the management signature is missing or does not match the body. **400** when `keyGenId` is missing, the KeyGen quorum is below 2, or this node has no share. **502** when continuum-mcp is unreachable or returns an error (no wallet on the KeyGen, no RPC gateway, no broadcaster).
+**Errors for these routes:** Ensure, scan, fee quote, and the broadcaster list return **401** `read JWT required` when the caller is not loopback and has no read JWT. Private transfer, unshield, agree, reject, execute, and shelve return **401** when the management signature is missing or does not match the body. **400** when `keyGenId` is missing, the KeyGen quorum is below 2, or this node has no share. **502** when continuum-mcp is unreachable or returns an error (no wallet on the KeyGen, no RPC gateway, no broadcaster).
 
 ### Agent environment variables (local MongoDB)
 

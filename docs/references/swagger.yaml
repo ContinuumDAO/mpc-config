@@ -2714,6 +2714,28 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.KeyGenRailgunActionPost'
+  /keyGenRailgunBroadcasters:
+    post:
+      description: 'List Railgun broadcasters for a pending private transfer or unshield, with fee ratio (read JWT) Full detail:
+        mpc-config docs/references/API_IMPLEMENTATION.md (POST /keyGenRailgunBroadcasters).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Key Generation
+      summary: List Railgun broadcasters for a pending private transfer or unshield, with fee ratio (read JWT)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.KeyGenRailgunBroadcastersPost'
   /keyGenRailgunSpendAgree:
     post:
       description: 'Release this node''s Railgun spending share for a pending spend (management signature) Full detail: mpc-config
@@ -6751,7 +6773,8 @@ definitions:
       - keyGenId
       - spendId
       description: Management-signed body for POST /keyGenRailgunSpendAgree, /keyGenRailgunSpendReject, /keyGenRailgunSpendExecute,
-        and /keyGenRailgunSpendShelve. thoughts is stored on agree and reject. Execute and shelve omit it.
+        and /keyGenRailgunSpendShelve. thoughts is stored on agree and reject. broadcasterAddress and broadcasterFeesId are
+        execute only. Omit empty fields.
       properties:
         keyGenId:
           type: string
@@ -6760,6 +6783,12 @@ definitions:
         thoughts:
           type: string
           description: Optional comment, max 256 characters. Agree and reject only.
+        broadcasterAddress:
+          type: string
+          description: Execute only. 0zk address of the chosen broadcaster.
+        broadcasterFeesId:
+          type: string
+          description: Execute only. Fee advertisement id from POST /keyGenRailgunBroadcasters.
   node.KeyGenRailgunPrivateTransferSignPost:
     type: object
     allOf:
@@ -6881,3 +6910,15 @@ definitions:
     - type: object
       description: POST /clearBitcoinSecurityRpc. Signed JSON field order is nonce, clientSig, nodeKey. HTML escaping is disabled.
         Removes the saved RPC address on this node.
+  node.KeyGenRailgunBroadcastersPost:
+    type: object
+    required:
+    - keyGenId
+    - spendId
+    description: POST /keyGenRailgunBroadcasters. Read JWT or loopback. Lists broadcasters that will accept this spend's token,
+      with the fee ratio against gas.
+    properties:
+      keyGenId:
+        type: string
+      spendId:
+        type: string
