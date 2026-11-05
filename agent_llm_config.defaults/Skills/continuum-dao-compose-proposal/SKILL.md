@@ -1,6 +1,6 @@
 ---
 name: continuum-dao-compose-proposal
-description: Interactive only. Interview a Bravo/Delta proposal (KeyGen submit or other-address draft): load etherscan + foundry, type, per-action contract + function, etherscan ABI, type-check values, table, then Foundry forge-script simulate. Agree the exact Governance forum title and body before posting. Forum + propose only for KeyGen submit. Never load from cron, vote-policy, or proposals presentation.
+description: Interactive only. Interview a Bravo/Delta proposal (KeyGen submit or other-address draft): load etherscan + foundry, type, per-action contract + function, etherscan ABI, type-check values, table, then Foundry forge-script simulate. Agree the exact Governance forum title and body before posting. The Governor propose description argument is that forum title, truncated to 128 characters. Forum + propose only for KeyGen submit. Never load from cron, vote-policy, or proposals presentation.
 ---
 
 # ContinuumDAO compose proposal (interactive only)
@@ -50,10 +50,10 @@ Ask one topic at a time until the draft is complete. Stopping after one question
      5. Call the same tool again with `inputs` values (and `value` wei if they send ETH). If `ok` is false, re-ask the fields in `missing` / `error` until types pass. Keep the returned `encoded` action (`target`, `value`, `signature`, `inputs`).
      6. Ask if there is another action (Delta: another action on this option, then the next option).
 4. **Delta only:** option **labels** (required), `nOptions >= 2`, `nWinners >= 1` and **strictly less than** `nOptions`. Confirm empty vs real actions per option.
-5. **Title** 8–128 chars (on-chain `description` and forum topic title). **Description** ≤ 1024 chars (backend). Forum body: proposal text ≤ **6200** so an 1800-char standards appendix still fits (tool max 8000, English).
+5. **Forum title and on-chain Description.** The `description` argument of `ContinuumDAO.propose` / `IContinuumGovernor.propose` is the Governance forum topic title. Use that title unchanged when it is 8–128 characters. If it is longer, truncate it to 128 characters for the on-chain call and for `build_propose_*` `title`. Do not put the forum body, Abstract, or catalog text in that argument. Catalog `description` (the `description` field on `build_propose_*` and `register_proposal`) is a different string, ≤ 1024 characters. Forum body: proposal text ≤ **6200** so an 1800-char standards appendix still fits (tool max 8000, English).
 6. **Proposal Format** — follow **`continuum-dao-proposal-standards`**. Draft Abstract, Motivation, Overview, Type, Scope, and Treasury extras (Success Criteria, Timeline, Budget). Fetch How to Write a Proposal; do not skip headings.
 7. **Vision / Mission and type-fit** — follow **`continuum-dao-proposal-standards`** (required Constitution fetches). If the draft does not further Mission & Vision, or the Type does not match **Proposals and Voting**, **tell the operator** and recommend a rewrite or a different type/section. If they **insist**, continue and append the red/amber appendix from that skill.
-8. **Governance forum post (proposal path only).** Draft the exact topic **title** and **body** that `forum_create_topic` will send. Title is the on-chain title (8–128). Body is the formatted proposal (≤ 6200) plus the standards appendix when they insisted after a failed check. Print that title and body verbatim and ask them to agree or rewrite. Do **not** call `forum_create_topic` in this step. A later “yes, submit” does not agree a post they have not seen. If they change the wording, print the new title and body and wait again.
+8. **Governance forum post (proposal path only).** Draft the exact topic **title** and **body** that `forum_create_topic` will send. That title, truncated to 128 characters when longer, is the Governor `propose` `description` argument. Body is the formatted proposal (≤ 6200) plus the standards appendix when they insisted after a failed check. Print that title and body verbatim and ask them to agree or rewrite. Do **not** call `forum_create_topic` in this step. A later “yes, submit” does not agree a post they have not seen. If they change the wording, print the new title and body and wait again.
 
 ## Conclusion table (required)
 
@@ -73,7 +73,7 @@ Sequential execute is one Foundry forge script on a Linea fork. A single `eth_ca
 4. For each `foundry.files` entry, call **`foundry__create_solidity_file`** with that `path` and that `source`.
 5. Call **`foundry__forge_script`** on every file before this turn ends. Propose file first, then each execute file. `broadcast: false`. `rpcUrl` is a Linea fork from the chain registry (chain `59144`, or `59141` for Sepolia).
 
-**Script shape.** Each action is an interface and `abi.encodeCall` on that function signature, with typed arguments (`address(...)`, `uint256(...)`, arrays built in memory). Tuples are structs with the same field order. `propose` is `IContinuumGovernor.propose(...)`. A failed call bubbles the contract revert (`_bubble` or a direct call). Write the returned `source` when it already has that shape.
+**Script shape.** Each action is an interface and `abi.encodeCall` on that function signature, with typed arguments (`address(...)`, `uint256(...)`, arrays built in memory). Tuples are structs with the same field order. `propose` is `IContinuumGovernor.propose(targets, values, calldatas, description)`. Set `description` to the agreed Governance forum title, truncated to 128 characters when the title is longer. Do not leave it blank, and do not use the forum body or the catalog description. A failed call bubbles the contract revert (`_bubble` or a direct call). Write the returned `source` when it already has that shape. Pass the same truncated title as `title` on `ctm_continuum_dao_simulate_proposal` so the generated script already contains it.
 
 If a returned file is still raw `hex"…"` calldata and a `.call` that drops returndata, replace each action before running it:
 
@@ -116,13 +116,13 @@ Never call `build_propose_*` or `register_proposal` until `forum_create_topic` h
 
 ## Preview briefing (before any write)
 
-Print a briefing in the same shape as `explain_proposal` would: title, type, Bravo vs Delta, the **input table**, each action / option (no-ops labeled **signaling**), C3 called out, the **exact forum title and body** (pending create if not yet posted), **forum URL** once it exists, **Vision/Mission + Format review** (from proposal-standards), and **Risks**. If they have not yet agreed that forum text, wait for agreement to the post and stop. Do not treat that as “yes, submit”. After the post exists, wait for an explicit confirm (“yes, submit”) before `build_propose_*`.
+Print a briefing in the same shape as `explain_proposal` would: title, type, Bravo vs Delta, the **input table**, each action / option (no-ops labeled **signaling**), C3 called out, the **exact forum title and body** (pending create if not yet posted), the **on-chain Description** (that forum title, truncated to 128 characters when longer), **forum URL** once it exists, **Vision/Mission + Format review** (from proposal-standards), and **Risks**. If they have not yet agreed that forum text, wait for agreement to the post and stop. Do not treat that as “yes, submit”. After the post exists, wait for an explicit confirm (“yes, submit”) before `build_propose_*`.
 
 ## Submit (KeyGen, confirmed only)
 
 1. If they have not explicitly agreed the forum title and body, print them and stop. Otherwise forum session check (sign-in only if `forum_me` is not `loggedIn`) → `forum_create_topic` with the **agreed** title and body (Governance `section`) → keep `url` as `forumKey`.
-2. `continuum__ctm_continuum_dao_build_propose_bravo_multisign` or `…_propose_delta_multisign` with that **`forumKey`** and the encoded actions from compose. No billing legs. Follow **`execution-policy`**.
-3. After the propose tx is **mined**, `continuum__ctm_continuum_dao_register_proposal` with the **same** `forumKey`, plus `onchainId` from `hashProposal` / `ProposalCreated`, title, description, proposer (KeyGen ETH), `type` 0–4, `configuration` 0|1, and user `actions` / `options` (empty arrays for signaling). If the POST fails, retry — do not revert the chain tx.
+2. `continuum__ctm_continuum_dao_build_propose_bravo_multisign` or `…_propose_delta_multisign` with that **`forumKey`**, `title` set to the agreed forum title truncated to 128 characters (that string is the Governor `propose` `description`), catalog `description` (≤ 1024; not the forum body), and the encoded actions from compose. No billing legs. Follow **`execution-policy`**.
+3. After the propose tx is **mined**, `continuum__ctm_continuum_dao_register_proposal` with the **same** `forumKey`, plus `onchainId` from `hashProposal` / `ProposalCreated`, `title` equal to that same truncated forum title, catalog `description`, proposer (KeyGen ETH), `type` 0–4, `configuration` 0|1, and user `actions` / `options` (empty arrays for signaling). If the POST fails, retry — do not revert the chain tx.
 4. Offer `forum_sign_out`.
 
 Do not enable or invent a cron that composes, creates a forum topic, or proposes.
