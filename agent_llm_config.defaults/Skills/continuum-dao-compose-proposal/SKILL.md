@@ -1,6 +1,6 @@
 ---
 name: continuum-dao-compose-proposal
-description: Interactive only. Interview a Bravo/Delta proposal (KeyGen submit or other-address draft): load etherscan + foundry, type, per-action contract + function, etherscan ABI, type-check values, table, then Foundry forge-script simulate. Forum + propose only for KeyGen submit. Never load from cron, vote-policy, or proposals presentation.
+description: Interactive only. Interview a Bravo/Delta proposal (KeyGen submit or other-address draft): load etherscan + foundry, type, per-action contract + function, etherscan ABI, type-check values, table, then Foundry forge-script simulate. Agree the exact Governance forum title and body before posting. Forum + propose only for KeyGen submit. Never load from cron, vote-policy, or proposals presentation.
 ---
 
 # ContinuumDAO compose proposal (interactive only)
@@ -21,7 +21,7 @@ This skill **never** votes, executes, cancels, or calls `trigger_sign_result` / 
 
 Ask first (do not assume):
 
-1. **Preferred signer KeyGen** — they intend to submit on-chain from this node’s KeyGen. Full interview below, then optional forge-script simulate, then forum topic + `build_propose_*` (builders **hard-fail** if `getVotes(KeyGen) <` live `proposalThreshold()` or `propose()` reverts).
+1. **Preferred signer KeyGen** — they intend to submit on-chain from this node’s KeyGen. Full interview below, then optional forge-script simulate, then agree the exact Governance forum title and body, then forum topic + `build_propose_*` (builders **hard-fail** if `getVotes(KeyGen) <` live `proposalThreshold()` or `propose()` reverts).
 2. **Other address draft** — committee EOA or any address that is not this KeyGen. Same interview and table. Simulate with `account`. **Do not** call `build_propose_*` or create a forum topic unless they later switch to the KeyGen path.
 
 Both paths use the same compose tool, the same simulate tool, and the same Foundry forge scripts. Do **not** skip ABI lookup, type checks, the input table, or the simulate offer on the KeyGen path.
@@ -53,6 +53,7 @@ Ask one topic at a time until the draft is complete. Stopping after one question
 5. **Title** 8–128 chars (on-chain `description` and forum topic title). **Description** ≤ 1024 chars (backend). Forum body: proposal text ≤ **6200** so an 1800-char standards appendix still fits (tool max 8000, English).
 6. **Proposal Format** — follow **`continuum-dao-proposal-standards`**. Draft Abstract, Motivation, Overview, Type, Scope, and Treasury extras (Success Criteria, Timeline, Budget). Fetch How to Write a Proposal; do not skip headings.
 7. **Vision / Mission and type-fit** — follow **`continuum-dao-proposal-standards`** (required Constitution fetches). If the draft does not further Mission & Vision, or the Type does not match **Proposals and Voting**, **tell the operator** and recommend a rewrite or a different type/section. If they **insist**, continue and append the red/amber appendix from that skill.
+8. **Governance forum post (proposal path only).** Draft the exact topic **title** and **body** that `forum_create_topic` will send. Title is the on-chain title (8–128). Body is the formatted proposal (≤ 6200) plus the standards appendix when they insisted after a failed check. Print that title and body verbatim and ask them to agree or rewrite. Do **not** call `forum_create_topic` in this step. A later “yes, submit” does not agree a post they have not seen. If they change the wording, print the new title and body and wait again.
 
 ## Conclusion table (required)
 
@@ -107,7 +108,7 @@ Reads do not need a ticket. Writes (`forum_create_topic`, `forum_create_idea`, `
 4. `continuum__ctm_continuum_dao_forum_me` to confirm session. `canPostIdea` is enough for Ideas; `canPropose` (`getVotes >= proposalThreshold()`) is required for Governance threads.
 5. `continuum__ctm_continuum_dao_forum_sections`. Then:
    - **Idea:** **`continuum__ctm_continuum_dao_forum_create_idea`**. Stop. Do not propose. Do not use the URL as `forumKey`.
-   - **Proposal:** **`continuum__ctm_continuum_dao_forum_create_topic`** with the matching `section` from the type table. Title/body must be English. Body = formatted proposal (≤ 6200) **plus** the standards appendix if the operator insisted after a failed check. Keep the returned **`url`**.
+   - **Proposal:** Only after they have explicitly agreed the exact title and body in this chat (for example “yes, post that”), **`continuum__ctm_continuum_dao_forum_create_topic`** with that agreed text and the matching `section`. Do not invent or silently edit the post after they agreed. Title/body must be English. Body = formatted proposal (≤ 6200) **plus** the standards appendix if the operator insisted after a failed check. Keep the returned **`url`**.
 6. Optional: `forum_reply` / `forum_react` (`+1` `-1` `heart` `tada` `eyes`) on that thread. To check Unread / mark threads read, load **`continuum-dao-forum-inbox`**.
 7. When finished, `continuum__ctm_continuum_dao_forum_sign_out({ address, ticket })`. That deletes the node ticket. `continuum__clear_forum_session({ address })` is the same delete if sign-out already ran. No multi-sign.
 
@@ -115,11 +116,11 @@ Never call `build_propose_*` or `register_proposal` until `forum_create_topic` h
 
 ## Preview briefing (before any write)
 
-Print a briefing in the same shape as `explain_proposal` would: title, type, Bravo vs Delta, the **input table**, each action / option (no-ops labeled **signaling**), C3 called out, **forum URL (pending create if not yet posted)**, **Vision/Mission + Format review** (from proposal-standards), and **Risks**. Wait for an explicit confirm (“yes, submit”).
+Print a briefing in the same shape as `explain_proposal` would: title, type, Bravo vs Delta, the **input table**, each action / option (no-ops labeled **signaling**), C3 called out, the **exact forum title and body** (pending create if not yet posted), **forum URL** once it exists, **Vision/Mission + Format review** (from proposal-standards), and **Risks**. If they have not yet agreed that forum text, wait for agreement to the post and stop. Do not treat that as “yes, submit”. After the post exists, wait for an explicit confirm (“yes, submit”) before `build_propose_*`.
 
 ## Submit (KeyGen, confirmed only)
 
-1. Forum session check (sign-in only if `forum_me` is not `loggedIn`) → `forum_create_topic` (Governance `section`) → keep `url` as `forumKey`.
+1. If they have not explicitly agreed the forum title and body, print them and stop. Otherwise forum session check (sign-in only if `forum_me` is not `loggedIn`) → `forum_create_topic` with the **agreed** title and body (Governance `section`) → keep `url` as `forumKey`.
 2. `continuum__ctm_continuum_dao_build_propose_bravo_multisign` or `…_propose_delta_multisign` with that **`forumKey`** and the encoded actions from compose. No billing legs. Follow **`execution-policy`**.
 3. After the propose tx is **mined**, `continuum__ctm_continuum_dao_register_proposal` with the **same** `forumKey`, plus `onchainId` from `hashProposal` / `ProposalCreated`, title, description, proposer (KeyGen ETH), `type` 0–4, `configuration` 0|1, and user `actions` / `options` (empty arrays for signaling). If the POST fails, retry — do not revert the chain tx.
 4. Offer `forum_sign_out`.
