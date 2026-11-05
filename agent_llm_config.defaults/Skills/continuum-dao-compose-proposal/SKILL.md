@@ -62,17 +62,30 @@ After every action is collected (or the draft is signaling-only), call **`contin
 
 Ask: “Do you want to simulate this proposal before going further?”
 
-If yes, sequential execute must be a **Foundry forge script** on a Linea fork. Isolated `eth_call` or `cast call` cannot carry state from one action to the next.
+Sequential execute is one Foundry forge script on a Linea fork. A single `eth_call` or `cast call` per action drops the state the next action needs.
 
 1. Confirm **etherscan** and **foundry** are loaded.
-2. Call **`continuum__ctm_continuum_dao_simulate_proposal`**:
-   - **Other-address draft:** pass `account` = that EOA, plus the same `configuration` / `actions` or `options` + `nWinners`.
+2. Call **`continuum__ctm_continuum_dao_simulate_proposal`** with the composed actions.
+   - **Other-address draft:** pass `account` = that EOA.
    - **KeyGen:** pass `keyGenId` or omit `account` (server fills the KeyGen).
 3. Read `warning` aloud if present (Committee is not exempt).
-4. For each file in `foundry.files`, call **`foundry__create_solidity_file`** with that `path` and `source`.
-5. For each file, call **`foundry__forge_script`** with the Linea (or Linea Sepolia) fork RPC from the chain registry and **no `--broadcast`**. Bravo: one execute script. Delta: one execute script per option. The propose script pranks the proposer; execute scripts prank the governor.
-6. If any forge script reverts, stop. Do **not** submit.
-7. If `execute.source` is `foundry_required`, that only means the public RPC lacks `eth_simulateV1` — the forge scripts are still the execute sim. Do not fall back to isolated `eth_call`.
+4. For each `foundry.files` entry, call **`foundry__create_solidity_file`** with that `path` and that `source`.
+5. Call **`foundry__forge_script`** on every file before this turn ends. Propose file first, then each execute file. `broadcast: false`. `rpcUrl` is a Linea fork from the chain registry (chain `59144`, or `59141` for Sepolia).
+
+**Script shape.** Each action is an interface and `abi.encodeCall` on that function signature, with typed arguments (`address(...)`, `uint256(...)`, arrays built in memory). Tuples are structs with the same field order. `propose` is `IContinuumGovernor.propose(...)`. A failed call bubbles the contract revert (`_bubble` or a direct call). Write the returned `source` when it already has that shape.
+
+If a returned file is still raw `hex"…"` calldata and a `.call` that drops returndata, replace each action before running it:
+
+```solidity
+interface IAction0 { function approve(address a0, uint256 a1) external; }
+calldatas[0] = abi.encodeCall(IAction0.approve, (address(0xSpender), uint256(3000)));
+```
+
+Use the signature and values from the compose table. Keep the prank. Bubble returndata. Then run forge. The turn is not done when the file is written.
+
+**Done when** every file has a forge result in this turn. On success, say so. On revert, quote the bubbled reason and stop. That reason is the simulation result.
+
+`execute.source == foundry_required` means the public RPC has no `eth_simulateV1`. The forge scripts are still the execute sim.
 
 `forumKey` is not required on simulate. Never broadcast these scripts.
 
