@@ -82,7 +82,7 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 | **`mpc-auth-telegram-ngrok-pending.path`** | Watches **`/var/lib/mpc-auth-docker/pending-telegram-ngrok.json`**; starts apply service when mpc-auth writes the file (after **`POST /telegramNgrok/setEnabled`**). |
 | **`mpc-auth-telegram-ngrok-pending.service`** | Oneshot: runs **`mpc-auth-apply-pending-telegram-ngrok.sh`** → **`mpc-auth-telegram-ngrok-enable.sh`** or **`mpc-auth-telegram-ngrok-disable.sh`** (Docker sidecar **`mpc-auth-telegram-ngrok`**). |
 | **`mpc-auth-wireguard-wg0.service`** | **`wg-quick up/down wg0`** — WireGuard server interface. |
-| **`mpc-auth-vpn-mgmt-proxy.service`** | **`socat`** on **`10.8.0.1:8080`** → **`127.0.0.1:8080`** so VPN clients reach the management API. |
+| **`mpc-auth-vpn-mgmt-proxy.service`** | Python proxy on **`10.8.0.1:8080`** → **`127.0.0.1:8080`**. Rewrites **`Host`** and sets **`X-Continuum-Vpn-Peer: 1`** so a tunnel peer cannot pass the localhost management gate. |
 | **`mpc-auth-shadowsocks.service`** | **`ssserver`** for optional WireGuard transport obfuscation (**`/var/lib/mpc-auth-docker/shadowsocks/ssserver.json`**). |
 
 **Compose:** **`docker-compose.relay.yml`** and **`docker-compose.client.yml`** both set **`MPC_AUTH_VPN_PENDING_FILE`** / **`MPC_AUTH_VPN_STATE_FILE`** / **`MPC_AUTH_TELEGRAM_NGROK_*`** and bind-mount **`/var/lib/mpc-auth-docker`**. **`process_config.sh`** copies the relay or client template to **`docker-compose.yml`** and can patch older compose files via **`apply_docker_compose_vpn_env`**.
@@ -95,8 +95,8 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 
 On VPS hosts with **UFW active** and **Docker**, `ufw allow 51820/udp` alone is often **not enough**: handshake packets can reach **`eth0`** but WireGuard never completes (client shows **`0 B received`**). **`mpc-auth-vpn-enable.sh`** (via **`scripts/lib/mpc-auth-vpn-wg0-hooks.sh`**) therefore:
 
-1. Adds UFW allow rules for **`51820/udp`**, **`8080/tcp` from the VPN CIDR**, and **`allow in on wg0`**
-2. Inserts **`PostUp` / `PostDown`** **`iptables -I INPUT`** rules under **`[Interface]`** in **`/etc/wireguard/wg0.conf`** (must be **before** **`[Peer]`** — never append at EOF)
+1. Adds UFW allow rules for **`51820/udp`** (the handshake), **`8080/tcp` from the VPN CIDR** (the management proxy), and **DNS 53** from that CIDR. It does **not** add **`allow in on wg0`**. A blanket accept on the tunnel opened every host port to the peer.
+2. Inserts **`PostUp` / `PostDown`** **`iptables`** rules under **`[Interface]`** in **`/etc/wireguard/wg0.conf`** (must be **before** **`[Peer]`** — never append at EOF). Those rules accept management and DNS from the VPN CIDR only, delete any older **`INPUT -i wg0 -j ACCEPT`**, and drop **`wg0`** traffic forwarded into Docker.
 
 **Provider firewall:** many VPS panels (Contabo, etc.) also filter **inbound UDP 51820** before traffic hits the VM. Open that in the provider panel if tcpdump on the host shows **no** packets on **`51820`**.
 

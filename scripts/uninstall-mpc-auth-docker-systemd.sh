@@ -71,6 +71,7 @@ LIBEXEC_SCRIPTS=(
 	"mpc-auth-telegram-ngrok-disable.sh"
 	"mpc-auth-apply-agent-llm-config.sh"
 	"mpc-auth-sync-compose-role.sh"
+	"mpc-auth-vpn-mgmt-proxy.py"
 	"mpc-auth-vpn-wg0-hooks.sh"
 	"mpc-auth-vpn-ss-hooks.sh"
 	"mpc-auth-vpn-wg-obfuscator-hooks.sh"

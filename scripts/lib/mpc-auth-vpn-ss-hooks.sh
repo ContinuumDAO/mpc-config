@@ -74,8 +74,8 @@ mpc_auth_vpn_apply_obfuscation_ufw_rules() {
 	fi
 	ufw allow "${ss_port}/tcp" comment 'Continuum Shadowsocks obfuscation' || true
 	ufw allow "${ss_port}/udp" comment 'Continuum Shadowsocks obfuscation' || true
+	ufw --force delete allow in on wg0 >/dev/null 2>&1 || true
 	ufw allow from "${vpn_cidr}" to any port "${mgmt_port}" proto tcp comment 'Continuum VPN management API' || true
-	ufw allow in on wg0 comment 'Continuum WireGuard wg0' || true
 }
 
 # mpc_auth_vpn_remove_obfuscation_ufw_rules SS_PORT LISTEN_PORT

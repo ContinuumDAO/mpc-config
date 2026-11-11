@@ -96,7 +96,8 @@ if [[ "$OBFUSCATION" == "shadowsocks" ]]; then
 	mpc_auth_vpn_start_shadowsocks_background "$SS_PIDFILE" "$SS_LOG"
 fi
 
-if command -v socat >/dev/null 2>&1; then
+proxy_py="$(mpc_auth_vpn_mgmt_proxy_py || true)"
+if [[ -n "$proxy_py" ]] && command -v python3 >/dev/null 2>&1; then
 	if [[ -f "$PROXY_PIDFILE" ]]; then
 		old_pid="$(cat "$PROXY_PIDFILE" 2>/dev/null || true)"
 		if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
@@ -104,11 +105,11 @@ if command -v socat >/dev/null 2>&1; then
 		fi
 		rm -f "$PROXY_PIDFILE"
 	fi
-	nohup socat "TCP-LISTEN:${MGMT_PORT},bind=10.8.0.1,reuseaddr,fork" "TCP:127.0.0.1:${MGMT_PORT}" \
-		>>"${HERE}/../vpn-mgmt-proxy.log" 2>&1 &
+	MPC_AUTH_VPN_BIND=10.8.0.1 MPC_AUTH_VPN_MGMT_PORT="${MGMT_PORT}" \
+		nohup python3 "$proxy_py" >>"${HERE}/../vpn-mgmt-proxy.log" 2>&1 &
 	echo $! >"$PROXY_PIDFILE"
 else
-	echo "mpc-auth-vpn-enable-macos: socat not installed — run: brew install socat" >&2
+	echo "mpc-auth-vpn-enable-macos: python3 management proxy missing — VPN clients cannot reach 10.8.0.1:${MGMT_PORT}" >&2
 fi
 
 macos_desktop_sudo mkdir -p "$(dirname "$STATE_FILE")"

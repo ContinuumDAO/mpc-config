@@ -68,7 +68,10 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "Status: 
 	ufw delete allow "${WO_PORT}/udp" 2>/dev/null || true
 	ufw delete allow "${LWO_PORT}/udp" 2>/dev/null || true
 	ufw delete allow "${U2_PORT}/tcp" 2>/dev/null || true
+	ufw --force delete allow in on wg0 >/dev/null 2>&1 || true
 	ufw delete allow from "${VPN_CIDR}" to any port "${MGMT_PORT}" proto tcp 2>/dev/null || true
+	ufw delete allow from "${VPN_CIDR}" to any port 53 proto udp 2>/dev/null || true
+	ufw delete allow from "${VPN_CIDR}" to any port 53 proto tcp 2>/dev/null || true
 	default_if="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"
 	default_if="${default_if:-eth0}"
 	ufw delete route allow in on wg0 out on "${default_if}" 2>/dev/null || true

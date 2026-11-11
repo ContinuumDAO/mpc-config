@@ -76,6 +76,7 @@ install -m 0755 \
 	"$HERE/mpc-auth-telegram-ngrok-disable.sh" \
 	"$HERE/mpc-auth-apply-agent-llm-config.sh" \
 	"$HERE/mpc-auth-sync-compose-role.sh" \
+	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-mgmt-proxy.py" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-wg0-hooks.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-ss-hooks.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-wg-obfuscator-hooks.sh" \

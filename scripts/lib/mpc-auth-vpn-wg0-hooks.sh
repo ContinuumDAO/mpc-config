@@ -2,6 +2,17 @@
 # Shared WireGuard wg0.conf hook logic for VPS systemd and WSL VPN enable scripts.
 # PostUp/PostDown must live under [Interface] (before [Peer]); never append after [Peer].
 
+# mpc_auth_vpn_mgmt_proxy_py — path to the Host-rewriting management proxy.
+mpc_auth_vpn_mgmt_proxy_py() {
+	local src
+	src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/mpc-auth-vpn-mgmt-proxy.py"
+	if [[ -f "$src" ]]; then
+		printf '%s' "$src"
+		return 0
+	fi
+	return 1
+}
+
 # mpc_auth_vpn_ufw_active — exit 0 when UFW is enabled.
 mpc_auth_vpn_ufw_active() {
 	command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "Status: active"
@@ -32,8 +43,15 @@ mpc_auth_vpn_apply_ufw_rules() {
 		ufw allow "${listen_port}/udp" comment 'Continuum WireGuard VPN' || true
 		;;
 	esac
+	# Peers may reach the management proxy and VPN DNS only. "allow in on wg0"
+	# accepted every host port (SSH and the rest) from the tunnel.
+	local _i
+	for _i in 1 2 3 4; do
+		ufw --force delete allow in on wg0 >/dev/null 2>&1 || true
+	done
 	ufw allow from "${vpn_cidr}" to any port "${mgmt_port}" proto tcp comment 'Continuum VPN management API' || true
-	ufw allow in on wg0 comment 'Continuum WireGuard wg0' || true
+	ufw allow from "${vpn_cidr}" to any port 53 proto udp comment 'Continuum VPN DNS' || true
+	ufw allow from "${vpn_cidr}" to any port 53 proto tcp comment 'Continuum VPN DNS' || true
 }
 
 # mpc_auth_vpn_insert_wg0_hooks WG0_CONF POST_UP POST_DOWN
@@ -65,7 +83,9 @@ with open(path, encoding="utf-8") as f:
 
 def is_hook(line: str) -> bool:
     s = line.strip()
-    return s.startswith("PostUp") or s.startswith("PostDown")
+    # PreUp/PreDown are never written by this installer. Drop them so a planted
+    # startup command cannot survive the next enable.
+    return s.startswith(("PostUp", "PostDown", "PreUp", "PreDown"))
 
 def hook_lines():
     out = []
@@ -161,18 +181,26 @@ mpc_auth_vpn_prepare_wg0_conf() {
 
 	post_up_parts+=("/usr/local/libexec/mpc-auth/mpc-auth-vpn-dns-filter.sh || true")
 
+	# Remove a blanket accept left by an older enable. It sat ahead of UFW and
+	# opened every local port to the WireGuard peer.
+	post_up_parts+=("while iptables -D INPUT -i wg0 -j ACCEPT 2>/dev/null; do :; done || true")
+	post_up_parts+=("iptables -C DOCKER-USER -i wg0 -j DROP 2>/dev/null || iptables -I DOCKER-USER -i wg0 -j DROP || true")
+	post_down_parts+=("iptables -D DOCKER-USER -i wg0 -j DROP || true")
+	post_up_parts+=("iptables -C INPUT -i wg0 -p tcp -s ${vpn_cidr} --dport ${mgmt_port} -j ACCEPT 2>/dev/null || iptables -I INPUT -i wg0 -p tcp -s ${vpn_cidr} --dport ${mgmt_port} -j ACCEPT")
+	post_up_parts+=("iptables -C INPUT -i wg0 -p udp -s ${vpn_cidr} --dport 53 -j ACCEPT 2>/dev/null || iptables -I INPUT -i wg0 -p udp -s ${vpn_cidr} --dport 53 -j ACCEPT")
+	post_up_parts+=("iptables -C INPUT -i wg0 -p tcp -s ${vpn_cidr} --dport 53 -j ACCEPT 2>/dev/null || iptables -I INPUT -i wg0 -p tcp -s ${vpn_cidr} --dport 53 -j ACCEPT")
+	post_down_parts+=("iptables -D INPUT -i wg0 -p tcp -s ${vpn_cidr} --dport ${mgmt_port} -j ACCEPT || true")
+	post_down_parts+=("iptables -D INPUT -i wg0 -p udp -s ${vpn_cidr} --dport 53 -j ACCEPT || true")
+	post_down_parts+=("iptables -D INPUT -i wg0 -p tcp -s ${vpn_cidr} --dport 53 -j ACCEPT || true")
+
 	if mpc_auth_vpn_ufw_active; then
 		mpc_auth_vpn_apply_ufw_rules "$listen_port" "$vpn_cidr" "$mgmt_port" "$obfuscation" "$transport_port"
 		case "$obfuscation" in
 		shadowsocks | wg_obfuscator | lwo | udp2raw)
-			post_up_parts+=("iptables -I INPUT -i wg0 -j ACCEPT")
-			post_down_parts+=("iptables -D INPUT -i wg0 -j ACCEPT || true")
 			;;
 		*)
-			post_up_parts+=("iptables -I INPUT -p udp --dport ${listen_port} -j ACCEPT")
-			post_up_parts+=("iptables -I INPUT -i wg0 -j ACCEPT")
+			post_up_parts+=("iptables -C INPUT -p udp --dport ${listen_port} -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport ${listen_port} -j ACCEPT")
 			post_down_parts+=("iptables -D INPUT -p udp --dport ${listen_port} -j ACCEPT || true")
-			post_down_parts+=("iptables -D INPUT -i wg0 -j ACCEPT || true")
 			;;
 		esac
 	fi

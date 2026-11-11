@@ -115,11 +115,11 @@ if [[ "$OBFUSCATION" != "none" ]]; then
 	mpc_auth_vpn_start_obfuscation_systemd "$OBFUSCATION"
 fi
 
-if command -v socat >/dev/null 2>&1; then
+if command -v python3 >/dev/null 2>&1; then
 	systemctl enable mpc-auth-vpn-mgmt-proxy.service
 	systemctl restart mpc-auth-vpn-mgmt-proxy.service
 else
-	echo "mpc-auth-vpn-enable: socat not installed — VPN clients cannot reach management API on 10.8.0.1:${MGMT_PORT}" >&2
+	echo "mpc-auth-vpn-enable: python3 not installed — VPN clients cannot reach management API on 10.8.0.1:${MGMT_PORT}" >&2
 fi
 
 mkdir -p "$(dirname "$STATE_FILE")"

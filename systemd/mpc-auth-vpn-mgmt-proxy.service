@@ -6,7 +6,8 @@ Requires=mpc-auth-wireguard-wg0.service
 [Service]
 Type=simple
 EnvironmentFile=-/etc/default/mpc-auth-docker
-ExecStart=/usr/bin/socat TCP-LISTEN:8080,bind=10.8.0.1,reuseaddr,fork TCP:127.0.0.1:8080
+# Rewrites Host and sets X-Continuum-Vpn-Peer. A raw TCP forward lets a peer send Host: localhost.
+ExecStart=/usr/bin/env python3 /usr/local/libexec/mpc-auth/mpc-auth-vpn-mgmt-proxy.py
 Restart=on-failure
 RestartSec=3
 StandardInput=null
