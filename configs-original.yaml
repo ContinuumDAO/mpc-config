@@ -18,13 +18,13 @@ NodeMgtKey: "0x1234567890ABCDEF1234567890ABCDEF12345678"
 # a browser Ethereum wallet for management.
 PublicMgtKey: ""
 
-# Ignore management key signature check (for testing/development only)
+# Ignore management key signature check (local testing only)
 # Controls signature verification for MANAGEMENT API endpoints (e.g., /newGroupRequest, /keyGenRequest)
 # These endpoints are used by node operators/administrators to manage the node
-# If true, skips signature verification on management API requests
-# WARNING: Set to false in production for security
+# Default false: management writes require a valid signature
+# Set true only on a machine that is not reachable beyond localhost
 # NOTE: This does NOT affect relayer authentication - relayer signatures are always required
-IgnoreMgtKeySigCheck: true
+IgnoreMgtKeySigCheck: false
 
 # MongoDB connection URI (optional, defaults to mongodb://localhost:27017)
 # MongoDB MUST be on localhost (127.0.0.1) - remote connections are not allowed
