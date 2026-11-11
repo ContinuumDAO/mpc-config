@@ -13,8 +13,9 @@ In agent chat, Continuum tools are **`continuum__<name>`**. Load the protocol fi
 
 Do **not** answer from `ctm_continuum_dao_fetch_proposals` or backend `status`.
 
-1. `continuum__ctm_continuum_dao_fetch_live_proposals` with Linea `chainId` `59144` (Sepolia `59141`) and `rpcUrl` from the chain registry. Pass `governor` if the constant is still zero. Catalog ids **-2** and **-1** are the two proposals on the superseded Linea governor `0x4800F9f1dC1b6daCA841B71E0531F547D374168E` — do not invent ids 1 and 2 from `total: 3`.
-2. Read `note`, then print **four short lists** (titles, `#id`, `stateLabel`). If `committeeProposer` is true, say **Committee** next to that row. Do not dump JSON.
+1. `get_chain_registry` for Linea and take `rpcGateway`. Then `continuum__ctm_continuum_dao_fetch_live_proposals` with `chainId` `59144` (Sepolia `59141`) **and** that value as `rpcUrl`. `chainId` alone leaves `overlay` `backend-only` and hides Active proposals in `unknown`. Pass `governor` only if the constant is still zero. Catalog ids **-2** and **-1** are the two proposals on the superseded Linea governor `0x4800F9f1dC1b6daCA841B71E0531F547D374168E` — do not invent ids 1 and 2 from `total: 3`.
+2. If `overlay` is `backend-only`, call the tool again in this turn with the registry `rpcUrl`. Do not ask the operator to retry. Say Governor state could not be confirmed only when that second call is still `backend-only`.
+3. Read `note`, then print **four short lists** (titles, `#id`, `stateLabel`). If `committeeProposer` is true, say **Committee** next to that row. Do not dump JSON.
 
 | Bucket | Meaning |
 |--------|---------|
@@ -23,8 +24,6 @@ Do **not** answer from `ctm_continuum_dao_fetch_proposals` or backend `status`.
 | **`readyToExecute`** | Succeeded. No queue. Offer execute only if the operator asks |
 | **`recentlyCompleted`** | Canceled / Defeated / Expired / Executed in this scan |
 | **`unknown`** | No on-chain overlay — never call these live |
-
-If `overlay` is `backend-only`, say you could not confirm Governor state.
 
 After naming a proposal (live or past), offer **`continuum__ctm_continuum_dao_fetch_proposal_votes`** with that catalog `id` or `onchainId` so the operator can see **who voted and how**. Read `note`, then voter + `how` (For/Against/Abstain, or Delta option weights; last slot is NOTA) + **`attached`** (true when `NodeProperties.attachedTokenId` is set after `attachNodeFor`). If `nodeInfo` is present, mention forum handle / VPS / DID — do **not** read email or IP aloud unless the operator asks. Do not dump every tx hash unless asked.
 
