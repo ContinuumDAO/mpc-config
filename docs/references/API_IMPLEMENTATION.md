@@ -679,7 +679,8 @@ Separate from admin **`wg0`**: optional **full-exit** routing through a configur
 | POST | `/vpn/egress/setSharing` | Management sig | Enable/disable offering egress; `obfuscation`, `defaultRateLimitMbps` |
 | POST | `/vpn/egress/requestClientConfig` | Management sig | On consumer node: `{ targetAddress }` → signed MQTT request to egress, returns config |
 | POST | `/vpn/egress/issueClientConfig` | Node-key sig (management :8080 loopback) | `{ consumerNodeKey, issuedAt, clientSig }` — issues keys on egress. Remote peers use **MQTT** (`VpnEgressIssueRequest` / `VpnEgressIssueReply`), not PublicDiscoveryPort or ScannerRelayerPort. |
-| POST | `/vpn/egress/revokePeer` | Management sig | Remove consumer peer key |
+| POST | `/vpn/egress/revokePeer` | Management sig | Revoke consumer WireGuard access and keep the issued record |
+| POST | `/vpn/egress/removePeer` | Management sig | Delete a revoked consumer record and free its VPN address |
 
 Host automation: **`pending-vpn-egress.json`** → **`mpc-auth-vpn-egress-pending.path`** → **`wg-quick@wg-egress`** with NAT + optional **`tc`** per peer (**`peer-rate-limits.json`**). Env: **`MPC_AUTH_VPN_EGRESS_PENDING_FILE`**, **`MPC_AUTH_VPN_EGRESS_STATE_FILE`**.
 

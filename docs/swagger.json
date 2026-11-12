@@ -6496,6 +6496,72 @@
                 }
             }
         },
+        "/vpn/egress/revokePeer": {
+            "post": {
+                "description": "Revoke consumer WireGuard access and keep the issued record (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /vpn/egress/revokePeer).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WireGuard VPN"
+                ],
+                "summary": "Revoke consumer WireGuard access and keep the issued record (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.VpnEgressRevokePeerPost"
+                        }
+                    }
+                ]
+            }
+        },
+        "/vpn/egress/removePeer": {
+            "post": {
+                "description": "Delete a revoked egress consumer record and free its VPN address (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /vpn/egress/removePeer).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WireGuard VPN"
+                ],
+                "summary": "Delete a revoked egress consumer record and free its VPN address (management-signed)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/node.VpnEgressRevokePeerPost"
+                        }
+                    }
+                ]
+            }
+        },
         "/backupDatabase": {
             "post": {
                 "description": "Create encrypted MongoDB backup (partial: shards + scrub base group/ping rows by scope) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (POST /backupDatabase).",
@@ -10204,6 +10270,27 @@
                     "type": "string"
                 }
             }
+        },
+        "node.VpnEgressRevokePeerPost": {
+            "type": "object",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/node.NodeMgtKeySig"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "consumerNodeKey"
+                    ],
+                    "description": "POST /vpn/egress/revokePeer and POST /vpn/egress/removePeer. Canonical JSON to sign: {\"consumerNodeKey\":\"<128-hex>\",\"nonce\":N,\"clientSig\":\"\",\"nodeKey\":\"<128-hex>\"} with clientSig cleared before signing. revokePeer cuts WireGuard access and keeps the issued record. removePeer deletes a revoked record and frees its VPN address. A later download issues a new key and address.",
+                    "properties": {
+                        "consumerNodeKey": {
+                            "type": "string",
+                            "description": "Consumer node public key (128-char hex, lowercase)"
+                        }
+                    }
+                }
+            ]
         }
     }
 }
