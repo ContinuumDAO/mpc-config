@@ -68,6 +68,7 @@ def build_sslocal_tunnel_config(
         "server_port": server_port,
         "password": password,
         "method": method,
+        "mode": "tcp_and_udp",
         "locals": [
             {
                 "protocol": "tunnel",
