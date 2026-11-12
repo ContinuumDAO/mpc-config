@@ -272,10 +272,13 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /addMcpServerFromCatalog`](#post-addmcpserverfromcatalog) - Activate one catalog MCP server on this node (**management signature**)
 - [`POST /setMcpServerFlags`](#post-setmcpserverflags) - Update `initialLoad` and/or `aiReady` on an active server (**management signature**)
 - [`POST /removeMcpServer`](#post-removemcpserver) - Remove an active MCP server (**management signature**; builtin **continuum** cannot be removed)
-- [`GET /listSkills`](#get-listskills) - List agent skill names (`agent_llm_config/Skills/`)
+- [`GET /listSkills`](#get-listskills) - List agent skill names (`agent_llm_config/Skills/`) and workspace skills (`user_folder/skills/`)
 - [`GET /getSkill`](#get-getskill) - Get one skill file by `name`
 - [`POST /addSkill`](#post-addskill) - Add or update a skill file (**management signature**)
+- [`POST /previewSkillDocument`](#post-previewskilldocument) - Extract text from a skill PDF (read JWT; does not save)
+- [`POST /upsertWorkspaceSkill`](#post-upsertworkspaceskill) - Add or update `user_folder/skills/<name>/SKILL.md` (**management signature**)
 - [`POST /removeSkill`](#post-removeskill) - Remove a skill by name (**management signature**)
+- [`POST /removeWorkspaceSkill`](#post-removeworkspaceskill) - Remove a workspace skill file (**management signature**)
 - [`POST /resetSkillsFromDefaults`](#post-resetskillsfromdefaults) - Overwrite bundled default skill files from **`agent_llm_config.defaults/Skills/`** (**management signature**; custom skills preserved)
 - [`POST /resetSkillFromDefaults`](#post-resetskillfromdefaults) - Overwrite **one** bundled default skill and update its sidecar (**management signature**)
 - [`GET /getHostYamlConfig`](#get-gethostyamlconfig) - Get editable host YAML by **`kind`** (installed runtime file or bundled defaults preview; upgrade metadata)
@@ -3701,7 +3704,8 @@ The mpc-auth image ships **uv**, **Node**, **Foundry**, and **Heimdall** as plat
 
 - `agent_add_mcp_server` — proposes a new user MCP server; the chat UI shows an approval dialog and the operator must **management-sign** `POST /addMcpServer` before the agent continues (elicitation `kind`: `add_mcp_server`).
 - `agent_load_mcp_server` / `agent_unload_mcp_server` — argument `serverId`; load or unload servers for the **current conversation** (persisted in the conversation file as `loadedMcpServerIds`). Applies to interactive chat, cron jobs (per job `conversationId`), and hooks using the same turn engine. After a successful load/unload in a turn, the LLM tool list is refreshed so prefixed tools are callable in the same response. **`initialLoad`** still means “connect automatically at the start of every new conversation”; dynamic load is scoped to the conversation where it was requested.
-- `agent_load_skill` — argument `name`; inject a skill file into session context when not loaded at startup.
+- `agent_load_skill` — argument `name`; inject a skill file into session context when not loaded at startup. Operator catalog skills and `user_folder/skills/<name>/SKILL.md` are both eligible. A catalog skill with the same name hides the workspace copy.
+- `agent_write_user_skill` — arguments `name`, `description`, `body`, optional `overwrite`. Writes `user_folder/skills/<name>/SKILL.md` with YAML frontmatter. Ask the user for the name and a one-line description before calling. `body` is markdown or a decoded PDF transcript, not raw PDF bytes. Refuses a name that matches an installed catalog skill. Does not replace an existing workspace skill unless `overwrite` is true. The skill stays load-on-demand (`initialLoad` is catalog-only).
 - MCP tools from loaded servers are exposed to the LLM as `{serverId}__{toolName}`.
 
 <a id="get-listmcpservers"></a>
@@ -3772,6 +3776,15 @@ Each skill: **`initialLoad`** — when true, content is injected as a **system**
       "defaultsUpdatedAt": "2026-08-26T09:00:00Z",
       "appliedAt": "2026-08-20T14:30:00Z"
     }
+  ],
+  "workspaceSkills": [
+    {
+      "name": "desk-notes",
+      "format": "md",
+      "description": "Use for desk notes.",
+      "needsFrontmatter": false,
+      "shadowedByCatalog": false
+    }
   ]
 }
 ```
@@ -3781,11 +3794,12 @@ Each skill: **`initialLoad`** — when true, content is injected as a **system**
 | `names` | Installed skill names (no file content) |
 | `availableCatalog` | Bundled skills not yet installed on this node |
 | `defaultsSync` | Per installed skill: bundled-default sync flags (no content). Omitted entries behave as custom skills when `fromBundledDefault` is false |
+| `workspaceSkills` | Files under **`user_folder/skills/<name>/SKILL.md`** (or **`.txt`**). `needsFrontmatter` is true when `name` and `description` are missing or the frontmatter name does not match the directory. `shadowedByCatalog` is true when an installed catalog skill has the same name; the agent then loads the catalog copy |
 
 <a id="get-getskill"></a>
 #### `GET /getSkill`
 
-**Query:** `name` (required).
+**Query:** `name` (required). Optional `source`: `catalog` or `workspace`. With no `source`, an installed catalog skill wins; otherwise the workspace file is returned.
 
 **Response data:** `{ "name", "content", "initialLoad", "format": "md"|"txt", "updatedAt"? }` plus bundled-default metadata when the skill name exists in **`agent_llm_config.defaults/Skills/skills.json`**:
 
@@ -3800,6 +3814,9 @@ Each skill: **`initialLoad`** — when true, content is injected as a **system**
 | `upgradeAvailable` | Sidecar hash ≠ SHA-256(**`defaultContent`**) |
 | `userModified` | SHA-256(**`content`**) ≠ **`appliedDefaultsHash`** |
 | `filename` | Manifest relative path (e.g. **`chart-defaults/SKILL.md`**) |
+| `source` | `catalog` or `workspace` |
+| `needsFrontmatter` | Workspace file is missing a usable `name` / `description` |
+| `shadowedByCatalog` | A catalog skill with this name is what the agent loads |
 
 **Sidecar:** On **`POST /addSkillFromCatalog`**, **`POST /resetSkillFromDefaults`**, **`POST /resetSkillsFromDefaults`**, and first install of a catalog skill via **`POST /addSkill`**, mpc-auth writes **`SKILL.md.meta.json`** (or **`.txt.meta.json`**) beside the skill file with **`appliedDefaultsHash`** and **`appliedAt`**. Sidecar is **not** updated on later **`POST /addSkill`** edits (same as host YAML upsert).
 
@@ -3810,7 +3827,28 @@ Each skill: **`initialLoad`** — when true, content is injected as a **system**
 
 **Auth:** Management signature.
 
-**Body:** `{ "name", "content", "format?", "initialLoad", "nonce", "clientSig", "nodeKey" }` — upserts manifest and file. **`format`**: `md` (default) or `txt`. Max content **512 KiB**.
+**Body:** `{ "name", "content", "format?", "initialLoad", "nonce", "clientSig", "nodeKey" }` — upserts manifest and file. **`format`**: `md` (default) or `txt`. Max content **512 KiB**. Content must start with YAML frontmatter whose `name` matches the skill name and whose `description` is non-empty (max 1024 characters). The Skills tab asks for those two fields before saving a markdown, text, or PDF upload that does not already have them. A PDF is text-extracted first (`POST /previewSkillDocument`); a scanned PDF is rejected.
+
+<a id="post-previewskilldocument"></a>
+#### `POST /previewSkillDocument`
+
+**Auth:** Read JWT on Browser HTTPS / loopback. No management signature. Does not write a skill.
+
+**Body:** `{ "dataBase64", "filename?" }` — a PDF, max 10 MB. Response data: `{ "text", "truncated", "format": "md" }`. Text is capped at 64k characters. Images are not transcribed. A PDF with no text layer returns an error.
+
+<a id="post-upsertworkspaceskill"></a>
+#### `POST /upsertWorkspaceSkill`
+
+**Auth:** Management signature.
+
+**Body:** `{ "name", "content", "format?", "nonce", "clientSig", "nodeKey" }` — writes **`user_folder/skills/<name>/SKILL.md`** (or **`.txt`**). Does not update **`agent_llm_config/Skills/skills.json`**. Same frontmatter rules and 512 KiB cap as **`POST /addSkill`**. Workspace skills are not initial-load.
+
+<a id="post-removeworkspaceskill"></a>
+#### `POST /removeWorkspaceSkill`
+
+**Auth:** Management signature.
+
+**Body:** `{ "name", "nonce", "clientSig", "nodeKey" }` — removes **`SKILL.md`** and **`SKILL.txt`** under **`user_folder/skills/<name>/`**. Other files in that directory (for example `scripts/`) stay. Does not remove a catalog skill of the same name.
 
 <a id="post-removeskill"></a>
 #### `POST /removeSkill`
@@ -4125,7 +4163,7 @@ Bundled templates ship in **mpc-config** under **`agent_llm_config.defaults/hook
 | **`AgentHookMaxConcurrentRuns`** | **4** (or cron cap) | Max concurrent hook agent turns |
 | Env **`MPC_AUTH_ENABLE_AGENT_HOOKS=0`** | — | Disables hooks |
 
-**Webhook `type` presets:** `generic`, `github`, `gmail`, `proton`, `stripe`, `slack`, `telegram`. Presets affect signature verification and body formatting; all run the job **`prompt`** plus a bounded event excerpt. **Telegram** is bidirectional: after the agent turn, replies are sent via Bot API (`sendMessage`), splitting text longer than **4096 runes**.
+**Webhook `type` presets:** `generic`, `github`, `gmail`, `proton`, `stripe`, `slack`, `telegram`. Presets affect signature verification and body formatting; all run the job **`prompt`** plus a bounded event excerpt. **Telegram** is bidirectional: after the agent turn, replies are sent via Bot API (`sendMessage`), splitting text longer than **4096 runes**. A Telegram **photo** (largest size) or a **document** that is a PDF, PNG, JPEG, WEBP, or GIF is downloaded and decoded the same way as a chat attachment. The caption is the prompt and is the only text used for stop, new-chat, chart, and prediction commands. No caption uses the default read prompt. The bot replies with the reason and does not start an agent turn when the file is too large, the PDF has no text layer, the model rejects the image, or the document is not one of those types. One update is one file.
 
 **KeyGen orchestration:** top-level messages with `@agent` and **`mpc-orchestrate v1`** spawn sub-agent turns per `tasks[]` (`mcpServers` allowlist). Sub-agents post **`mpc-task-result`** replies on KeyGen; when all tasks are terminal, **`orchestratorOnReply`** runs once (synthesis via `send_key_gen_message`). Same-node replies without `mpc-task-result` do not re-trigger hooks. **`synthesis.onPartial`** (default true) allows synthesis when tasks are `complete` or `failed`. **Plan → execute:** interactive chat with **`conversationPurpose: "plan"`**, plan doc under **`user_folder/plans/`**, optional **`POST /agent/plan/start`** (`mode` or follow-on rollup), then **`POST /agent/plan/execute`** / meta-tool **`agent_execute_plan`** (KeyGen body = human plan markdown; host-starts tasks). Operator guide: **[`docs/AGENT_HOOKS.md`](../AGENT_HOOKS.md)**. See **`docs/references/API_KEYGEN_MESSAGING.md`** and bundled **`hooks/orchestration_manifest_example.md`**.
 
@@ -4725,10 +4763,15 @@ At least one of **`priorOrchestratorConversationId`** or **`priorTopLevelMessage
 {
   "conversationId": "<uuid or empty for new>",
   "message": "user text",
+  "attachments": [
+    { "filename": "shot.png", "mediaType": "image/png", "dataBase64": "<standard base64>" }
+  ],
   "conversationPurpose": "plan",
   "keyGenId": "optional override for plan/implement flows"
 }
 ```
+
+`attachments` is optional (max 4). Each item is a PNG, JPEG, WEBP, GIF (max 4 MB) or PDF (max 10 MB). The typed `message` stays within 32k characters. An attachment with an empty message uses the default prompt “Read this attachment and say what it contains.” The node stores the bytes under `user_folder/data/chat-uploads/<conversationId>/` and keeps filename, media type, relative path, and a text transcript on the user message (no base64 in the conversation file). PDF text is extracted on the node (text layer only; a scanned PDF is an error). Images are transcribed once by the configured chat model, then the tool loop stays text-only. Transcripts are capped at 64k characters. Host tool **`agent_read_document`** reads the same kinds of files already in `user_folder` and returns up to 64k characters inline (pass `offset` to page a longer PDF). **`agent_fetch_url`** uses that decoder when the response itself is a PNG, JPEG, WEBP, GIF, or PDF. HTML pages stay raw text; images inside a page are not fetched.
 
 **`conversationPurpose`:** omit or `"default"` for normal chat; **`"plan"`** loads the **`orchestration_planning`** skill each turn for manifest drafting.
 
