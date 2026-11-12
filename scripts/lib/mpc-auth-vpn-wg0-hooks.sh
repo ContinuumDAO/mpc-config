@@ -153,10 +153,11 @@ mpc_auth_vpn_prepare_wg0_conf() {
 	local -a post_up_parts=()
 	local -a post_down_parts=()
 
+	local default_if
+	default_if="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"
+	default_if="${default_if:-eth0}"
+
 	if [[ "$profile" == "full" ]]; then
-		local default_if
-		default_if="$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')"
-		default_if="${default_if:-eth0}"
 		post_up_parts+=("sysctl -w net.ipv4.ip_forward=1")
 		post_up_parts+=("iptables -A FORWARD -i wg0 -o ${default_if} -j ACCEPT")
 		post_up_parts+=("iptables -A FORWARD -i ${default_if} -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT")
@@ -184,7 +185,14 @@ mpc_auth_vpn_prepare_wg0_conf() {
 	# Remove a blanket accept left by an older enable. It sat ahead of UFW and
 	# opened every local port to the WireGuard peer.
 	post_up_parts+=("while iptables -D INPUT -i wg0 -j ACCEPT 2>/dev/null; do :; done || true")
-	post_up_parts+=("iptables -C DOCKER-USER -i wg0 -j DROP 2>/dev/null || iptables -I DOCKER-USER -i wg0 -j DROP || true")
+	# Docker checks DOCKER-USER before the FORWARD accept rules. A blanket drop on
+	# wg0 also drops full-tunnel egress. Return WAN traffic first, then drop the
+	# rest so a peer still cannot reach published containers.
+	post_up_parts+=("while iptables -D DOCKER-USER -i wg0 -o ${default_if} -j RETURN 2>/dev/null; do :; done || true")
+	post_up_parts+=("while iptables -D DOCKER-USER -i wg0 -j DROP 2>/dev/null; do :; done || true")
+	post_up_parts+=("iptables -I DOCKER-USER -i wg0 -j DROP || true")
+	post_up_parts+=("iptables -I DOCKER-USER -i wg0 -o ${default_if} -j RETURN || true")
+	post_down_parts+=("iptables -D DOCKER-USER -i wg0 -o ${default_if} -j RETURN || true")
 	post_down_parts+=("iptables -D DOCKER-USER -i wg0 -j DROP || true")
 	post_up_parts+=("iptables -C INPUT -i wg0 -p tcp -s ${vpn_cidr} --dport ${mgmt_port} -j ACCEPT 2>/dev/null || iptables -I INPUT -i wg0 -p tcp -s ${vpn_cidr} --dport ${mgmt_port} -j ACCEPT")
 	post_up_parts+=("iptables -C INPUT -i wg0 -p udp -s ${vpn_cidr} --dport 53 -j ACCEPT 2>/dev/null || iptables -I INPUT -i wg0 -p udp -s ${vpn_cidr} --dport 53 -j ACCEPT")
