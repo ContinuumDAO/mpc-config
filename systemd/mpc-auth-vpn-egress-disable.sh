@@ -60,6 +60,11 @@ payload = {
 with open(path + ".tmp", "w") as f:
     json.dump(payload, f)
 os.rename(path + ".tmp", path)
+live_path = os.path.join(os.path.dirname(path), "vpn-egress-live-peers.json")
+live = {"updatedAt": payload["updatedAt"], "publicKeys": []}
+with open(live_path + ".tmp", "w", encoding="utf-8") as f:
+    json.dump(live, f)
+os.replace(live_path + ".tmp", live_path)
 PY
 
 if [[ -x "${HERE}/mpc-auth-vpn-dns-filter.sh" ]]; then

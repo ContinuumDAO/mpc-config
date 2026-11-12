@@ -113,6 +113,31 @@ systemctl daemon-reload
 systemctl enable mpc-auth-wireguard-wg-egress.service
 systemctl restart mpc-auth-wireguard-wg-egress.service
 
+LIVE_PEERS_FILE="$(dirname "$STATE_FILE")/vpn-egress-live-peers.json"
+export LIVE_PEERS_FILE
+python3 - <<'PY' || echo "mpc-auth-vpn-egress-enable: could not record live peers" >&2
+import datetime, json, os, subprocess
+path = os.environ["LIVE_PEERS_FILE"]
+keys = []
+try:
+    out = subprocess.check_output(["wg", "show", "wg-egress", "dump"], text=True, stderr=subprocess.DEVNULL)
+    for ln in out.splitlines()[1:]:
+        pub = ln.split("\t", 1)[0].strip()
+        if pub and pub != "(none)":
+            keys.append(pub)
+except (OSError, subprocess.CalledProcessError):
+    keys = []
+os.makedirs(os.path.dirname(path), exist_ok=True)
+payload = {
+    "updatedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "publicKeys": keys,
+}
+tmp = path + ".tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+os.replace(tmp, path)
+PY
+
 if [[ "$OBFUSCATION" != "none" ]]; then
 	mpc_auth_vpn_start_obfuscation_egress_systemd "$OBFUSCATION"
 fi
