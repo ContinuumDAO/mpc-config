@@ -1,0 +1,13 @@
+{
+  "name": "continuum-mpa-plugins",
+  "plugins": [
+    {
+      "name": "hello-mpa",
+      "version": "1.0.0",
+      "description": "Example MPA Wallet plugin. Greets the operator and registers a ping tool.",
+      "source": "",
+      "sha256": "",
+      "permissions": ["user_folder:read", "hooks:session", "hooks:before_tool"]
+    }
+  ]
+}

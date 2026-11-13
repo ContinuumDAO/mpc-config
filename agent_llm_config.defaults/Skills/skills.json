@@ -229,6 +229,16 @@
       "name": "stock-research-alerts",
       "filename": "stock-research-alerts/SKILL.md",
       "initialLoad": false
+    },
+    {
+      "name": "mpa-plugin-author",
+      "filename": "mpa-plugin-author/SKILL.md",
+      "initialLoad": false
+    },
+    {
+      "name": "mpa-plugin-review",
+      "filename": "mpa-plugin-review/SKILL.md",
+      "initialLoad": false
     }
   ]
 }

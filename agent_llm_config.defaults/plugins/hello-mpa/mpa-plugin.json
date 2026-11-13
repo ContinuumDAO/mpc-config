@@ -1,0 +1,9 @@
+{
+  "name": "hello-mpa",
+  "version": "1.0.0",
+  "description": "Example MPA Wallet plugin. Greets the operator and registers a ping tool.",
+  "skills": ["skills/hello-mpa"],
+  "prompts": ["prompts/hello-mpa.md"],
+  "entrypoint": "extension/index.js",
+  "permissions": ["user_folder:read", "hooks:session", "hooks:before_tool"]
+}

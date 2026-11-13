@@ -3890,6 +3890,7 @@ Five **editable** host YAML files share one management API. Each has bundled def
 | **`orchestration-plan`** | **`agent_llm_config/orchestration-plan.yaml`** | **`agent_llm_config.defaults/orchestration-plan.yaml`** | Plan modes + execution policy (leaves, matchers, budgets, verify text). Change here after mpc-auth loader upgrade — no binary rebuild. |
 | **`agent-intent-rules`** | **`agent_llm_config/agent-intent-rules.yaml`** | **`agent_llm_config.defaults/agent-intent-rules.yaml`** | Free-text intent → pack boost + hints + optional **`always`** turn hints + **`loadMcpServers`** auto-load + optional **`verify`** (`interview` / `lookup` / `deliverable`) (never short-circuits the LLM). Protocol and third-party MCP policy lives here, not in mpc-auth. |
 | **`continuum-dao-vote-policy`** | **`agent_llm_config/continuum-dao-vote-policy.yaml`** | **`agent_llm_config.defaults/continuum-dao-vote-policy.yaml`** | ContinuumDAO vote defaults (`trustedProposers`, `defaultAction`, type/signature/target/scam rules). Committee addresses are not operator-editable; agents fetch Constitution **Committee List**. Injected when the **`continuum-dao-vote-policy`** skill loads. Procedure prose stays in that skill. |
+| **`mpa-plugin-review`** | **`agent_llm_config/mpa-plugin-review.yaml`** | **`agent_llm_config.defaults/mpa-plugin-review.yaml`** | MPA plugin install recommendation. `defaultAction` and each risk are `accept` or `reject`. Injected when the **`mpa-plugin-review`** skill loads. The permission card comes after that recommendation. |
 | **`cron-trade`** | **`agent_llm_config/cron/trade-cron.yaml`** | **`agent_llm_config.defaults/cron/trade-cron.yaml`** | Node-wide **`tradeConsensus`** / **`tradeBuild`** defaults for scheduled trade-analysis cron runs. Per-job fenced blocks in a cron **`message`** override this file for that run. |
 
 **Provisioning:** **`process_config.sh`** copies each default file into runtime **`agent_llm_config/`** once if missing. Operators can also install via **`POST /resetHostYamlFromDefaults`** or the **Skills** / **Cron** tabs in continuumdao-node-app.
@@ -3905,7 +3906,7 @@ Five **editable** host YAML files share one management API. Each has bundled def
 
 **Auth:** Management API (same as **`GET /listSkills`** — no read JWT on plain management port).
 
-**Query:** **`kind`** — one of **`trade-desk`**, **`orchestration-plan`**, **`agent-intent-rules`**, **`continuum-dao-vote-policy`**, **`cron-trade`**.
+**Query:** **`kind`** — one of **`trade-desk`**, **`orchestration-plan`**, **`agent-intent-rules`**, **`continuum-dao-vote-policy`**, **`mpa-plugin-review`**, **`cron-trade`**.
 
 **Response data:**
 ```json
@@ -3938,14 +3939,14 @@ Five **editable** host YAML files share one management API. Each has bundled def
 | `upgradeAvailable` | **`configured`** && sidecar hash ≠ SHA-256(**`defaultContent`**) |
 | `userModified` | **`configured`** && SHA-256(**`content`**) ≠ **`appliedDefaultsHash`** |
 | `path` | Source path used for **`content`** (runtime or defaults preview) |
-| `filename` | Relative filename (`trade-desk.yaml`, `orchestration-plan.yaml`, `agent-intent-rules.yaml`, `continuum-dao-vote-policy.yaml`, or `cron/trade-cron.yaml`) |
+| `filename` | Relative filename (`trade-desk.yaml`, `orchestration-plan.yaml`, `agent-intent-rules.yaml`, `continuum-dao-vote-policy.yaml`, `mpa-plugin-review.yaml`, or `cron/trade-cron.yaml`) |
 
 <a id="post-upserthostyamlconfig"></a>
 #### `POST /upsertHostYamlConfig`
 
 **Auth:** Management signature.
 
-**Body:** `{ "kind", "content", "nonce", "clientSig", "nodeKey" }` — **`content`** is the full YAML file. Server validates structure per **`kind`** before atomic write. **`trade-desk`:** `version`, `universal`, `llmFallback`, `protocols`. **`orchestration-plan`:** plan schema. **`agent-intent-rules`:** rules schema. **`continuum-dao-vote-policy`:** `votePolicy.version`, `defaultAction` (`skip` / `nota` / `against` / `abstain`), optional `trustedAction` (`skip` / `nota` / `against` / `abstain` / `for`), 0x `trustedProposers` / `blockedProposers` / target addresses. Optional leftover `committeeProposers` is ignored; Committee membership is the Constitution **Committee List**. **`cron-trade`:** `version`, at least one of **`tradeConsensus`** / **`tradeBuild`**.
+**Body:** `{ "kind", "content", "nonce", "clientSig", "nodeKey" }` — **`content`** is the full YAML file. Server validates structure per **`kind`** before atomic write. **`trade-desk`:** `version`, `universal`, `llmFallback`, `protocols`. **`orchestration-plan`:** plan schema. **`agent-intent-rules`:** rules schema. **`continuum-dao-vote-policy`:** `votePolicy.version`, `defaultAction` (`skip` / `nota` / `against` / `abstain`), optional `trustedAction` (`skip` / `nota` / `against` / `abstain` / `for`), 0x `trustedProposers` / `blockedProposers` / target addresses. Optional leftover `committeeProposers` is ignored; Committee membership is the Constitution **Committee List**. **`mpa-plugin-review`:** `pluginReview.version`, `defaultAction` and `cleanAction` (`accept` / `reject`), and `risks` values of `accept` or `reject` for known audit ids. **`cron-trade`:** `version`, at least one of **`tradeConsensus`** / **`tradeBuild`**.
 
 **Response data:** Same shape as **`GET /getHostYamlConfig`** with **`configured: true`** and **`path`** set to the runtime file.
 

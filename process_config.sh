@@ -110,6 +110,7 @@ DEFAULT_TRADE_DESK_BASENAME="trade-desk.yaml"
 DEFAULT_ORCHESTRATION_PLAN_BASENAME="orchestration-plan.yaml"
 DEFAULT_AGENT_INTENT_RULES_BASENAME="agent-intent-rules.yaml"
 DEFAULT_CONTINUUM_DAO_VOTE_POLICY_BASENAME="continuum-dao-vote-policy.yaml"
+DEFAULT_MPA_PLUGIN_REVIEW_BASENAME="mpa-plugin-review.yaml"
 DEFAULT_CRON_TRADE_REL="cron/trade-cron.yaml"
 DEFAULT_AGENT_CRON_JOBS_REL="cron/jobs.json"
 DEFAULT_AGENT_HOOKS_REL="hooks"
@@ -219,6 +220,22 @@ _seed_continuum_dao_vote_policy_yaml() {
     fi
     if cp "$src" "$dest" 2>/dev/null; then
         print_success "agent_llm_config: installed ${DEFAULT_CONTINUUM_DAO_VOTE_POLICY_BASENAME}"
+    fi
+}
+
+# Copy mpa-plugin-review.yaml into agent_llm_config/ (once) for plugin install recommendations.
+_seed_mpa_plugin_review_yaml() {
+    local cfg_parent="$1"
+    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/${DEFAULT_MPA_PLUGIN_REVIEW_BASENAME}"
+    local dest="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_MPA_PLUGIN_REVIEW_BASENAME}"
+    if [ ! -f "$src" ]; then
+        return 0
+    fi
+    if [ -f "$dest" ]; then
+        return 0
+    fi
+    if cp "$src" "$dest" 2>/dev/null; then
+        print_success "agent_llm_config: installed ${DEFAULT_MPA_PLUGIN_REVIEW_BASENAME}"
     fi
 }
 
@@ -7541,6 +7558,7 @@ main() {
         _seed_orchestration_plan_yaml "${_cfg_parent}" || true
         _seed_agent_intent_rules_yaml "${_cfg_parent}" || true
         _seed_continuum_dao_vote_policy_yaml "${_cfg_parent}" || true
+        _seed_mpa_plugin_review_yaml "${_cfg_parent}" || true
         _seed_cron_trade_yaml "${_cfg_parent}" || true
         _seed_agent_llm_runtime_readme "${_cfg_parent}" || true
         _seed_agent_skills_catalog "${_cfg_parent}" || true

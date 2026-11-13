@@ -1,0 +1,21 @@
+# Default MPA plugin review.
+# Edit via Skills tab → Host YAML configs, or POST /upsertHostYamlConfig
+# with kind=mpa-plugin-review. The mpa-plugin-review skill loads this
+# installed file (not the example in SKILL.md).
+pluginReview:
+  version: 1
+  defaultAction: reject       # accept | reject — used when a finding has no rule below
+  cleanAction: accept         # accept | reject — package with no risk findings
+  risks:
+    entrypoint: reject        # JavaScript or TypeScript runs in the agent
+    shell: reject             # process execution, including process:spawn and shell scripts
+    net: reject               # network, including net:https
+    fs-read-user: reject      # read under user_folder
+    fs-read-outside: reject   # read outside user_folder (still blocked after approval)
+    fs-write-user: reject     # write or delete under user_folder
+    fs-write-outside: reject  # write outside user_folder (still blocked after approval)
+    hook-before-tool: reject  # see or block later tool calls
+    skill-shell: reject       # instructions tell the agent to run a shell
+    skill-net: reject         # instructions tell the agent to fetch a URL or search
+    skill-write: reject       # instructions tell the agent to write files
+    key-material: reject      # text mentions node key material

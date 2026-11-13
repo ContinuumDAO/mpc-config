@@ -14,11 +14,12 @@ Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent
 | **`orchestration-plan.yaml`** | Same name | Plan modes, skeletons, **`followOn`** (store prior TA trade ideas), task-class matchers, budgets, verify/soft-accept, contracts. Host-parsed YAML — product policy changes without rebuilding mpc-auth after the loader ships. |
 | **`agent-intent-rules.yaml`** | Same name | Free-text intent → pack boost, **`always`** turn hints, **`loadMcpServers`**, optional **`verify`** (`interview` / `lookup` / `deliverable`), and vendor/protocol playbooks (never short-circuits the LLM). Host-parsed YAML; mpc-auth stays vendor-agnostic. |
 | **`continuum-dao-vote-policy.yaml`** | Same name | ContinuumDAO vote defaults (`trustedProposers`, `defaultAction`, type/signature/target/scam rules). Committee addresses are **not** in this file — agents fetch Constitution **Committee List**. Host-parsed YAML; injected when the **`continuum-dao-vote-policy`** skill loads. |
+| **`mpa-plugin-review.yaml`** | Same name | MPA plugin install recommendation (`defaultAction`, `cleanAction`, per-risk `accept` / `reject`). Host-parsed YAML; injected when the **`mpa-plugin-review`** skill loads. The permission card comes after that recommendation. |
 | **`Skills/`** | Same path | Agent skills: **`skills.json`** manifest plus **`.md`** / **`.txt`** bodies. |
 
-### Host YAML configs (`trade-desk.yaml`, `orchestration-plan.yaml`, `agent-intent-rules.yaml`, `continuum-dao-vote-policy.yaml`)
+### Host YAML configs (`trade-desk.yaml`, `orchestration-plan.yaml`, `agent-intent-rules.yaml`, `continuum-dao-vote-policy.yaml`, `mpa-plugin-review.yaml`)
 
-These are **not** agent Skills. mpc-auth loads them at plan/trade/turn time (mtime-aware cache); vote policy is injected when the **`continuum-dao-vote-policy`** skill loads. Ops model:
+These are **not** agent Skills. mpc-auth loads them at plan/trade/turn time (mtime-aware cache); vote policy is injected when the **`continuum-dao-vote-policy`** skill loads, and plugin review is injected when the **`mpa-plugin-review`** skill loads. Ops model:
 
 1. **One-time:** upgrade mpc-auth so the node understands the YAML schema + management APIs.
 2. **Ongoing:** edit the file under **`agent_llm_config.defaults/`**, `git pull` on the node, then **reset-from-defaults** in the UI (or **`POST /resetHostYamlFromDefaults`** with the matching **`kind`**) to overwrite the runtime copy. Or edit runtime YAML via **`POST /upsertHostYamlConfig`** / UI editor.
