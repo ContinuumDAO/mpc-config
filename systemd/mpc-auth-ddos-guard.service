@@ -1,0 +1,15 @@
+[Unit]
+Description=MPA Wallet connection guard (DOCKER-USER MPC-GUARD)
+After=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Exit 2 is firewalld: the guard logs that it was not applied.
+SuccessExitStatus=2
+EnvironmentFile=-/etc/default/mpc-auth-docker
+ExecStart=/usr/local/libexec/mpc-auth/mpc-auth-ddos-guard.sh
+
+[Install]
+WantedBy=docker.service

@@ -51,6 +51,7 @@ UNIT_FILES=(
 	"mpc-auth-telegram-ngrok-pending.service"
 	"mpc-auth-agent-llm-config.path"
 	"mpc-auth-agent-llm-config.service"
+	"mpc-auth-ddos-guard.service"
 )
 
 LIBEXEC_SCRIPTS=(
@@ -83,6 +84,7 @@ LIBEXEC_SCRIPTS=(
 	"mpc-auth-vpn-udp2raw-egress-hooks.sh"
 	"mpc-auth-udp2raw-run.sh"
 	"mpc-auth-udp2raw-egress-run.sh"
+	"mpc-auth-ddos-guard.sh"
 )
 
 KEEP_ENV=false
@@ -294,6 +296,12 @@ mpc_auth_stop_disable_known_units
 mpc_auth_remove_libexec
 mpc_auth_remove_env
 mpc_auth_remove_var_lib
+if [[ -f /etc/fail2ban/jail.d/mpc-auth-sshd.local ]]; then
+	run rm -f /etc/fail2ban/jail.d/mpc-auth-sshd.local
+	if command -v fail2ban-client >/dev/null 2>&1; then
+		run fail2ban-client reload >/dev/null 2>&1 || true
+	fi
+fi
 mpc_auth_journal_touch
 
 echo "Done. Unit templates under ${UNIT_DIR} named mpc-auth-* should be gone; libexec cleared under ${LIBEXEC}."

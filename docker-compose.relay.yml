@@ -38,7 +38,8 @@ services:
     ports:
       - "8883:8883"   # TLS encrypted (default, required)
       # - "9999:1883"   # Unencrypted (disabled - use mosquitto.conf.no-tls for testing)
-      - "9001:9001"   # WebSocket (TLS)
+      # 9001 is not published. mosquitto.conf has no WebSocket listener, and docker-proxy
+      # would still accept the port. Peers use 8883.
     volumes:
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data

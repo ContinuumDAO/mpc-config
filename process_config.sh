@@ -6121,6 +6121,8 @@ show_process_config_help() {
     echo "  ManagementAPIsPort (8080), relay MQTT (8883). ScannerRelayerPort uses *scoped* UFW rules when"
     echo "  PreSigningVerification.RelayerAPIURL and/or ScannerAPIURLs resolve to IPv4 (see configs.yaml)."
     echo "  ManagementAPIsPort is not opened in UFW by default; set UFW_OPEN_MANAGEMENT_PORT=1 if peers/operators need inbound HTTP to the management API."
+    echo "  Connection guard (scripts/lib/mpc-auth-ddos-guard.sh): per-IP caps on the published TCP ports via DOCKER-USER,"
+    echo "  and on SSH via INPUT. VPN interfaces, WireGuard, and Shadowsocks are not capped. An enabled udp2raw listen port is skipped."
     echo "  Loopback Mongo: after baseline rules, installs /etc/ufw/after.rules DROP for non-root → 127.0.0.1:Mongo (disable: APPLY_LOOPBACK_MONGO_OWNER_FW=0)."
     echo "  Peer egress VPN (wg-egress): opens UFW UDP WireGuardEgress.ListenPort (default 51830), TCP+UDP ShadowsocksEgress (8390), UDP WgObfuscatorEgress (51832), TCP Udp2rawEgress (8443)."
     echo "  Also prints provider-panel reminders — cloud SG must allow the same transport ports when obfuscation is used."
@@ -6866,6 +6868,7 @@ apply_process_config_firewall() {
         fi
         print_info "firewalld active — inbound mpc-auth rules apply."
         sudo firewall-cmd --list-ports 2>/dev/null || true
+        _apply_mpc_auth_ddos_guard "$config_file"
         return 0
     fi
 
@@ -6884,6 +6887,28 @@ apply_process_config_firewall() {
         exit 1
     fi
     print_info "UFW active — inbound mpc-auth rules apply."
+    _apply_mpc_auth_ddos_guard "$config_file"
+}
+
+# Per-IP caps for Docker-published listeners and SSH. Exit 2 means firewalld (not applied).
+_apply_mpc_auth_ddos_guard() {
+    local config_file="$1"
+    local guard="${REPO_ROOT}/scripts/lib/mpc-auth-ddos-guard.sh"
+    local rc=0
+    if [ ! -f "$guard" ]; then
+        print_error "MPC-GUARD script missing: $guard"
+        exit 1
+    fi
+    bash "$guard" --config "$config_file" || rc=$?
+    if [ "$rc" -eq 2 ]; then
+        print_warning "MPC-GUARD was not applied. The connection guard is UFW/iptables-only."
+        return 0
+    fi
+    if [ "$rc" -ne 0 ]; then
+        print_error "MPC-GUARD connection guard failed (exit ${rc})."
+        exit 1
+    fi
+    print_success "MPC-GUARD connection caps are in place."
 }
 
 # If /etc/default/mpc-auth-docker exists (host has mpc-auth docker systemd helpers), keep

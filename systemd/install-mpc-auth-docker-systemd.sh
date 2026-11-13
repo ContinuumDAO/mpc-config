@@ -88,6 +88,7 @@ install -m 0755 \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-vpn-udp2raw-egress-hooks.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-udp2raw-run.sh" \
 	"${REPO_ROOT}/scripts/lib/mpc-auth-udp2raw-egress-run.sh" \
+	"${REPO_ROOT}/scripts/lib/mpc-auth-ddos-guard.sh" \
 	"$LIBEXEC/"
 
 if [[ "$INSTALL_ENV" == true ]]; then
@@ -138,6 +139,7 @@ install -m 0644 \
 	"$HERE/mpc-auth-telegram-ngrok-pending.service" \
 	"$HERE/mpc-auth-agent-llm-config.path" \
 	"$HERE/mpc-auth-agent-llm-config.service" \
+	"$HERE/mpc-auth-ddos-guard.service" \
 	"$UNIT_DIR/"
 
 mkdir -p /var/lib/mpc-auth-docker/applied
@@ -222,6 +224,10 @@ systemctl restart mpc-auth-telegram-ngrok-pending.path || systemctl start mpc-au
 systemctl enable mpc-auth-bitcoin-core-pending.path
 systemctl restart mpc-auth-bitcoin-core-pending.path || systemctl start mpc-auth-bitcoin-core-pending.path
 
+# Re-applies MPC-GUARD after every Docker start. Exit 2 (firewalld) is success for the unit.
+systemctl enable mpc-auth-ddos-guard.service
+systemctl start mpc-auth-ddos-guard.service || echo "WARNING: mpc-auth-ddos-guard did not apply yet (configs.yaml or iptables). It runs again when Docker starts." >&2
+
 echo
 echo "Installed:"
 echo "  $LIBEXEC/mpc-auth-docker-{restart,update}.sh + mpc-auth-apply-pending-{update,reboot}.sh"
@@ -243,6 +249,7 @@ echo "  $UNIT_DIR/mpc-auth-vpn-egress-pending.{path,service} (peer egress VPN)"
 echo "  $LIBEXEC/mpc-auth-apply-pending-telegram-ngrok.sh + mpc-auth-telegram-ngrok-{enable,disable}.sh (POST /telegramNgrok/setEnabled — ngrok sidecar)"
 echo "  $UNIT_DIR/mpc-auth-telegram-ngrok-pending.{path,service} (Telegram webhook tunnel)"
 echo "  $UNIT_DIR/mpc-auth-wireguard-wg0.service + mpc-auth-vpn-mgmt-proxy.service + mpc-auth-shadowsocks.service + mpc-auth-wg-obfuscator.service + mpc-auth-udp2raw.service + mpc-auth-lwo.service"
+echo "  $UNIT_DIR/mpc-auth-ddos-guard.service (DOCKER-USER connection caps; re-applied when Docker starts)"
 echo "  $UNIT_DIR/mpc-auth-wireguard-wg-egress.service + mpc-auth-shadowsocks-egress.service + mpc-auth-wg-obfuscator-egress.service + mpc-auth-udp2raw-egress.service"
 echo "  ${HERE}/write-vpn-host-obfuscation-capabilities.sh (refresh vpn-host-obfuscation.json after obfuscation binary install)"
 echo

@@ -84,6 +84,7 @@ Use **`/etc/systemd/system/`** for administrator-installed units. **`/etc/system
 | **`mpc-auth-wireguard-wg0.service`** | **`wg-quick up/down wg0`** — WireGuard server interface. |
 | **`mpc-auth-vpn-mgmt-proxy.service`** | Python proxy on **`10.8.0.1:8080`** → **`127.0.0.1:8080`**. Rewrites **`Host`** and sets **`X-Continuum-Vpn-Peer: 1`** so a tunnel peer cannot pass the localhost management gate. |
 | **`mpc-auth-shadowsocks.service`** | **`ssserver`** for optional WireGuard transport obfuscation (**`/var/lib/mpc-auth-docker/shadowsocks/ssserver.json`**). |
+| **`mpc-auth-ddos-guard.service`** | Oneshot, **`WantedBy=docker.service`**. Rebuilds **`MPC-GUARD`** per-IP caps for the published TCP ports and SSH. See **Connection guard** below. |
 
 **Compose:** **`docker-compose.relay.yml`** and **`docker-compose.client.yml`** both set **`MPC_AUTH_VPN_PENDING_FILE`** / **`MPC_AUTH_VPN_STATE_FILE`** / **`MPC_AUTH_TELEGRAM_NGROK_*`** and bind-mount **`/var/lib/mpc-auth-docker`**. **`process_config.sh`** copies the relay or client template to **`docker-compose.yml`** and can patch older compose files via **`apply_docker_compose_vpn_env`**.
 
@@ -109,6 +110,28 @@ On VPS hosts with **UFW active** and **Docker**, `ufw allow 51820/udp` alone is 
 **Operator flow (no SSH after install):** MPA **VPN Panel** → **`POST /vpn/setEnabled`** → host applies **`wg0`** + mgmt proxy → download client **`.conf`** → **`wg-quick up`** on the workstation. Verify with **`curl http://10.8.0.1:8080/health`** over the tunnel (ping is optional).
 
 **Do not** edit **`PostUp`** manually at the bottom of **`wg0.conf`**. Re-enable VPN from the panel (or run **`mpc-auth-vpn-enable.sh`**) after **`git pull`** so hooks are regenerated.
+
+### Connection guard (public listeners)
+
+UFW allow rules do not see Docker-published ports. **`scripts/lib/mpc-auth-ddos-guard.sh`** (installed as **`/usr/local/libexec/mpc-auth/mpc-auth-ddos-guard.sh`**) rebuilds the **`MPC-GUARD`** chain and **appends** **`-j MPC-GUARD`** on **`DOCKER-USER`**. It never inserts at the head of that chain, so the **`wg0`** egress **`RETURN`** stays first. **`mpc-auth-ddos-guard.service`** is **`WantedBy=docker.service`**, so a Docker restart applies the jump again. **`process_config.sh`** runs the same script at the end of the host firewall step.
+
+The chain returns immediately for **`lo`**, **`docker0`**, **`br-+`**, **`wg0`**, and **`wg-egress`**, and only matches the WAN interface. WireGuard UDP, Shadowsocks, and an **enabled** udp2raw listen port are not capped. **`Udp2rawEgress.ListenPort`** defaults to **8443** even when that section is absent; **8443** is skipped only while **`mpc-auth-udp2raw-egress.service`** (or the admin udp2raw unit) is active. UDP conntrack timeouts are left alone.
+
+Per source address, only the excess is dropped:
+
+- **22** SSH (`INPUT`, `NEW`, WAN only): 10 concurrent, 10 new/minute, burst 10
+- **3333** dashboard and **8443** Browser HTTPS: 80 concurrent, 30 new/second, burst 60
+- **18080** discovery: 40 concurrent, 20 new/second, burst 40
+- **8883** MQTT TLS: 16 concurrent, 2 new/second, burst 8
+- **18081** scanner/relayer: the same cap as discovery when it is world-open. When **`RelayerAPIURL`** / **`ScannerAPIURLs`** resolve, other WAN sources are dropped. That is the UFW scope Docker was ignoring.
+
+fail2ban gets an **`sshd`** jail only (`maxretry` 6, `findtime` 10m, `bantime` 1h) in **`/etc/fail2ban/jail.d/mpc-auth-sshd.local`**. **`ignoreip`** is loopback, the configured VPN CIDRs (**`10.8.0.0/24`** and **`10.9.0.0/24`** unless **`configs.yaml`** sets others), and current **`nodeAddresses`** hosts. There is no mosquitto or recidive jail.
+
+**`docker-compose.relay.yml`** does not publish **9001**. **`mosquitto.conf`** has no WebSocket listener; peers stay on **8883**.
+
+On firewalld the script logs that the guard is UFW/iptables-only and exits **2** (the systemd unit treats that as success and does not install rules).
+
+Check: **`sudo iptables -L DOCKER-USER -n -v --line-numbers`** shows the **`wg0`** **`RETURN`** above **`-j MPC-GUARD`**. A normal browser or discovery connection stays under the cap; only the excess from one address is dropped.
 
 ### Shadowsocks transport obfuscation (optional)
 
