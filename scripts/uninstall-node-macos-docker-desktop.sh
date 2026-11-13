@@ -112,6 +112,19 @@ LOGIN_HOME="$(uninstall_login_home)"
 LABEL="com.continuumdao.mpc-auth-watcher"
 PLIST_DST="${LOGIN_HOME}/Library/LaunchAgents/${LABEL}.plist"
 
+remove_macos_firewall() {
+	local fw="${REPO_DIR}/macos-desktop/mpc-auth-firewall-macos.sh"
+	if [[ ! -f "$fw" ]]; then
+		return 0
+	fi
+	echo "Removing macOS packet filter caps..." >&2
+	if [[ "$UNINSTALL_DRY_RUN" == true ]]; then
+		echo "[dry-run] bash ${fw} --remove" >&2
+		return 0
+	fi
+	bash "$fw" --remove || true
+}
+
 stop_macos_watcher() {
 	local stop="${REPO_DIR}/macos-desktop/stop-watcher.sh"
 	if [[ -f "$stop" ]]; then
@@ -158,6 +171,7 @@ uninstall_print_warnings
 uninstall_confirm || exit 1
 
 stop_macos_watcher
+remove_macos_firewall
 remove_launchagent
 uninstall_compose_down "$REPO_DIR"
 uninstall_remove_sidecar

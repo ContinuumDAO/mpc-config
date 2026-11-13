@@ -135,6 +135,8 @@ unregister_scheduled_tasks() {
 		echo "warning: powershell.exe not found — delete Scheduled Tasks from Windows if present:" >&2
 		echo "  schtasks /Delete /TN ContinuumNodeMpcAuthWatcher /F" >&2
 		echo "  schtasks /Delete /TN ContinuumNodeMpcAuthWatcherPoll /F" >&2
+		echo "  schtasks /Delete /TN ContinuumNodeMpcAuthFirewall /F" >&2
+		echo "  schtasks /Delete /TN ContinuumNodeMpcAuthFirewallPoll /F" >&2
 		return 0
 	fi
 	echo "Removing Windows Scheduled Tasks..." >&2
@@ -143,7 +145,7 @@ unregister_scheduled_tasks() {
 		return 0
 	fi
 	powershell.exe -NoProfile -Command \
-		'foreach ($t in @("ContinuumNodeMpcAuthWatcher","ContinuumNodeMpcAuthWatcherPoll")) { schtasks /Query /TN $t 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { schtasks /Delete /TN $t /F } }' \
+		'foreach ($t in @("ContinuumNodeMpcAuthWatcher","ContinuumNodeMpcAuthWatcherPoll","ContinuumNodeMpcAuthFirewall","ContinuumNodeMpcAuthFirewallPoll")) { schtasks /Query /TN $t 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { schtasks /Delete /TN $t /F } }; Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "ContinuumMPC-*" } | ForEach-Object { Remove-NetFirewallRule -Name $_.Name -ErrorAction SilentlyContinue }' \
 		|| true
 }
 

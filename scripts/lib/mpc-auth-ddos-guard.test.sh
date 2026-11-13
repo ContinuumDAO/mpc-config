@@ -87,6 +87,19 @@ assert_in "$out" "ignoreip = 127.0.0.1/8 ::1 10.8.0.0/24 10.9.0.0/24 198.51.100.
 assert_not "$out" "[mosquitto]"
 assert_not "$out" "[recidive]"
 
+plan="$(MPC_AUTH_DDOS_WAN_IF=eth0 "$guard" --config "${tmp}/configs.yaml" --print-plan 2>"${tmp}/plan.err")"
+assert_in "$plan" "WAN=eth0"
+assert_in "$plan" "CAP=8443 80 30/sec 60"
+assert_in "$plan" "CAP=8883 16 2/sec 8"
+assert_in "$plan" "SCANCAP=18081 40 20/sec 40 203.0.113.50"
+assert_in "$plan" "SCANDROP=18081"
+assert_in "$plan" "SSH=22 10 10/minute 10"
+assert_in "$plan" "IGNORE=198.51.100.10"
+assert_not "$plan" "iptables"
+vpnplan="$(MPC_AUTH_DDOS_WAN_IF=wg0 "$guard" --config "${tmp}/configs.yaml" --print-plan 2>"${tmp}/vpnplan.err")"
+assert_in "$vpnplan" "WAN=wg0"
+assert_in "$vpnplan" "CAP=18080 40 20/sec 40"
+
 # Enabled udp2raw egress on 8443 must not be capped.
 mkdir -p "${tmp}/bin"
 cat >"${tmp}/bin/systemctl" <<'EOF'

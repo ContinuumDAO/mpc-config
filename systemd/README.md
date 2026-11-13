@@ -133,6 +133,8 @@ On firewalld the script logs that the guard is UFW/iptables-only and exits **2**
 
 Check: **`sudo iptables -L DOCKER-USER -n -v --line-numbers`** shows the **`wg0`** **`RETURN`** above **`-j MPC-GUARD`**. A normal browser or discovery connection stays under the cap; only the excess from one address is dropped.
 
+Windows and macOS Docker Desktop nodes do not use this iptables chain. The same plan (**`mpc-auth-ddos-guard.sh --print-plan`**) is applied on the host, where the real source address is still visible: **`macos-desktop/mpc-auth-firewall-macos.sh`** (pf on the router-facing interface) and **`wsl-desktop/mpc-auth-firewall.ps1`** (Windows Firewall allows, plus a one-hour SSH block after repeated failed logins). Windows Firewall cannot cap connections per address. VPN interfaces are not the filtered interface. SSH stays reachable from the public internet.
+
 ### Shadowsocks transport obfuscation (optional)
 
 When the VPN Panel enables **`obfuscation: shadowsocks`** (mpc-auth writes **`pending-vpn.json`** with that field):

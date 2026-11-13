@@ -13,17 +13,21 @@
 #
 # Usage:
 #   mpc-auth-ddos-guard.sh [--config /path/configs.yaml] [--dry-run]
+#   mpc-auth-ddos-guard.sh [--config /path/configs.yaml] --print-plan
 #
-# Exit 0 applied (or dry-run printed). Exit 2 when firewalld is active and
-# nothing was installed. Exit 1 on error.
+# --print-plan writes CAP, SCANCAP, SCANDROP, SSH, and IGNORE lines and does
+# not touch iptables or fail2ban. Desktop host tools consume that plan.
+# Exit 0 applied (or dry-run / plan printed). Exit 2 when firewalld is active
+# and nothing was installed. Exit 1 on error.
 
 set -euo pipefail
 
 DRY_RUN=0
+PRINT_PLAN=0
 CONFIG="${MPC_AUTH_DDOS_CONFIG:-}"
 
 usage() {
-	echo "usage: $0 [--config configs.yaml] [--dry-run]" >&2
+	echo "usage: $0 [--config configs.yaml] [--dry-run|--print-plan]" >&2
 	exit 2
 }
 
@@ -35,6 +39,10 @@ while [[ $# -gt 0 ]]; do
 		;;
 	--dry-run)
 		DRY_RUN=1
+		shift
+		;;
+	--print-plan)
+		PRINT_PLAN=1
 		shift
 		;;
 	-h | --help) usage ;;
@@ -64,12 +72,16 @@ if [[ -z "$CONFIG" || ! -f "$CONFIG" ]]; then
 	exit 1
 fi
 
-if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet firewalld; then
+if [[ "$PRINT_PLAN" -eq 1 ]]; then
+	export MPC_AUTH_DDOS_PRINT_PLAN=1
+fi
+
+if [[ "$PRINT_PLAN" -eq 0 ]] && command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet firewalld; then
 	echo "mpc-auth-ddos-guard: firewalld is active. This guard is UFW/iptables-only and was not applied." >&2
 	exit 2
 fi
 
-if [[ "$DRY_RUN" -eq 0 && "${EUID:-$(id -u)}" -ne 0 ]]; then
+if [[ "$PRINT_PLAN" -eq 0 && "$DRY_RUN" -eq 0 && "${EUID:-$(id -u)}" -ne 0 ]]; then
 	exec sudo -E "$0" --config "$CONFIG"
 fi
 
@@ -191,12 +203,16 @@ if not wan:
     m = re.search(r"\bdev\s+(\S+)", route)
     if m:
         wan = m.group(1)
+print_plan = os.environ.get("MPC_AUTH_DDOS_PRINT_PLAN") == "1"
 if wan in ("", "wg0", "wg-egress"):
-    sys.stderr.write(
-        "mpc-auth-ddos-guard: WAN interface is %s — refusing to install caps that would match VPN traffic\n"
-        % (wan or "unset")
-    )
-    sys.exit(1)
+    if print_plan:
+        wan = wan or "-"
+    else:
+        sys.stderr.write(
+            "mpc-auth-ddos-guard: WAN interface is %s — refusing to install caps that would match VPN traffic\n"
+            % (wan or "unset")
+        )
+        sys.exit(1)
 
 pub = scalar_int(data.get("PublicDiscoveryPort"), 18080)
 sr = scalar_int(data.get("ScannerRelayerPort"), 18081)
@@ -349,6 +365,11 @@ for item in ignore:
 with open(out_path, "w", encoding="utf-8") as fh:
     fh.write("\n".join(lines) + "\n")
 PY
+
+if [[ "$PRINT_PLAN" -eq 1 ]]; then
+	cat "$plan_file"
+	exit 0
+fi
 
 WAN=""
 declare -a CAPS=()

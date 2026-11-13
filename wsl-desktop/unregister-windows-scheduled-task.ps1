@@ -10,7 +10,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Continue'
 
 $failed = $false
-foreach ($t in @('ContinuumNodeMpcAuthWatcher', 'ContinuumNodeMpcAuthWatcherPoll')) {
+foreach ($t in @(
+  'ContinuumNodeMpcAuthWatcher',
+  'ContinuumNodeMpcAuthWatcherPoll',
+  'ContinuumNodeMpcAuthFirewall',
+  'ContinuumNodeMpcAuthFirewallPoll'
+)) {
   schtasks /Query /TN $t 2>$null | Out-Null
   if ($LASTEXITCODE -eq 0) {
     schtasks /Delete /TN $t /F
@@ -24,6 +29,10 @@ foreach ($t in @('ContinuumNodeMpcAuthWatcher', 'ContinuumNodeMpcAuthWatcherPoll
     Write-Host "Scheduled task $t not present."
   }
 }
+
+Get-NetFirewallRule -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -like 'ContinuumMPC-allow-*' -or $_.Name -like 'ContinuumMPC-ssh-ban-*' } |
+  ForEach-Object { Remove-NetFirewallRule -Name $_.Name -ErrorAction SilentlyContinue }
 
 if ($failed) { exit 1 }
 exit 0

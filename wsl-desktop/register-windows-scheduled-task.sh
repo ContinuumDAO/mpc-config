@@ -33,3 +33,7 @@ if command -v wslpath >/dev/null 2>&1; then
 fi
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$WIN_PS1" -Distro "$DISTRO"
+
+if [[ -f "${HERE}/register-windows-firewall.sh" ]]; then
+	bash "${HERE}/register-windows-firewall.sh" || echo "warning: Windows Firewall task was not registered" >&2
+fi

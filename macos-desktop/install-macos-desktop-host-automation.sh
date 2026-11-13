@@ -170,6 +170,11 @@ if [[ "$SKIP_LAUNCHAGENT" != true ]]; then
 	bash "${MACOS_ROOT}/install-launchagent.sh" --repo-dir "$REPO_DIR"
 fi
 
+log "Installing macOS packet filter caps"
+if ! bash "${MACOS_ROOT}/mpc-auth-firewall-macos.sh" --install; then
+	warn "macOS firewall anchor was not installed — re-run ${MACOS_ROOT}/mpc-auth-firewall-macos.sh --install"
+fi
+
 log "macOS desktop host automation ready."
 log "  status: ${MACOS_ROOT}/status-watcher.sh"
 log "  log:    ${MACOS_ROOT}/watcher.log"

@@ -15,6 +15,8 @@ if ! command -v powershell.exe >/dev/null 2>&1; then
 	echo "warning: powershell.exe not found — delete Scheduled Tasks from Windows:" >&2
 	echo "  schtasks /Delete /TN ContinuumNodeMpcAuthWatcher /F" >&2
 	echo "  schtasks /Delete /TN ContinuumNodeMpcAuthWatcherPoll /F" >&2
+	echo "  schtasks /Delete /TN ContinuumNodeMpcAuthFirewall /F" >&2
+	echo "  schtasks /Delete /TN ContinuumNodeMpcAuthFirewallPoll /F" >&2
 	exit 0
 fi
 

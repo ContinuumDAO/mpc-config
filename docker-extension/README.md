@@ -26,11 +26,11 @@ Common flow:
 
 The extension **backend image is UI-only** (no baked `/mpc-config`, no `docker.sock`). Config, keys, and compose bind mounts live under **`~/mpc-config`** on the host (WSL on Windows; home directory on Linux and macOS).
 
-**Windows profile:** no apt docker, no UFW, no systemd; pip/venv Python deps in WSL; WSL pending-update watcher.
+**Windows profile:** no apt docker, no UFW, no systemd; pip/venv Python deps in WSL; WSL pending-update watcher. Host firewall rules are Windows Firewall rules installed by `wsl-desktop/` (not inside the Docker VM).
 
 **Linux profile:** distro packages except Docker (apt on Ubuntu/Debian; pacman on Arch, Omarchy, Manjaro, EndeavourOS, Garuda, CachyOS, and ArcoLinux), UFW + systemd via provision; requires **passwordless sudo** for the install step (extension cannot enter a password). Artix, Obarun, and SteamOS are not supported.
 
-**macOS profile:** Homebrew packages (`wireguard-tools`, `socat`, `yq`); no UFW/systemd; **passwordless sudo** for `/var/lib/mpc-auth-docker`; macos-desktop pending watcher + launchd LaunchAgent.
+**macOS profile:** Homebrew packages (`wireguard-tools`, `socat`, `yq`); no UFW/systemd; **passwordless sudo** for `/var/lib/mpc-auth-docker`; macos-desktop pending watcher + launchd LaunchAgent. Host connection caps are a pf anchor on the router-facing interface, installed by `macos-desktop/` (not inside the Docker VM).
 
 ## Prerequisites (end users)
 

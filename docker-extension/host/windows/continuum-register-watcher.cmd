@@ -34,4 +34,10 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo Registered logon + 5-minute tasks for distro %DISTRO%.
+
+"%WSL%" -d %DISTRO% -- bash -lc "test -f ~/mpc-config/wsl-desktop/register-windows-firewall.sh && bash ~/mpc-config/wsl-desktop/register-windows-firewall.sh"
+if %ERRORLEVEL% neq 0 (
+  echo warning: Windows firewall task was not registered — from WSL: bash ~/mpc-config/wsl-desktop/register-windows-firewall.sh >&2
+)
+
 exit /b 0
