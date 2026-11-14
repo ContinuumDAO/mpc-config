@@ -986,13 +986,6 @@ rules:
         - my own plugin
         - custom plugin
         - new plugin
-        - adapt a plugin
-        - adapt this plugin
-        - turn into a plugin
-        - convert to a plugin
-        - pi plugin
-        - claude plugin
-        - codex plugin
         - extension/index.js
         - defimodules
         - marketmodules
@@ -1001,11 +994,42 @@ rules:
     hint: |
       Operator wants a plugin written or adapted. The host loads mpa-plugin-author and mpa-plugin-review.
       It also loads mpa-plugin-libraries when the ask names DeFi, an indicator, or an import.
+      Call find_library_function before choosing an export. It returns the import path, export name,
+      arguments, and return fields.
       Write under user_folder/plugins/<name>/ with agent_create_plugin, then agent_install_plugin on that
       local path. Call agent_smoke_plugin with the new tool name and a sample argument, and quote its result.
       Smoke does not enable the plugin, open the permission card, or grant net, shell, or writes.
       Show the mpa-plugin-review recommendation and wait. Do not call agent_enable_plugin until the
       operator agrees. Do not publish unless asked.
+    modes: [interactive]
+
+  - id: plugin_author_adapt
+    tier: work
+    match:
+      anySubstring:
+        - adapt a plugin
+        - adapt this plugin
+        - turn into a plugin
+        - convert a plugin
+        - convert this plugin
+        - convert to a plugin
+        - port a plugin
+        - port this plugin
+        - migrate a plugin
+        - import a plugin
+        - claude plugin
+        - claude-plugin
+        - .claude-plugin
+        - codex plugin
+        - pi plugin
+    hint: |
+      Operator wants a Pi, Claude, or Codex package turned into an MPA plugin. Ask for the
+      directory path under user_folder. A GitHub or marketplace link is not a path. Call
+      agent_adapt_plugin with that path. It writes mpa-plugin.json and a slash prompt and leaves
+      the original manifest in place. Then agent_install_plugin on that directory, show the
+      mpa-plugin-review recommendation, and agent_smoke_plugin when the package has an entrypoint.
+      Do not start from agent_create_plugin. Do not enable until the operator agrees. Do not
+      publish unless asked.
     modes: [interactive]
 
   - id: plugin_author_manage
