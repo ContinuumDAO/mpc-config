@@ -51,6 +51,7 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 | **`stock-research-watchlist`** | Draft a watchlist and write it only after yes |
 | **`stock-research-alerts`** | 52-week-high price alerts as cron jobs, after yes. No trade submit |
 | **`mpa-plugin-author`** | Search, install, adapt, and create MPA Wallet plugins under `user_folder/plugins`. Optional `defiModules` and `marketModules` name library subpaths the entrypoint may import |
+| **`mpa-plugin-libraries`** | Export names, subpaths, and inputs for a plugin that imports DeFi or technical analysis. Load from **`mpa-plugin-author`** while writing the entrypoint |
 | **`mpa-plugin-review`** | Recommend install or not before any permission approval. Machine defaults live in host YAML **`mpa-plugin-review.yaml`** |
 
 Machine-editable host YAML is **not** under **`Skills/`**. Those files live at **`agent_llm_config.defaults/*.yaml`** (and **`cron/trade-cron.yaml`**) and appear on the Skills / Cron tabs as **Host YAML configs**.

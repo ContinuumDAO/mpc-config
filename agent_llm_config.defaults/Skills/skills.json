@@ -236,6 +236,11 @@
       "initialLoad": false
     },
     {
+      "name": "mpa-plugin-libraries",
+      "filename": "mpa-plugin-libraries/SKILL.md",
+      "initialLoad": false
+    },
+    {
       "name": "mpa-plugin-review",
       "filename": "mpa-plugin-review/SKILL.md",
       "initialLoad": false

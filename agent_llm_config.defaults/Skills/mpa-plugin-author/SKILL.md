@@ -16,6 +16,7 @@ These tools are added to the chat only after this skill is loaded. A plugin's ow
 - `agent_enable_plugin` / `agent_disable_plugin` / `agent_uninstall_plugin` — `agent_enable_plugin` with `confirmPermissions: true` is the permission card. Call it only after the operator has seen the review recommendation and asked to continue.
 - `agent_adapt_plugin` — `path` under `user_folder` to a Pi, Claude (`.claude-plugin/plugin.json`), or Codex (`plugin.json`) package. Writes `mpa-plugin.json` and a slash prompt. Leaves the original manifest in place. Lists Pi APIs this worker does not run (`registerFlag`, providers, shortcuts).
 - `agent_create_plugin` — local draft only. `name` (kebab-case) and `description`. Optional `skillBody` and `promptBody`. This does not publish.
+- `agent_smoke_plugin` — `name` of an installed plugin, `tool` as registered in the entrypoint, optional `arguments` object. Runs that tool once in the worker and returns the result or the error. Does not enable the plugin, open the permission card, or grant net, shell, or writes. DeFi and market-data subpaths in the manifest are available. Call it after a local install and quote the result before asking the operator to enable.
 - `agent_create_plugin_new_version` — publish the local plugin. Pass a public `repository` (`https://github.com/owner/name`) and the full 40-character `commit`. Add `path` when the plugin is a directory inside that repository. The commit must already contain the same files, including `mpa-plugin.json` with this release’s version, version date, node key, veCTM id, GroupId, and KeyGen address. The catalog refuses the release when the files differ. A private repository cannot be published. The node must have veCTM privilege, and `keyGenId` (or the preferred KeyGen) must be a multi-agree KeyGen in that GroupId. The first release is `v1.0.0`. A later version is chosen by the author, must be greater, must use the same repository and path, and must be signed by the same KeyGen, veCTM id, and GroupId. The tool opens a `multiSignRequest`. After members `signRequestAgree` and the signature is triggered, call it again with `requestId`.
 - `agent_update_plugin` — replace the installed copy with the repository's current signed version. Older packages remain in the repository. A changed entrypoint needs approval again.
 
@@ -65,22 +66,22 @@ Tool names are exposed as `plugin_<name>_<tool>`. The worker does not receive ma
 
 Leave `defiModules` and `marketModules` off when the plugin only needs its own code. `hello-mpa` is that shape. Name a subpath only when the entrypoint imports it. The node image supplies the packages. The plugin does not run `npm install`.
 
-`defiModules` allows `@continuumdao/ctm-mpc-defi/<subpath>`. Use one protocol, plus `core` when that protocol needs it: `protocols/evm/aerodrome`, `protocols/evm/aave-v4`, `protocols/evm/uniswap-v4`. `marketModules` allows `@continuumdao/ctm-market-data/<subpath>`: `ta`, `ohlcv`, `trade-ideas`, and a deeper path such as `chart/prepare`. A subpath is a package export without a leading slash. `..` is refused.
+Load **`mpa-plugin-libraries`** before writing that entrypoint. It lists the export to call, the `defiModules` or `marketModules` subpath, and the inputs. Use those export names. Do not call `ctm_*` tools or `load_defi_protocol` from the entrypoint, and do not import `@continuumdao/continuum-node-sdk`. An import that is not listed throws. A subpath has no leading slash, and `..` is refused.
 
 ```js
 export default async function (pi) {
-  const ta = await pi.importMarket('ta')
   const aero = await pi.importDefi('protocols/evm/aerodrome')
   pi.registerTool({
     name: 'quote',
-    async execute() {
-      return 'unsigned payload for the agent'
+    async execute(args) {
+      const quoted = await aero.aerodromeQuote(args)
+      return JSON.stringify(quoted)
     },
   })
 }
 ```
 
-`importMarket('ta')` and `importDefi('protocols/evm/aerodrome')` are the same imports as the package specifiers above. An import that is not listed throws. Do not import `@continuumdao/continuum-node-sdk`. That package is the agent's tool catalog. The entrypoint returns text or an unsigned payload. The agent opens the sign request afterwards. `build_trade_from_*` stays an agent tool.
+`importDefi('protocols/evm/aerodrome')` requires `defiModules` to include `protocols/evm/aerodrome`. The tool returns that result. A build export returns an unsigned payload. The agent opens the sign request afterwards. `build_trade_from_*` stays an agent tool. Technical analysis exports (`calculateTechnicalIndicator`, `analyzeMovingAverages`, `tradeIdeaFromAnalyzeOutput`) are in the same index under market data.
 
 ## Index
 

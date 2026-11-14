@@ -967,3 +967,70 @@ rules:
       Automated jobs must not execute agreementKind railgun_spend.
     boostGroups: ["defi:railgun:trading", "registry_address_book"]
     modes: [interactive, cron]
+
+  - id: plugin_author_create
+    tier: work
+    match:
+      anySubstring:
+        - create a plugin
+        - write a plugin
+        - make a plugin
+        - build a plugin
+        - draft a plugin
+        - code a plugin
+        - coding a plugin
+        - plugin that
+        - plugin which
+        - plugin for
+        - plugin to
+        - my own plugin
+        - custom plugin
+        - new plugin
+        - adapt a plugin
+        - adapt this plugin
+        - turn into a plugin
+        - convert to a plugin
+        - pi plugin
+        - claude plugin
+        - codex plugin
+        - extension/index.js
+        - defimodules
+        - marketmodules
+        - importdefi
+        - importmarket
+    hint: |
+      Operator wants a plugin written or adapted. The host loads mpa-plugin-author and mpa-plugin-review.
+      It also loads mpa-plugin-libraries when the ask names DeFi, an indicator, or an import.
+      Write under user_folder/plugins/<name>/ with agent_create_plugin, then agent_install_plugin on that
+      local path. Call agent_smoke_plugin with the new tool name and a sample argument, and quote its result.
+      Smoke does not enable the plugin, open the permission card, or grant net, shell, or writes.
+      Show the mpa-plugin-review recommendation and wait. Do not call agent_enable_plugin until the
+      operator agrees. Do not publish unless asked.
+    modes: [interactive]
+
+  - id: plugin_author_manage
+    tier: work
+    match:
+      anySubstring:
+        - install a plugin
+        - install the plugin
+        - install plugin
+        - search plugins
+        - find a plugin
+        - list plugins
+        - update a plugin
+        - update the plugin
+        - uninstall the plugin
+        - uninstall plugin
+        - disable the plugin
+        - enable the plugin
+        - publish a plugin
+        - publish the plugin
+        - plugin catalog
+        - mpaplugins
+    hint: |
+      Operator wants an existing plugin found, installed, updated, or published. The host loads
+      mpa-plugin-author and mpa-plugin-review. Search the index, show the review recommendation,
+      and wait for an explicit yes before agent_enable_plugin. Do not write a new package unless
+      they asked for one. Do not publish unless they asked.
+    modes: [interactive]
