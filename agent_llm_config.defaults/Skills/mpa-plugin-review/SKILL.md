@@ -35,6 +35,8 @@ pluginReview:
 
 Each value is `accept` or `reject`. `defaultAction` applies when a finding has no rule. `cleanAction` applies when the audit has no risk findings. A missing rule uses `defaultAction`.
 
+`defiModules` and `marketModules` are not risk ids. When the manifest lists them, name each subpath in the recommendation. They allow the entrypoint to import `@continuumdao/ctm-mpc-defi` and `@continuumdao/ctm-market-data`. They do not grant management keys or open a sign request.
+
 ## Appraisal
 
 1. Install or update first. Those tools copy the package and return the audit plus a recommendation. They do not open the permission card.

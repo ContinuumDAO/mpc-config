@@ -37,7 +37,7 @@ plugins/<name>/
   extension/index.js    # optional
 ```
 
-`mpa-plugin.json` fields: `name`, `version`, `description`, `skills`, `prompts`, optional `mcp`, optional `entrypoint`, `permissions`, optional `agentReputation`. A published package also has `versionDate`, `nodeKey`, `veCtmId`, `groupId`, and `keyGenAddress`.
+`mpa-plugin.json` fields: `name`, `version`, `description`, `skills`, `prompts`, optional `mcp`, optional `entrypoint`, `permissions`, optional `defiModules`, optional `marketModules`, optional `agentReputation`. A published package also has `versionDate`, `nodeKey`, `veCtmId`, `groupId`, and `keyGenAddress`.
 
 `agentReputation` reserves the EIP-8004 identity. When present, `standard` is `EIP-8004`. Optional `chainId`, `agentRegistry` (`eip155:<chainId>:0x…`), and `agentId` are stored for a later reputation check and are not resolved now.
 
@@ -60,6 +60,27 @@ export default function (pi) {
 ```
 
 Tool names are exposed as `plugin_<name>_<tool>`. The worker does not receive management keys or signing RPCs. `fetch` throws unless network was granted.
+
+## Libraries
+
+Leave `defiModules` and `marketModules` off when the plugin only needs its own code. `hello-mpa` is that shape. Name a subpath only when the entrypoint imports it. The node image supplies the packages. The plugin does not run `npm install`.
+
+`defiModules` allows `@continuumdao/ctm-mpc-defi/<subpath>`. Use one protocol, plus `core` when that protocol needs it: `protocols/evm/aerodrome`, `protocols/evm/aave-v4`, `protocols/evm/uniswap-v4`. `marketModules` allows `@continuumdao/ctm-market-data/<subpath>`: `ta`, `ohlcv`, `trade-ideas`, and a deeper path such as `chart/prepare`. A subpath is a package export without a leading slash. `..` is refused.
+
+```js
+export default async function (pi) {
+  const ta = await pi.importMarket('ta')
+  const aero = await pi.importDefi('protocols/evm/aerodrome')
+  pi.registerTool({
+    name: 'quote',
+    async execute() {
+      return 'unsigned payload for the agent'
+    },
+  })
+}
+```
+
+`importMarket('ta')` and `importDefi('protocols/evm/aerodrome')` are the same imports as the package specifiers above. An import that is not listed throws. Do not import `@continuumdao/continuum-node-sdk`. That package is the agent's tool catalog. The entrypoint returns text or an unsigned payload. The agent opens the sign request afterwards. `build_trade_from_*` stays an agent tool.
 
 ## Index
 
