@@ -992,12 +992,14 @@ rules:
         - importdefi
         - importmarket
     hint: |
-      Operator wants a plugin written or adapted. The host loads mpa-plugin-author and mpa-plugin-review.
+      Operator wants a plugin written. The host loads mpa-plugin-author and mpa-plugin-review.
       It also loads mpa-plugin-libraries when the ask names DeFi, an indicator, or an import.
-      Call find_library_function before choosing an export. It returns the import path, export name,
-      arguments, and return fields.
-      Write under user_folder/plugins/<name>/ with agent_create_plugin, then agent_install_plugin on that
+      A skill and prompt only, with no library import and no entrypoint, stays in this chat.
+      Write it under user_folder/plugins/<name>/ with agent_create_plugin, then agent_install_plugin on that
       local path. Call agent_smoke_plugin with the new tool name and a sample argument, and quote its result.
+      If the plugin needs find_library_function, a library export, or an entrypoint that imports a module,
+      stop. Do not call find_library_function in this chat. Tell the operator to open a plan and choose
+      Create a plugin. If this thread is already a plugin plan, continue that interview.
       Smoke does not enable the plugin, open the permission card, or grant net, shell, or writes.
       Show the mpa-plugin-review recommendation and wait. Do not call agent_enable_plugin until the
       operator agrees. Do not publish unless asked.

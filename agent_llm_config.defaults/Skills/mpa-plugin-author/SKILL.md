@@ -70,7 +70,7 @@ Tool names are exposed as `plugin_<name>_<tool>`. The worker does not receive ma
 
 Leave `defiModules` and `marketModules` off when the plugin only needs its own code. `hello-mpa` is that shape. Name a subpath only when the entrypoint imports it. The node image supplies the packages. The plugin does not run `npm install`.
 
-Call `find_library_function` with the technique you need. It returns the import path, the export name, the purpose, the arguments, and the return fields. Load **`mpa-plugin-libraries`** for the full list. Use the export name. Do not call `ctm_*` tools or `load_defi_protocol` from the entrypoint, and do not import `@continuumdao/continuum-node-sdk`. An import that is not listed throws. A subpath has no leading slash, and `..` is refused.
+In a normal chat, if this plugin needs `find_library_function`, a library export, or an entrypoint import, stop and tell the operator to open a plan and choose Create a plugin. Do not search from that chat. In a plugin plan, the specialist calls `find_library_function`. It returns the import path, the export name, the purpose, the arguments, and the return fields. Load **`mpa-plugin-libraries`** for the full list. Use the export name. Do not call `ctm_*` tools or `load_defi_protocol` from the entrypoint, and do not import `@continuumdao/continuum-node-sdk`. An import that is not listed throws. A subpath has no leading slash, and `..` is refused.
 
 ```js
 export default async function (pi) {

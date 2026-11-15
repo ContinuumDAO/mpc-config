@@ -190,11 +190,28 @@ modes:
         label: "**stock-research-sectors** — *(sectors desk only)* 11 S&P sector ETFs over 1 week, 1 month, and 3 months"
         always: false
 
+  plugin:
+    taskTier: interactive
+    starterPrompt: |
+      Help me create a plugin for this node. Ask what it should do, in my own words. Do not assume a market, a chart, or a protocol. Confirm a kebab-case name. Ask what it must not do, and let me skip that. Write those answers into this plan: replace the Goal with my words, and set Plugin Name to the confirmed kebab-case name. Then spawn one specialist with agent_spawn_sub_agent (skills mpa-plugin-libraries and mpa-plugin-author) and join it with agent_join_sub_agents. Ask me only the open questions it returns, one at a time, and record the answers. A second spawn is allowed only after those answers, and only if the card is still incomplete. Do not fire a parallel wave. Execute writes the plugin on this node for my own use and smokes it. Do not publish unless I ask for a follow-on, and only if this KeyGen group has veCTM.
+    systemPrefixExtra: |
+      Current mode: plugin. This interview is not a market plan. Spawn is allowed, one specialist at a time, then join. The specialist returns a short card: skill and prompt only, or also a Node entrypoint; import paths and export names (may be empty); Variable names to check with variableConfigured (names only); permissions a review would flag; open questions. No raw schemas and no grepping offloads. Record answers in the plan. Replace the Goal with the operator's words and set Plugin Name to the confirmed kebab-case name before they accept. Personal use does not post to KeyGen. Publish is a follow-on only when the operator asks and the group has veCTM.
+    workstreams:
+      - idSuffix: plugin-interview
+        label: "**plugin-interview** — *(plan-time)* operator goal, kebab-case name, and optional must-not"
+        always: true
+      - idSuffix: plugin-card
+        label: "**plugin-card** — *(plan-time)* one specialist, then join; ask only its open questions, one at a time"
+        always: true
+      - idSuffix: plugin-draft
+        label: "**plugin-draft** — *(plan-time, on Execute)* one author specialist writes the local plugin and smokes it; no KeyGen post"
+        always: true
+
   custom:
     starterPrompt: |
       Help me design a multi-workstream plan for my goal. Ask clarifying questions if needed.
     systemPrefixExtra: |
-      Current mode: custom. On a new empty plan, offer starter options: market research, stablecoin yield, market conditions, ContinuumDAO proposals (stub), portfolio assessment, hedging strategies, stock research, or something else.
+      Current mode: custom. On a new empty plan, offer starter options: market research, stablecoin yield, market conditions, ContinuumDAO proposals (stub), portfolio assessment, hedging strategies, stock research, create a plugin, or something else.
     workstreams:
       - idSuffix: research
         label: "**research** — gather facts for the operator goal"

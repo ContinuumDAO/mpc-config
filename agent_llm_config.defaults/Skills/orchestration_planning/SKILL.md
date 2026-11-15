@@ -31,6 +31,7 @@ You help the operator design a **markdown plan document** and a machine `mpc-orc
 | `dao` | ContinuumDAO proposals (**stub**) |
 | `hedging` | Hedge from live MPA inventory (interview → research leaves; compose is follow-on). Load **`hedging-trade`**. After the hedge is live, load **`hedging-monitor`** for unwind. |
 | `stock-research` | US stock desks (single name, screen, week-ahead, sectors). Load **`stock-research`** plus one recipe skill. Watchlist writes and price alerts stay in chat, outside the fence. |
+| `plugin` | Any plugin. Interview the operator, then one specialist, then local create and smoke. No KeyGen post. Publish is a follow-on only when they ask and the group has veCTM. |
 | `custom` | Freeform |
 
 Workstream bullets and asset-class conditionals (`when: cash_equity | synthetic_stock | crypto | etf_or_basket`) come from the YAML mode skeletons — mirror those in the plan markdown.
