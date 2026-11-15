@@ -42,6 +42,8 @@ plugins/<name>/
 
 `variables` lists Variable names. The entrypoint checks `pi.variableConfigured(name)`, which is true or false. It does not receive the value.
 
+`pi.preferredKeyGenAddress()` returns the node's current preferred KeyGen Ethereum address (`0x` and 40 hex characters). The host resolves it when the tool or hook runs. It throws when no preferred KeyGen is set. Do not import the node SDK to read it, and do not hard-code an address. Use a different address only when the operator named one.
+
 `secrets` binds a Variable name to a library argument: `{ "variable": "MY_API_KEY", "field": "apiKey", "exports": ["myQuote"] }`. `exports` limits the fill to those functions. Omit `exports` to fill that argument on every function from an imported module. DeFi modules also export `trustedVariableBindings` for their own arguments. The host reads those bindings. Do not read `process.env` for a Variable, and do not pass the secret as a tool argument.
 
 `agentReputation` reserves the EIP-8004 identity. When present, `standard` is `EIP-8004`. Optional `chainId`, `agentRegistry` (`eip155:<chainId>:0x…`), and `agentId` are stored for a later reputation check and are not resolved now.

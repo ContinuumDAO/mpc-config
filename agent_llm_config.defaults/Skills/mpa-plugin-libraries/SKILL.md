@@ -5,7 +5,7 @@ description: Function index for a plugin entrypoint that imports DeFi or technic
 
 # Plugin libraries
 
-Load this before writing an entrypoint that imports DeFi or market data. Call the export names below. Do not call `ctm_*` tools, `load_defi_protocol`, or `@continuumdao/continuum-node-sdk` from the entrypoint. Return the function result. A build function returns an unsigned payload. The agent opens the sign request.
+Load this before writing an entrypoint that imports DeFi or market data. Call the export names below. Do not call `ctm_*` tools, `load_defi_protocol`, or `@continuumdao/continuum-node-sdk` from the entrypoint. The preferred KeyGen Ethereum address is `pi.preferredKeyGenAddress()`, not a library export. Return the function result. A build function returns an unsigned payload. The agent opens the sign request.
 
 The DeFi list is generated from the tool catalog. `npm test` in ctm-mpc-defi fails when a protocol was added or updated and this list was not regenerated. `npm run build` writes it again.
 
