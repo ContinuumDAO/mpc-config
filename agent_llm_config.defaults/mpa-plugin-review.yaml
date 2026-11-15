@@ -19,3 +19,8 @@ pluginReview:
     skill-net: reject         # instructions tell the agent to fetch a URL or search
     skill-write: reject       # instructions tell the agent to write files
     key-material: reject      # text mentions node key material
+    protocol-library: reject # entrypoint rebuilds a covered protocol call instead of the library export
+    http-post: reject         # sends or accepts a POST request
+    http-put: reject          # sends or accepts a PUT request
+    http-patch: reject        # sends or accepts a PATCH request
+    http-delete: reject       # sends or accepts a DELETE request

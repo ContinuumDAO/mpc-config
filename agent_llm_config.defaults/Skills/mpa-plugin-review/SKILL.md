@@ -31,11 +31,20 @@ pluginReview:
     skill-net: reject
     skill-write: reject
     key-material: reject
+    protocol-library: reject
+    http-post: reject
+    http-put: reject
+    http-patch: reject
+    http-delete: reject
 ```
 
 Each value is `accept` or `reject`. `defaultAction` applies when a finding has no rule. `cleanAction` applies when the audit has no risk findings. A missing rule uses `defaultAction`.
 
 `defiModules` and `marketModules` are not risk ids. When the manifest lists them, name each subpath in the recommendation. They allow the entrypoint to import `@continuumdao/ctm-mpc-defi` and `@continuumdao/ctm-market-data`. They do not grant management keys or open a sign request.
+
+`protocol-library` means the entrypoint names a protocol the library already covers and builds that call with `Interface`, `encodeFunctionData`, or `pi.signRequest` without `pi.importDefi` of that protocol's module. The library export is the path that keeps the protocol's approve, slippage, and batch steps.
+
+`http-post`, `http-put`, `http-patch`, and `http-delete` mean the package sends or accepts that method: an Express route, a `fetch` or request whose method is that verb, or a shell `curl -X` of that verb. Each shipped rule is reject. GET is not one of these findings.
 
 ## Appraisal
 

@@ -7,6 +7,12 @@ description: Function index for a plugin entrypoint that imports DeFi or technic
 
 Load this before writing an entrypoint that imports DeFi or market data. Call the export names below. Do not call `ctm_*` tools, `load_defi_protocol`, or `@continuumdao/continuum-node-sdk` from the entrypoint. The preferred KeyGen Ethereum address is `pi.preferredKeyGenAddress()`, not a library export. Return the function result. A build function returns an unsigned payload. The agent opens the sign request.
 
+`ethers` may be imported from the package root. Use it to encode calldata and to read contracts. Do not construct `Wallet`, `HDNodeWallet`, `SigningKey`, or a mnemonic. A transaction returns `pi.signRequest({ chainId, to, data, value, purpose })`, which opens a multiSignRequest for the preferred KeyGen. The group reviews that request before anything is signed.
+
+`express` may be imported from the package root. `app.get`, `app.post`, `app.put`, `app.patch`, and `app.delete` are the route methods. `app.listen` needs `net:https` and listens on `127.0.0.1`. A POST, PUT, PATCH, or DELETE route or fetch is an `http-post`, `http-put`, `http-patch`, or `http-delete` review finding. The shipped rule for each is reject.
+
+`zod` may be imported from the package root as `{ z }`. Use it to check a request body or a tool argument.
+
 The DeFi list is generated from the tool catalog. `npm test` in ctm-mpc-defi fails when a protocol was added or updated and this list was not regenerated. `npm run build` writes it again.
 
 ## Market data

@@ -44,6 +44,12 @@ plugins/<name>/
 
 `pi.preferredKeyGenAddress()` returns the node's current preferred KeyGen Ethereum address (`0x` and 40 hex characters). The host resolves it when the tool or hook runs. It throws when no preferred KeyGen is set. Do not import the node SDK to read it, and do not hard-code an address. Use a different address only when the operator named one.
 
+`import { Interface, Contract, JsonRpcProvider, parseUnits } from 'ethers'` is available. The node image supplies the package. Do not construct `Wallet`, `HDNodeWallet`, `SigningKey`, or a mnemonic. Those throw, because a plugin has no private key. Encode the call, then return `pi.signRequest({ chainId, to, data, value, purpose })`. That opens a multiSignRequest for the preferred KeyGen. `purpose` is the text the group reviews. Nothing is broadcast until members accept it. A `JsonRpcProvider` needs `net:https`. Import the package root `ethers`, not a subpath.
+
+`import express from 'express'` is available. Use `express.json()` and `app.get`, `app.post`, `app.put`, `app.patch`, and `app.delete` for routes. `app.listen` needs `net:https` in the manifest and listens on `127.0.0.1`. Import the package root `express`, not a subpath. The review lists an Express import as network. A POST, PUT, PATCH, or DELETE route or fetch is an `http-post`, `http-put`, `http-patch`, or `http-delete` finding. The shipped rule for each is reject.
+
+`import { z } from 'zod'` is available. Use it to check a request body or a tool argument. Import the package root `zod`, not a subpath.
+
 `secrets` binds a Variable name to a library argument: `{ "variable": "MY_API_KEY", "field": "apiKey", "exports": ["myQuote"] }`. `exports` limits the fill to those functions. Omit `exports` to fill that argument on every function from an imported module. DeFi modules also export `trustedVariableBindings` for their own arguments. The host reads those bindings. Do not read `process.env` for a Variable, and do not pass the secret as a tool argument.
 
 `agentReputation` reserves the EIP-8004 identity. When present, `standard` is `EIP-8004`. Optional `chainId`, `agentRegistry` (`eip155:<chainId>:0x…`), and `agentId` are stored for a later reputation check and are not resolved now.
@@ -66,7 +72,7 @@ export default function (pi) {
 }
 ```
 
-Tool names are exposed as `plugin_<name>_<tool>`. The worker does not receive management keys or signing RPCs. `fetch` throws unless network was granted.
+Tool names are exposed as `plugin_<name>_<tool>`. The worker does not receive management keys or a private key. `pi.signRequest` opens a multi-sign request the group reviews. `fetch` throws unless network was granted.
 
 ## Libraries
 
