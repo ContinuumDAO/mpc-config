@@ -5,7 +5,7 @@ description: Function index for a plugin entrypoint that imports DeFi or technic
 
 # Plugin libraries
 
-Load this before writing an entrypoint that imports DeFi or market data. Call the export names below. Do not call `ctm_*` tools, `load_defi_protocol`, or `@continuumdao/continuum-node-sdk` from the entrypoint. The preferred KeyGen Ethereum address is `pi.preferredKeyGenAddress()`, not a library export. Return the function result. A build function returns an unsigned payload. The agent opens the sign request.
+Load this before writing an entrypoint that imports DeFi or market data. Call the export names below. Do not call `ctm_*` tools, `load_defi_protocol`, or `@continuumdao/continuum-node-sdk` from the entrypoint. The preferred KeyGen Ethereum address is `pi.preferredKeyGenAddress()`, not a library export. A library call returns `{ ok: true, data }` or `{ ok: false, reason }`. Read the fields below on `data` when `ok` is true. A build function returns an unsigned payload on `data`. The agent opens the sign request.
 
 `ethers` may be imported from the package root. Use it to encode calldata and to read contracts. Do not construct `Wallet`, `HDNodeWallet`, `SigningKey`, or a mnemonic. A transaction returns `pi.signRequest({ chainId, to, data, value, purpose })`, which opens a multiSignRequest for the preferred KeyGen. The group reviews that request before anything is signed.
 
