@@ -28,8 +28,8 @@ Call `listIndicatorCatalog` for the indicator list. Do not hard-code every id in
 
 `importMarket('ohlcv')`. `marketModules`: `ohlcv`.
 
+- `finalizeOhlcvFetch(fetchPayload)` — check candle integrity and return `{ kind, bars, fingerprint }`. Pass a DeFi OHLCV result or `{ bars }`. Return that object. Do not build a chart. The agent passes it as `fetchResult` to `prepare_chart_from_rows`.
 - `normalizeOhlcvRow` / `extractOhlcvBarsFromUnknown` — turn a fetch result into rows.
-- `prepareChartFromRows` — chart payload from those rows.
 - `analyzeMovingAverages({ rows, maType, fastPeriod, slowPeriod })` — SMA or EMA cross. `maType` is `sma` or `ema`. Omit the periods for SMA 50 and 200. Result `analysis.crossoverState` is `bullish`, `bearish`, or `none`.
 
 ### `trade-ideas`
