@@ -1,0 +1,7 @@
+# Variable names for built-in host features. Values stay in AI Agent → Variables.
+# Skills tab → Host YAML configs, or POST /resetHostYamlFromDefaults
+# with kind=trusted-substitutions.
+substitutions:
+  uniswapV4Chart:
+    theGraph: THE_GRAPH_API_KEY
+    bitquery: BITQUERY_API_KEY

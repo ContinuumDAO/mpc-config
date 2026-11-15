@@ -15,9 +15,10 @@ Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent
 | **`agent-intent-rules.yaml`** | Same name | Free-text intent → pack boost, **`always`** turn hints, **`loadMcpServers`**, optional **`verify`** (`interview` / `lookup` / `deliverable`), and vendor/protocol playbooks (never short-circuits the LLM). Host-parsed YAML; mpc-auth stays vendor-agnostic. |
 | **`continuum-dao-vote-policy.yaml`** | Same name | ContinuumDAO vote defaults (`trustedProposers`, `defaultAction`, type/signature/target/scam rules). Committee addresses are **not** in this file — agents fetch Constitution **Committee List**. Host-parsed YAML; injected when the **`continuum-dao-vote-policy`** skill loads. |
 | **`mpa-plugin-review.yaml`** | Same name | MPA plugin install recommendation (`defaultAction`, `cleanAction`, per-risk `accept` / `reject`). Host-parsed YAML; injected when the **`mpa-plugin-review`** skill loads. The permission card comes after that recommendation. |
+| **`trusted-substitutions.yaml`** | Same name | Variable names for built-in host features (Uniswap V4 chart: `THE_GRAPH_API_KEY`, `BITQUERY_API_KEY`). Values stay in Variables. Host-parsed YAML; edit via **Host YAML configs** (`kind=trusted-substitutions`). |
 | **`Skills/`** | Same path | Agent skills: **`skills.json`** manifest plus **`.md`** / **`.txt`** bodies. |
 
-### Host YAML configs (`trade-desk.yaml`, `orchestration-plan.yaml`, `agent-intent-rules.yaml`, `continuum-dao-vote-policy.yaml`, `mpa-plugin-review.yaml`)
+### Host YAML configs (`trade-desk.yaml`, `orchestration-plan.yaml`, `agent-intent-rules.yaml`, `continuum-dao-vote-policy.yaml`, `mpa-plugin-review.yaml`, `trusted-substitutions.yaml`)
 
 These are **not** agent Skills. mpc-auth loads them at plan/trade/turn time (mtime-aware cache); vote policy is injected when the **`continuum-dao-vote-policy`** skill loads, and plugin review is injected when the **`mpa-plugin-review`** skill loads. Ops model:
 
