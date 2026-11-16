@@ -50,7 +50,9 @@ plugins/<name>/
 
 `import { z } from 'zod'` is available. Use it to check a request body or a tool argument. Import the package root `zod`, not a subpath.
 
-`secrets` binds a Variable name to a library argument: `{ "variable": "MY_API_KEY", "field": "apiKey", "exports": ["myQuote"] }`. `exports` limits the fill to those functions. Omit `exports` to fill that argument on every function from an imported module. DeFi modules also export `trustedVariableBindings` for their own arguments. The host reads those bindings. Do not read `process.env` for a Variable, and do not pass the secret as a tool argument.
+`secrets` binds a Variable name to a library argument: `{ "variable": "MY_API_KEY", "field": "apiKey", "exports": ["myQuote"] }`. `exports` limits the fill to those functions. Omit `exports` to fill that argument on every function from an imported module. DeFi modules also export `trustedVariableBindings` for their own arguments. The host reads those bindings and substitutes the Variable inside the worker, the same way a chart fetch substitutes `THE_GRAPH_API_KEY` without showing it. You do not copy a library binding into `variables` or `secrets` for that fill to happen, and you do not pass the value as a tool argument. `pi.variableConfigured(name)` stays true or false. The entrypoint never receives the value.
+
+Chat OHLCV tools (`ctm_*_fetch_ohlcv` and any slim `agentView`) return a summary. Candle rows are not in that JSON. A plugin that needs the rows calls the library export in the entrypoint (`uniswapV4FetchOhlcv` returns `candles`). Do not tell the agent to pass the chat summary in as `candles`.
 
 `agentReputation` reserves the EIP-8004 identity. When present, `standard` is `EIP-8004`. Optional `chainId`, `agentRegistry` (`eip155:<chainId>:0x…`), and `agentId` are stored for a later reputation check and are not resolved now.
 

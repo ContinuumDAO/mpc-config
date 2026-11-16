@@ -7,6 +7,10 @@ description: Function index for a plugin entrypoint that imports DeFi or technic
 
 Load this before writing an entrypoint that imports DeFi or market data. Call the export names below. Do not call `ctm_*` tools, `load_defi_protocol`, or `@continuumdao/continuum-node-sdk` from the entrypoint. The preferred KeyGen Ethereum address is `pi.preferredKeyGenAddress()`, not a library export. A library call returns `{ ok: true, data }` or `{ ok: false, reason }`. Read the fields below on `data` when `ok` is true. A build function returns an unsigned payload on `data`. The agent opens the sign request.
 
+Chat OHLCV tools return a slim summary and no candle rows. When the plugin needs rows, call the library export in the entrypoint. `uniswapV4FetchOhlcv` returns `candles`. Do not pass the chat summary in as `candles`.
+
+A DeFi module exports `trustedVariableBindings`. Each row names the Variable and the argument field (`theGraphApiKey` is `THE_GRAPH_API_KEY` on `uniswapV4FetchOhlcv`). The host substitutes the value in the worker. The agent does not see it, and the entrypoint does not pass it. You do not add that name to `secrets` for the fill to happen.
+
 `ethers` may be imported from the package root. Use it to encode calldata and to read contracts. Do not construct `Wallet`, `HDNodeWallet`, `SigningKey`, or a mnemonic. A transaction returns `pi.signRequest({ chainId, to, data, value, purpose })`, which opens a multiSignRequest for the preferred KeyGen. The group reviews that request before anything is signed.
 
 `express` may be imported from the package root. `app.get`, `app.post`, `app.put`, `app.patch`, and `app.delete` are the route methods. `app.listen` needs `net:https` and listens on `127.0.0.1`. A POST, PUT, PATCH, or DELETE route or fetch is an `http-post`, `http-put`, `http-patch`, or `http-delete` review finding. The shipped rule for each is reject.
