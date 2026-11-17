@@ -141,6 +141,11 @@
       "initialLoad": false
     },
     {
+      "name": "evm-foundry",
+      "filename": "evm-foundry/SKILL.md",
+      "initialLoad": false
+    },
+    {
       "name": "continuum-dao-tokenomics",
       "filename": "continuum-dao-tokenomics/SKILL.md",
       "initialLoad": false
