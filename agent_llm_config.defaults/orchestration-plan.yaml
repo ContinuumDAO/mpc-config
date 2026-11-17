@@ -204,7 +204,7 @@ modes:
         label: "**plugin-card** — *(plan-time)* one specialist, then join; ask only its open questions, one at a time"
         always: true
       - idSuffix: plugin-draft
-        label: "**plugin-draft** — *(plan-time, on Execute)* one author specialist writes the local plugin and smokes it; no KeyGen post"
+        label: "**plugin-draft** — *(plan-time, on Execute)* one author specialist writes the local plugin, smokes it, and fixes it until the smoke result does the Goal; no KeyGen post"
         always: true
 
   custom:
