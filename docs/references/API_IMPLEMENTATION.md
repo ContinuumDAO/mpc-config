@@ -281,6 +281,7 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /removeWorkspaceSkill`](#post-removeworkspaceskill) - Remove a workspace skill file (**management signature**)
 - [`POST /resetSkillsFromDefaults`](#post-resetskillsfromdefaults) - Overwrite bundled default skill files from **`agent_llm_config.defaults/Skills/`** (**management signature**; custom skills preserved)
 - [`POST /resetSkillFromDefaults`](#post-resetskillfromdefaults) - Overwrite **one** bundled default skill and update its sidecar (**management signature**)
+- [`POST /completePluginPublish`](#post-completepluginpublish) - Post a signed plugin release to the catalog (**management signature**)
 - [`GET /getHostYamlConfig`](#get-gethostyamlconfig) - Get editable host YAML by **`kind`** (installed runtime file or bundled defaults preview; upgrade metadata)
 - [`POST /upsertHostYamlConfig`](#post-upserthostyamlconfig) - Write host YAML after validation (**management signature**; preserves submitted bytes)
 - [`POST /resetHostYamlFromDefaults`](#post-resethostyamlfromdefaults) - Install or reset host YAML from **`agent_llm_config.defaults/`** (**management signature**; writes sidecar)
@@ -3879,6 +3880,23 @@ Each skill: **`initialLoad`** — when true, content is injected as a **system**
 **Behavior:** Copies the bundled default file into **`agent_llm_config/Skills/`**, updates **`skills.json`** (`initialLoad`, `filename`), and writes the applied-defaults sidecar. Custom skills not in the catalog cannot use this endpoint.
 
 **Response data:** Same shape as **`GET /getSkill`** (including sync metadata).
+
+### Agent plugins (catalog publish)
+
+The node opens a plugin release with the agent tool **`agent_create_plugin_new_version`**. That writes a pending tarball and a multi-sign request. After the group has signed and the signature exists, the dashboard **Publish plugin** button calls this route. The same completion is **`agent_create_plugin_new_version`** called again with **`requestId`**.
+
+<a id="post-completepluginpublish"></a>
+#### `POST /completePluginPublish`
+
+**Auth:** Management signature ([`nonce`, `clientSig`, `nodeKey`](#management-signatures-nodekey)). Canonical JSON to sign is `{"nonce":N,"clientSig":"","nodeKey":"<128-hex>","requestId":"<Sign…>"}` with **`clientSig` cleared** before signing.
+
+**Body:** `{ "requestId", "nonce", "clientSig", "nodeKey" }` — **`requestId`** is the multi-sign request opened for the release.
+
+**Behavior:** Reads the pending release and tarball for that request, checks the signature, and posts them to the plugin catalog. Removes the pending files after a successful post. There is no on-chain delivery for this signature.
+
+**Response data:** A string, for example `Published trade-bot-macd-uniswap v1.0.0. Read the code at ….`.
+
+**Errors:** **401** when the management signature does not match. **400** when **`requestId`** is missing, there is no pending publish, the signature is not ready, or the catalog rejects the package.
 
 ### Host YAML configs (editable)
 

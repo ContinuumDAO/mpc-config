@@ -3155,6 +3155,28 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/node.ResetSkillFromDefaultsPost'
+  /completePluginPublish:
+    post:
+      description: 'Post a signed plugin release to the catalog (management-signed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
+        (POST /completePluginPublish).'
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      tags:
+      - Agent automation
+      summary: Post a signed plugin release to the catalog (management-signed)
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/node.APIResponse'
+      parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/node.CompletePluginPublishPost'
   /listUserFolder:
     get:
       description: 'List entries under MPC_AUTH_USER_FOLDER (jailed) Full detail: mpc-config docs/references/API_IMPLEMENTATION.md
@@ -6980,3 +7002,16 @@ definitions:
         consumerNodeKey:
           type: string
           description: Consumer node public key (128-char hex, lowercase)
+  node.CompletePluginPublishPost:
+    type: object
+    allOf:
+    - *id002
+    - type: object
+      description: POST /completePluginPublish. Canonical JSON to sign has clientSig cleared. Reads the pending release for
+        a signed multiSignRequest and posts it to the plugin catalog.
+      required:
+      - requestId
+      properties:
+        requestId:
+          type: string
+          description: multiSignRequest id opened by agent_create_plugin_new_version, after the signature exists
