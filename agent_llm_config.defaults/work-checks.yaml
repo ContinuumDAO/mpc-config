@@ -1,0 +1,155 @@
+version: 1
+checks:
+  - id: evm_command
+    openRuleIds: [evm_forge]
+    openSubstrings:
+      - solidity
+      - ".sol"
+      - foundry script
+      - forge test
+      - forge script
+      - evm/src
+      - under evm/
+    rewriteSubstrings:
+      - rewrite
+      - upgrade the
+      - upgrade this
+      - migrate
+      - replace the contract
+      - replace this contract
+      - existing contract
+      - change the contract
+      - modify the contract
+      - update the contract
+    commandCriterion: forge_ran
+    commandSpec: >
+      A .sol file under evm/ is not done. Done is a dry-run forge script or forge
+      test on a fork of a chain configured on this node, with cwd evm/, using the
+      Solidity version the operator chose. The preferred KeyGen must cover the
+      dry-run gas estimate. Deployment is continuum__deploy_built_contract_multi_sign_request
+      after that dry-run, not forge --broadcast. On revert, quote the reason from that run.
+    diffCriterion: differential
+    diffSpec: This task rewrites an existing contract. Compare the old bytecode or an old cast call with the new one and report both.
+    cwdPrefixes: [evm]
+    commands:
+      - id: test
+        pattern: '(?i)\bforge\s+test\b'
+        chainFlag: '(?i)--fork-url\b'
+      - id: script
+        pattern: '(?i)\bforge\s+script\b'
+        requireFlag: '(?i)--(?:rpc-url|fork-url)\b'
+        forbidFlag: '(?i)--broadcast\b'
+        quoteRevert: true
+        chainFlag: '(?i)--(?:rpc-url|fork-url)\b'
+    revertPatterns:
+      - '(?i)execution reverted:?\s*([^\n]{1,180})'
+      - '(?i)\[FAIL(?:\.[^\]]*)?:\s*([^\]]+)\]'
+      - '(?i)revert(?:ed)?(?: with reason string)?[:\s]+[''"]?([^\n''"]{1,180})'
+    evidencePattern: '(?i)\bcast\s+(?:code|call)\b|\bforge\s+inspect\s+\S+\s+bytecode\b'
+    evidenceMin: 2
+    reportPairs:
+      - [old, new]
+      - [before, after]
+    gaps:
+      badCwd: "A .sol file under evm/ is not done. Run forge test, or a dry-run forge script on a fork, with cwd evm/."
+      forbidden: "A dry-run forge script must not use --broadcast. Use a fork (--rpc-url or --fork-url) with cwd evm/, or run forge test."
+      missingFlag: "A dry-run forge script has to run on a fork (--rpc-url or --fork-url) with cwd evm/. forge test with cwd evm/ is the other done signal."
+      sawOther: "A .sol file under evm/ is not done. Run forge test, or a dry-run forge script on a fork, with cwd evm/."
+      none: "A .sol file under evm/ is not done. Run forge test, or a dry-run forge script on a fork, with cwd evm/. On revert, quote the reason."
+      noExit: "The forge output has no exit line. Run it again with cwd evm/ and keep that output. On revert, quote the reason."
+      testFailed: "forge test failed with cwd evm/. Fix the contract and run forge test again. Failure: %s"
+      testFailedBare: forge test failed
+      quoteMissing: "Quote this revert from the dry-run forge script: %s"
+      quoteAbsent: "The dry-run forge script reverted. Quote the revert reason from that output."
+      diffAfter: "After the forge run, compare the old bytecode or an old cast call with the new one and report both."
+      diffAfterPass: "After forge test passes, compare the old bytecode or an old cast call with the new one and report both."
+      diffAfterQuote: "After the revert is quoted, compare the old bytecode or an old cast call with the new one and report both."
+      diffRewrite: "This is a rewrite. Compare the old bytecode (cast code) or an old cast call with the new one, and report both. A new contract does not need that."
+      diffAfterFork: "After the fork dry-run, compare the old bytecode or an old cast call with the new one and report both."
+      diffAfterProfile: "After the Solidity compiler is loaded, compare the old bytecode or an old cast call with the new one and report both."
+    workspaceHint: "Place Foundry projects under evm/ (foundry.toml seeded). A .sol file is not done: dry-run forge test or forge script on a fork of a chain configured on this node, cwd evm/, and quote a revert. The preferred KeyGen must cover that dry-run estimate. Deployment is continuum__deploy_built_contract_multi_sign_request after that dry-run, not forge --broadcast. Compare old and new bytecode or cast call only when rewriting a contract."
+    chain:
+      serverId: etherscan
+      urlContains: mcp.etherscan.io
+      serverGap: "Enable the official Etherscan MCP server (https://mcp.etherscan.io/mcp) and set ETHERSCAN_API_KEY before coding. The community server does not replace it. Deploys are finished only after that verification succeeds."
+      noChainGap: "Add an EVM chain with an RPC on this node before coding. The fork and the KeyGen gas check use that RPC."
+      readChainsGap: "Could not read the chains configured on this node: %s"
+      readServersGap: "Could not read MCP servers: %s"
+      forkGap: "End-to-end is a dry-run on a fork of chain %s (%s), cwd evm/. Use forge test --fork-url or forge script --rpc-url and do not pass --broadcast. On revert, quote the reason."
+      broadcastGap: "A deployment is a multi-sign request. After the dry-run, call continuum__deploy_built_contract_multi_sign_request. Do not pass --broadcast. The operator can call that same tool later."
+      deployToolContains: deploy_built_contract_multi_sign_request
+      deployGap: "The contract is built and tested. Create the deployment with continuum__deploy_built_contract_multi_sign_request and the dry-run run-latest.json. That multi-sign request is the broadcast, and the operator can call the same tool later. Report the requestId."
+      insufficientNeedle: insufficient funds
+      insufficientGap: "The preferred KeyGen does not have enough gas for this deploy. The dry-run reported insufficient funds. Do not broadcast."
+      missingEstimateGap: "Run a dry-run forge script on this chain's RPC with no --broadcast and keep the estimated amount required. Read the preferred KeyGen native balance on that chain. The balance must cover the estimate."
+      missingBalanceGap: "Read the preferred KeyGen native balance on this chain with agent_get_balance or cast balance and this node's RPC. Do not broadcast."
+      shortBalanceGap: "The preferred KeyGen balance %s wei is below the dry-run estimate %s wei. Do not broadcast."
+      amountEth: '(?i)estimated amount required:\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*eth'
+      gasUsed: '(?i)estimated total gas used[^0-9]*([0-9][0-9_]*)'
+      gasPriceGwei: '(?i)estimated gas price:\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*gwei'
+      rawWei: '(?i)raw:\s*([0-9]+)\s*wei'
+      requestId: '(?i)"requestId"\s*:\s*"([^"]+)"'
+      balanceCommandContains: cast balance
+      chainIdMarker: "chainId: "
+    profile:
+      file: evm/foundry.toml
+      section: "[profile.default]"
+      cacheDir: .svm
+      binaryName: "solc-{version}"
+      binaryFallback: solc
+      versionPattern: '^v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)$'
+      versionField: solidityVersion
+      distBase: https://binaries.soliditylang.org
+      elicitationKind: solidity_compiler
+      decline: the operator did not confirm the Foundry profile
+      unconfirmed: The operator has not confirmed the Foundry profile.
+      blockTail: " Do not start coding until this is resolved."
+      readError: "read %s: %s"
+      writeError: "pin profile in %s: %s"
+      versionError: "compiler version %q is not a release like 0.8.26"
+      platformError: "this node has no compiler download for %s/%s"
+      askIntro: "Confirm the Foundry profile before coding starts.\n\n"
+      noneInstalled: "None are installed on this node yet.\n"
+      installedLine: "Installed: %s.\n"
+      askBody: "\nEnter a Solidity version such as 0.8.26. If that compiler is not installed yet, it will be downloaded before forge runs. Optimizer, optimizer runs, via IR, and gas limit are filled with the defaults; change any of them before submitting."
+      chainIntro: "\n\nChain (one of the chains configured on this node):\n"
+      chainLine: "- %s — RPC %s\n"
+      chainFooter: "The end-to-end run forks that RPC. A dry-run, with no broadcast, checks that the preferred KeyGen can pay the deploy gas. After that dry-run, continuum__deploy_built_contract_multi_sign_request creates the multi-sign request that deploys it. The operator can call that same tool later."
+      reminder: "Foundry profile is pinned in %s before coding: solc_version %s, optimizer %t, optimizer_runs %d, via_ir %t, gas_limit %d. Solidity %s is installed under %s/%s. Use that compiler in the source pragma. Do not change these settings."
+      reminderChain: " Chain %s uses RPC %s. End-to-end is forge test --fork-url or a dry-run forge script on that RPC, cwd evm/, with no --broadcast. The preferred KeyGen native balance on that chain must cover the dry-run estimate. Then call continuum__deploy_built_contract_multi_sign_request with that dry-run file. That multi-sign request is the deployment, and the operator can call the same tool later."
+      chainField: chainId
+      chainTitle: Chain
+      chainDescription: A chain configured on this node. The fork and the gas check use its RPC.
+      chooseChain: choose one of the chains configured on this node
+      fields:
+        - form: solidityVersion
+          title: Solidity version
+          description: A published compiler version, for example 0.8.26. It is downloaded when it is not already under .svm/.
+          kind: version
+          fileKey: solc_version
+          quoted: true
+          required: true
+        - form: optimizer
+          title: Optimizer
+          description: optimizer in evm/foundry.toml.
+          kind: bool
+          defaultBool: true
+          fileKey: optimizer
+        - form: optimizerRuns
+          title: Optimizer runs
+          description: optimizer_runs. Default 200.
+          kind: uint
+          defaultUint: 200
+          fileKey: optimizer_runs
+        - form: viaIr
+          title: Via IR
+          description: via_ir. Default true.
+          kind: bool
+          defaultBool: true
+          fileKey: via_ir
+        - form: gasLimit
+          title: Gas limit
+          description: gas_limit. Default 10_000_000_000.
+          kind: uint
+          defaultUint: 10000000000
+          fileKey: gas_limit
