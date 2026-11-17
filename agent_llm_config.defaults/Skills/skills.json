@@ -146,6 +146,11 @@
       "initialLoad": false
     },
     {
+      "name": "evm-audit",
+      "filename": "evm-audit/SKILL.md",
+      "initialLoad": false
+    },
+    {
       "name": "continuum-dao-tokenomics",
       "filename": "continuum-dao-tokenomics/SKILL.md",
       "initialLoad": false

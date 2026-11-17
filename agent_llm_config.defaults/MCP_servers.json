@@ -414,6 +414,32 @@
       "initialLoad": false
     },
     {
+      "id": "quillshield",
+      "displayName": "QuillShield",
+      "searchTags": [
+        "quillshield",
+        "quill shield",
+        "smart contract audit"
+      ],
+      "setupUrl": "https://www.quillaudits.com/quillshield/developers/mcp-for-cursor-and-claude",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@quillaudits/mcp"
+      ],
+      "apiKeyEnvVar": "QUILLSHIELD_API_KEY",
+      "envVars": [
+        "QUILLSHIELD_API_KEY"
+      ],
+      "runtime": {
+        "requireCommands": [
+          "npx"
+        ]
+      },
+      "initialLoad": false
+    },
+    {
       "id": "etherscan-community",
       "displayName": "Etherscan (community stdio \u2014 not official)",
       "kind": "research-data",
