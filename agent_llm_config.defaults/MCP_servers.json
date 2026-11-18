@@ -1005,6 +1005,20 @@
         "TWITTER_ACCESS_SECRET"
       ],
       "initialLoad": false
+    },
+    {
+      "id": "postman",
+      "displayName": "Postman",
+      "searchTags": [
+        "postman",
+        "postman mcp",
+        "api collections"
+      ],
+      "setupUrl": "https://learning.postman.com/docs/developer/postman-api/postman-mcp-server/overview/",
+      "transport": "http",
+      "url": "https://mcp.postman.com/mcp",
+      "apiKeyEnvVar": "POSTMAN_API_KEY",
+      "initialLoad": false
     }
   ]
 }
