@@ -4,7 +4,8 @@
 WireGuard peers reach 10.8.0.1:8080. A raw TCP forward would deliver
 Host: localhost to the node, and the node treats that as a local caller of
 POST /signLocalEd25519Message. This proxy forces Host to the VPN address and
-sets X-Continuum-Vpn-Peer: 1.
+sets X-Continuum-Vpn-Peer: 1. The node then requires a read JWT on agent
+routes and refuses to sign with the on-disk management seed.
 """
 
 from __future__ import annotations
