@@ -111,7 +111,15 @@ checks:
       askIntro: "Confirm the Foundry profile before coding starts.\n\n"
       noneInstalled: "None are installed on this node yet.\n"
       installedLine: "Installed: %s.\n"
-      askBody: "\nEnter a Solidity version such as 0.8.26. If that compiler is not installed yet, it will be downloaded before forge runs. Optimizer, optimizer runs, via IR, and gas limit are filled with the defaults; change any of them before submitting."
+      askBody: "\nEnter a Solidity version such as 0.8.26. If that compiler is not installed yet, it will be downloaded before forge runs. Leave the version blank to choose a compiler already downloaded on this node, or to download a different one. Optimizer, optimizer runs, via IR, and gas limit are filled with the defaults; change any of them before submitting."
+      emptyVersionInstalled: "No Solidity version was entered. These compilers are already downloaded on this node under %s: %s.\nChoose one of them, or enter another version below to download it."
+      emptyVersionNone: "No Solidity version was entered, and this node has no Solidity compiler downloaded under %s yet. Enter a version such as 0.8.26 to download one."
+      versionStillEmpty: "No compiler version was selected. Choose a downloaded compiler, or enter a version to download."
+      versionChoiceTitle: Downloaded compiler
+      versionChoiceDescription: A Solidity compiler already downloaded on this node.
+      versionDownloadForm: solidityVersionDownload
+      versionDownloadTitle: Download another version
+      versionDownloadDescription: Leave this blank to use the compiler selected above. A version entered here is downloaded instead.
       chainIntro: "\n\nChain (one of the chains configured on this node):\n"
       chainLine: "- %s — RPC %s\n"
       chainFooter: "The end-to-end run forks that RPC. A dry-run, with no broadcast, checks that the preferred KeyGen can pay the deploy gas. After that dry-run, continuum__deploy_built_contract_multi_sign_request creates the multi-sign request that deploys it. The operator can call that same tool later."
