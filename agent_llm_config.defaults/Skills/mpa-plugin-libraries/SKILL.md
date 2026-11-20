@@ -352,7 +352,9 @@ Each line is `exportName` — what it does. Names in parentheses are the inputs 
 - `buildEvmMultisignBodyHyperliquidVaultWithdrawBatch` — Create and submit mpc-auth multiSignRequest for Hyperliquid vault withdraw (includes accrued PnL). Builds the unsigned batch, signs the management envelope, an… (chainId, vaultAddress, usdHuman)
 - `buildHyperliquidBorrowLendMultisign` — Supply, withdraw, borrow, or repay on Hyperliquid Core lend via L1 /exchange EIP-712 — not CoreWriter. No useCustomGas. trigger_sign_result without txParams; b… (chainId, coin, operation)
 - `buildHyperliquidBridgeWithdrawMultisign` — Create and submit mpc-auth multiSignRequest to withdraw USDC from Hyperliquid to Arbitrum via withdraw3 (EIP-712, delivered to /exchange). chainId 999 or 998.… (chainId, usdHuman)
+- `buildHyperliquidCoreToEvmHypeMultisign` — Create and submit mpc-auth multiSignRequest to move HyperCore spot HYPE to native HyperEVM HYPE on the same KeyGen address. EIP-712 sendAsset to the HYPE syste… (chainId, hypeHuman)
 - `buildHyperliquidCoreToEvmUsdcMultisign` — Create and submit mpc-auth multiSignRequest to move HyperCore spot USDC to native HyperEVM USDC (0xb88339… on mainnet) on the same KeyGen address. EIP-712 send… (chainId, usdHuman)
+- `buildHyperliquidEvmToCoreHypeMultisign` — Create and submit mpc-auth multiSignRequest to move native HyperEVM HYPE back to HyperCore spot. Native transfer to the HYPE system address 0x2222…2222. HyperE… (chainId, hypeHuman)
 - `buildHyperliquidEvmToCoreUsdcMultisign` — Create and submit mpc-auth multiSignRequest to move native HyperEVM USDC (0xb88339… on mainnet) back to HyperCore spot. Approves Circle USDC to CoreDepositWall… (chainId, usdHuman)
 - `buildHyperliquidTrailingStopMultisign` — Create and submit mpc-auth multiSignRequest for a Hyperliquid perp trailing stop (EIP-712 L1 trailingStop action to /exchange — no useCustomGas). Retracement i… (chainId, coin, szHuman, trailingOffsetHuman)
 - `buildHyperliquidUpdateLeverageMultisign` — Set per-market leverage (cross or isolated) on Hyperliquid via L1 /exchange EIP-712 signing — not CoreWriter. No useCustomGas. trigger_sign_result without txPa… (chainId, coin, leverage)
@@ -367,7 +369,7 @@ Each line is `exportName` — what it does. Names in parentheses are the inputs 
 - `hyperliquidFetchPositionsForExecutor` — Open Hyperliquid perp positions for executor (size, entry, uPnL, liq price, leverage, margin). (executorAddress)
 - `hyperliquidFetchStakingSummaryForExecutor` — HYPE staking summary: delegated and undelegated amounts. (executorAddress)
 - `hyperliquidFetchStockMarketsSummary` — HIP-3 / equity stock perps (xyz:AAPL, TSLA, …) with dex, displayName, and category. Trading only — not a savings APR. Native crypto: ctm_hyperliquid_fetch_mark…
-- `hyperliquidFetchUsdClassBalancesSummary` — Spot USDC available and perp withdrawable USD for spot↔perp transfers. (executorAddress)
+- `hyperliquidFetchUsdClassBalancesSummary` — Spot USDC available, spot HYPE available, and perp withdrawable USD. Use before spot↔perp USDC moves and Core spot ↔ HyperEVM USDC or HYPE moves. (executorAddress)
 - `hyperliquidFetchUserVaultEquitiesSummary` — USD equity the user holds in Hyperliquid vaults. (executorAddress)
 - `hyperliquidFetchVaultApysSummary` — Hyperliquid vault APRs sorted descending (HLP first). Use this for idle USDC yield compare — not HIP-3 stocks. Same catalog cap as fetch_vaults.
 - `hyperliquidFetchVaultCatalogSummary` — Vault catalog by TVL with APR (mainnet only; may take ~10–15s). Pass executorAddress to merge user-held vaults.
