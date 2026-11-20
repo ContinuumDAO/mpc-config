@@ -58,15 +58,28 @@ Each line is `exportName` — what it does. Names in parentheses are the inputs 
 
 `defiModules`: `protocols/evm/aave-v4`
 
-- `aaveV4FetchMarketsSummary` — List Aave v4 hub reserves on a chain with live supply/borrow APY, liquidity, and collateral factor. Use this (not web search) to compare lending rates or pick… (chainId)
-- `aaveV4FetchMarketSummary` — One Aave v4 reserve (or the same underlying across hubs) with supply/borrow APY and liquidity. Copy underlying + marketId for deposit/borrow/repay. Tickers OK… (chainId, underlying)
+- `aaveV4FetchMarketsSummary` — List Aave v4 reserves on a chain with supply/borrow APY, liquidity, collateral factor, and spoke address. Optional spoke or underlying filter. Includes zero-li… (chainId)
+- `aaveV4FetchMarketSummary` — One Aave v4 underlying across spokes, or on one spoke, with supply/borrow APY and liquidity. Copy underlying + spokeAddress. Tickers OK (USDT, AAPLc). Do not w… (chainId, underlying)
 - `aaveV4FetchMerklRewardsSummary` — Wallet-wide Merkl claimables for this address on a chain (not Aave-only). Pass keyGenId or user. Other venues’ campaigns can appear. rEUL is omitted. Follow wi… (chainId)
-- `aaveV4FetchStockMarketsSummary` — Coinbase tokenized stocks (bStocks) on the Aave v4 Coinbase Stocks hub, Base chainId 8453 by default. Equities (AAPLc, NVDAc, …) are collateral-only; USDC is t…
-- `buildEvmMultisignBodyAaveV4DepositBatch` — Build Aave v4 Spoke supply/deposit batch (wrap native, approve, supply). Base bStocks: marketId bstocks and underlying ticker (AAPLc) or address. Builds the un… (chainId, underlying, amountHuman)
+- `aaveV4FetchPositionManagers` — Position managers registered on a spoke. Copy address into the approve/revoke build tool. (chainId, spoke)
+- `aaveV4FetchPositionsSummary` — User positions on a chain: spoke address, health factor, risk premium, supplied and debt USD. positionId is required for condition updates and quotes. (chainId, user)
+- `aaveV4FetchSpokesSummary` — Spokes on a chain. A spoke is the market (Main, Lido, Coinbase Stocks, Sentora, Global Dollar, and so on). Copy address as spoke for every build tool. (chainId)
+- `aaveV4QuoteBorrowSwap` — Quote swapping an existing borrow on one spoke into another reserve. (chainId, user, spoke, amount, debtUnderlying, buyUnderlying)
+- `aaveV4QuoteLeverage` — Quote a leverage loop on one spoke. Returns minMultiplier and maxSafeMultiplier. multiplier must sit in that range. (chainId, user, spoke, collateralUnderlying, debtUnderlying, multiplier)
+- `aaveV4QuoteRepayWithSupply` — Quote repaying debt with a supplied asset on the same spoke. (chainId, user, spoke, amount, debtUnderlying, repayWithUnderlying)
+- `aaveV4QuoteSupplySwap` — Quote swapping supplied collateral on one spoke into another reserve on that spoke. (chainId, user, spoke, amount, sellUnderlying, buyUnderlying)
+- `aaveV4QuoteWithdrawSwap` — Quote withdrawing supplied collateral as a different token. (chainId, user, spoke, amount, sellUnderlying, buyToken)
+- `buildEip712MultisignBodyAaveV4PrepareOrder` — EIP-712 sign request for an Aave order (swap or leverage). Pass orderQuoteId from the quote. No EVM gas. After signing, pass the returned quoteId to submit ord… (chainId, quoteId)
+- `buildEvmMultisignBodyAaveV4DepositBatch` — Build Aave v4 Spoke supply/deposit batch (wrap native, approve, supply). Pass spoke from ctm_aave_v4_fetch_spokes. Tickers such as AAPLc resolve on the Coinbas… (chainId, spoke, underlying, amountHuman)
+- `buildEvmMultisignBodyAaveV4Liquidate` — Liquidate another user on a spoke. The signer is the liquidator and cannot be the borrower. If an approval is required, the first transaction is the approval.… (chainId, spoke, user, collateralUnderlying, debtUnderlying, amountHuman)
 - `buildEvmMultisignBodyAaveV4MerklDistributorClaim` — Build wallet-wide Merkl Distributor.claim. Pass keyGenId + chainId; server fetches proofs. Optional claimData override. Builds the unsigned batch, signs the ma… (chainId)
-- `buildEvmMultisignBodyAaveV4SpokeBorrow` — Build Aave v4 Spoke borrow; underlying is the debt asset (USDC on bstocks). Equities are collateral-only. collateralUnderlying may be a bStock ticker (AAPLc).… (chainId, underlying, amountHuman)
-- `buildEvmMultisignBodyAaveV4SpokeRepay` — Build Aave v4 Spoke repay (approve if needed + repay). Builds the unsigned batch, signs the management envelope, and POSTs /multiSignRequest. Returns { request… (chainId, underlying, amountHuman)
-- `buildEvmMultisignBodyAaveV4SpokeWithdraw` — Build Aave v4 Spoke withdraw; health-factor preview when user has borrow debt. Builds the unsigned batch, signs the management envelope, and POSTs /multiSignRe… (chainId, underlying, amountHuman)
+- `buildEvmMultisignBodyAaveV4PositionManager` — Approve or renounce a position manager on a spoke. Builds the unsigned batch, signs the management envelope, and POSTs /multiSignRequest. Returns { requestId }… (chainId, spoke, manager, approve)
+- `buildEvmMultisignBodyAaveV4SetCollateral` — Enable or disable a supplied reserve as collateral on a spoke. Builds the unsigned batch, signs the management envelope, and POSTs /multiSignRequest. Returns {… (chainId, spoke, underlying, usingAsCollateral)
+- `buildEvmMultisignBodyAaveV4SpokeBorrow` — Build Aave v4 Spoke borrow on the spoke that already holds collateral. underlying is the debt asset. Equities on the Coinbase Stocks spoke are collateral-only.… (chainId, spoke, underlying, amountHuman)
+- `buildEvmMultisignBodyAaveV4SpokeRepay` — Build Aave v4 Spoke repay (approve if needed + repay). Builds the unsigned batch, signs the management envelope, and POSTs /multiSignRequest. Returns { request… (chainId, spoke, underlying, amountHuman)
+- `buildEvmMultisignBodyAaveV4SpokeWithdraw` — Build Aave v4 Spoke withdraw; health-factor preview when user has borrow debt. Builds the unsigned batch, signs the management envelope, and POSTs /multiSignRe… (chainId, spoke, underlying, amountHuman)
+- `buildEvmMultisignBodyAaveV4SubmitOrder` — Submit a prepared Aave order. quoteId is the id returned by prepare order. Builds the unsigned batch, signs the management envelope, and POSTs /multiSignReques… (chainId, quoteId)
+- `buildEvmMultisignBodyAaveV4UpdateConditions` — Refresh a position risk premium (JUST_RISK_PREMIUM) or all dynamic risk config (ALL_DYNAMIC_CONFIG). Uses the Aave GraphQL transaction. Builds the unsigned bat… (chainId, userPositionId, update)
 
 ### aerodrome
 
@@ -329,6 +342,8 @@ Each line is `exportName` — what it does. Names in parentheses are the inputs 
 - `buildEvmMultisignBodyHyperliquidVaultWithdrawBatch` — Create and submit mpc-auth multiSignRequest for Hyperliquid vault withdraw (includes accrued PnL). Builds the unsigned batch, signs the management envelope, an… (chainId, vaultAddress, usdHuman)
 - `buildHyperliquidBorrowLendMultisign` — Supply, withdraw, borrow, or repay on Hyperliquid Core lend via L1 /exchange EIP-712 — not CoreWriter. No useCustomGas. trigger_sign_result without txParams; b… (chainId, coin, operation)
 - `buildHyperliquidBridgeWithdrawMultisign` — Create and submit mpc-auth multiSignRequest to withdraw USDC from Hyperliquid to Arbitrum via withdraw3 (EIP-712, delivered to /exchange). chainId 999 or 998.… (chainId, usdHuman)
+- `buildHyperliquidCoreToEvmUsdcMultisign` — Create and submit mpc-auth multiSignRequest to move HyperCore spot USDC to native HyperEVM USDC (0xb88339… on mainnet) on the same KeyGen address. EIP-712 send… (chainId, usdHuman)
+- `buildHyperliquidEvmToCoreUsdcMultisign` — Create and submit mpc-auth multiSignRequest to move native HyperEVM USDC (0xb88339… on mainnet) back to HyperCore spot. Approves Circle USDC to CoreDepositWall… (chainId, usdHuman)
 - `buildHyperliquidTrailingStopMultisign` — Create and submit mpc-auth multiSignRequest for a Hyperliquid perp trailing stop (EIP-712 L1 trailingStop action to /exchange — no useCustomGas). Retracement i… (chainId, coin, szHuman, trailingOffsetHuman)
 - `buildHyperliquidUpdateLeverageMultisign` — Set per-market leverage (cross or isolated) on Hyperliquid via L1 /exchange EIP-712 signing — not CoreWriter. No useCustomGas. trigger_sign_result without txPa… (chainId, coin, leverage)
 - `hyperliquidFetchDelegationsForExecutor` — HYPE delegations by validator for executor. (executorAddress)
