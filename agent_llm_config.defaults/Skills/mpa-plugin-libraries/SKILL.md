@@ -136,6 +136,7 @@ Each line is `exportName` — what it does. Names in parentheses are the inputs 
 `defiModules`: `protocols/evm/chainlink-ccip`
 
 - `buildEvmMultisignBodyCcipSendBatchFromMcp` — Create and submit mpc-auth multiSignRequest for a Chainlink CCIP token send (approve the token, approve LINK when that pays the fee, then Router.ccipSend). Re-… (chainId, destChainId, token, transferAmountHuman, feeKind)
+- `buildEvmMultisignBodyCcipUnwrapBatchFromMcp` — Create and submit mpc-auth multiSignRequest that unwraps the chain wrapped gas token (WETH.withdraw and equivalents) into native gas. Use this on the chain tha… (chainId, amountHuman)
 - `ccipFetchDestinations` — List connected EVM CCIP destinations for one reviewed token, including the remote token address. Pass allowedChainIds from get_chain_registry so only node chai… (chainId, token)
 - `ccipFetchSendFee` — Quote Router.getFee for a CCIP token send. Returns native and/or LINK when that fee token is accepted. The fee is paid on top of transferAmountHuman. Build app… (chainId, destChainId, token, transferAmountHuman)
 - `ccipFetchSupportedTokens` — List reviewed Chainlink CCIP tokens on an EVM chain (public CCIP directory). Read-only. Use the addresses to decide which wallet tokens can be sent. (chainId)
