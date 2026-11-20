@@ -131,6 +131,15 @@ Each line is `exportName` — what it does. Names in parentheses are the inputs 
 - `buildEvmMultisignBodyArcusSetLeverageBatch` — Set Arcus perp leverage for a market (Scheme 2 Ed25519 → POST /v1/setLeverage). Call before place_order when leverage must change. Max leverage = floor(1 / ini… (chainId, secp256k1KeyGenId, ed25519KeyGenId, market, leverage)
 - `buildEvmMultisignBodyArcusSpotRfqBatch` — Arcus spot Stock Token RFQ buy/sell. Post-fill: offer Add ERC20 with tokenContractAddress from delivery. Builds the unsigned batch, signs the management envelo… (chainId, secp256k1KeyGenId, ed25519KeyGenId, ticker, sizeHuman)
 
+### chainlink-ccip
+
+`defiModules`: `protocols/evm/chainlink-ccip`
+
+- `buildEvmMultisignBodyCcipSendBatchFromMcp` — Create and submit mpc-auth multiSignRequest for a Chainlink CCIP token send (approve the token, approve LINK when that pays the fee, then Router.ccipSend). Re-… (chainId, destChainId, token, transferAmountHuman, feeKind)
+- `ccipFetchDestinations` — List connected EVM CCIP destinations for one reviewed token, including the remote token address. Pass allowedChainIds from get_chain_registry so only node chai… (chainId, token)
+- `ccipFetchSendFee` — Quote Router.getFee for a CCIP token send. Returns native and/or LINK when that fee token is accepted. The fee is paid on top of transferAmountHuman. Build app… (chainId, destChainId, token, transferAmountHuman)
+- `ccipFetchSupportedTokens` — List reviewed Chainlink CCIP tokens on an EVM chain (public CCIP directory). Read-only. Use the addresses to decide which wallet tokens can be sent. (chainId)
+
 ### circle-cctp
 
 `defiModules`: `protocols/evm/circle-cctp`
