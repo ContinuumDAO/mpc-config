@@ -19,6 +19,9 @@ Bundled jobs in `jobs.json`:
 | `appraise-and-vote-proposals` | no | ContinuumDAO **vote only** (never propose; never load `continuum-dao-compose-proposal`). See **`continuum_dao_vote_policy.example.md`** |
 | `notify-forum-replies` | no | Read-only: new replies to **your** Forum posts → Telegram with the formatted post. Set `forumWatch.forumUsername`. See **`forum_replies_cron.example.md`** |
 | `conditional-accept-governance-vote` | no | ContinuumDAO **governor Join** only. Reject propose/execute/cancel. See **`continuum_dao_vote_policy.example.md`** |
+| `reject-all-sign-request` | no | Reject every pending Join row (`accept: false`), including trades and governor requests. Skips Railgun private transfers. One rejection can block the request for the group. |
+
+The four Join jobs (`auto-accept-sign-request`, `conditional-accept-sign-request`, `conditional-accept-governance-vote`, `reject-all-sign-request`) are eligible for an **instant hook**. Only one can hold it. Enabling it is a management-signed `POST /enableCronInstantHook`. The schedule does not run while it is on. An arriving sign request runs that job, and the host allows only `sign_request_agree`. Jobs that can agree show a warning that this reduces the inherent safety of an MPA wallet. Reject-all does not.
 | `close-call` | no | Close Call on technocore.chat. UTC minutes 1,6,11,… Load skill **`close-call`**. Watch each sweep, register once in room `close1`, hold unless a slow target needs one adjusting trade. |
 | `trade_analysis_cron.example.md` | Copy-paste template for multi-analysis (patterns, **momentum + candlestick confirmation**, trend, key levels, fib, Elliott waves) + optional **`tradeConsensus`** / **`tradeBuild`** YAML; supports **hyperliquid**, **arcus**, **gmx**, **uniswap** execution. **Pattern C** documents optional cron supervisor spawn strands (`agent_spawn_sub_agent` / join) for multi-analyze jobs |
 

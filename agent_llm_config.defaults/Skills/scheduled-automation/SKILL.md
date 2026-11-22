@@ -96,7 +96,16 @@ On **cron** turns the host may expose **`agent_spawn_sub_agent`** / **`agent_joi
 | **`conditional-accept-sign-request`** | Evaluate embedded **`signAcceptPolicy`** YAML: parse ctm1 Purpose short codes (`proto`, `setup`, `sz=` / `szUsd=`, symbol) **and** additional Purpose prose after ` · `; accept or **reject** with full Purpose cited in thoughts. Template: **`cron/sign_accept_policy.example.md`**. Skip `agreementKind: railgun_spend`. |
 | **`appraise-and-vote-proposals`** | ContinuumDAO **vote only**. Follow host YAML **`continuum-dao-vote-policy.yaml`**. Template: **`cron/continuum_dao_vote_policy.example.md`**. Never propose. |
 | **`conditional-accept-governance-vote`** | ContinuumDAO **governor Join** only (`sign_request_agree`). Same host YAML. Always reject propose/execute/cancel. |
+| **`reject-all-sign-request`** | Reject every pending Join row (`accept: false`), trades and governor included. Skip `agreementKind: railgun_spend`. One rejection can block that request for the group. |
 | **`notify-forum-replies`** | Read-only Forum reply watch + **`telegramNotify`**. Template: **`cron/forum_replies_cron.example.md`**. |
+
+## Instant Join hook
+
+The four Join jobs above (`auto-accept-sign-request`, `conditional-accept-sign-request`, `conditional-accept-governance-vote`, `reject-all-sign-request`) can take an **instant hook**. Only one job holds it. `POST /enableCronInstantHook` and `POST /disableCronInstantHook` are management-signed. Catalog add, `updateCronJob`, and reset-from-defaults cannot set it.
+
+While the hook is on, that job does not run on its schedule. A new inbound sign request runs the job message immediately. The host allows only `sign_request_agree` on that turn and attaches the pending Join rows. Scheduled runs of the same job, and `POST /runCronJob`, keep the normal tool set and do not run while the hook is on.
+
+Enabling the hook on a job that can agree asks the operator to confirm they understand this reduces the inherent safety of an MPA wallet. `reject-all-sign-request` does not show that warning. It is a safety measure: this node rejects without a person reviewing each request.
 
 Gather policy in **interactive chat first** (test against sample `get_sign_request_by_id`), paste frozen YAML into the cron **`message`**, **`run_cron_job`** once, then enable.
 
