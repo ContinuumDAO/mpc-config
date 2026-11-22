@@ -263,6 +263,15 @@ Each line is `exportName` — what it does. Names in parentheses are the inputs 
 - `curveDaoQuoteAddLiquidity` — Quote Curve add_liquidity for an important pool. Copy pool + amountsHuman onto the build tool. (chainId, pool, amountsHuman)
 - `curveDaoQuoteRemoveLiquidity` — Quote balanced Curve remove_liquidity for an important pool. (chainId, pool, lpAmountHuman)
 
+### debridge
+
+`defiModules`: `protocols/evm/debridge`
+
+- `buildEvmMultisignBodyDebridgeSendBatchFromMcp` — Create and submit mpc-auth multiSignRequest for a DeBridge same-asset DLN order (approve the token when allowance is short, then DlnSource.createSaltedOrder).… (chainId, destChainId, token, transferAmountHuman)
+- `debridgeFetchAssets` — List DeBridge DLN tokens on an EVM chain. Read-only. Use the token address to decide which wallet tokens can be sent. The zero address is native gas. (chainId)
+- `debridgeFetchDestinations` — List EVM DeBridge destinations that have exactly one token with the same symbol. Pass allowedChainIds from get_chain_registry so only node chains are returned.… (chainId, token)
+- `debridgeFetchSendFee` — Quote a DeBridge same-asset DLN order. fixedNativeFee is the exact source-chain native fee. amountReceived is after protocol, solver, and extra margin. Does NO… (chainId, destChainId, token, transferAmountHuman)
+
 ### derive
 
 `defiModules`: `protocols/evm/derive`
@@ -496,6 +505,15 @@ Each line is `exportName` — what it does. Names in parentheses are the inputs 
 - `buildSkySusdsDepositFromUsdsBatch` — Build USDS → sUSDS ERC-4626 deposit batch. Builds the unsigned batch, signs the management envelope, and POSTs /multiSignRequest. Returns { requestId } on succ… (chainId, usdsAmountHuman)
 - `buildSkySusdsRedeemToUsdsBatch` — Build sUSDS redeem to USDS batch. Builds the unsigned batch, signs the management envelope, and POSTs /multiSignRequest. Returns { requestId } on success — do… (chainId, sharesHuman)
 - `skyFetchSusdsRateSummary` — Sky Savings Rate (sUSDS APY) from on-chain ssr(). Use this (not web search) for USDS savings. Ethereum mainnet. rpcUrl is injected.
+
+### stargate
+
+`defiModules`: `protocols/evm/stargate`
+
+- `buildEvmMultisignBodyStargateSendBatchFromMcp` — Create and submit mpc-auth multiSignRequest for a Stargate V2 Taxi send (approve the token when the pool requires it, then IOFT.send). Re-quotes quoteSend. The… (chainId, destChainId, token, transferAmountHuman)
+- `stargateFetchAssets` — List Stargate V2 pools, native pools, and Hydra OFTs on an EVM chain. Read-only. Use the token address to decide which wallet tokens can be bridged. The zero a… (chainId)
+- `stargateFetchDestinations` — List EVM Stargate destinations that share this asset id, including the remote pool and token. Pass allowedChainIds from get_chain_registry so only node chains… (chainId, token)
+- `stargateFetchSendFee` — Quote Stargate Taxi quoteOFT and quoteSend. quotedNativeFee is the live LayerZero price. bufferedNativeFee is that quote plus 50% and is what the safe attaches… (chainId, destChainId, token, transferAmountHuman)
 
 ### trueo
 
