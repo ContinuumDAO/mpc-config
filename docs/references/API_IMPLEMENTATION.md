@@ -294,6 +294,8 @@ Jump to detailed descriptions in [Endpoint Categories](#endpoint-categories) bel
 - [`POST /updateCronJob`](#post-updatecronjob) - Update schedule/message/metadata only (**management signature**)
 - [`POST /activateCronJob`](#post-activatecronjob) - Enable a cron job (**management signature**)
 - [`POST /deactivateCronJob`](#post-deactivatecronjob) - Disable a cron job without deleting it (**management signature**)
+- [`POST /enableCronInstantHook`](#post-enablecroninstanthook) - Run one eligible Join job when a sign request arrives, and turn its schedule off (**management signature**)
+- [`POST /disableCronInstantHook`](#post-disablecroninstanthook) - Turn that arrival trigger off and restore the schedule (**management signature**)
 - [`POST /removeCronJob`](#post-removecronjob) - Remove a cron job (**management signature**; optional `deleteConversation`)
 - [`POST /runCronJob`](#post-runcronjob) - Manual trigger (async; **management signature**)
 - [`POST /resetCronJobsFromDefaults`](#post-resetcronjobsfromdefaults) - Overwrite bundled default cron jobs from **`agent_llm_config.defaults/cron/`** (**management signature**; custom jobs preserved)
@@ -4013,8 +4015,8 @@ Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each **a
 | Path | Role |
 |------|------|
 | **`agent_llm_config.defaults/cron/jobs.json`** | Bundled **catalog** of cron job templates (not active until added on this node) |
-| **`agent_llm_config/cron/jobs.json`** | Active job manifest: `id`, `name`, `enabled`, `schedule`, `message`, `conversationId`, run metadata |
-| **`agent_llm_config/cron/runs/{jobId}.jsonl`** | Append-only run history (`runId`, `startedAt`, `finishedAt`, `status`, `error?`, `assistantPreview?`) |
+| **`agent_llm_config/cron/jobs.json`** | Active job manifest: `id`, `name`, `enabled`, `schedule`, `message`, `conversationId`, `instantHook?`, `instantHookEligible?`, run metadata |
+| **`agent_llm_config/cron/runs/{jobId}.jsonl`** | Append-only run history (`runId`, `startedAt`, `finishedAt`, `status`, `trigger?`, `error?`, `assistantPreview?`) |
 
 **Repository catalog:** Edit templates only in **mpc-config** under **`agent_llm_config.defaults/cron/jobs.json`**. Operators activate via **Available from repository** in the UI or **`POST /addCronJobFromCatalog`** (`GET /listCronJobs` → **`availableCatalog`** until active). Custom jobs use **`POST /addCronJob`**.
 
@@ -4038,12 +4040,14 @@ Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each **a
 
 **Scheduler guardrails:** one in-flight run per job; global concurrency cap; restart catch-up runs **at most one** job per enabled task if missed within the last hour (older misses schedule forward only). Cron runs use the full agent turn (LLM + skills + MCP) but **fail immediately** if MCP elicitation would block on human input.
 
+**Instant Join hook:** at most one job may set **`instantHook`**. Eligible names are **`auto-accept-sign-request`**, **`conditional-accept-sign-request`**, **`conditional-accept-governance-vote`**, and **`reject-all-sign-request`**. While the hook is on, that job has no **`nextRunAt`** and the scheduler does not run it. A new inbound **`SIGNREQUEST`** insert runs it once. That turn may call only **`sign_request_agree`**. **`POST /runCronJob`** stays a normal cron turn. **`POST /updateCronJob`**, catalog add, and reset-from-defaults cannot set **`instantHook`**. Deactivate stops the hook without clearing the flag; activate resumes it. On process start the enabled instant job runs once to catch requests that arrived while the node was down. Run rows from that path set **`trigger`** to **`instant`**. A manual run sets **`manual`**. A scheduled run omits **`trigger`**.
+
 <a id="get-listcronjobs"></a>
 #### `GET /listCronJobs`
 
 **Auth:** Read JWT on Browser HTTPS / loopback when JWT applies; plain management port has no JWT.
 
-**Response data:** `{ "jobs": [ … ], "activeJobs": [ … ], "availableCatalog": [ { "name", "enabled", "schedule", "message"?, "deleteAfterRun"? } ] }` — **`jobs`** and **`activeJobs`** list the same active summaries (**message body omitted**). **`availableCatalog`**: rows from **`agent_llm_config.defaults/cron/jobs.json`** not yet active on this node by name.
+**Response data:** `{ "jobs": [ … ], "activeJobs": [ … ], "availableCatalog": [ { "name", "enabled", "schedule", "message"?, "deleteAfterRun"?, "instantHookEligible"? } ] }` — **`jobs`** and **`activeJobs`** list the same active summaries (**message body omitted**). Each summary includes **`instantHook`** and **`instantHookEligible`** when set. **`availableCatalog`**: rows from **`agent_llm_config.defaults/cron/jobs.json`** not yet active on this node by name.
 
 <a id="get-getcronjob"></a>
 #### `GET /getCronJob`
@@ -4061,7 +4065,7 @@ Scheduled agent tasks run inside the mpc-auth process (no extra ports). Each **a
 
 **Auth:** Read JWT when applicable.
 
-**Response data:** `{ "jobId", "runs": [ { "runId", "startedAt", "finishedAt"?, "status", "error"?, "assistantPreview"? } ] }`.
+**Response data:** `{ "jobId", "runs": [ { "runId", "startedAt", "finishedAt"?, "status", "trigger"?, "error"?, "assistantPreview"? } ] }`. **`trigger`** is **`instant`** for an arrival run and **`manual`** for **`POST /runCronJob`**.
 
 <a id="post-addcronjob"></a>
 #### `POST /addCronJob`
@@ -4107,7 +4111,7 @@ Copies one entry from **`agent_llm_config.defaults/cron/jobs.json`** into runtim
 
 **Auth:** Management signature.
 
-**Body:** `{ "id"?, "name"?, "message"?, "schedule"?, "deleteAfterRun"?, "telegramNotify"?, "nonce", "clientSig", "nodeKey" }` — **`id` or `name`** required. Does **not** change **`enabled`** (use activate/deactivate).
+**Body:** `{ "id"?, "name"?, "message"?, "schedule"?, "deleteAfterRun"?, "telegramNotify"?, "nonce", "clientSig", "nodeKey" }` — **`id` or `name`** required. Does **not** change **`enabled`** (use activate/deactivate) or **`instantHook`** (use **`POST /enableCronInstantHook`** / **`POST /disableCronInstantHook`**).
 
 <a id="post-activatecronjob"></a>
 #### `POST /activateCronJob`
@@ -4121,7 +4125,33 @@ Copies one entry from **`agent_llm_config.defaults/cron/jobs.json`** into runtim
 
 **Auth:** Management signature.
 
-**Body:** same shape as activate — sets **`enabled: false`**; job, conversation, and run log are retained.
+**Body:** same shape as activate — sets **`enabled: false`**; job, conversation, and run log are retained. An **`instantHook`** flag is kept but does not fire while the job is disabled.
+
+<a id="post-enablecroninstanthook"></a>
+#### `POST /enableCronInstantHook`
+
+**Auth:** Management signature. Same body as **`POST /activateCronJob`**. Canonical JSON to sign is the cron job ref with **`clientSig`** cleared: `{"id":"<job id>","nonce":N,"clientSig":"","nodeKey":"<128-hex>"}` (or **`name`** instead of **`id`**).
+
+**Body:** `{ "id"?, "name"?, "nonce", "clientSig", "nodeKey" }` — **`id` or `name`** required.
+
+Turns **`instantHook`** on for that job and clears it on every other job in the same write. Jobs that lose the hook get **`nextRunAt`** again. The enabled job’s **`nextRunAt`** is cleared. Only these names are eligible: **`auto-accept-sign-request`**, **`conditional-accept-sign-request`**, **`conditional-accept-governance-vote`**, **`reject-all-sign-request`**. If the job is already enabled, one run is enqueued so pending Join rows are not left until the next arrival.
+
+**Response data:** job summary (same shape as **`GET /listCronJobs`** entries), including **`instantHook: true`**.
+
+**Errors:** **400** if the job is missing from the eligible set or the body is invalid. **404** if the job is not on this node. **401** if the management signature fails.
+
+<a id="post-disablecroninstanthook"></a>
+#### `POST /disableCronInstantHook`
+
+**Auth:** Management signature.
+
+**Body:** same shape as enable.
+
+Clears **`instantHook`** on that job and recomputes **`nextRunAt`** when the job is enabled. Does not change **`enabled`**.
+
+**Response data:** job summary with **`instantHook`** omitted.
+
+**Errors:** **404** if the job is not on this node. **401** if the management signature fails.
 
 <a id="post-removecronjob"></a>
 #### `POST /removeCronJob`
@@ -4149,7 +4179,7 @@ Copies one entry from **`agent_llm_config.defaults/cron/jobs.json`** into runtim
 
 **Body:** `{ "nonce", "clientSig", "nodeKey" }` — no other fields. Use the same [management signatures (`nonce`, `clientSig`, `nodeKey`)](#management-signatures-nodekey) flow as **`POST /resetSkillsFromDefaults`**: canonical JSON to sign is `{"nonce":N,"clientSig":"","nodeKey":"<128-hex>"}` with **`clientSig` cleared** before signing (Ed25519 128 hex, or EIP-191 **`signedMessage`** + **`clientSig`** from **`NodeMgtKey`**).
 
-**Behavior:** For each job listed in **`agent_llm_config.defaults/cron/jobs.json`**, updates or creates the matching runtime entry in **`agent_llm_config/cron/jobs.json`** (`message`, `schedule`, `enabled`, `deleteAfterRun`). Existing default jobs keep their **`id`**, **`conversationId`**, run metadata, and **`runs/{jobId}.jsonl`** history. Custom cron jobs you added that are **not** in the defaults catalog are **unchanged**. Default jobs you removed are **re-added** with fresh runtime ids.
+**Behavior:** For each job listed in **`agent_llm_config.defaults/cron/jobs.json`**, updates or creates the matching runtime entry in **`agent_llm_config/cron/jobs.json`** (`message`, `schedule`, `enabled`, `deleteAfterRun`). Existing default jobs keep their **`id`**, **`conversationId`**, **`instantHook`**, run metadata, and **`runs/{jobId}.jsonl`** history. Reset does not turn the instant hook on. Custom cron jobs you added that are **not** in the defaults catalog are **unchanged**. Default jobs you removed are **re-added** with fresh runtime ids.
 
 **Response data:** `{ "jobCount": <int> }` — count of default jobs refreshed.
 

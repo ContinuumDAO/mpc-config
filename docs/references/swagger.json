@@ -5232,6 +5232,74 @@
                 ]
             }
         },
+        "/enableCronInstantHook": {
+            "post": {
+                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /enableCronInstantHook).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "POST enableCronInstantHook",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                        }
+                    }
+                ]
+            }
+        },
+        "/disableCronInstantHook": {
+            "post": {
+                "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /disableCronInstantHook).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Management API"
+                ],
+                "summary": "POST disableCronInstantHook",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/node.APIResponse"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "description": "Request JSON — see docs/API_IMPLEMENTATION.md"
+                        }
+                    }
+                ]
+            }
+        },
         "/removeCronJob": {
             "post": {
                 "description": "MPC node management API — see in mpc-config repo docs/references/API_IMPLEMENTATION.md (POST /removeCronJob).",
