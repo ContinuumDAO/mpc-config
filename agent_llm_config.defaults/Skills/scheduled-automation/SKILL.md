@@ -101,11 +101,11 @@ On **cron** turns the host may expose **`agent_spawn_sub_agent`** / **`agent_joi
 
 ## Instant Join hook
 
-The four Join jobs above (`auto-accept-sign-request`, `conditional-accept-sign-request`, `conditional-accept-governance-vote`, `reject-all-sign-request`) can take an **instant hook**. Only one job holds it. `POST /enableCronInstantHook` and `POST /disableCronInstantHook` are management-signed. Catalog add, `updateCronJob`, and reset-from-defaults cannot set it.
+The four Join jobs above (`auto-accept-sign-request`, `conditional-accept-sign-request`, `conditional-accept-governance-vote`, `reject-all-sign-request`) and **`auto-sign-and-broadcast`** can take an **instant hook**. Only one job holds it. `POST /enableCronInstantHook` and `POST /disableCronInstantHook` are management-signed. Catalog add, `updateCronJob`, and reset-from-defaults cannot set it.
 
-While the hook is on, that job does not run on its schedule. A new inbound sign request runs the job message immediately. The host allows only `sign_request_agree` on that turn and attaches the pending Join rows. Scheduled runs of the same job, and `POST /runCronJob`, keep the normal tool set and do not run while the hook is on.
+While the hook is on, that job does not run on its schedule. A new inbound sign request runs a Join job immediately. The host allows only `sign_request_agree` on that turn and attaches the pending Join rows. **`auto-sign-and-broadcast`** runs when this node originated the request and the MPC quorum is reached. That turn may call only `list_sign_requests_ready`, `get_sign_result_summary`, `trigger_sign_result`, and `broadcast_sign_result`. Scheduled runs of the same job, and `POST /runCronJob`, keep the normal tool set and do not run while the hook is on.
 
-Enabling the hook on a job that can agree asks the operator to confirm they understand this reduces the inherent safety of an MPA wallet. `reject-all-sign-request` does not show that warning. It is a safety measure: this node rejects without a person reviewing each request.
+Enabling the hook on a job that can agree asks the operator to confirm they understand this reduces the inherent safety of an MPA wallet. `reject-all-sign-request` and `auto-sign-and-broadcast` do not show that warning. Reject-all is a safety measure: this node rejects without a person reviewing each request. Auto-sign-and-broadcast already signs and broadcasts; the hook only removes the wait for the timer.
 
 Gather policy in **interactive chat first** (test against sample `get_sign_request_by_id`), paste frozen YAML into the cron **`message`**, **`run_cron_job`** once, then enable.
 

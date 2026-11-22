@@ -191,11 +191,6 @@
       "initialLoad": false
     },
     {
-      "name": "close-call",
-      "filename": "close-call/SKILL.md",
-      "initialLoad": false
-    },
-    {
       "name": "stock-research",
       "filename": "stock-research/SKILL.md",
       "initialLoad": false
