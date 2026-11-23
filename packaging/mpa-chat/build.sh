@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Build mpa-chat .deb and Arch packages from an mpc-auth checkout.
 # MPC_AUTH_DIR defaults to the sibling checkout ../mpc-auth.
-# VERSION defaults to 0.1.0. Output goes to packaging/mpc-chat/dist/.
+# VERSION defaults to 0.1.0. A tag mpa-chat-v0.1.0 is stripped to 0.1.0.
+# Output goes to packaging/mpa-chat/dist/.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 config_root="$(cd "$here/../.." && pwd)"
 src="${MPC_AUTH_DIR:-"$config_root/../mpc-auth"}"
 version="${VERSION:-0.1.0}"
-version="${version#mpc-chat-v}"
+version="${version#mpa-chat-v}"
 out="$here/dist"
 mkdir -p "$out"
 

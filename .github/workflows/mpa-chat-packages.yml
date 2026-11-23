@@ -1,10 +1,10 @@
-name: mpc-chat packages
+name: mpa-chat packages
 
 on:
   workflow_dispatch:
   push:
     tags:
-      - "mpc-chat-v*"
+      - "mpa-chat-v*"
 
 permissions:
   contents: write
@@ -32,12 +32,12 @@ jobs:
         env:
           MPC_AUTH_DIR: ${{ github.workspace }}/mpc-auth
           VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.1.0' }}
-        run: ./packaging/mpc-chat/build.sh
+        run: ./packaging/mpa-chat/build.sh
 
       - name: Attach packages to the GitHub release
-        if: startsWith(github.ref, 'refs/tags/mpc-chat-v')
+        if: startsWith(github.ref, 'refs/tags/mpa-chat-v')
         uses: softprops/action-gh-release@v2
         with:
-          files: packaging/mpc-chat/dist/*
+          files: packaging/mpa-chat/dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

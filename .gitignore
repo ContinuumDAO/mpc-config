@@ -10,8 +10,8 @@ docs/internal/
 # Secrets (Compose; see .env.example)
 .env
 
-# Built mpc-chat packages (see packaging/mpc-chat/build.sh)
-packaging/mpc-chat/dist/
+# Built mpa-chat packages (see packaging/mpa-chat/build.sh)
+packaging/mpa-chat/dist/
 
 # config
 configs.yaml
