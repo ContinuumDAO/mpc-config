@@ -107,6 +107,19 @@ universal:
   # Invalidation is always the Donchian mid-channel (not this multiple).
   donchianTargetAtrMultiple: 3
 
+  # Momentum (analyze_momentum).
+  # rsiPeriod is the RSI length. 7 reaches an extreme more often than 14.
+  # rsiOversold and rsiOverbought are the zone limits (wider than 30 / 70).
+  # MACD lengths replace 12 / 26 / 9. macdCrossLookbackBars counts a cross
+  # within that many bars, not only on the current bar.
+  rsiPeriod: 7
+  rsiOversold: 40
+  rsiOverbought: 60
+  macdFastPeriod: 8
+  macdSlowPeriod: 17
+  macdSignalPeriod: 9
+  macdCrossLookbackBars: 3
+
   # Supertrend (analyze_supertrend + overlay type:supertrend).
   # Injected as period / supertrendPeriod and multiplier / supertrendMultiplier when unset.
   supertrendPeriod: 10
