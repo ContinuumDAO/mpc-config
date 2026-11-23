@@ -1,7 +1,7 @@
 # Maintainer: ContinuumDAO <https://github.com/ContinuumDAO/mpc-config>
 # Omarchy and Arch can install the release package with pacman -U.
 # This recipe builds the same binary from the mpc-auth sources.
-pkgname=mpc-chat
+pkgname=mpa-chat
 pkgver=0.1.0
 pkgrel=1
 pkgdesc="Terminal chat for the AI agent on a Continuum node"
@@ -15,9 +15,9 @@ sha256sums=('SKIP')
 
 build() {
   cd mpc-auth
-  CGO_ENABLED=0 go build -trimpath -o "$srcdir/mpc-chat" ./cli/mpc-chat
+  CGO_ENABLED=0 go build -trimpath -o "$srcdir/mpa-chat" ./cli/mpa-chat
 }
 
 package() {
-  install -Dm755 "$srcdir/mpc-chat" "$pkgdir/usr/bin/mpc-chat"
+  install -Dm755 "$srcdir/mpa-chat" "$pkgdir/usr/bin/mpa-chat"
 }
