@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build mpa-chat .deb and Arch packages from an mpc-auth checkout.
+# Build mpa-chat .deb, Arch, Fedora rpm, openSUSE rpm, and tar.gz packages from an mpc-auth checkout.
 # MPC_AUTH_DIR defaults to the sibling checkout ../mpc-auth.
 # VERSION defaults to 0.1.0. A tag mpa-chat-v0.1.0 is stripped to 0.1.0.
 # Output goes to packaging/mpa-chat/dist/.
@@ -37,7 +37,7 @@ pack() {
   )
   local cfg="$out/nfpm-$debarch.yaml"
   write_nfpm() {
-    local arch="$1" dep="$2"
+    local arch="$1" dep="$2" release="$3"
     cat >"$cfg" <<EOF
 name: mpa-chat
 arch: ${arch}
@@ -50,6 +50,11 @@ maintainer: ContinuumDAO <https://github.com/ContinuumDAO/mpc-config>
 description: Terminal chat for the AI agent on a Continuum node
 homepage: https://github.com/ContinuumDAO/mpc-config
 license: BUSL-1.1
+EOF
+    if [[ -n "$release" ]]; then
+      printf 'release: "%s"\n' "$release" >>"$cfg"
+    fi
+    cat >>"$cfg" <<EOF
 depends:
   - ${dep}
 contents:
@@ -61,13 +66,28 @@ EOF
   }
   local deb="$out/mpa-chat_${version}_${debarch}.deb"
   local pkg="$out/mpa-chat-${version}-1-${pkgarch}.pkg.tar.zst"
-  write_nfpm "$debarch" openssh-client
+  local fedora="$out/mpa-chat-${version}-1.${pkgarch}.rpm"
+  local suse="$out/mpa-chat-${version}-1.suse.${pkgarch}.rpm"
+  local archive="$out/mpa-chat_${version}_linux_${debarch}.tar.gz"
+  write_nfpm "$debarch" openssh-client ""
   (cd "$out" && run_nfpm package -f "$cfg" -p deb -t "$deb")
-  write_nfpm "$pkgarch" openssh
+  write_nfpm "$pkgarch" openssh ""
   (cd "$out" && run_nfpm package -f "$cfg" -p archlinux -t "$pkg")
-  rm -f "$bin" "$cfg"
+  write_nfpm "$pkgarch" openssh-clients 1
+  (cd "$out" && run_nfpm package -f "$cfg" -p rpm -t "$fedora")
+  write_nfpm "$pkgarch" openssh 1
+  (cd "$out" && run_nfpm package -f "$cfg" -p rpm -t "$suse")
+  local stage="$out/stage-$goarch"
+  rm -rf "$stage"
+  mkdir -p "$stage"
+  cp "$bin" "$stage/mpa-chat"
+  tar -C "$stage" -czf "$archive" mpa-chat
+  rm -rf "$stage" "$bin" "$cfg"
   echo "wrote $deb"
   echo "wrote $pkg"
+  echo "wrote $fedora"
+  echo "wrote $suse"
+  echo "wrote $archive"
 }
 
 pack amd64 amd64 x86_64
