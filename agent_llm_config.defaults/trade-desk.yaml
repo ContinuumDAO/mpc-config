@@ -107,9 +107,11 @@ universal:
   # Invalidation is always the Donchian mid-channel (not this multiple).
   donchianTargetAtrMultiple: 3
 
-  # Momentum (analyze_momentum).
-  # rsiPeriod is the RSI length. 7 reaches an extreme more often than 14.
-  # rsiOversold and rsiOverbought are the zone limits (wider than 30 / 70).
+  # Momentum (analyze_momentum) and divergence RSI. Injected when the tool arg is unset.
+  # rsiPeriod is the RSI length, including the RSI length inside stochastic RSI.
+  # 7 reaches an extreme more often than 14.
+  # rsiOversold and rsiOverbought are the momentum zone limits and the divergence
+  # RSI extremity edges (wider than 30 / 70).
   # MACD lengths replace 12 / 26 / 9. macdCrossLookbackBars counts a cross
   # within that many bars, not only on the current bar.
   rsiPeriod: 7

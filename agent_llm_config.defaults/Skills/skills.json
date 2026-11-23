@@ -66,11 +66,6 @@
       "initialLoad": false
     },
     {
-      "name": "chart-analysis-time-series",
-      "filename": "chart-analysis-time-series/SKILL.md",
-      "initialLoad": false
-    },
-    {
       "name": "chart-analysis-bollinger",
       "filename": "chart-analysis-bollinger/SKILL.md",
       "initialLoad": false

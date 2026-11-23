@@ -16,7 +16,7 @@ All **symbol, venue, candle interval, and lookback** come from the operator’s 
 ### Analysis-only sub-agent
 
 - Fetch OHLCV or line time-series per task prompt parameters.
-- Run chosen **`analyze_*`** or **`analyze_time_series_*`** tool(s).
+- Run chosen **`analyze_*`** tool(s). Line-only metrics use **`analyze_bollinger_bands`**.
 - Return **`mpc-task-result v1`** with analysis JSON in the body.
 - **Must not** call `prepare_chart*`, `apply_chart_*`, or attach `continuum/chart/v1`.
 - **Must not** call `prepare_chart_from_rows` even after fetch — fetch output goes to **`analyze_*` only**.
