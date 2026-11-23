@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build mpa-chat .deb, Arch, Fedora rpm, openSUSE rpm, and tar.gz packages from an mpc-auth checkout.
+# Build mpa-chat Linux packages and Windows zips from an mpc-auth checkout.
 # MPC_AUTH_DIR defaults to the sibling checkout ../mpc-auth.
 # VERSION defaults to 0.1.0. A tag mpa-chat-v0.1.0 is stripped to 0.1.0.
 # Output goes to packaging/mpa-chat/dist/.
@@ -90,5 +90,27 @@ EOF
   echo "wrote $archive"
 }
 
+pack_windows() {
+  local goarch="$1" token="$2"
+  local bin="$out/mpa-chat-$goarch.exe"
+  echo "building windows/$goarch"
+  (
+    cd "$src"
+    CGO_ENABLED=0 GOOS=windows GOARCH="$goarch" go build -trimpath -o "$bin" ./cli/mpa-chat
+  )
+  local archive="$out/mpa-chat_${version}_windows_${token}.zip"
+  python3 - "$bin" "$archive" <<'PY'
+import sys
+import zipfile
+src, dest = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    zf.write(src, "mpa-chat.exe")
+PY
+  rm -f "$bin"
+  echo "wrote $archive"
+}
+
 pack amd64 amd64 x86_64
 pack arm64 arm64 aarch64
+pack_windows amd64 amd64
+pack_windows arm64 arm64
