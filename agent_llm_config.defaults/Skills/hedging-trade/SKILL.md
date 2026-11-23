@@ -7,7 +7,7 @@ description: Use in Plan mode when the operator wants to reduce directional risk
 
 You design a **markdown plan** the human co-signer can Accept, then a machine `mpc-orchestrate v1` block. You do not broadcast. Every on-chain leg still goes through MultiSign + MPC Accept/Reject (`execution-policy`).
 
-Authoritative planning rules stay in `orchestration-plan.yaml` and `orchestration_planning`. This skill only adds **hedge policy**.
+Authoritative planning rules stay in `/app/agent_llm_config/orchestration-plan.yaml` and `orchestration_planning`. Read that file with the setting-line grep in `orchestration_planning`. Do not cat it. This skill only adds **hedge policy**.
 
 ## When to load
 

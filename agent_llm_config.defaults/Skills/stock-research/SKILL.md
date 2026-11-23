@@ -20,7 +20,7 @@ Shared rules for the recipe skills. Load this skill first, then the one recipe t
 
 A named ticker plus technical analysis or a trade idea stays on **trade** mode and **`trade-defaults`**. This family hands off; it does not run `analyze_*` or broadcast.
 
-In Plan mode, keep or set **`mode: stock-research`**. Desks and the `mpc-orchestrate` fence are in **`orchestration-plan.yaml`**. Watchlist writes and alert crons stay in chat, outside the fence.
+In Plan mode, keep or set **`mode: stock-research`**. Desks and the `mpc-orchestrate` fence are in **`/app/agent_llm_config/orchestration-plan.yaml`**. Read that file with the setting-line grep in `orchestration_planning`. Do not cat it. Watchlist writes and alert crons stay in chat, outside the fence.
 
 ## Two books
 

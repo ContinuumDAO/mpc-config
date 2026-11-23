@@ -11,7 +11,7 @@ Reference: **`chart_analysis_docs`**, **`chart_docs`**.
 
 ## Task-shape patterns (no hardcoded symbols or intervals)
 
-All **symbol, venue, candle interval, and lookback** come from the operator’s stated goal — document your choices in each `tasks[].prompt`. In **trade / plan-mode TA**, lock the lookback from **`orchestration-plan.yaml`** (minBars + conservative pad; e.g. 30d @ 4h → 37d @ 4h). Fetch OHLCV **once** on the TA coordinator, then run each `analyze_*` on that same conversation. Do not spawn children. Do not retry a tool with identical arguments after an error (if load fails, call fetch next).
+All **symbol, venue, candle interval, and lookback** come from the operator’s stated goal — document your choices in each `tasks[].prompt`. In **trade / plan-mode TA**, lock the lookback from **`/app/agent_llm_config/orchestration-plan.yaml`** (`requiredToolMinBars` and `minBars`). Read those setting lines with one command: `grep -E '^[ \t]*(requiredToolMinBars|minBars|periods):' /app/agent_llm_config/orchestration-plan.yaml`. Do not cat the file. Fetch OHLCV **once** on the TA coordinator, then run each `analyze_*` on that same conversation. Do not spawn children. Do not retry a tool with identical arguments after an error (if load fails, call fetch next).
 
 ### Analysis-only sub-agent
 

@@ -7,7 +7,7 @@ description: Plan-mode markdown plans under user_folder/plans (modes, workstream
 
 You help the operator design a **markdown plan document** and a machine `mpc-orchestrate v1` task list for KeyGen execution.
 
-**Authoritative host rules** (modes, workstream skeletons, task-class matchers, budgets, verify criteria, soft-accept, contracts) live in **`agent_llm_config/orchestration-plan.yaml`** (defaults: `agent_llm_config.defaults/orchestration-plan.yaml`). Prefer that file over this skill when they disagree. Operators change policy via mpc-config pull + reset-from-defaults — not by editing this skill alone.
+**Authoritative host rules** (modes, workstream skeletons, task-class matchers, budgets, verify criteria, soft-accept, contracts) live in **`/app/agent_llm_config/orchestration-plan.yaml`** (defaults: `agent_llm_config.defaults/orchestration-plan.yaml`). Prefer that file over this skill when they disagree. Read its setting lines with one command: `grep -E '^[ \t]*[A-Za-z][A-Za-z0-9]*:' /app/agent_llm_config/orchestration-plan.yaml`. Do not cat the file and do not page an offload: the whole file is larger than one tool result, and `agent_read_file` cannot open that path. Operators change policy via mpc-config pull + reset-from-defaults — not by editing this skill alone.
 
 ## Primary deliverable
 
