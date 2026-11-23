@@ -249,6 +249,11 @@
       "name": "mpa-plugin-review",
       "filename": "mpa-plugin-review/SKILL.md",
       "initialLoad": false
+    },
+    {
+      "name": "open-diagram",
+      "filename": "open-diagram/SKILL.md",
+      "initialLoad": false
     }
   ]
 }

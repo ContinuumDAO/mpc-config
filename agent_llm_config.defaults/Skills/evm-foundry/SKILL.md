@@ -13,6 +13,8 @@ The end-to-end run is a dry-run on a fork of that chain RPC, cwd `evm/`: `forge 
 
 A file under `evm/` is not finished work.
 
+**Diagram, only when open-diagram is already active.** After the source for this task is written, call `list_mcp_servers`. If `open-diagram` is in the active servers, load the `open-diagram` skill and call `agent_load_mcp_server` with `{ "serverId": "open-diagram" }`. Draw one picture of the contracts in this task: each contract, who calls it, and its external calls. Then continue the dry-run. If it is only in the catalog, or not listed, do not ask to add it. A missing server, a failed draw, or a layout problem that will not clear does not stop `forge test`, the dry-run script, or `continuum__deploy_built_contract_multi_sign_request`. If the picture disagrees with the `.sol` file, the file wins.
+
 **Done** is a dry run on a fork of the chosen node chain, from `agent_bash` with **cwd** `evm/`:
 
 1. `forge test --fork-url` with that chain's RPC

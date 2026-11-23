@@ -432,6 +432,7 @@ rules:
       End-to-end is a dry-run forge script or forge test on a fork of that chain RPC. Check KeyGen gas from that estimate without broadcasting.
       After that dry-run, offer a QuillShield audit once (load evm-audit). A decline still calls continuum__deploy_built_contract_multi_sign_request. That multi-sign request is the deployment. The operator can call the same tool later. Do not pass --broadcast.
       A .sol file is not done. Run forge test, or a dry-run forge script on a fork, with cwd evm/.
+      If open-diagram is already an active MCP server, load that skill and draw one contract map after the source is written. If it is not active, do not ask to add it, and continue the dry-run.
       On revert, quote the reason. Compare old bytecode or an old cast call with the new one only when the task is a rewrite.
       Dry-run imports via continuum__import_forge_dry_run_multi_sign_request — no --broadcast.
     modes: [interactive, cron]

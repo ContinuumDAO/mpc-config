@@ -1019,6 +1019,35 @@
       "url": "https://mcp.postman.com/mcp",
       "apiKeyEnvVar": "POSTMAN_API_KEY",
       "initialLoad": false
+    },
+    {
+      "id": "open-diagram",
+      "displayName": "open-diagram",
+      "searchTags": [
+        "open-diagram",
+        "diagram",
+        "architecture diagram"
+      ],
+      "setupUrl": "https://github.com/lukendeasy/open-diagram",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "--python",
+        "3.12",
+        "--from",
+        "open-diagram[mcp]==0.4.0",
+        "open-diagram-mcp",
+        "--out",
+        "/app/user_folder/data/diagrams"
+      ],
+      "useUserFolder": true,
+      "runtime": {
+        "requireCommands": [
+          "uv"
+        ]
+      },
+      "initialLoad": false,
+      "aiReady": false
     }
   ]
 }

@@ -7,6 +7,8 @@ description: Search, install, adapt, and create MPA Wallet plugins. Use when the
 
 A plugin is a directory `user_folder/plugins/<name>/`. Installing it adds a slash prompt and one or more skills. The operator runs it with `/<name> …` or `agent_load_skill`. An optional `extension/index.js` (or `.ts`) runs in a Node worker only after the operator approves the permission card.
 
+An architecture picture is optional. Load **`open-diagram`** only when the operator asks for a diagram. Create, review, smoke, and publish do not use that server. If it is not loaded, continue the plugin work.
+
 ## Tools
 
 These tools are added to the chat only after this skill is loaded. A plugin's own tools appear only after that plugin's skill is loaded, which its slash prompt asks for.

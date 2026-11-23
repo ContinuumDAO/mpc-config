@@ -33,7 +33,7 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 | **`hedging-trade`** | Plan-mode hedge interview + overlay picker (perps, Derive, Trueo / Hyperliquid Outcomes, Pendle, Morpho/Euler Earn, hedged LP). Compose is follow-on |
 | **`hedging-monitor`** | Live-hedge watch + unwind compose (hold / tighten / close / roll). Cron on the Orchestrator thread |
 | **`workspace-tooling`** | Create / reuse scripts under **`user_folder`** |
-| **`evm-foundry`** | Solidity under **`evm/`**. A `.sol` file is not done: `forge test` or a dry-run `forge script` on a fork, cwd `evm/`, quote a revert. Differential check only for a rewrite |
+| **`evm-foundry`** | Solidity under **`evm/`**. A `.sol` file is not done: `forge test` or a dry-run `forge script` on a fork, cwd `evm/`, quote a revert. Differential check only for a rewrite. If **`open-diagram`** is already active, draw one contract map; otherwise skip it |
 | **`evm-audit`** | Optional QuillShield audit after that dry-run. A decline still creates the deploy multi-sign. No key, a declined quote, a short wallet they will not top up, or an API error is a local scan |
 | **`continuum-dao-tokenomics`** | Live CTM circulating/escrowed supply, protocol addresses, veCTM locks (catalog MCP, not White Paper) |
 | **`continuum-dao-proposals`** | Present live/recent ContinuumDAO proposals and deconstruct multi-action briefs |
