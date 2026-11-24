@@ -2,6 +2,8 @@
 #
 # Used by mpc-auth when injecting analyze_* arguments, and on the Build Trade
 # fast path for offsets, proximity, ratio, leverage, and LLM-fallback rules.
+# classicPatterns is injected only into analyze_chart_patterns and
+# calculate_chart_pattern_drawings.
 # Edit on the node under agent_llm_config/trade-desk.yaml
 # (Skills tab → Host YAML, or POST /upsertHostYamlConfig kind=trade-desk).
 #
@@ -195,6 +197,34 @@ universal:
 
   # Optional multisign expiry: minutes from prefill/build time. Omit to use protocol default / no expiry.
   # expiryMinutesFromNow: 60
+
+# ---------------------------------------------------------------------------
+# classicPatterns — analyze_chart_patterns and calculate_chart_pattern_drawings
+# ---------------------------------------------------------------------------
+# Injected when those tool args omit the field. Other analyses ignore this block.
+# Library fallbacks match these values when the block is absent.
+classicPatterns:
+  # Drop hits below this confidence (0–1).
+  minConfidence: 0.45
+  # Centered smoothing of highs/lows before head-and-shoulders swing detection.
+  smoothHeadShoulders: true
+  # Smoothing window: 3 or 5.
+  smoothWindow: 5
+  # Trendline retest band is the wider of this fraction of the post-break move
+  # and retestAtrMultiplier × ATR (retestAtrPeriod bars).
+  retestTolerancePct: 0.10
+  retestAtrPeriod: 14
+  retestAtrMultiplier: 1.0
+  # After a break: retest the broken boundary, or enter at last close (immediate).
+  # Default retest.
+  entryMode: retest
+  # While price is inside the pattern: wait for a break, or bounce the near edge.
+  # Default none.
+  insideEntry: none
+  # Percent of price past a boundary before it counts as broken. 0.1 = 0.1%.
+  # After a break, the stop sits this same percent back through the broken line.
+  # This is not retestTolerancePct (that one is a fraction of the post-break move).
+  breakTolerancePct: 0.1
 
 # ---------------------------------------------------------------------------
 # llmFallback — when set, skip the fast path and run trade-defaults skill via LLM

@@ -17,7 +17,7 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 | **`chart-analysis-divergence`** | Momentum/price divergence analysis |
 | **`chart-analysis-range`** | Range / volatility analysis |
 | **`chart-analysis-patterns`** | Chart-pattern analysis entry points |
-| **`chart-analysis-classic-patterns`** | Classic geometric pattern analysis and drawing |
+| **`chart-analysis-classic-patterns`** | Classic geometric pattern analysis and drawing (scan knobs in **`trade-desk.yaml`** `classicPatterns`) |
 | **`chart-analysis-bollinger`** | Bollinger Bands analysis (desk knobs in **`trade-desk.yaml`**) |
 | **`chart-analysis-donchian`** | Donchian breakout analysis (desk knobs in **`trade-desk.yaml`**) |
 | **`chart-analysis-supertrend`** | Supertrend analysis (desk knobs in **`trade-desk.yaml`**) |

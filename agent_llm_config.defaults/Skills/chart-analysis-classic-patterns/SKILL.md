@@ -11,7 +11,7 @@ Use after OHLCV fetch. Tool: **`continuum__analyze_chart_patterns`**.
 
 Reference: **`chart_analysis_docs`** (pattern ids, smoothing, trendline breakout options).
 
-Input: `{ "title": "<from fetch>", "toolResult": { ... } }` — optional **`patterns[]`**, **`focusWindow`**, **`minConfidence`** (default 0.45), **`smoothHeadShoulders`** (default **true**), **`smoothWindow`** (`3`|`5`), **`retestTolerancePct`** (default **0.10**), **`retestAtrPeriod`** (default **14**), **`retestAtrMultiplier`** (default **1.0**).
+Input: `{ "title": "<from fetch>", "toolResult": { ... } }` — optional **`patterns[]`**, **`focusWindow`**. Omit **`minConfidence`**, **`smoothHeadShoulders`**, **`smoothWindow`**, **`retestTolerancePct`**, **`retestAtrPeriod`**, **`retestAtrMultiplier`**, **`entryMode`**, **`insideEntry`**, and **`breakTolerancePct`** so the node injects **`trade-desk.yaml`** **`classicPatterns`**. Pass one of those only when the operator overrides that run. Bundled defaults: confidence **0.45**, smoothing **on**, window **5**, retest **0.10** of the post-break move or **1.0** × ATR over **14** bars (the wider band), **`entryMode: retest`**, **`insideEntry: none`**, break tolerance **0.1** (0.1% of price).
 
 You may also pass **`label`** (ignored by the tool). Prefer full fetch **`toolResult`** over hand-copied **`rows`**. If using **`rows`**, pass a candle **array** (stringified JSON arrays are accepted).
 
@@ -56,8 +56,8 @@ Prefer **`analysis.chartPatternTradeSetup`** from tool JSON (SDK-resolved patter
 | **Bias / side** | **`chartPatternTradeSetup.side`** (`long` \| `short` \| `neutral`) |
 | **Entry (base limit)** | **`chartPatternTradeSetup.triggerPrice`** / **`triggerLabel`** — support bounce (**inside**) or broken-boundary retest (**post-breakout**) |
 | **Target** | **`chartPatternTradeSetup.targetPrice`** when present (measured move — unchanged) |
-| **Invalidation (pattern fail)** | **`chartPatternTradeSetup.invalidationPrice`** / **`invalidationLabel`** — opposite boundary where the thesis fails |
-| **Phase** | **`entryPhase`**: `inside_pattern` \| `post_breakout_retest`; **`entryOffsetMode`**: `bounce` \| `retest` |
+| **Invalidation** | **`chartPatternTradeSetup.invalidationPrice`** / **`invalidationLabel`**. After a break (retest or immediate), the stop is **`breakTolerancePct`** back through the broken line (`back through broken boundary`). Inside a pattern it stays the pattern-failure boundary. |
+| **Phase** | **`entryPhase`**: `inside_pattern` \| `post_breakout_retest` \| `post_breakout_immediate`; **`entryOffsetMode`**: `bounce` \| `retest`. **`insideEntry: none`** (default) waits for a break. **`insideEntry: bounce`** rests a limit on the near edge while price is inside. **`entryMode: immediate`** applies only after a break: entry is last close, offset is bounce, and the idea is unclear when last close is outside entry proximity of the broken boundary. Default **`entryMode`** is **`retest`**. |
 | **Setup code** | **`setupPurposeCode`** (e.g. `fw-bnc`, `fw-ret`, `sym-ret`) — used in multisign Purpose |
 
 **Rules**
@@ -92,7 +92,7 @@ After **`analyze_chart_patterns`**, read **`analysis.chartPatternTradeSetup`** f
 | `side` | `long` \| `short` \| `neutral` |
 | `triggerPrice` / `triggerLabel` | **Base** entry (pattern boundary) |
 | `targetPrice` / `targetStatus` / `targetDirection` | Measured-move target |
-| `invalidationPrice` / `invalidationLabel` | **Base** pattern-failure level |
+| `invalidationPrice` / `invalidationLabel` | **Base** stop: pattern-failure boundary inside the pattern, or `breakTolerancePct` back through the broken line after a break |
 | `entryPhase` / `entryOffsetMode` | Phase-aware limit rules |
 | `setupPurposeCode` | Short code for ctm1 Purpose (e.g. `fw-ret`) |
 | `lastClose` | From analyze turn |
