@@ -107,6 +107,7 @@ DEFAULT_USER_FOLDER_CONTAINER_PATH="/app/user_folder"
 DEFAULT_RAILGUN_DATA_DIR="railgun_data"
 DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME="MCP_default_servers.json"
 DEFAULT_TRADE_DESK_BASENAME="trade-desk.yaml"
+DEFAULT_PROTOCOL_TRADE_BASENAME="protocol-trade.yaml"
 DEFAULT_ORCHESTRATION_PLAN_BASENAME="orchestration-plan.yaml"
 DEFAULT_AGENT_INTENT_RULES_BASENAME="agent-intent-rules.yaml"
 DEFAULT_WORK_CHECKS_BASENAME="work-checks.yaml"
@@ -161,7 +162,7 @@ _seed_agent_mcp_default_servers_file() {
     _seed_agent_mcp_json_file "$1" "${DEFAULT_AGENT_MCP_DEFAULT_SERVERS_BASENAME}"
 }
 
-# Copy trade-desk.yaml into agent_llm_config/ (once) for deterministic trade prefill defaults.
+# Copy trade-desk.yaml into agent_llm_config/ (once) for analysis knobs and idea geometry.
 _seed_trade_desk_yaml() {
     local cfg_parent="$1"
     local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/${DEFAULT_TRADE_DESK_BASENAME}"
@@ -174,6 +175,22 @@ _seed_trade_desk_yaml() {
     fi
     if cp "$src" "$dest" 2>/dev/null; then
         print_success "agent_llm_config: installed ${DEFAULT_TRADE_DESK_BASENAME}"
+    fi
+}
+
+# Copy protocol-trade.yaml into agent_llm_config/ (once) for per-venue Build Trade defaults.
+_seed_protocol_trade_yaml() {
+    local cfg_parent="$1"
+    local src="${REPO_ROOT}/${DEFAULT_AGENT_LLM_CONFIG_BUNDLE_DIR}/${DEFAULT_PROTOCOL_TRADE_BASENAME}"
+    local dest="${cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}/${DEFAULT_PROTOCOL_TRADE_BASENAME}"
+    if [ ! -f "$src" ]; then
+        return 0
+    fi
+    if [ -f "$dest" ]; then
+        return 0
+    fi
+    if cp "$src" "$dest" 2>/dev/null; then
+        print_success "agent_llm_config: installed ${DEFAULT_PROTOCOL_TRADE_BASENAME}"
     fi
 }
 
@@ -7589,6 +7606,7 @@ main() {
         _process_config_mkdir_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_RAILGUN_DATA_DIR}/keygens"
         _seed_agent_mcp_default_servers_file "${_cfg_parent}" || true
         _seed_trade_desk_yaml "${_cfg_parent}" || true
+        _seed_protocol_trade_yaml "${_cfg_parent}" || true
         _seed_orchestration_plan_yaml "${_cfg_parent}" || true
         _seed_agent_intent_rules_yaml "${_cfg_parent}" || true
         _seed_work_checks_yaml "${_cfg_parent}" || true

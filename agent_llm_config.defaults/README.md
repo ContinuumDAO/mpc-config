@@ -10,7 +10,8 @@ Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent
 |------|--------------|---------|
 | **`MCP_default_servers.json`** | Same name (legacy seed) | Default **active** servers seeded on first DB migration: **continuum** (`initialLoad: true`), **coinmarketcap-public** / **coinbase-public** (`initialLoad: false`). |
 | **`MCP_servers.json`** | Not copied to active storage | **Repository catalog** of optional MCP servers (`kind`, `searchTags`, connect fields). Use **Add from repository** in the UI or `POST /addMcpServerFromCatalog` to activate on this node. Host search and search-engine vs research-data classification read this file at runtime — adding a server does not require an mpc-auth rebuild. See **MCP catalog secrets** below. |
-| **`trade-desk.yaml`** | Same name | Trade prefill desk defaults (offsets, sizing, LLM fallback). Host-parsed YAML; edit via UI **Host YAML configs** or reset-from-defaults. |
+| **`trade-desk.yaml`** | Same name | Analysis knobs and shared idea geometry (offsets, proximity, indicator periods, LLM fallback). Host-parsed YAML; a `protocols` key is rejected. Edit via UI **Host YAML configs** or reset-from-defaults. |
+| **`protocol-trade.yaml`** | Same name | Per-venue Build Trade defaults (sizing, TIF, TP offset, purpose suffix). Host-parsed YAML; edit via UI **Host YAML configs** (`kind=protocol-trade`) or reset-from-defaults. |
 | **`orchestration-plan.yaml`** | Same name | Plan modes, skeletons, **`followOn`** (store prior TA trade ideas), task-class matchers, budgets, verify/soft-accept, contracts. Host-parsed YAML — product policy changes without rebuilding mpc-auth after the loader ships. |
 | **`agent-intent-rules.yaml`** | Same name | Free-text intent → pack boost, **`always`** turn hints, **`loadMcpServers`**, optional **`verify`** (`interview` / `lookup` / `deliverable`), and vendor/protocol playbooks (never short-circuits the LLM). Host-parsed YAML; mpc-auth stays vendor-agnostic. |
 | **`work-checks.yaml`** | Same name | Command-evidence grader: which phrases open a check, which commands count, cwd, forbidden flags, follow-up tool, and the compiler profile pin. Host-parsed YAML. |
@@ -19,7 +20,7 @@ Runtime secrets, mpc-auth–assigned ids, and operator edits live under **`agent
 | **`trusted-substitutions.yaml`** | Same name | Variable names for built-in host features (Uniswap V4 chart: `THE_GRAPH_API_KEY`, `BITQUERY_API_KEY`). Values stay in Variables. Host-parsed YAML; edit via **Host YAML configs** (`kind=trusted-substitutions`). |
 | **`Skills/`** | Same path | Agent skills: **`skills.json`** manifest plus **`.md`** / **`.txt`** bodies. |
 
-### Host YAML configs (`trade-desk.yaml`, `orchestration-plan.yaml`, `agent-intent-rules.yaml`, `continuum-dao-vote-policy.yaml`, `mpa-plugin-review.yaml`, `trusted-substitutions.yaml`)
+### Host YAML configs (`trade-desk.yaml`, `protocol-trade.yaml`, `orchestration-plan.yaml`, `agent-intent-rules.yaml`, `continuum-dao-vote-policy.yaml`, `mpa-plugin-review.yaml`, `trusted-substitutions.yaml`)
 
 These are **not** agent Skills. mpc-auth loads them at plan/trade/turn time (mtime-aware cache); vote policy is injected when the **`continuum-dao-vote-policy`** skill loads, and plugin review is injected when the **`mpa-plugin-review`** skill loads. Ops model:
 

@@ -7,7 +7,7 @@ description: Use for trade idea / trade desk defaults and build-trade guidance. 
 
 Load when the operator opens **Trade ideas**, selects a numbered idea, or before **`continuum__build_trade_from_trade_idea`**.
 
-**Desk numeric defaults** (offsets, proximity, protocol sizing, `marketKind`, `tif`, `autoSubmitMultisign`) are machine-parsed from **`trade-desk.yaml`** beside `agent_llm_config/` (seeded from `agent_llm_config.defaults/trade-desk.yaml`). The node applies them on a **deterministic fast path** for clear ideas — no LLM round-trip.
+**Desk numeric defaults** are machine-parsed beside `agent_llm_config/`. **`trade-desk.yaml`** holds offsets, proximity, indicator knobs, and `autoSubmitMultisign`. **`protocol-trade.yaml`** holds per-venue sizing, `marketKind`, `tif`, TP offset, and purpose suffix. The node applies them on a **deterministic fast path** for clear ideas — no LLM round-trip.
 
 **This skill** is for **policy-only** cases the fast path cannot decide: nearest-level break+retest alternates (`kl-ret`), Donchian primary vs nested alternate (`dc-ret` / `dc-brk`), unclear status with a clear alternate, and discretionary `purposeTextAdditional`. When the fast path applies, the operator still reviews the prefilled form unless **`autoSubmitMultisign`** is enabled in `trade-desk.yaml` or cron **`tradeBuild`** YAML.
 
@@ -113,23 +113,21 @@ Quote **`tradeSummary`** in operator-facing prose (e.g. “Golden cross · SMA(5
 
 ## 2. Universal prefill fields (trade-desk.yaml)
 
-Edit **`trade-desk.yaml`** → `universal:` and per-protocol `protocols:` blocks. The node prefill fast path reads these directly.
+Edit **`trade-desk.yaml`** → `universal:` for shared idea geometry. Edit **`protocol-trade.yaml`** → `protocols:` for venue sizing, TIF, TP offset, and purpose suffix. The node prefill fast path reads both.
 
 | Field | Meaning |
 |-------|---------|
 | `entryOffsetPct` | Perp entry limit band — always **price %** (see §3) |
 | `invalidationOffsetPct` / `invalidationOffsetMode` | Perp invalidation / SL band — `price` (default) or `atr` (% of one ATR bar; default pct **25** when atr and omitted) |
-| `targetOffsetPct` | Hyperliquid only — TP trigger band **inside** idea target (see §3) |
-| `targetOffsetMode` | Hyperliquid only — `price` (% of target) or `atr` (% of one ATR bar) |
 | `takeProfitSource` | **Trend structure only** — `impulse_leg` (default; `measuredMove.targetPrice`, falls back to swing) or `swing` (nearer swing target) |
 | `useCustomGas` | EVM Custom Gas Config (ignored when Hyperliquid bracket uses EIP-712) |
 | `entryProximityMode` / `entryProximityPct` | Idea surfacing gates (`price` \| `atr`; Bollinger uses band-width % on the setup) |
 | `autoSubmitMultisign` | Submit without operator review (cron only when explicitly allowed) |
 | `expiryMinutesFromNow` | Optional multisign expiry (Unix seconds computed at prefill time) |
 
-**Protocol blocks** (`hyperliquid`, `arcus`, `gmx`, `uniswap`): `marketKind`, `tif`, `collateralToken`, `sizing` (`fixed` or `marginPct` for Hyperliquid), optional `purposeSuffix` per analysis kind.
+**Protocol blocks** in **`protocol-trade.yaml`** (`hyperliquid`, `arcus`, `gmx`, `uniswap`): `marketKind`, `tif`, `collateralToken`, `sizing` (`fixed` or `marginPct` for Hyperliquid), optional `purposeSuffix` per analysis kind.
 
-**Hyperliquid-only** (`protocols.hyperliquid` in `trade-desk.yaml`):
+**Hyperliquid-only** (`protocols.hyperliquid` in `protocol-trade.yaml`):
 
 | Field | Meaning |
 |-------|---------|
@@ -173,7 +171,7 @@ ATR comes from the analysis session (`atrAtLastBar` on the trade idea setup). Wh
 
 ### targetOffsetPct / targetOffsetMode (Hyperliquid bracket only)
 
-Conservative take-profit: exit **before** the full analysis target is reached (long TP below target, short TP above target). Configure in **`trade-desk.yaml` → `protocols.hyperliquid`**. Override per build via `targetOffsetPct` / `targetOffsetMode` on `build_trade_from_*` or the Build Trade form.
+Conservative take-profit: exit **before** the full analysis target is reached (long TP below target, short TP above target). Configure in **`protocol-trade.yaml` → `protocols.hyperliquid`**. Override per build via `targetOffsetPct` / `targetOffsetMode` on `build_trade_from_*` or the Build Trade form.
 
 | `targetOffsetMode` | `targetOffsetPct` meaning | Long effective TP | Short effective TP |
 |--------------------|---------------------------|-------------------|------------------|
@@ -195,7 +193,7 @@ Default from desk: **`targetOffsetPct: 0.1`**, **`targetOffsetMode: price`**. Se
 | **`limit_at_trigger`** (default) | Resting limit at trigger price when TP/SL fires |
 | **`market`** | Market order with HL slippage tolerance when triggered |
 
-Configure default in **`trade-desk.yaml` → `protocols.hyperliquid.tpslExecMode`**. Bracket orders use **EIP-712** `/exchange` — not CoreWriter; **`useCustomGas`** does not apply.
+Configure default in **`protocol-trade.yaml` → `protocols.hyperliquid.tpslExecMode`**. Bracket orders use **EIP-712** `/exchange` — not CoreWriter; **`useCustomGas`** does not apply.
 
 ### Worked examples (any perp limit protocol)
 
@@ -232,9 +230,9 @@ Optional **`purposeTextAdditional`** after ` · ` (e.g. `trend retest`, `Generat
 
 ---
 
-## 5. Protocol reference (trade-desk.yaml)
+## 5. Protocol reference (protocol-trade.yaml)
 
-Protocol-specific defaults and sizing live under **`trade-desk.yaml` → `protocols:`**. Required build fields:
+Protocol-specific defaults and sizing live under **`protocol-trade.yaml` → `protocols:`**. Required build fields:
 
 | `protocolId` | Required prefill fields |
 |--------------|-------------------------|
@@ -404,7 +402,7 @@ Structure: **when** (idea filter) → **which protocol** → **prefill from that
 
 1. **`analyze_*`** → trade ideas upsert.
 2. Operator selects **#N** (or cron sets `tradeIdeaNumber`).
-3. Node loads **`trade-desk.yaml`** → deterministic prefill when eligible (SSE `trade_idea_prefill`); otherwise loads this skill → LLM prefill.
+3. Node loads **`trade-desk.yaml`** and **`protocol-trade.yaml`** → deterministic prefill when eligible (SSE `trade_idea_prefill`); otherwise loads this skill → LLM prefill.
 4. Operator submits, or **`autoSubmitMultisign`** → **`continuum__build_trade_from_trade_idea`**.
 5. Approve in Sign Requests.
 

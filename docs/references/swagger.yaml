@@ -3277,16 +3277,16 @@ paths:
           $ref: '#/definitions/node.DeleteUserFolderPathPost'
   /getHostYamlConfig:
     get:
-      description: 'Get host YAML config by kind (trade-desk, orchestration-plan, agent-intent-rules, cron-trade) with upgrade
-        metadata Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getHostYamlConfig).'
+      description: 'Get host YAML config by kind (trade-desk, protocol-trade, orchestration-plan, agent-intent-rules, cron-trade)
+        with upgrade metadata Full detail: mpc-config docs/references/API_IMPLEMENTATION.md (GET /getHostYamlConfig).'
       consumes:
       - application/json
       produces:
       - application/json
       tags:
       - Management API
-      summary: Get host YAML config by kind (trade-desk, orchestration-plan, agent-intent-rules, cron-trade) with upgrade
-        metadata
+      summary: Get host YAML config by kind (trade-desk, protocol-trade, orchestration-plan, agent-intent-rules, cron-trade)
+        with upgrade metadata
       responses:
         '200':
           description: OK
@@ -3299,6 +3299,7 @@ paths:
         required: true
         enum:
         - trade-desk
+        - protocol-trade
         - orchestration-plan
         - agent-intent-rules
         - cron-trade
@@ -6401,6 +6402,7 @@ definitions:
         type: string
         enum:
         - trade-desk
+        - protocol-trade
         - orchestration-plan
         - agent-intent-rules
         - cron-trade
@@ -6449,6 +6451,7 @@ definitions:
           type: string
           enum:
           - trade-desk
+          - protocol-trade
           - orchestration-plan
           - agent-intent-rules
           - cron-trade
@@ -6469,6 +6472,7 @@ definitions:
           type: string
           enum:
           - trade-desk
+          - protocol-trade
           - orchestration-plan
           - agent-intent-rules
           - cron-trade

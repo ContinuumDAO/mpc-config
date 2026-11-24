@@ -7,6 +7,7 @@
 #
 # Related config (not duplicated here):
 #   • trade-desk.yaml — entryProximity*, offsets, Donchian/Z-score/Fib knobs for analyze_* and Build Trade
+#   • protocol-trade.yaml — per-venue sizing, TIF, TP offset, purpose suffix for Build Trade
 #   • Skills/trade-defaults.md — LLM policy fallback (nearest-level break+retest, unclear + clear alternate, etc.)
 #   • cron/trade_analysis_cron.example.md — full analysis steps + selection prose template
 

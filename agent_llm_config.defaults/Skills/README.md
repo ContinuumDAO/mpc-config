@@ -28,7 +28,7 @@ Bundled skill files for the node agent. Copied from **`agent_llm_config.defaults
 | **`continuum-mcp-deferred-tools`** | Tool bundle discovery; **`load_defi_protocol`** vs **`agent_load_mcp_server`** (`initialLoad: true`) |
 | **`execution-policy`** | MultiSign / on-chain execution: gas, one `requestId` per round, confirm before broadcast |
 | **`scheduled-automation`** | Cron & webhook behavior: non-interactive runs, schedule kinds, conversation threading |
-| **`trade-defaults`** | Policy-only trade-build guidance; numeric desk defaults live in host YAML **`trade-desk.yaml`** |
+| **`trade-defaults`** | Policy-only trade-build guidance; analysis knobs and idea geometry live in **`trade-desk.yaml`**; venue sizing lives in **`protocol-trade.yaml`** |
 | **`hedging-trade`** | Plan-mode hedge interview + overlay picker (perps, Derive, Trueo / Hyperliquid Outcomes, Pendle, Morpho/Euler Earn, hedged LP). Compose is follow-on |
 | **`hedging-monitor`** | Live-hedge watch + unwind compose (hold / tighten / close / roll). Cron on the Orchestrator thread |
 | **`workspace-tooling`** | Create / reuse scripts under **`user_folder`** |
