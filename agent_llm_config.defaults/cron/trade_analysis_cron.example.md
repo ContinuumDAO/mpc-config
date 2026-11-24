@@ -131,7 +131,7 @@ Else prefer **elliott_waves** when `status=clear`, `patternType` is **`impulse`*
 
 Else prefer **trend_structure** when `status=clear`, `setupPurposeCode` **`trend-ret`**, `side` matches **`analysis.bias`** (support-line long / resistance-line short), and confirmation rule passes. Skip if **`tradeBuild.protocolId`** is **`uniswap`** unless last close is within **`entryProximityPct`** of entry (retest limit not actionable as spot otherwise).
 
-Else prefer **key_level_fibonacci** when `status=clear`, `priceRegime: inside_range`, and both bracket legs are quoted (strongest Level # below and above last close). Primary is **`kl-fib`** (0.618 fade). Skip when analysis is invalid (no strong legs on both sides of last close / below desk **`fibKeyLevelMinConfidence`**).
+Else prefer **key_level_fibonacci** when `status=clear`, `priceRegime: inside_range`, and both bracket legs are quoted (strongest Level # below and above last close). Primary is **`kl-fib`** (0.618 fade). Skip when analysis is invalid (no legs on both sides of last close with at least desk **`keyLevelFibonacci.minTouches`**).
 
 Else prefer **key_levels** (nearest): rank-1 **bounce** (`kl-bnc`) or **rejection** (`kl-brk`). For historical break+retest, use nested **`breakRetestAlternative`** (`kl-ret`) per **`trade-defaults`** §1.1 when prose favors it or primary is unclear and alternate is clear.
 

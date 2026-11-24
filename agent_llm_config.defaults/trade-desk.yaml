@@ -4,6 +4,10 @@
 # fast path for offsets, proximity, ratio, leverage, and LLM-fallback rules.
 # classicPatterns is injected only into analyze_chart_patterns and
 # calculate_chart_pattern_drawings.
+# keyLevels is injected into analyze_key_levels and, for the shared swing
+# detector, into analyze_key_level_fibonacci. keyLevelFibonacci is injected
+# only into analyze_key_level_fibonacci. Universal proximity and offsets
+# already apply to both; they are not repeated in those blocks.
 # Edit on the node under agent_llm_config/trade-desk.yaml
 # (Skills tab → Host YAML, or POST /upsertHostYamlConfig kind=trade-desk).
 #
@@ -89,11 +93,6 @@ universal:
   # Assumed isolated leverage for analysis-time liquidation estimate (perp venues only;
   # omitted for Uniswap / spot). long entry × (1 − 1/leverage); short entry × (1 + 1/leverage)
   assumedLeverage: 10
-
-  # Per-leg key-level confidence (strength/100) for Fib strongest-bracket range.
-  # Both the strongest level below and above last close must meet this, else fib analysis is invalid.
-  # Injected into analyze_key_level_fibonacci as fibKeyLevelMinConfidence (default 0.35).
-  fibKeyLevelMinConfidence: 0.35
 
   # Donchian channel length (bars) for analyze_donchian_breakout and chart overlay type:donchian.
   # Injected as period / donchianPeriod when the tool arg is unset. Default 20.
@@ -197,6 +196,36 @@ universal:
 
   # Optional multisign expiry: minutes from prefill/build time. Omit to use protocol default / no expiry.
   # expiryMinutesFromNow: 60
+
+# ---------------------------------------------------------------------------
+# keyLevels — analyze_key_levels, and the swing detector shared with fib
+# ---------------------------------------------------------------------------
+# Universal entryProximity*, entryOffsetPct, and invalidationOffset* already
+# apply. This block only says how a level is found and how many touches make
+# a bounce, rejection, or break retest clear. Library fallbacks match these
+# values when the block is absent. minTouches is injected only into
+# analyze_key_levels. tolerancePct and swingLookback are also injected into
+# analyze_key_level_fibonacci.
+keyLevels:
+  # Cluster swings within this percent of price into one level. 0.3 = 0.3%.
+  tolerancePct: 0.3
+  # Bars on each side of a pivot.
+  swingLookback: 3
+  # Touches required before a bounce, rejection, or break retest can be clear.
+  minTouches: 3
+
+# ---------------------------------------------------------------------------
+# keyLevelFibonacci — analyze_key_level_fibonacci
+# ---------------------------------------------------------------------------
+# Universal proximity and offsets apply. Swing clustering comes from keyLevels
+# (tolerancePct, swingLookback). This block says when a bracket leg qualifies
+# and which Fib level is the fade target. Library fallbacks match these values
+# when the block is absent.
+keyLevelFibonacci:
+  # Touches required on the level below last close and the level above it.
+  minTouches: 3
+  # Fade target inside the bracket. One of 0.236, 0.382, 0.5, 0.618, 0.786.
+  retracementRatio: 0.618
 
 # ---------------------------------------------------------------------------
 # classicPatterns — analyze_chart_patterns and calculate_chart_pattern_drawings

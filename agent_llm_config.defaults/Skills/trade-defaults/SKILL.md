@@ -41,7 +41,7 @@ Chart-pattern ideas store **base** entry and invalidation at pattern boundaries 
 
 **Key-levels (nearest)** ideas (`analyze_key_levels`) auto-upsert the **primary** setup only — **bounce** at nearest support (`kl-bnc`, long) or **rejection** at nearest resistance (`kl-brk`, short). Base entry sits at the menu level price; target is the **next key level** in trade direction when available (`targetSource: next_level`). A nested **`breakRetestAlternative`** may be present for operator/agent selection — it is **not** used unless this skill directs you to switch (see §1.1).
 
-**Key-level Fibonacci** ideas (`analyze_key_level_fibonacci`) use the **strongest-bracket** range: strongest key level below last close × strongest key level above last close, each with confidence (`strength/100`) ≥ desk **`fibKeyLevelMinConfidence`** (default **0.35**). If either leg is missing or weak, the analysis is invalid (no `primaryFibPair` / no trade setup). A valid bracket always places last close **between** the legs (`priceRegime: inside_range`). Always quote both Level #s, prices, strengths, and confidences when reporting.
+**Key-level Fibonacci** ideas (`analyze_key_level_fibonacci`) use the **strongest-bracket** range: strongest key level below last close × strongest key level above last close, each with at least desk **`keyLevelFibonacci.minTouches`** (default **3**). The fade target is **`keyLevelFibonacci.retracementRatio`** (default **0.618**). If either leg is missing or short of that touch count, the analysis is invalid (no `primaryFibPair` / no trade setup). A valid bracket always places last close **between** the legs (`priceRegime: inside_range`). Always quote both Level #s, prices, and touch counts when reporting.
 
 | Regime | Last close | Primary setup | Target |
 |--------|------------|---------------|--------|
@@ -80,7 +80,7 @@ Fib analyze does **not** emit outside-range extension or Fib break+retest setups
 
 **Chart apply:** `apply_key_fib_drawings` with **`fibPairNumber`** draws the Fib overlay (**0 / 0.618 / 1**) plus leg horizontals. Lower-half setups use inverted Fib orientation (`displayTrend: up`).
 
-**Desk percentages on setup (match §2 defaults):** each `keyLevelFibTradeSetup` includes **`entryProximityPct: 1`**, **`entryOffsetPct: 1`**, **`invalidationOffsetPct: 1`**. Bracket formation also uses desk **`fibKeyLevelMinConfidence: 0.35`** (per-leg `strength/100`). Analysis uses proximity/offsets when assessing entry actionability: last close within **`entryProximityPct`** of the **Fib leg entry** (Fib 1.0 / Fib 0 per variant — not the 0.618 target). At **build**, **`entryOffsetPct`** (bounce mode) shifts the resting limit slightly beyond that leg (§3).
+**Desk percentages on setup (match §2 defaults):** each `keyLevelFibTradeSetup` includes **`entryProximityPct: 1`**, **`entryOffsetPct: 1`**, **`invalidationOffsetPct: 1`**. Bracket formation uses desk **`keyLevelFibonacci.minTouches: 3`** on each leg and **`retracementRatio: 0.618`**. Analysis uses proximity/offsets when assessing entry actionability: last close within **`entryProximityPct`** of the **Fib leg entry** (Fib 1.0 / Fib 0 per variant — not the retracement target). At **build**, **`entryOffsetPct`** (bounce mode) shifts the resting limit slightly beyond that leg (§3).
 
 Same desk fields are on **`keyLevelsTradeSetup`** for nearest analysis (bounce uses **`entryProximityPct`**).
 

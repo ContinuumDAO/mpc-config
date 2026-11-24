@@ -10,7 +10,7 @@ Two **`analyze_*`** tools share the same ranked level menu / OHLCV session but p
 | Tool | Trade idea kind | Setup field | Use when |
 |------|-----------------|-------------|----------|
 | **`continuum__analyze_key_levels`** | **`key_levels`** | `keyLevelsTradeSetup` | Nearest support **bounce** (`kl-bnc`) or nearest resistance **rejection** (`kl-brk`); target = next key level. Historical **break+retest** lives here as nested **`breakRetestAlternative`** (`kl-ret`). |
-| **`continuum__analyze_key_level_fibonacci`** | **`key_level_fibonacci`** | `keyLevelFibTradeSetup` | **Strongest-bracket** Fib: strongest key level **below** × strongest **above** last close → inside-range **0.618** fade (`kl-fib`; entry at Fib leg, bounce offsets). Invalid when either leg is missing or below desk **`fibKeyLevelMinConfidence`**. |
+| **`continuum__analyze_key_level_fibonacci`** | **`key_level_fibonacci`** | `keyLevelFibTradeSetup` | **Strongest-bracket** Fib: strongest key level **below** × strongest **above** last close → inside-range **0.618** fade (`kl-fib`; entry at Fib leg, bounce offsets). Invalid when either leg is missing or below desk **`keyLevelFibonacci.minTouches`** (default 3). Fade target is **`keyLevelFibonacci.retracementRatio`** (default 0.618). |
 
 Summarize **`analysis.levels`** (ranked support/resistance), **`nearestSupport`**, **`nearestResistance`**, and distance from **`lastClose`**.
 
