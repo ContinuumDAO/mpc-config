@@ -98,9 +98,9 @@ universal:
   donchianPeriod: 20
 
   # Donchian primary entry style for analyze_donchian_breakout:
-  #   retest    — post-breakout retest of broken band (dc-ret); default
-  #   immediate — channel break / hold beyond prior band (dc-brk)
-  donchianEntryMode: retest
+  #   retest    — post-breakout retest of broken band (dc-ret)
+  #   immediate — channel break / hold beyond prior band (dc-brk); default
+  donchianEntryMode: immediate
 
   # Donchian take-profit distance as a multiple of ATR (entryProximityAtrPeriod bars):
   #   Target = breakout entry ± (donchianTargetAtrMultiple × ATR). Default 3.
