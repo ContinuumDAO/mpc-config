@@ -984,6 +984,7 @@ rules:
       Market-data OHLCV: ask which catalog MCP or Continuum DeFi protocol to use if none is loaded.
       Do not pick CoinGecko / CoinMarketCap / Coinbase / Binance by default. After the operator
       chooses, agent_load_mcp_server (or continuum__load_defi_protocol) then that provider's fetch tool.
+      A plugin install or load is not this ask, even when the plugin name contains perp or candles.
     modes: [interactive, cron]
 
   - id: railgun_private_transfer_contact
@@ -1093,6 +1094,30 @@ rules:
         - install a plugin
         - install the plugin
         - install plugin
+        - install this plugin
+        - load a plugin
+        - load the plugin
+        - load plugin
+        - load this plugin
+        - add a plugin
+        - add the plugin
+        - add plugin
+        - add this plugin
+        - get a plugin
+        - get the plugin
+        - fetch a plugin
+        - fetch the plugin
+        - fetch plugin
+        - pull a plugin
+        - pull the plugin
+        - download a plugin
+        - download the plugin
+        - download plugin
+        - reinstall a plugin
+        - reinstall the plugin
+        - reinstall plugin
+        - plugin from the repository
+        - plugin repository
         - search plugins
         - find a plugin
         - list plugins
@@ -1107,8 +1132,10 @@ rules:
         - plugin catalog
         - mpaplugins
     hint: |
-      Operator wants an existing plugin found, installed, updated, or published. The host loads
-      mpa-plugin-author and mpa-plugin-review. Search the index, show the review recommendation,
-      and wait for an explicit yes before agent_enable_plugin. Do not write a new package unless
-      they asked for one. Do not publish unless they asked.
+      Operator wants an existing plugin found, installed, loaded, added, or published. The host loads
+      mpa-plugin-author and mpa-plugin-review. Search the index with agent_search_plugins, then
+      agent_install_plugin for the name they gave. Show the review recommendation, and wait for an
+      explicit yes before agent_enable_plugin. Do not write a new package unless they asked for one.
+      Do not publish unless they asked. A plugin name that contains perp, candles, or ohlcv is still
+      this install. Do not fetch OHLCV or load a DeFi protocol for it.
     modes: [interactive]
