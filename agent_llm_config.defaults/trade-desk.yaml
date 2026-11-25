@@ -228,6 +228,16 @@ keyLevelFibonacci:
   retracementRatio: 0.618
 
 # ---------------------------------------------------------------------------
+# candlestick — plugin candlestick_patterns and the candlestick confirmation switch
+# ---------------------------------------------------------------------------
+# The plugin sets analyze minConfidence from minConfidenceCandles for a
+# candlestick_patterns decision and for the candlestick switch on every other
+# analysis type. classicPatterns.minConfidence stays the chart-pattern gate.
+# When this line is absent the plugin uses 0.8.
+candlestick:
+  minConfidenceCandles: 0.8
+
+# ---------------------------------------------------------------------------
 # classicPatterns — analyze_chart_patterns and calculate_chart_pattern_drawings
 # ---------------------------------------------------------------------------
 # Injected when those tool args omit the field. Other analyses ignore this block.
