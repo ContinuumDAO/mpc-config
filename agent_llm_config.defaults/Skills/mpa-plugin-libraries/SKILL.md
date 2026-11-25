@@ -276,28 +276,43 @@ Each line is `exportName` — what it does. Names in parentheses are the inputs 
 
 `defiModules`: `protocols/evm/derive`
 
-- `buildDeriveCancelMultisign` — Cancel a Derive open order (v3 private/cancel via EIP-191 login delivery). Requires subaccountId from ctm_derive_fetch_subaccounts. Does not move the current-c… (chainId, instrumentName, orderId, subaccountId)
+- `buildDeriveCancelAllMultisign` — Group approval of private/cancel_all for one subaccount. Login is the session key at POST time. Builds the unsigned batch, signs the management envelope, and P… (chainId, subaccountId)
+- `buildDeriveCancelByInstrumentMultisign` — Group approval of private/cancel_by_instrument. Login is the session key at POST time. Builds the unsigned batch, signs the management envelope, and POSTs /mul… (chainId, instrumentName, subaccountId)
+- `buildDeriveCancelMultisign` — Group approval of one Derive cancel. The node signs the login header at POST time with the login session key. The signed message is not a timestamp. Builds the… (chainId, instrumentName, orderId, subaccountId)
+- `buildDeriveCloseOptionMultisign` — Offsetting order that closes an option. Sell to close a long, buy to close a short, in the position size. Not a perp reduce-only flag. Builds the unsigned batc… (chainId, instrumentName, direction, amount, limitPrice, maxFee, subaccountId)
+- `buildDeriveClosePerpMultisign` — Reduce-only IoC market order that closes a perp. direction is the closing side. Size is the position size. Builds the unsigned batch, signs the management enve… (chainId, instrumentName, direction, amount, limitPrice, maxFee, subaccountId)
+- `buildDeriveCompetitionSignProofMultisign` — KeyGen personal_sign of caller-supplied text. Activate defi:derive:competition. The signature is returned to the caller and is not posted to Derive. Builds the… (chainId, message)
 - `buildDeriveDepositAddressTransferMultisign` — Ethereum L1 ERC-20 transfer to a registered Derive deposit address (standard / keeper sweep). Call ctm_derive_register_deposit_address first. useCustomGas. Bui… (chainId, underlyingErc20, amountHuman, depositAddress)
 - `buildDeriveDepositNewSubaccountMultisign` — Ethereum L1 only (chainId 1 / 11155111): approve the underlying ERC-20 to ACTION_MANAGER, then depositToNewSubaccount. First credit creates the trading + fallb… (chainId, protocolAsset, underlyingErc20, amountHuman, managerId)
 - `buildDeriveHypeVaultDepositMultisign` — HyperEVM (999) HYPE vault: wrap native HYPE to WHYPE if needed, approve, deposit. First credit creates a Standard Margin subaccount. useCustomGas. Builds the u… (chainId, amountHuman)
-- `buildDerivePlaceOrderMultisign` — EIP-712 Derive options order (delivery derive_exchange). Requires subaccountId from ctm_derive_fetch_subaccounts. Does not move the current-chain token unless… (chainId, instrumentName, direction, amount, limitPrice, maxFee, subaccountId)
+- `buildDeriveOwnerLoginMultisign` — Group personal_sign of a login timestamp. Broadcast saves it so the following set_session_key can register. It is not a trade and it is not reused for orders.… (chainId)
+- `buildDerivePerpBracketMultisign` — One multisign with an entry limit and optional reduce-only mark triggers for take-profit and stop-loss. Each leg is its own EIP-712 order. Long: stop below ent…
+- `buildDerivePlaceOrderMultisign` — EIP-712 Derive option or perp order (delivery derive_exchange). Perp names end in -PERP and use sub_id 0. The subaccount manager must be in the instrument univ… (chainId, instrumentName, direction, amount, limitPrice, maxFee, subaccountId)
 - `buildDeriveReplaceOrderMultisign` — EIP-712 replace of a Derive open order. Requires subaccountId from ctm_derive_fetch_subaccounts and exactly one of orderIdToCancel or nonceToCancel. EIP-712 or… (chainId, instrumentName, direction, amount, limitPrice, maxFee, subaccountId)
+- `buildDeriveSetSessionKeyMultisign` — Owner EIP-712 that registers a login-only session key (account_info, no trade/transfer/withdraw scope). The private key stays on the node. Broadcast the owner… (chainId, subaccountId)
 - `buildDeriveSocketDepositMultisign` — Socket FAST deposit of USDC/WETH/WBTC on Ethereum, Optimism, Base, or Arbitrum. Native 0x0 wraps to WETH. Pays a small native bridge fee. useCustomGas. Builds… (chainId, token, amountHuman)
-- `buildDeriveTransferSpotMultisign` — EIP-712 transfer_spot. Use toSubaccountId 0 + newSubaccountManager to create an extra subaccount after the first funded one. First account is a deposit (L1 / S… (chainId, fromSubaccountId, toSubaccountId, newSubaccountManager, asset, amount)
+- `buildDeriveTransferSpotMultisign` — Move Derive collateral between subaccounts, including crypto and RWA. toSubaccountId 0 plus newSubaccountManager creates the destination subaccount on that man… (chainId, fromSubaccountId, toSubaccountId, newSubaccountManager, asset, amount)
+- `buildDeriveWithdrawMultisign` — EIP-712 private/withdraw of collateral to the KeyGen owner. amountHuman is in token units. The login session key does not sign this payout. Builds the unsigned… (chainId, subaccountId, assetName, amountHuman)
+- `deriveCompetitionCheck` — Compare one option against caller-supplied currencies, expiry deadline, delta band, and minimum premium. Activate defi:derive:competition. Rules are not built… (currency, expiryUnix, delta, premiumUsd, currencies, expiryDeadlineUnix, deltaMin, deltaMax, minPremiumUsd)
 - `deriveFetchCurrenciesSummary` — List Derive currencies from public/get_all_currencies. Used to map asset-row symbols (ETH, USDC, BTC, …). load_defi_protocol derive activates defi:derive:marke…
+- `deriveFetchFundingSummary` — Perp funding-rate history for a CCY-PERP instrument. (instrumentName)
 - `deriveFetchMarketSnapshotSummary` — Live Derive ticker: mark, index, bid/ask, greeks. Throws if no live price. (instrumentName)
 - `deriveFetchOhlcvSummary` — OHLCV for a Derive option (instrumentName) or underlying index (currency + marketKind index). Default is ~96 bars for the interval (not a 14-day dump). Envelop…
+- `deriveFetchOpenContextSummary` — One Derive instrument: tick, amount step, max leverage, mark/bid/ask, and the subaccount position when a login session key exists. (instrumentName)
 - `deriveFetchOpenOrdersSummary` — Open Derive orders for a subaccountId. Follow with cancel/replace. (subaccountId)
 - `deriveFetchOptionChainAgentSummary` — Compact Derive expiry ladder for a currency (counts + min/max strike per YYYYMMDD). Does not dump every instrument. Then ctm_derive_fetch_tickers for that expi… (currency)
+- `deriveFetchOptionUnderlyingsSummary` — Option underlyings from the live risk universes, including RWA names. Pass a currency into ctm_derive_fetch_option_chain. Settlement is display text, not an or…
 - `deriveFetchPendingDepositsSummary` — Poll public/get_pending_deposits for the KeyGen wallet. credited:false means wait; then call fetch_subaccounts. First deposit is L1, Socket (ETH/OP/Base/Arb),…
+- `deriveFetchPerpMarketsSummary` — Perp markets from the live risk universes, split into crypto and RWA by universe name. Includes manager ids for standard vs portfolio margin. No leverage sette…
 - `deriveFetchPortfolioSummary` — Derive private/get_subaccount portfolio for a funded subaccountId. (subaccountId)
-- `deriveFetchPositionsSummary` — Open Derive option positions for a subaccountId from fetch_subaccounts. (subaccountId)
+- `deriveFetchPositionsSummary` — Open Derive option and perp positions for a subaccountId from fetch_subaccounts. (subaccountId)
 - `deriveFetchRiskUniversesSummary` — List Derive risk universes (manager_id + collaterals). Required before the first deposit. Pick a manager that lists ETH options and USDC (or the row currency).
 - `deriveFetchSubaccountsSummary` — List Derive subaccount ids for the KeyGen executor. Empty list returns funded:false and notes to deposit from a fundable logo row (L1 / Socket / HYPE vault). T…
 - `deriveFetchTickersSummary` — ATM strike/premium ladder for one Derive expiry (bid/ask/mark). expiryDate is YYYYMMDD — string or number. Default ~9 strikes around index; pass ladder:"all" f… (currency, expiryDate)
 - `deriveOrderQuoteSummary` — Dry-run Derive fill / margin preview (public/order_quote). (instrumentName, direction, amount, limitPrice)
 - `deriveRegisterDepositAddress` — public/register_deposit_address — deterministic Ethereum L1 deposit address for this wallet. Then transfer the token with ctm_derive_build_deposit_address_tran… (wallet)
 - `deriveSearchInstrumentsSummary` — Search Derive option instrument names by strike, expiry, or C/P suffix. (currency, query)
+- `deriveSearchMarketsSummary` — Search crypto and RWA perp or option underlyings by name or universe. (query)
 
 ### ethena
 

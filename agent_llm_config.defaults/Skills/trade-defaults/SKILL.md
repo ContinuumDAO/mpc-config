@@ -240,8 +240,9 @@ Protocol-specific defaults and sizing live under **`protocol-trade.yaml` → `pr
 | **`arcus`** | `szHuman` (coin units); **`ed25519KeyGenId`** (paired ed25519 KeyGen, same `GroupId` as `keyGenId`); `marketKind` (`perp` \| `spot`); perp optional bracket via idea target/invalidation + desk `targetOffsetPct` / `tpslExecMode`; spot uses RFQ (no TP/SL at build) |
 | **`gmx`** | `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman` |
 | **`uniswap`** | `sizeUsdHuman` (spot swap; proximity enforced at build) |
+| **`derive`** | `szHuman` and `subaccountId`. Coin is `ETH-PERP` / `NVDA-PERP`. Options are not a trade-idea venue. A universe mismatch names `transfer_spot`. Triggers are separate reduce-only orders, not one Hyperliquid bracket. |
 
-ctm1 `{proto}` codes: `hl`, `arc`, `gmx`, `uni`. Default chainIds: Hyperliquid **999**, Arcus **4663**, GMX / Uniswap **42161**.
+ctm1 `{proto}` codes: `hl`, `arc`, `gmx`, `uni`, `drv`. Default chainIds: Hyperliquid **999**, Arcus **4663**, GMX / Uniswap **42161**, Derive **1**.
 
 Build path: **`continuum__build_trade_from_trade_idea`** with matching `protocolId`.
 

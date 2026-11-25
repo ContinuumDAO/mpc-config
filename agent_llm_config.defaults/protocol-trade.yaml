@@ -133,6 +133,17 @@ protocols:
       divergence: "div confirm"
       default: "arcus perp"
 
+  # --- Derive (perps only; options stay off trade ideas) -------------------------
+  derive:
+    marketKind: perp
+    tif: gtc
+    # Default settlement chain for the sign request. The order itself is a Derive signature.
+    # subaccountId is required on the build form. A universe mismatch should name transfer_spot.
+    targetOffsetPct: 0.1
+    targetOffsetMode: price
+    purposeSuffix:
+      default: "derive perp"
+
 # ---------------------------------------------------------------------------
 # Examples (commented — copy into protocols.* to try alternatives)
 # ---------------------------------------------------------------------------
