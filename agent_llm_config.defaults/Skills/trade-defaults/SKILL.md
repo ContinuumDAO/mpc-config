@@ -125,17 +125,17 @@ Edit **`trade-desk.yaml`** → `universal:` for shared idea geometry. Edit **`pr
 | `autoSubmitMultisign` | Submit without operator review (cron only when explicitly allowed) |
 | `expiryMinutesFromNow` | Optional multisign expiry (Unix seconds computed at prefill time) |
 
-**Protocol blocks** in **`protocol-trade.yaml`** (`hyperliquid`, `arcus`, `gmx`, `uniswap`): `marketKind`, `tif`, `collateralToken`, `sizing` (`fixed` or `marginPct` for Hyperliquid), optional `purposeSuffix` per analysis kind.
+**Protocol blocks** in **`protocol-trade.yaml`** (`hyperliquid`, `arcus`, `gmx`, `uniswap`, `derive`): `marketKind`, `tif`, `collateralToken`, `sizing` (`fixed` or `marginPct` for Hyperliquid), optional `purposeSuffix` per analysis kind.
 
-**Hyperliquid-only** (`protocols.hyperliquid` in `protocol-trade.yaml`):
+**Hyperliquid and Derive** (`protocols.hyperliquid` and `protocols.derive` in `protocol-trade.yaml`):
 
 | Field | Meaning |
 |-------|---------|
 | `targetOffsetPct` | Conservative TP band inside analysis target (default **0.1**) |
 | `targetOffsetMode` | `price` (default) or `atr` — see §3 |
-| `tpslExecMode` | `limit_at_trigger` (default) or `market` when bracket TP/SL is included at build |
+| `tpslExecMode` | Hyperliquid only: `limit_at_trigger` (default) or `market` when bracket TP/SL is included at build. Derive exits are reduce-only market orders; do not pass `tpslExecMode`. |
 
-When a trade idea has **target** and/or **invalidation**, **`build_trade_from_*`** for Hyperliquid auto-includes bracket fields (`takeProfitTriggerPxHuman`, `stopLossTriggerPxHuman`) via one L1 EIP-712 `normalTpsl` action — not CoreWriter. **Arcus perp** uses the same bracket geometry via `ctm_arcus_build_place_order_multisign` (ed25519-signed API payload). Geometry: long → SL < entry < TP; short → TP < entry < SL. See **`ctm-mpc-defi`** Hyperliquid / Arcus skills.
+When a trade idea has **target** and/or **invalidation**, **`build_trade_from_*`** for Hyperliquid auto-includes bracket fields (`takeProfitTriggerPxHuman`, `stopLossTriggerPxHuman`) via one L1 EIP-712 `normalTpsl` action — not CoreWriter. **Derive** uses the same target and invalidation offsets and sends them as `takeProfit` / `stopLoss` on `ctm_derive_build_perp_bracket_multisign` (reduce-only market exits, no entry-side trigger mode). **Arcus perp** uses the same bracket geometry via `ctm_arcus_build_place_order_multisign` (ed25519-signed API payload). Geometry: long → SL < entry < TP; short → TP < entry < SL. Pass the Build Trade form’s `targetOffsetPct`, `targetOffsetMode`, `invalidationOffsetPct`, and `invalidationOffsetMode` through for Hyperliquid and Derive. See **`ctm-mpc-defi`** Hyperliquid / Arcus / Derive skills.
 
 **LLM fallback** (this skill): `llmFallback` in `trade-desk.yaml` lists when the fast path is skipped — e.g. `status: unclear`, `setupPurposeCode` **`kl-ret`**, or primary unclear with a clear nearest-level **`breakRetestAlternative`**.
 
@@ -158,7 +158,7 @@ If `entryOffsetMode` is absent, treat as **bounce** — except when `analysisSet
 
 ### invalidationOffsetPct / invalidationOffsetMode
 
-On **Hyperliquid**, when the idea has an **invalidation** level, the effective level maps to **`stopLossTriggerPxHuman`** on bracket builds (L1 `normalTpsl`). On **GMX**, still informational in Purpose only (pattern-failure reference).
+On **Hyperliquid**, when the idea has an **invalidation** level, the effective level maps to **`stopLossTriggerPxHuman`** on bracket builds (L1 `normalTpsl`). On **Derive**, the same effective level maps to **`stopLoss`**. On **GMX**, still informational in Purpose only (pattern-failure reference).
 
 Configure in **`trade-desk.yaml` → `universal`**. Override per build via `invalidationOffsetPct` / `invalidationOffsetMode` on `build_trade_from_*` or the Build Trade form.
 
@@ -169,9 +169,9 @@ Configure in **`trade-desk.yaml` → `universal`**. Override per build via `inva
 
 ATR comes from the analysis session (`atrAtLastBar` on the trade idea setup). When `invalidationOffsetMode: atr` but ATR is unavailable, the SDK falls back to **price** mode with a **price-scale** pct (omitted → **1**, not the atr default 25 applied as a price %).
 
-### targetOffsetPct / targetOffsetMode (Hyperliquid bracket only)
+### targetOffsetPct / targetOffsetMode (Hyperliquid and Derive)
 
-Conservative take-profit: exit **before** the full analysis target is reached (long TP below target, short TP above target). Configure in **`protocol-trade.yaml` → `protocols.hyperliquid`**. Override per build via `targetOffsetPct` / `targetOffsetMode` on `build_trade_from_*` or the Build Trade form.
+Conservative take-profit: exit **before** the full analysis target is reached (long TP below target, short TP above target). Configure in **`protocol-trade.yaml` → `protocols.hyperliquid`** or **`protocols.derive`**. Override per build via `targetOffsetPct` / `targetOffsetMode` on `build_trade_from_*` or the Build Trade form.
 
 | `targetOffsetMode` | `targetOffsetPct` meaning | Long effective TP | Short effective TP |
 |--------------------|---------------------------|-------------------|------------------|
@@ -240,7 +240,7 @@ Protocol-specific defaults and sizing live under **`protocol-trade.yaml` → `pr
 | **`arcus`** | `szHuman` (coin units); **`ed25519KeyGenId`** (paired ed25519 KeyGen, same `GroupId` as `keyGenId`); `marketKind` (`perp` \| `spot`); perp optional bracket via idea target/invalidation + desk `targetOffsetPct` / `tpslExecMode`; spot uses RFQ (no TP/SL at build) |
 | **`gmx`** | `sizeUsdHuman`, `collateralToken`, `collateralAmountHuman` |
 | **`uniswap`** | `sizeUsdHuman` (spot swap; proximity enforced at build) |
-| **`derive`** | `szHuman` and `subaccountId`. Coin is `ETH-PERP` / `NVDA-PERP`. Options are not a trade-idea venue. A universe mismatch names `transfer_spot`. Triggers are separate reduce-only orders, not one Hyperliquid bracket. |
+| **`derive`** | `szHuman` and `subaccountId`. Coin is `ETH-PERP` / `NVDA-PERP`. Options are not a trade-idea venue. A universe mismatch names `transfer_spot`. The Build Trade form’s target and invalidation offsets become `takeProfit` / `stopLoss` on a perp bracket: reduce-only market exits, not one Hyperliquid trigger. |
 
 ctm1 `{proto}` codes: `hl`, `arc`, `gmx`, `uni`, `drv`. Default chainIds: Hyperliquid **999**, Arcus **4663**, GMX / Uniswap **42161**, Derive **1**.
 
