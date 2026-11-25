@@ -120,6 +120,9 @@ services:
       DEFAULT_NODE_DISCOVERY_PORT: "18080"
       BROWSER_HTTPS_PORT: "8443"
       MANAGEMENT_API_PORT: "8080"
+      MPC_AUTH_USER_FOLDER: "/app/user_folder"
+    volumes:
+      - ./user_folder:/app/user_folder
     ports:
       - "3333:3000"
     networks:
@@ -139,6 +142,7 @@ services:
       MCP_HTTP_PATH: "/mcp"
       MPC_AUTH_URL: "http://app"
       MPC_AUTH_PORT: "8080"
+      MPC_AUTH_USER_FOLDER: "/app/user_folder"
       RAILGUN_DATA_DIR: /app/railgun_data
     volumes:
       - ./added_keys:/app/added_keys

@@ -4940,6 +4940,9 @@ if enabled:
         f'      DEFAULT_NODE_DISCOVERY_PORT: "{pub_port}"\n'
         f'      BROWSER_HTTPS_PORT: "{bh_use}"\n'
         f'      MANAGEMENT_API_PORT: "{mgt_port}"\n'
+        f'      MPC_AUTH_USER_FOLDER: "/app/user_folder"\n'
+        f"    volumes:\n"
+        f"      - ./user_folder:/app/user_folder\n"
         f"    ports:\n"
         f'      - "{host_port}:3000"\n'
         f"    networks:\n"
