@@ -520,14 +520,31 @@ _process_config_mkdir_owned_by_invoking_user() {
 # Also fixes root-owned bind-mount files written by mpc-auth before user: was set in compose.
 # Derive login keys are created by the root MCP process. Share that directory with the host
 # group so the dashboard can join it via group_add and stay user nextjs.
+# A root shell has gid 0. Group root cannot walk user_folder (mode 750, host group), so use
+# the group that already owns user_folder/data.
+_process_config_host_folder_gid() {
+    local root="$1"
+    local gid="${PROCESS_CONFIG_REPO_GID:-}"
+    if [ -z "$gid" ] || [ "$gid" = "0" ]; then
+        if [ -n "$root" ] && [ -d "${root}/data" ]; then
+            gid=$(stat -c '%g' "${root}/data" 2>/dev/null || true)
+        elif [ -n "$root" ] && [ -d "$root" ]; then
+            gid=$(stat -c '%g' "$root" 2>/dev/null || true)
+        fi
+    fi
+    case "$gid" in
+        ''|0) gid=1000 ;;
+    esac
+    printf '%s' "$gid"
+}
+
 _process_config_share_derive_session_dir() {
     local root="$1"
     local dir gid json
     [ -n "$root" ] || return 0
     dir="${root}/data/derive"
     [ -d "$dir" ] || return 0
-    gid="${PROCESS_CONFIG_REPO_GID:-}"
-    [ -n "$gid" ] || return 0
+    gid="$(_process_config_host_folder_gid "$root")"
     [ "${EUID:-0}" -eq 0 ] || return 0
     chgrp "$gid" "$dir" 2>/dev/null || true
     chmod 2770 "$dir" 2>/dev/null || true
@@ -4828,9 +4845,11 @@ apply_docker_compose_continuumdao_node_app() {
         print_warning "python3 not found — could not merge ContinuumdaoNodeApp into docker-compose.yml"
         return 1
     fi
-    local _na_action
+    local _na_action _na_folder_gid _na_user_folder
+    _na_user_folder="$(cd "$(dirname "$file")" && pwd)/${DEFAULT_USER_FOLDER_DIR}"
+    _na_folder_gid="$(_process_config_host_folder_gid "$_na_user_folder")"
     _na_action=$(
-        MPC_NA_COMPOSE_PATH="$file" MPC_NA_CONFIG_PATH="$config_file" MPC_NA_FOLDER_GID="${PROCESS_CONFIG_REPO_GID}" python3 <<'PYNA'
+        MPC_NA_COMPOSE_PATH="$file" MPC_NA_CONFIG_PATH="$config_file" MPC_NA_FOLDER_GID="${_na_folder_gid}" python3 <<'PYNA'
 import os
 import sys
 
@@ -4943,7 +4962,7 @@ i0 = text.index(BEGIN)
 i1 = text.index(END) + len(END)
 
 folder_gid = os.environ.get("MPC_NA_FOLDER_GID", "").strip()
-if not folder_gid.isdigit():
+if not folder_gid.isdigit() or folder_gid == "0":
     folder_gid = "1000"
 
 if enabled:
