@@ -130,6 +130,10 @@ services:
   # BEGIN mpc-config continuumdao-node-app
   dashboard:
     image: continuumdao/continuumdao-node-app:latest
+    # Stay the image user nextjs. user_folder is mode 750, owned by the host user.
+    # Joining that group lets this container reach user_folder/data/derive. process_config.sh writes the host gid.
+    group_add:
+      - "1000"
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

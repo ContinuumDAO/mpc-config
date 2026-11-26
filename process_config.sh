@@ -518,6 +518,26 @@ _process_config_mkdir_owned_by_invoking_user() {
 
 # agent_llm_config/ and user_folder/ beside configs.yaml: user + primary group (git pull, editor).
 # Also fixes root-owned bind-mount files written by mpc-auth before user: was set in compose.
+# Derive login keys are created by the root MCP process. Share that directory with the host
+# group so the dashboard can join it via group_add and stay user nextjs.
+_process_config_share_derive_session_dir() {
+    local root="$1"
+    local dir gid json
+    [ -n "$root" ] || return 0
+    dir="${root}/data/derive"
+    [ -d "$dir" ] || return 0
+    gid="${PROCESS_CONFIG_REPO_GID:-}"
+    [ -n "$gid" ] || return 0
+    [ "${EUID:-0}" -eq 0 ] || return 0
+    chgrp "$gid" "$dir" 2>/dev/null || true
+    chmod 2770 "$dir" 2>/dev/null || true
+    for json in "$dir"/*.json; do
+        [ -f "$json" ] || continue
+        chgrp "$gid" "$json" 2>/dev/null || true
+        chmod 660 "$json" 2>/dev/null || true
+    done
+}
+
 _process_config_ensure_path_owned_by_invoking_user() {
     local target="$1"
     [ -n "$target" ] || return 0
@@ -578,6 +598,7 @@ _process_config_finalize_repo_ownership_after_sudo() {
     _process_config_chown_repo_tree_if_sudo_root "$WEB_TLS_HOST_DIR"
     _process_config_ensure_path_owned_by_invoking_user "${compose_root}/${DEFAULT_AGENT_LLM_CONFIG_DIR}"
     _process_config_ensure_path_owned_by_invoking_user "${compose_root}/${DEFAULT_USER_FOLDER_DIR}"
+    _process_config_share_derive_session_dir "${compose_root}/${DEFAULT_USER_FOLDER_DIR}"
     _process_config_mkdir_owned_by_invoking_user "${compose_root}/${DEFAULT_RAILGUN_DATA_DIR}"
     _process_config_ensure_path_owned_by_invoking_user "${compose_root}/${DEFAULT_RAILGUN_DATA_DIR}"
 }
@@ -4809,7 +4830,7 @@ apply_docker_compose_continuumdao_node_app() {
     fi
     local _na_action
     _na_action=$(
-        MPC_NA_COMPOSE_PATH="$file" MPC_NA_CONFIG_PATH="$config_file" python3 <<'PYNA'
+        MPC_NA_COMPOSE_PATH="$file" MPC_NA_CONFIG_PATH="$config_file" MPC_NA_FOLDER_GID="${PROCESS_CONFIG_REPO_GID}" python3 <<'PYNA'
 import os
 import sys
 
@@ -4921,6 +4942,10 @@ if BEGIN not in text or END not in text:
 i0 = text.index(BEGIN)
 i1 = text.index(END) + len(END)
 
+folder_gid = os.environ.get("MPC_NA_FOLDER_GID", "").strip()
+if not folder_gid.isdigit():
+    folder_gid = "1000"
+
 if enabled:
     plain_attach_env = '"1"' if plain_attach else '"0"'
     disc_allow_private_env = '"1"' if disc_allow_private else '"0"'
@@ -4929,6 +4954,10 @@ if enabled:
         f"{BEGIN}"
         f"  dashboard:\n"
         f'    image: {yaml_sq(image + ":" + tag)}\n'
+        f"    # Stay the image user nextjs. user_folder is mode 750, owned by the host user.\n"
+        f"    # Joining that group lets this container reach user_folder/data/derive.\n"
+        f"    group_add:\n"
+        f'      - "{folder_gid}"\n'
         f"    restart: unless-stopped\n"
         f"    depends_on:\n"
         f"      app:\n"
@@ -7623,6 +7652,7 @@ main() {
         _seed_agent_cron_catalog "${_cfg_parent}" || true
         _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_AGENT_LLM_CONFIG_DIR}"
         _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
+        _process_config_share_derive_session_dir "${_cfg_parent}/${DEFAULT_USER_FOLDER_DIR}"
         _process_config_ensure_path_owned_by_invoking_user "${_cfg_parent}/${DEFAULT_RAILGUN_DATA_DIR}"
         case "$_agent_llm_merge_result" in
             merged)
