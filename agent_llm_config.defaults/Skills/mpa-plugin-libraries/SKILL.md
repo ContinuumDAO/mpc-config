@@ -386,6 +386,7 @@ Each line is `exportName` — what it does. Names in parentheses are the inputs 
 - `buildHyperliquidEvmToCoreUsdcMultisign` — Create and submit mpc-auth multiSignRequest to move native HyperEVM USDC (0xb88339… on mainnet) back to HyperCore spot. Approves Circle USDC to CoreDepositWall… (chainId, usdHuman)
 - `buildHyperliquidTrailingStopMultisign` — Create and submit mpc-auth multiSignRequest for a Hyperliquid perp trailing stop (EIP-712 L1 trailingStop action to /exchange — no useCustomGas). Retracement i… (chainId, coin, szHuman, trailingOffsetHuman)
 - `buildHyperliquidUpdateLeverageMultisign` — Set per-market leverage (cross or isolated) on Hyperliquid via L1 /exchange EIP-712 signing — not CoreWriter. No useCustomGas. trigger_sign_result without txPa… (chainId, coin, leverage)
+- `buildHyperliquidUpdatePositionTpslMultisign` — Set or replace the stop-loss and/or take-profit (target) on an existing Hyperliquid perp. Requires an open position. Pass stopLossTriggerPxHuman, takeProfitTri… (chainId, coin)
 - `hyperliquidFetchDelegationsForExecutor` — HYPE delegations by validator for executor. (executorAddress)
 - `hyperliquidFetchLendMarketsSummary` — Hyperliquid Core lend reserves with current supply APR and borrow APR (yearly rates, not APY), utilization, LTV, and totals. Collateral (HYPE, UBTC) earns no s…
 - `hyperliquidFetchLendPositionsSummary` — User Hyperliquid Core lend positions (supplied/borrowed), health, and whether manual borrow is enabled. Portfolio-margin accounts disable the manual borrow act… (executorAddress)
