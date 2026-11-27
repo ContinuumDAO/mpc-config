@@ -162,6 +162,8 @@ services:
         condition: service_started
     environment:
       MCP_HTTP_HOST: "0.0.0.0"
+      # V8's default heap is about 4GB. This process grows past that over a few hours.
+      NODE_OPTIONS: "--max-old-space-size=8192"
       MCP_HTTP_PORT: "8446"
       MCP_HTTP_PATH: "/mcp"
       MPC_AUTH_URL: "http://app"

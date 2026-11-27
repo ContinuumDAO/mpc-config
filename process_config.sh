@@ -5206,6 +5206,7 @@ if enabled:
     block = set_env(block, "MCP_HTTP_PORT", f'"{container_port}"')
     block = set_env(block, "MCP_HTTP_PATH", yaml_sq(http_path))
     block = set_env(block, "MPC_AUTH_PORT", f'"{mgt_port}"')
+    block = set_env(block, "NODE_OPTIONS", '"--max-old-space-size=8192"')
     block, _port_ok = replace_line(
         block,
         r'^(\s*)-\s*"127\.0\.0\.1:\d+:\d+"\s*$',
